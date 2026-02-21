@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm init -y)",
+      "Bash(npm install:*)",
+      "Bash(npx prisma init:*)",
+      "Bash(npx prisma:*)",
+      "Bash(timeout 8 npx ts-node:*)",
+      "Bash(timeout 6 npx ts-node:*)",
+      "Bash(npx ts-node:*)"
+    ]
+  }
+}

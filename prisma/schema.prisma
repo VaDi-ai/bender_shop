@@ -1,0 +1,131 @@
+// Bender Shop — Telegram CRM
+// https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── Enums ────────────────────────────────────────────────────────────────────
+
+enum ClientSource {
+  avito
+  instagram
+  telegram
+  shop
+}
+
+enum ClientSegment {
+  lead    // новый, не квалифицирован
+  qual    // квалифицирован, в воронке
+  client  // совершил покупку
+}
+
+enum MessageDirection {
+  in  // входящее от клиента
+  out // исходящее от магазина
+}
+
+enum TaskStatus {
+  pending
+  done
+  cancelled
+}
+
+enum TemplateType {
+  followup      // догрев
+  offer         // оффер / КП
+  reactivation  // реактивация
+  announcement  // объявление / акция
+}
+
+// ─── Models ───────────────────────────────────────────────────────────────────
+
+model Client {
+  id              Int           @id @default(autoincrement())
+  name            String
+  source          ClientSource
+  externalId      String?       // ID на внешней платформе (Avito, Instagram и т.д.)
+  segment         ClientSegment @default(lead)
+  notes           String?
+  telegramTopicId Int?          // ID темы в группе Telegram CRM
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  messages Message[]
+  tags     Tag[]
+  tasks    Task[]
+
+  @@unique([source, externalId]) // один клиент per платформа
+  @@index([segment])
+}
+
+model Message {
+  id        Int              @id @default(autoincrement())
+  clientId  Int
+  direction MessageDirection
+  text      String
+  source    ClientSource     // через какой канал пришло сообщение
+  isRead    Boolean          @default(false)
+  createdAt DateTime         @default(now())
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([clientId])
+  @@index([isRead])
+}
+
+model Tag {
+  id         Int    @id @default(autoincrement())
+  clientId   Int
+  name       String
+  autoAction Json?  // { trigger: string, templateId: number, delayHours: number }
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@unique([clientId, name])
+  @@index([name])
+}
+
+model Task {
+  id          Int        @id @default(autoincrement())
+  clientId    Int
+  action      String     // "send_message", "change_segment", "notify_manager" и т.д.
+  payload     Json       // произвольные параметры действия
+  scheduledAt DateTime
+  status      TaskStatus @default(pending)
+  createdAt   DateTime   @default(now())
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([status, scheduledAt])
+  @@index([clientId])
+}
+
+model Template {
+  id   Int          @id @default(autoincrement())
+  name String       @unique
+  text String       // поддерживает переменные: {{name}}, {{product}} и т.д.
+  type TemplateType
+}
+
+model Product {
+  id          Int      @id @default(autoincrement())
+  name        String
+  description String?
+  price       Decimal  @db.Decimal(12, 2)
+  stock       Int      @default(0)  // количество на складе
+  category    String?
+  isAvailable Boolean  @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([category])
+  @@index([isAvailable])
+}
