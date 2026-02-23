@@ -1,6 +1,7 @@
 import 'dotenv/config'
 import { Telegraf, Markup } from 'telegraf'
 import { setupClientHandlers } from '../webhooks/telegram'
+import { startScheduler } from './scheduler'
 
 const BOT_TOKEN = process.env.BOT_TOKEN
 const ADMIN_IDS = (process.env.ADMIN_IDS ?? '').split(',').map((id) => Number(id.trim()))
@@ -63,6 +64,8 @@ bot.launch({
 })
 
 console.log('Бот запущен')
+
+startScheduler(bot)
 
 process.once('SIGINT', () => bot.stop('SIGINT'))
 process.once('SIGTERM', () => bot.stop('SIGTERM'))
