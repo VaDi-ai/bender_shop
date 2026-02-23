@@ -14,6 +14,6 @@
     "declarationMap": true,
     "sourceMap": true
   },
-  "include": ["src/**/*", "bot/**/*", "webhooks/**/*", "lib/**/*"],
+  "include": ["src/**/*", "bot/**/*", "webhooks/**/*", "lib/**/*", "api/**/*"],
   "exclude": ["node_modules", "dist", "generated"]
 }

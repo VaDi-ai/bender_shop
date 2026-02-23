@@ -60,6 +60,7 @@ model Client {
   messages Message[]
   tags     Tag[]
   tasks    Task[]
+  orders   Order[]
 
   @@unique([source, externalId]) // один клиент per платформа
   @@index([segment])
@@ -121,6 +122,7 @@ model Product {
   price       Decimal  @db.Decimal(12, 2)
   stock       Int      @default(0)  // количество на складе
   category    String?
+  photoUrl    String?  // URL фото товара
   isAvailable Boolean  @default(true)
 
   createdAt DateTime @default(now())
@@ -128,4 +130,21 @@ model Product {
 
   @@index([category])
   @@index([isAvailable])
+}
+
+model Order {
+  id          Int      @id @default(autoincrement())
+  clientId    Int?
+  telegramId  String   // Telegram user ID из WebApp
+  items       Json     // [{ productId, name, price, qty }]
+  totalAmount Decimal  @db.Decimal(12, 2)
+  payment     String   // "cash" | "transfer" | "card"
+  status      String   @default("new")
+  createdAt   DateTime @default(now())
+
+  client Client? @relation(fields: [clientId], references: [id])
+
+  @@index([telegramId])
+  @@index([status])
+  @@index([clientId])
 }

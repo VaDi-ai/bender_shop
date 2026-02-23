@@ -17,6 +17,7 @@
  */
 
 import { Telegraf, Telegram, Markup } from 'telegraf'
+import { message } from 'telegraf/filters'
 import { prisma } from '../lib/prisma'
 
 const CRM_GROUP_ID = Number(process.env.CRM_GROUP_ID)
@@ -223,6 +224,34 @@ export function setupClientHandlers(bot: Telegraf): void {
     return ctx.answerCbQuery()
   })
 
+  // ── Команда /shop — открыть Mini App ────────────────────────────────────────
+
+  bot.command('shop', (ctx) => {
+    const webAppUrl = process.env.WEBAPP_URL ?? `http://localhost:${process.env.API_PORT ?? 3000}/shop`
+    return ctx.reply(
+      '🛍️ Добро пожаловать в Bender Shop!',
+      Markup.keyboard([[Markup.button.webApp('🛒 Открыть магазин', webAppUrl)]]).resize(),
+    )
+  })
+
+  // ── Заказ из Mini App (web_app_data) ─────────────────────────────────────────
+  // Регистрируется ДО generic message-handler, чтобы не попасть в «тихий дроп»
+
+  bot.on(message('web_app_data'), async (ctx) => {
+    try {
+      const raw = ctx.message.web_app_data.data
+      const orderData = JSON.parse(raw) as {
+        orderId: number
+        items: Array<{ productId: number; name: string; price: string; qty: number }>
+        payment: string
+        total: string
+      }
+      await handleWebAppOrder(ctx.telegram, ctx.from, orderData)
+    } catch (err) {
+      console.error('web_app_data error:', err)
+    }
+  })
+
   // ── Обработчик входящих сообщений ───────────────────────────────────────────
 
   bot.on('message', async (ctx, next) => {
@@ -387,5 +416,90 @@ function getClientName(from: TgUser): string {
     [from.first_name, from.last_name].filter(Boolean).join(' ') ||
     from.username ||
     'Неизвестный'
+  )
+}
+
+function fmtPrice(n: number): string {
+  return n.toLocaleString('ru-RU')
+}
+
+// ─── Обработка заказа из Mini App ────────────────────────────────────────────
+
+async function handleWebAppOrder(
+  telegram: Telegram,
+  from: TgUser,
+  orderData: {
+    orderId: number
+    items: Array<{ productId: number; name: string; price: string; qty: number }>
+    payment: string
+    total: string
+  },
+): Promise<void> {
+  const { orderId, items, payment, total } = orderData
+  const externalId = String(from.id)
+  const name = getClientName(from)
+
+  const PAYMENT_LABEL: Record<string, string> = {
+    cash: '💵 Наличные',
+    transfer: '📲 Перевод',
+    card: '💳 Карта (+14%)',
+  }
+
+  // Найти или создать клиента
+  let client = await prisma.client.findUnique({
+    where: { source_externalId: { source: 'telegram', externalId } },
+  })
+
+  if (!client) {
+    client = await prisma.client.create({
+      data: { name, source: 'telegram', externalId, segment: 'lead' },
+    })
+  }
+
+  // Привязать заказ к клиенту (если orderId корректен)
+  if (orderId > 0) {
+    await prisma.order.update({
+      where: { id: orderId },
+      data: { clientId: client.id },
+    }).catch(() => {})
+  }
+
+  // Создать CRM-топик если нет
+  if (client.telegramTopicId == null) {
+    const topic = await telegram.createForumTopic(CRM_GROUP_ID, name)
+    client = await prisma.client.update({
+      where: { id: client.id },
+      data: { telegramTopicId: topic.message_thread_id },
+    })
+  }
+
+  // Форматируем уведомление
+  const itemLines = items
+    .map((i) => `• ${i.name} × ${i.qty} — ${fmtPrice(Number(i.price) * i.qty)} ₽`)
+    .join('\n')
+  const orderRef = orderId > 0 ? ` #${orderId}` : ''
+  const notification = [
+    `🛒 Новый заказ${orderRef} из магазина`,
+    `👤 ${name}`,
+    '',
+    itemLines,
+    '',
+    `💰 Итого: ${fmtPrice(Number(total))} ₽`,
+    `💳 Оплата: ${PAYMENT_LABEL[payment] ?? payment}`,
+  ].join('\n')
+
+  await sendToTopic(telegram, CRM_GROUP_ID, client.telegramTopicId!, notification)
+  await sendControlPanel(telegram, CRM_GROUP_ID, client.telegramTopicId!, client.id, client.segment)
+
+  // Сохраняем в историю
+  await prisma.message.create({
+    data: { clientId: client.id, direction: 'in', text: notification, source: 'shop' },
+  })
+
+  // Подтверждение клиенту
+  const itemCount = items.reduce((s, i) => s + i.qty, 0)
+  await telegram.sendMessage(
+    externalId,
+    `✅ Заказ принят!\n\n${itemCount} поз. на ${fmtPrice(Number(total))} ₽\nОплата: ${PAYMENT_LABEL[payment] ?? payment}\n\nОжидайте — скоро свяжемся с вами 👋`,
   )
 }
