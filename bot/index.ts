@@ -25,6 +25,12 @@ import {
   handleSalesMessage,
   registerSkipCommentHandlers,
 } from './admin/sales'
+import {
+  analyticsState,
+  setupAnalyticsHandlers,
+  showAnalyticsToday,
+  handleAnalyticsMessage,
+} from './admin/analytics'
 
 const BOT_TOKEN = process.env.BOT_TOKEN
 const ADMIN_IDS = (process.env.ADMIN_IDS ?? '').split(',').map((id) => Number(id.trim()))
@@ -96,6 +102,7 @@ bot.on(message('text'), async (ctx, next) => {
     broadcastState.delete(userId)
     segmentsState.delete(userId)
     salesState.delete(userId)
+    analyticsState.delete(userId)
     return next()
   }
 
@@ -121,6 +128,12 @@ bot.on(message('text'), async (ctx, next) => {
     }
     await ctx.reply(`✅ Рассылка отправлена ${sent} из ${clients.length} клиентов.`)
     return
+  }
+
+  // Флоу аналитики (произвольный период)
+  if (analyticsState.has(userId)) {
+    const handled = await handleAnalyticsMessage(ctx, userId, text)
+    if (handled) return
   }
 
   // Флоу сегментов
@@ -182,45 +195,10 @@ bot.start((ctx) => {
 
 // ─── 📊 Аналитика ─────────────────────────────────────────────────────────────
 
+setupAnalyticsHandlers(bot)
+
 bot.hears('📊 Аналитика', async (ctx) => {
-  const [totalClients, segments, totalOrders, unread] = await Promise.all([
-    prisma.client.count(),
-    prisma.segment.findMany({
-      orderBy: { id: 'asc' },
-      include: { _count: { select: { clients: true } } },
-    }),
-    prisma.order.count(),
-    prisma.message.count({ where: { isRead: false } }),
-  ])
-
-  const revenue = await prisma.order.aggregate({ _sum: { totalAmount: true } })
-  const todayStart = new Date()
-  todayStart.setHours(0, 0, 0, 0)
-  const todayOrders = await prisma.order.count({ where: { createdAt: { gte: todayStart } } })
-
-  const revenueVal = Number(revenue._sum.totalAmount ?? 0).toLocaleString('ru-RU')
-  const segLines = segments
-    .map((s) => `   ${s.color} ${s.name}: ${s._count.clients}`)
-    .join('\n')
-
-  await ctx.reply(
-    [
-      '📊 Аналитика',
-      '',
-      `👥 Клиентов: ${totalClients}`,
-      segLines,
-      '',
-      `📦 Заказов всего: ${totalOrders}`,
-      `📦 Заказов сегодня: ${todayOrders}`,
-      `💰 Выручка: ${revenueVal} ₽`,
-      '',
-      `📬 Непрочитанных сообщений: ${unread}`,
-    ].join('\n'),
-    Markup.inlineKeyboard([
-      [Markup.button.callback('📂 Сегменты', 'segs:list')],
-      [Markup.button.callback('🏠 Главное меню', 'back:main')],
-    ]),
-  )
+  await showAnalyticsToday(ctx)
 })
 
 // ─── 📬 Входящие ──────────────────────────────────────────────────────────────

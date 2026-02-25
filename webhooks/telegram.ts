@@ -499,7 +499,10 @@ export function setupClientHandlers(bot: Telegraf): void {
           email: 'Введите email клиента:',
           birthDate: 'Введите дату рождения (ДД.ММ.ГГГГ):',
         }
-        return ctx.reply(prompts[field] ?? 'Введите значение:')
+        return ctx.reply(
+          prompts[field] ?? 'Введите значение:',
+          Markup.inlineKeyboard([[Markup.button.callback('❌ Отмена', 'edit:cancel')]]),
+        )
       }
 
       // ── Отмена редактирования ────────────────────────────────────────────────
@@ -535,6 +538,17 @@ export function setupClientHandlers(bot: Telegraf): void {
     }
 
     return next()
+  })
+
+  // ── Команда /cancel — отменяет любой активный флоу редактирования ───────────
+
+  bot.command('cancel', async (ctx) => {
+    const userId = ctx.from?.id
+    if (userId && editMode.has(userId)) {
+      editMode.delete(userId)
+      return ctx.reply('Редактирование отменено.')
+    }
+    return ctx.reply('Нет активного редактирования.')
   })
 
   // ── Команда /shop — открыть Mini App ────────────────────────────────────────
