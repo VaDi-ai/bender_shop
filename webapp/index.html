@@ -604,6 +604,19 @@
           body: JSON.stringify({ telegramId, items, totalAmount: totalAmt, payment: payMethod }),
         })
         const json = await res.json().catch(() => ({}))
+
+        if (!res.ok) {
+          btn.disabled = false
+          btn.textContent = 'Оформить заказ'
+          if (json.error === 'Товар закончился') {
+            alert('К сожалению, товар уже закончился')
+            await loadProducts(document.querySelector('.cat-btn.active').dataset.cat)
+          } else {
+            alert('Ошибка оформления. Попробуйте ещё раз.')
+          }
+          return
+        }
+
         const orderId = json.orderId || 0
 
         const payload = JSON.stringify({

@@ -64,8 +64,10 @@ export function startApiServer(): void {
         const products = await prisma.product.findMany({
           where: {
             isAvailable: true,
-            ...(category ? { category } : {}),
+            quantity: { gt: 0 },
+            ...(category ? { category: { name: category } } : {}),
           },
+          include: { category: true },
           orderBy: { name: 'asc' },
         })
 
@@ -74,7 +76,7 @@ export function startApiServer(): void {
           name: p.name,
           description: p.description ?? '',
           price: p.price.toString(),
-          category: p.category ?? '',
+          category: p.category?.name ?? '',
           photoUrl: p.photoUrl ?? '',
         }))
 
@@ -97,6 +99,15 @@ export function startApiServer(): void {
           return res.end(JSON.stringify({ error: 'Missing required fields' }))
         }
 
+        // Проверить наличие остатков для каждого товара
+        for (const item of data.items) {
+          const product = await prisma.product.findUnique({ where: { id: item.productId } })
+          if (!product || product.quantity < item.qty) {
+            res.writeHead(409, { 'Content-Type': 'application/json' })
+            return res.end(JSON.stringify({ error: 'Товар закончился', product: item.name }))
+          }
+        }
+
         // Найти клиента по telegramId если передан
         let clientId: number | null = null
         if (data.telegramId) {
@@ -115,6 +126,23 @@ export function startApiServer(): void {
             payment: data.payment,
           },
         })
+
+        // Уменьшить quantity и stock для каждого товара
+        for (const item of data.items) {
+          const updated = await prisma.product.update({
+            where: { id: item.productId },
+            data: {
+              quantity: { decrement: item.qty },
+              stock: { decrement: item.qty },
+            },
+          })
+          if (updated.quantity <= 0) {
+            await prisma.product.update({
+              where: { id: item.productId },
+              data: { isAvailable: false },
+            })
+          }
+        }
 
         res.writeHead(200, { 'Content-Type': 'application/json' })
         return res.end(JSON.stringify({ success: true, orderId: order.id }))

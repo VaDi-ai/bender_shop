@@ -80,8 +80,9 @@ async function processAvitoMessage(
   })
 
   if (!client) {
+    const defaultSeg = await prisma.segment.findFirst({ where: { isDefault: true } })
     client = await prisma.client.create({
-      data: { name, source: 'avito', externalId, segment: 'lead' },
+      data: { name, source: 'avito', externalId, segmentId: defaultSeg?.id ?? null },
     })
   }
 
