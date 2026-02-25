@@ -31,6 +31,7 @@ import {
   showAnalyticsToday,
   handleAnalyticsMessage,
 } from './admin/analytics'
+import { showAISettings, setupAISettingsHandlers } from './admin/ai_settings'
 
 const BOT_TOKEN = process.env.BOT_TOKEN
 const ADMIN_IDS = (process.env.ADMIN_IDS ?? '').split(',').map((id) => Number(id.trim()))
@@ -56,7 +57,7 @@ const adminKeyboard = Markup.keyboard([
   ['📢 Рассылки', '💰 Балансы'],
   ['🏷️ Акции', '🔧 Техработы'],
   ['📦 Товароучёт', '🔑 API Ключи'],
-  ['📂 Сегменты'],
+  ['📂 Сегменты', '🤖 AI Агент'],
 ]).resize()
 
 // Кнопки главного меню — для сброса пошаговых флоу при нажатии
@@ -70,6 +71,7 @@ const MENU_BUTTONS = new Set([
   '📦 Товароучёт',
   '🔑 API Ключи',
   '📂 Сегменты',
+  '🤖 AI Агент',
 ])
 
 // ─── Обработка сообщений от клиентов ─────────────────────────────────────────
@@ -396,6 +398,14 @@ bot.hears('📂 Сегменты', async (ctx) => {
   await showSegments(ctx)
 })
 
+// ─── 🤖 AI Агент ──────────────────────────────────────────────────────────────
+
+setupAISettingsHandlers(bot)
+
+bot.hears('🤖 AI Агент', async (ctx) => {
+  await showAISettings(ctx)
+})
+
 // ─── 💰 Продажи и резервы ─────────────────────────────────────────────────────
 
 setupSalesHandlers(bot)
@@ -410,12 +420,13 @@ bot.hears('🔑 API Ключи', (ctx) => {
   const lines = [
     '🔑 Конфигурация',
     '',
-    `BOT_TOKEN:   ${mask(process.env.BOT_TOKEN)}`,
-    `CRM_GROUP:   ${process.env.CRM_GROUP_ID ?? '❌ не задан'}`,
-    `ADMIN_IDS:   ${process.env.ADMIN_IDS ?? '❌ не задан'}`,
-    `DATABASE_URL: ${mask(process.env.DATABASE_URL)}`,
-    `API_PORT:    ${process.env.API_PORT ?? '3000 (default)'}`,
-    `WEBAPP_URL:  ${process.env.WEBAPP_URL ?? '❌ не задан'}`,
+    `BOT_TOKEN:          ${mask(process.env.BOT_TOKEN)}`,
+    `CRM_GROUP:          ${process.env.CRM_GROUP_ID ?? '❌ не задан'}`,
+    `ADMIN_IDS:          ${process.env.ADMIN_IDS ?? '❌ не задан'}`,
+    `DATABASE_URL:       ${mask(process.env.DATABASE_URL)}`,
+    `API_PORT:           ${process.env.API_PORT ?? '3000 (default)'}`,
+    `WEBAPP_URL:         ${process.env.WEBAPP_URL ?? '❌ не задан'}`,
+    `OPENROUTER_API_KEY: ${mask(process.env.OPENROUTER_API_KEY)}`,
   ]
 
   return ctx.reply(
@@ -434,6 +445,16 @@ console.log('Бот запущен')
 
 startScheduler(bot)
 startApiServer()
+
+// ─── DB keepalive: предотвращает разрыв соединения на db.prisma.io ────────────
+
+setInterval(async () => {
+  try {
+    await prisma.$queryRaw`SELECT 1`
+  } catch (e) {
+    console.log('DB keepalive failed, reconnecting...')
+  }
+}, 4 * 60 * 1000)
 
 // ─── Инициализация технического топика «📦 Продажи и резервы» ─────────────────
 

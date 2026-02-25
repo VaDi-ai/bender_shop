@@ -24,6 +24,14 @@ import { message } from 'telegraf/filters'
 import { prisma } from '../lib/prisma'
 import type { SegmentModel } from '../generated/prisma/models'
 import { startSaleFlow, startReserveFlow, salesState } from '../bot/admin/sales'
+import {
+  getAIMode,
+  generateAIResponse,
+  storeSuggestion,
+  getSuggestion,
+  deleteSuggestion,
+  incrementStat,
+} from '../bot/ai/agent'
 
 const CRM_GROUP_ID = Number(process.env.CRM_GROUP_ID)
 const ADMIN_IDS = (process.env.ADMIN_IDS ?? '').split(',').map((id) => Number(id.trim()))
@@ -532,6 +540,83 @@ export function setupClientHandlers(bot: Telegraf): void {
         return ctx.answerCbQuery('Управление тегами — скоро')
       }
 
+      // ── AI: ai:send:{suggestionId} — отправить предложение клиенту ───────────
+      if (data.startsWith('ai:send:')) {
+        const suggestionId = parseInt(data.slice(8), 10)
+        const suggestion = getSuggestion(suggestionId)
+        if (!suggestion) return ctx.answerCbQuery('Предложение не найдено или устарело')
+
+        const { clientId, text } = suggestion
+        deleteSuggestion(suggestionId)
+
+        const client = await prisma.client.findUnique({ where: { id: clientId } })
+        if (!client) return ctx.answerCbQuery('Клиент не найден')
+
+        if (client.source === 'telegram' && client.externalId) {
+          await ctx.telegram.sendMessage(client.externalId, text)
+        }
+        await prisma.message.create({
+          data: { clientId, direction: 'out', text, source: 'telegram' },
+        })
+
+        incrementStat('approved')
+
+        // Обновляем сообщение с кнопками — убираем кнопки, добавляем метку
+        if (chatId && messageId) {
+          try {
+            await ctx.telegram.editMessageReplyMarkup(chatId, messageId, undefined, {
+              inline_keyboard: [],
+            })
+          } catch {}
+        }
+        return ctx.answerCbQuery('✅ Ответ отправлен клиенту')
+      }
+
+      // ── AI: ai:edit:{suggestionId} — редактировать предложение ──────────────
+      if (data.startsWith('ai:edit:')) {
+        const suggestionId = parseInt(data.slice(8), 10)
+        const suggestion = getSuggestion(suggestionId)
+        if (!suggestion) return ctx.answerCbQuery('Предложение не найдено или устарело')
+
+        deleteSuggestion(suggestionId)
+        incrementStat('rejected')
+
+        // Убираем кнопки
+        if (chatId && messageId) {
+          try {
+            await ctx.telegram.editMessageReplyMarkup(chatId, messageId, undefined, {
+              inline_keyboard: [],
+            })
+          } catch {}
+        }
+
+        if (threadId) {
+          await sendToTopic(
+            ctx.telegram,
+            CRM_GROUP_ID,
+            threadId,
+            '✏️ Введите ваш вариант ответа следующим сообщением — он будет отправлен клиенту.',
+          )
+        }
+        return ctx.answerCbQuery('✏️ Введите ваш вариант')
+      }
+
+      // ── AI: ai:skip:{suggestionId} — пропустить предложение ─────────────────
+      if (data.startsWith('ai:skip:')) {
+        const suggestionId = parseInt(data.slice(8), 10)
+        deleteSuggestion(suggestionId)
+        incrementStat('rejected')
+
+        if (chatId && messageId) {
+          try {
+            await ctx.telegram.editMessageReplyMarkup(chatId, messageId, undefined, {
+              inline_keyboard: [],
+            })
+          } catch {}
+        }
+        return ctx.answerCbQuery('❌ Предложение пропущено')
+      }
+
     } catch (err) {
       console.error('callback_query error:', err)
       return ctx.answerCbQuery('Ошибка')
@@ -804,11 +889,80 @@ async function handleClientMessage(
       }
     }
 
-    await prisma.message.create({
+    const savedMessage = await prisma.message.create({
       data: { clientId: client.id, direction: 'in', text, source: 'telegram' },
     })
+
+    // ── AI Sales Agent ────────────────────────────────────────────────────────
+    const currentClient = await prisma.client.findUnique({ where: { id: client.id } })
+    if (currentClient?.telegramTopicId) {
+      const threadId = currentClient.telegramTopicId
+      // Запускаем AI асинхронно, не блокируем ответ клиенту
+      handleAIResponse(telegram, client.id, text, threadId).catch((err) => {
+        console.error('handleAIResponse error:', err)
+      })
+    }
   } catch (e) {
     console.error('handleClientMessage FULL ERROR:', e)
+  }
+}
+
+// ─── AI: обработка входящего сообщения ────────────────────────────────────────
+
+async function handleAIResponse(
+  telegram: Telegram,
+  clientId: number,
+  userMessage: string,
+  threadId: number,
+): Promise<void> {
+  const mode = await getAIMode()
+  if (mode === 'off') return
+
+  let aiText: string
+  try {
+    aiText = await generateAIResponse(clientId, userMessage)
+    incrementStat('total')
+  } catch (err) {
+    console.error('generateAIResponse error:', err)
+    return
+  }
+
+  if (mode === 'auto') {
+    // Отправляем клиенту автоматически
+    const client = await prisma.client.findUnique({ where: { id: clientId } })
+    if (client?.source === 'telegram' && client.externalId) {
+      await telegram.sendMessage(client.externalId, aiText)
+    }
+    await prisma.message.create({
+      data: { clientId, direction: 'out', text: aiText, source: 'telegram' },
+    })
+    incrementStat('approved')
+    // Уведомляем менеджера в топике
+    await sendToTopic(telegram, CRM_GROUP_ID, threadId, `🤖 AI ответил: ${aiText}`)
+    return
+  }
+
+  if (mode === 'semi') {
+    // Сохраняем предложение и показываем менеджеру с кнопками
+    const suggestionId = storeSuggestion(clientId, aiText, threadId)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (telegram.sendMessage as any)(CRM_GROUP_ID, `🤖 Предложение AI:\n\n${aiText}`, {
+      message_thread_id: threadId,
+      reply_markup: Markup.inlineKeyboard([
+        [
+          Markup.button.callback('✅ Отправить', `ai:send:${suggestionId}`),
+          Markup.button.callback('✏️ Редактировать', `ai:edit:${suggestionId}`),
+          Markup.button.callback('❌ Пропустить', `ai:skip:${suggestionId}`),
+        ],
+      ]).reply_markup,
+    })
+    return
+  }
+
+  if (mode === 'manual') {
+    // Только подсказка менеджеру
+    await sendToTopic(telegram, CRM_GROUP_ID, threadId, `💡 AI подсказка: ${aiText}`)
+    return
   }
 }
 
