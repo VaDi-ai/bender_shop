@@ -32,6 +32,13 @@ import {
   handleAnalyticsMessage,
 } from './admin/analytics'
 import { showAISettings, setupAISettingsHandlers } from './admin/ai_settings'
+import {
+  storefrontState,
+  setupStorefrontHandlers,
+  handleStorefrontMessage,
+  handleStorefrontPhoto,
+  showStorefront,
+} from './admin/storefront'
 
 const BOT_TOKEN = process.env.BOT_TOKEN
 const ADMIN_IDS = (process.env.ADMIN_IDS ?? '').split(',').map((id) => Number(id.trim()))
@@ -58,6 +65,7 @@ const adminKeyboard = Markup.keyboard([
   ['🏷️ Акции', '🔧 Техработы'],
   ['📦 Товароучёт', '🔑 API Ключи'],
   ['📂 Сегменты', '🤖 AI Агент'],
+  ['🖼️ Витрина'],
 ]).resize()
 
 // Кнопки главного меню — для сброса пошаговых флоу при нажатии
@@ -72,6 +80,7 @@ const MENU_BUTTONS = new Set([
   '🔑 API Ключи',
   '📂 Сегменты',
   '🤖 AI Агент',
+  '🖼️ Витрина',
 ])
 
 // ─── Обработка сообщений от клиентов ─────────────────────────────────────────
@@ -105,6 +114,7 @@ bot.on(message('text'), async (ctx, next) => {
     segmentsState.delete(userId)
     salesState.delete(userId)
     analyticsState.delete(userId)
+    storefrontState.delete(userId)
     return next()
   }
 
@@ -156,6 +166,12 @@ bot.on(message('text'), async (ctx, next) => {
     if (handled) return
   }
 
+  // Флоу витрины
+  if (storefrontState.has(userId)) {
+    const handled = await handleStorefrontMessage(ctx as any, userId, text)
+    if (handled) return
+  }
+
   return next()
 })
 
@@ -166,6 +182,8 @@ bot.on(message('photo'), async (ctx, next) => {
   if (!userId) return next()
   const handled = await handleInventoryPhoto(ctx, userId)
   if (handled) return
+  const handledSf = await handleStorefrontPhoto(ctx as any, userId)
+  if (handledSf) return
   return next()
 })
 
@@ -404,6 +422,14 @@ setupAISettingsHandlers(bot)
 
 bot.hears('🤖 AI Агент', async (ctx) => {
   await showAISettings(ctx)
+})
+
+// ─── 🖼️ Витрина ───────────────────────────────────────────────────────────────
+
+setupStorefrontHandlers(bot)
+
+bot.hears('🖼️ Витрина', async (ctx) => {
+  await showStorefront(ctx)
 })
 
 // ─── 💰 Продажи и резервы ─────────────────────────────────────────────────────

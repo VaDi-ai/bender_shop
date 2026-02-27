@@ -52,8 +52,11 @@ type WriteoffFlow =
 type ImportFlow = { flow: 'import'; step: 'awaiting_file' }
 type ReceiveFileFlow = { flow: 'receive_file'; step: 'awaiting_file' }
 type WriteoffFileFlow = { flow: 'writeoff_file'; step: 'awaiting_file' }
-type CategoryAddFlow = { flow: 'category_add'; step: 'name' }
+type CategoryAddFlow =
+  | { flow: 'category_add'; step: 'name' }
+  | { flow: 'category_add'; step: 'textSide'; name: string }
 type CategoryRenameFlow = { flow: 'category_rename'; step: 'name'; categoryId: number; oldName: string }
+type CategoryBannerFlow = { flow: 'category_banner'; step: 'photo'; categoryId: number; categoryName: string }
 
 export type InventoryFlowState =
   | AddFlow
@@ -64,6 +67,7 @@ export type InventoryFlowState =
   | WriteoffFileFlow
   | CategoryAddFlow
   | CategoryRenameFlow
+  | CategoryBannerFlow
 
 // userId → активный флоу (сбрасывается после завершения или отмены)
 export const inventoryState = new Map<number, InventoryFlowState>()
@@ -261,15 +265,53 @@ async function showCategories(ctx: Context): Promise<void> {
     orderBy: { name: 'asc' },
   })
 
-  const rows: ReturnType<typeof Markup.button.callback>[][] = categories.map((cat) => [
-    Markup.button.callback(`✏️ ${cat.name} (${cat._count.products})`, `inv:cat_rename:${cat.id}`),
-    Markup.button.callback('🗑️', `inv:cat_delete:${cat.id}`),
-  ])
+  const rows: ReturnType<typeof Markup.button.callback>[][] = categories.map((cat) => {
+    const banner = cat.imageFile ? '🖼️' : '🚫'
+    return [
+      Markup.button.callback(`${banner} ${cat.name} (${cat._count.products})`, `inv:cat_edit:${cat.id}`),
+      Markup.button.callback('🗑️', `inv:cat_delete:${cat.id}`),
+    ]
+  })
   rows.push([Markup.button.callback('➕ Добавить категорию', 'inv:category_add')])
   rows.push([Markup.button.callback('🔙 К товароучёту', 'inv:back')])
 
   const text = categories.length === 0 ? '📂 Категории\n\nКатегорий пока нет.' : '📂 Категории'
   await ctx.reply(text, Markup.inlineKeyboard(rows))
+}
+
+// ─── Карточка редактирования категории ────────────────────────────────────────
+
+async function showCategoryEdit(ctx: Context, categoryId: number): Promise<void> {
+  const cat = await prisma.category.findUnique({
+    where: { id: categoryId },
+    include: { _count: { select: { products: true } } },
+  })
+  if (!cat) {
+    await ctx.reply('❌ Категория не найдена.')
+    await showCategories(ctx)
+    return
+  }
+
+  const bannerStatus = cat.imageFile ? '🖼️ Баннер: загружен ✅' : '🖼️ Баннер: не загружен ❌'
+  const sideLabel = cat.textSide === 'right' ? '▶️ Текст справа' : '◀️ Текст слева'
+  const text = [
+    `📂 ${cat.name}`,
+    `Товаров: ${cat._count.products}`,
+    bannerStatus,
+    `Сторона текста: ${sideLabel}`,
+  ].join('\n')
+
+  await ctx.reply(
+    text,
+    Markup.inlineKeyboard([
+      [Markup.button.callback('✏️ Переименовать', `inv:cat_rename:${cat.id}`)],
+      [
+        Markup.button.callback('🖼️ Сменить баннер', `inv:cat_banner:${cat.id}`),
+        Markup.button.callback('↔️ Сменить сторону текста', `inv:cat_textside:${cat.id}`),
+      ],
+      [Markup.button.callback('🔙 К категориям', 'inv:categories')],
+    ]),
+  )
 }
 
 // ─── Вспомогательные функции выбора товара (оприходование / списание) ─────────
@@ -479,6 +521,94 @@ export function setupInventoryHandlers(bot: Telegraf): void {
     )
   })
 
+  // ── Редактирование категории ────────────────────────────────────────────────
+
+  bot.action(/^inv:cat_edit:(\d+)$/, async (ctx) => {
+    try { await ctx.answerCbQuery() } catch { /* ignore stale query */ }
+    const categoryId = parseInt((ctx.match as RegExpMatchArray)[1], 10)
+    await showCategoryEdit(ctx, categoryId)
+  })
+
+  // ── Сменить баннер ──────────────────────────────────────────────────────────
+
+  bot.action(/^inv:cat_banner:(\d+)$/, async (ctx) => {
+    try { await ctx.answerCbQuery() } catch { /* ignore stale query */ }
+    const userId = ctx.from!.id
+    const categoryId = parseInt((ctx.match as RegExpMatchArray)[1], 10)
+    const cat = await prisma.category.findUnique({ where: { id: categoryId } })
+    if (!cat) {
+      await ctx.reply('❌ Категория не найдена.')
+      return
+    }
+    inventoryState.set(userId, { flow: 'category_banner', step: 'photo', categoryId: cat.id, categoryName: cat.name })
+    await ctx.reply(
+      `🖼️ Баннер для «${cat.name}»\n\nОтправьте фото-баннер:`,
+      Markup.keyboard([['❌ Отмена']]).resize(),
+    )
+  })
+
+  // ── Сменить сторону текста ─────────────────────────────────────────────────
+
+  bot.action(/^inv:cat_textside:(\d+)$/, async (ctx) => {
+    try { await ctx.answerCbQuery() } catch { /* ignore stale query */ }
+    const categoryId = parseInt((ctx.match as RegExpMatchArray)[1], 10)
+    const cat = await prisma.category.findUnique({ where: { id: categoryId } })
+    if (!cat) {
+      await ctx.reply('❌ Категория не найдена.')
+      return
+    }
+    await ctx.reply(
+      `↔️ Сторона текста для «${cat.name}»\n\nВыберите:`,
+      Markup.inlineKeyboard([
+        [
+          Markup.button.callback('◀️ Текст слева', `inv:cat_textside_set:${cat.id}:left`),
+          Markup.button.callback('▶️ Текст справа', `inv:cat_textside_set:${cat.id}:right`),
+        ],
+        [Markup.button.callback('🔙 Назад', `inv:cat_edit:${cat.id}`)],
+      ]),
+    )
+  })
+
+  bot.action(/^inv:cat_textside_set:(\d+):(left|right)$/, async (ctx) => {
+    try { await ctx.answerCbQuery() } catch { /* ignore stale query */ }
+    const m = ctx.match as RegExpMatchArray
+    const categoryId = parseInt(m[1], 10)
+    const side = m[2] as 'left' | 'right'
+    const cat = await prisma.category.findUnique({ where: { id: categoryId } })
+    if (!cat) {
+      await ctx.reply('❌ Категория не найдена.')
+      return
+    }
+    await prisma.category.update({ where: { id: categoryId }, data: { textSide: side } })
+    const label = side === 'right' ? '▶️ Текст справа' : '◀️ Текст слева'
+    await ctx.reply(`✅ Сторона текста «${cat.name}»: ${label}`)
+    await showCategoryEdit(ctx, categoryId)
+  })
+
+  // ── Выбор стороны текста при добавлении категории ─────────────────────────
+
+  bot.action(/^inv:cat_add_textside:(left|right)$/, async (ctx) => {
+    try { await ctx.answerCbQuery() } catch { /* ignore stale query */ }
+    const userId = ctx.from!.id
+    const state = inventoryState.get(userId)
+    if (!state || state.flow !== 'category_add' || state.step !== 'textSide') return
+
+    const side = (ctx.match as RegExpMatchArray)[1] as 'left' | 'right'
+    const s = state as Extract<CategoryAddFlow, { step: 'textSide' }>
+    try {
+      await prisma.category.create({ data: { name: s.name, textSide: side } })
+      inventoryState.delete(userId)
+      const label = side === 'right' ? '▶️ Текст справа' : '◀️ Текст слева'
+      await ctx.reply(`✅ Категория «${s.name}» добавлена (${label}).`, Markup.removeKeyboard())
+      await showCategories(ctx)
+    } catch (err) {
+      console.error('category add textSide error:', err)
+      inventoryState.delete(userId)
+      await ctx.reply('❌ Ошибка при сохранении.', Markup.removeKeyboard())
+      await showInventory(ctx)
+    }
+  })
+
   bot.action('inv:back', async (ctx) => {
     try { await ctx.answerCbQuery() } catch { /* ignore stale query */ }
     await showInventory(ctx)
@@ -680,6 +810,16 @@ export async function handleInventoryMessage(
       return handleCategoryAddFlow(ctx, userId, text, state)
     case 'category_rename':
       return handleCategoryRenameFlow(ctx, userId, text, state)
+    case 'category_banner': {
+      if (text === '❌ Отмена') {
+        inventoryState.delete(userId)
+        await ctx.reply('Отменено.', Markup.removeKeyboard())
+        await showCategories(ctx)
+      } else {
+        await ctx.reply('📷 Пришлите фото баннера (или нажмите ❌ Отмена)')
+      }
+      return true
+    }
     case 'import':
     case 'receive_file':
     case 'writeoff_file': {
@@ -696,14 +836,38 @@ export async function handleInventoryMessage(
 }
 
 // ─── Обработчик входящего фото ────────────────────────────────────────────────
-// Вызывается из bot/index.ts для шага photo флоу добавления товара.
+// Вызывается из bot/index.ts для шага photo флоу добавления товара и баннера категории.
 
 export async function handleInventoryPhoto(ctx: Context, userId: number): Promise<boolean> {
   const state = inventoryState.get(userId)
-  if (!state || state.flow !== 'add' || state.step !== 'photo') return false
+  if (!state) return false
 
   const photos = (ctx.message as { photo?: Array<{ file_id: string }> })?.photo
   if (!photos || !Array.isArray(photos) || photos.length === 0) return false
+
+  const bestPhoto = photos[photos.length - 1]
+
+  // ── Баннер категории ───────────────────────────────────────────────────────
+  if (state.flow === 'category_banner' && state.step === 'photo') {
+    const s = state as CategoryBannerFlow
+    try {
+      await prisma.category.update({
+        where: { id: s.categoryId },
+        data: { imageFile: bestPhoto.file_id },
+      })
+      inventoryState.delete(userId)
+      await ctx.reply(`✅ Баннер для «${s.categoryName}» сохранён.`, Markup.removeKeyboard())
+      await showCategoryEdit(ctx, s.categoryId)
+    } catch (err) {
+      console.error('category banner error:', err)
+      inventoryState.delete(userId)
+      await ctx.reply('❌ Ошибка при сохранении баннера.', Markup.removeKeyboard())
+    }
+    return true
+  }
+
+  // ── Фото товара ────────────────────────────────────────────────────────────
+  if (!state || state.flow !== 'add' || state.step !== 'photo') return false
 
   const s = state as Extract<AddFlow, { step: 'photo' }>
 
@@ -716,7 +880,6 @@ export async function handleInventoryPhoto(ctx: Context, userId: number): Promis
   }
 
   // Берём последний элемент массива — самое высокое качество
-  const bestPhoto = photos[photos.length - 1]
   const newFileIds = [...s.photoFileIds, bestPhoto.file_id]
   inventoryState.set(userId, { ...s, photoFileIds: newFileIds })
 
@@ -1275,7 +1438,7 @@ async function handleCategoryAddFlow(
   ctx: Context,
   userId: number,
   text: string,
-  _state: CategoryAddFlow,
+  state: CategoryAddFlow,
 ): Promise<boolean> {
   if (text === '❌ Отмена') {
     inventoryState.delete(userId)
@@ -1284,22 +1447,35 @@ async function handleCategoryAddFlow(
     return true
   }
 
-  try {
-    const existing = await prisma.category.findUnique({ where: { name: text } })
-    if (existing) {
-      await ctx.reply(`❌ Категория «${text}» уже существует. Введите другое название:`)
-      return true
+  // Шаг 1 — ввод имени
+  if (state.step === 'name') {
+    try {
+      const existing = await prisma.category.findUnique({ where: { name: text } })
+      if (existing) {
+        await ctx.reply(`❌ Категория «${text}» уже существует. Введите другое название:`)
+        return true
+      }
+      inventoryState.set(userId, { flow: 'category_add', step: 'textSide', name: text })
+      await ctx.reply(
+        `Категория: «${text}»\n\nВыберите сторону текста для баннера:`,
+        Markup.inlineKeyboard([
+          [
+            Markup.button.callback('◀️ Текст слева', 'inv:cat_add_textside:left'),
+            Markup.button.callback('▶️ Текст справа', 'inv:cat_add_textside:right'),
+          ],
+        ]),
+      )
+    } catch (err) {
+      console.error('category add error:', err)
+      inventoryState.delete(userId)
+      await ctx.reply('❌ Ошибка при сохранении.', Markup.removeKeyboard())
+      await showInventory(ctx)
     }
-    await prisma.category.create({ data: { name: text } })
-    inventoryState.delete(userId)
-    await ctx.reply(`✅ Категория «${text}» добавлена.`, Markup.removeKeyboard())
-    await showCategories(ctx)
-  } catch (err) {
-    console.error('category add error:', err)
-    inventoryState.delete(userId)
-    await ctx.reply('❌ Ошибка при сохранении.', Markup.removeKeyboard())
-    await showInventory(ctx)
+    return true
   }
+
+  // Шаг 2 — ожидаем нажатие кнопки (текст здесь не обрабатываем)
+  await ctx.reply('Выберите сторону текста с помощью кнопок выше.')
   return true
 }
 

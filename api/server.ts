@@ -9,9 +9,12 @@
 
 import 'dotenv/config'
 import http from 'http'
+import https from 'https'
 import fs from 'fs'
 import path from 'path'
 import { prisma } from '../lib/prisma'
+
+const BOT_TOKEN = process.env.BOT_TOKEN ?? ''
 
 const PORT = Number(process.env.API_PORT ?? 3000)
 const WEBAPP_FILE = path.join(__dirname, '../webapp/index.html')
@@ -78,10 +81,112 @@ export function startApiServer(): void {
           price: p.price.toString(),
           category: p.category?.name ?? '',
           photoUrl: p.photoUrl ?? '',
+          quantity: p.quantity,
         }))
 
         res.writeHead(200, { 'Content-Type': 'application/json' })
         return res.end(JSON.stringify(payload))
+      }
+
+      // ── GET /api/categories ─────────────────────────────────────────────────
+      if (req.method === 'GET' && url.pathname === '/api/categories') {
+        const categories = await prisma.category.findMany({
+          include: { _count: { select: { products: true } } },
+          orderBy: { name: 'asc' },
+        })
+
+        const payload = categories.map((c) => ({
+          id: c.id,
+          name: c.name,
+          textSide: c.textSide,
+          productCount: c._count.products,
+          imageUrl: c.imageFile ? `/api/banner/${c.imageFile}` : null,
+        }))
+
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        return res.end(JSON.stringify(payload))
+      }
+
+      // ── GET /api/settings ───────────────────────────────────────────────────
+      if (req.method === 'GET' && url.pathname === '/api/settings') {
+        const key = url.searchParams.get('key')
+        if (!key) {
+          res.writeHead(400, { 'Content-Type': 'application/json' })
+          return res.end(JSON.stringify({ error: 'Missing key param' }))
+        }
+        const record = await prisma.apiKey.findUnique({ where: { service: 'setting_' + key } })
+        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate')
+        res.setHeader('Pragma', 'no-cache')
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        return res.end(JSON.stringify({ value: record?.value ?? '' }))
+      }
+
+      // ── GET /api/cache-version ──────────────────────────────────────────────
+      if (req.method === 'GET' && url.pathname === '/api/cache-version') {
+        const record = await prisma.apiKey.findUnique({ where: { service: 'cache_version' } })
+        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate')
+        res.setHeader('Pragma', 'no-cache')
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        return res.end(JSON.stringify({ version: record?.value ?? '0' }))
+      }
+
+      // ── GET /api/hero-banners ────────────────────────────────────────────────
+      if (req.method === 'GET' && url.pathname === '/api/hero-banners') {
+        const banners = await prisma.heroBanner.findMany({
+          where: { isActive: true },
+          orderBy: { order: 'asc' },
+        })
+        const payload = banners.map((b) => ({
+          id: b.id,
+          imageUrl: '/api/banner/' + b.imageFile,
+          title: b.title ?? null,
+          subtitle: b.subtitle ?? null,
+          order: b.order,
+        }))
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        return res.end(JSON.stringify(payload))
+      }
+
+      // ── GET /api/banner/:fileId ─────────────────────────────────────────────
+      if (req.method === 'GET' && url.pathname.startsWith('/api/banner/')) {
+        const fileId = url.pathname.slice('/api/banner/'.length)
+        if (!fileId) {
+          res.writeHead(400)
+          return res.end('Missing file id')
+        }
+
+        // 1. Получаем путь файла от Telegram
+        const filePath = await new Promise<string>((resolve, reject) => {
+          const tgUrl = `https://api.telegram.org/bot${BOT_TOKEN}/getFile?file_id=${encodeURIComponent(fileId)}`
+          https.get(tgUrl, (tgRes) => {
+            let data = ''
+            tgRes.on('data', (chunk) => (data += chunk))
+            tgRes.on('end', () => {
+              try {
+                const json = JSON.parse(data)
+                if (!json.ok) return reject(new Error('Telegram getFile failed'))
+                resolve(json.result.file_path as string)
+              } catch (e) {
+                reject(e)
+              }
+            })
+          }).on('error', reject)
+        })
+
+        // 2. Скачиваем и стримим клиенту
+        const downloadUrl = `https://api.telegram.org/file/bot${BOT_TOKEN}/${filePath}`
+        await new Promise<void>((resolve, reject) => {
+          https.get(downloadUrl, (tgRes) => {
+            res.writeHead(200, {
+              'Content-Type': 'image/jpeg',
+              'Cache-Control': 'public, max-age=86400',
+            })
+            tgRes.pipe(res)
+            tgRes.on('end', resolve)
+            tgRes.on('error', reject)
+          }).on('error', reject)
+        })
+        return
       }
 
       // ── POST /api/orders ────────────────────────────────────────────────────
