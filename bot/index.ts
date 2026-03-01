@@ -187,11 +187,25 @@ bot.on(message('photo'), async (ctx, next) => {
   return next()
 })
 
-// ─── Перехватчик документов для импорта прайса ────────────────────────────────
+// ─── Перехватчик документов ───────────────────────────────────────────────────
+// Обрабатывает:
+//   1. Image-документы (PNG без фона и т.п.) → photo-флоу товароучёта и витрины
+//   2. Файлы прайсов (Excel/CSV) → импорт, приёмка, списание
 
 bot.on(message('document'), async (ctx, next) => {
   const userId = ctx.from?.id
   if (!userId) return next()
+
+  const doc = (ctx.message as { document?: { mime_type?: string } })?.document
+
+  // Image-документ → роутим в photo-обработчики (работают с photo и document)
+  if (doc?.mime_type?.startsWith('image/')) {
+    const handled = await handleInventoryPhoto(ctx as any, userId)
+    if (handled) return
+    const handledSf = await handleStorefrontPhoto(ctx as any, userId)
+    if (handledSf) return
+  }
+
   const state = inventoryState.get(userId)
   if (
     state?.flow === 'import' ||
@@ -201,6 +215,7 @@ bot.on(message('document'), async (ctx, next) => {
     await handleInventoryDocument(ctx, userId)
     return
   }
+
   return next()
 })
 

@@ -12,6 +12,7 @@
     }
 
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    img { background-color: #1a1a1a; }
 
     :root {
       --bg:        #0a0a0a;
@@ -37,7 +38,6 @@
       cursor: none;
     }
 
-    /* Touch devices — отключить кастомный курсор */
     @media (pointer: coarse) {
       body { cursor: auto; }
       #cursor { display: none; }
@@ -45,568 +45,326 @@
 
     /* ── Custom cursor ─────────────────────────────────────────────────────── */
     #cursor {
-      position: fixed;
-      width: 18px; height: 18px;
-      pointer-events: none;
-      z-index: 10000;
+      position: fixed; width: 18px; height: 18px;
+      pointer-events: none; z-index: 10000;
       transform: translate(-50%, -50%);
     }
     #cursor::before, #cursor::after {
-      content: '';
-      position: absolute;
-      background: var(--accent);
-      box-shadow: 0 0 6px var(--accent);
+      content: ''; position: absolute;
+      background: var(--accent); box-shadow: 0 0 6px var(--accent);
     }
     #cursor::before { width: 2px; height: 100%; left: 50%; top: 0; transform: translateX(-50%); }
     #cursor::after  { width: 100%; height: 2px; top: 50%; left: 0; transform: translateY(-50%); }
 
     /* ── Page loader ──────────────────────────────────────────────────────── */
     #loader {
-      position: fixed; inset: 0;
-      z-index: 9000;
-      background: #000;
-      display: flex; flex-direction: column;
-      align-items: center; justify-content: center;
-      gap: 28px;
+      position: fixed; inset: 0; z-index: 9000;
+      background: #000; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; gap: 28px;
       transition: opacity 0.5s ease;
     }
     #loader.fade-out { opacity: 0; pointer-events: none; }
     .loader-title {
       font-family: 'CyberpunkRus', sans-serif;
-      font-size: clamp(38px, 9vw, 80px);
-      color: var(--accent);
-      text-shadow: var(--neon);
-      letter-spacing: 6px;
-      animation: flicker 4s infinite;
+      font-size: clamp(38px, 9vw, 80px); color: var(--accent);
+      text-shadow: var(--neon); letter-spacing: 6px; animation: flicker 4s infinite;
     }
     @keyframes flicker {
       0%, 94%, 96%, 98%, 100% { opacity: 1; }
       95% { opacity: 0.6; } 97% { opacity: 0.8; } 99% { opacity: 0.4; }
     }
-    .loader-bar-wrap {
-      width: min(300px, 75vw); height: 2px;
-      background: #1a1a1a; position: relative; overflow: hidden;
-    }
+    .loader-bar-wrap { width: min(300px, 75vw); height: 2px; background: #1a1a1a; position: relative; overflow: hidden; }
     .loader-bar-wrap::before {
       content: ''; position: absolute; inset: 0;
-      background: repeating-linear-gradient(
-        90deg, transparent 0px, transparent 4px,
-        rgba(168,255,62,0.1) 4px, rgba(168,255,62,0.1) 6px
-      );
+      background: repeating-linear-gradient(90deg, transparent 0px, transparent 4px, rgba(168,255,62,0.1) 4px, rgba(168,255,62,0.1) 6px);
     }
-    .loader-bar {
-      height: 100%; width: 0%;
-      background: var(--accent);
-      box-shadow: 0 0 12px var(--accent);
-      transition: width 2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
-      position: relative; z-index: 1;
-    }
+    .loader-bar { height: 100%; width: 0%; background: var(--accent); box-shadow: 0 0 12px var(--accent); transition: width 2s cubic-bezier(0.25, 0.46, 0.45, 0.94); position: relative; z-index: 1; }
     .loader-sub { font-size: 10px; color: var(--hint); letter-spacing: 4px; text-transform: uppercase; }
 
     /* ── Fixed header ─────────────────────────────────────────────────────── */
     .header {
-      position: fixed; top: 0; left: 0; right: 0;
-      height: var(--header-h);
-      z-index: 500;
-      background: rgba(10,10,10,0.92);
-      backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
-      border-bottom: 1px solid rgba(255,255,255,0.05);
-      padding: 0 20px;
+      position: fixed; top: 0; left: 0; right: 0; height: var(--header-h); z-index: 500;
+      background: rgba(10,10,10,0.92); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+      border-bottom: 1px solid rgba(255,255,255,0.05); padding: 0 20px;
       display: flex; align-items: center; justify-content: space-between;
     }
-    .header-logo {
-      font-family: 'CyberpunkRus', sans-serif;
-      font-size: 20px; color: var(--accent);
-      text-shadow: var(--neon); letter-spacing: 3px;
-      cursor: pointer; user-select: none;
-    }
+    .header-logo { font-family: 'CyberpunkRus', sans-serif; font-size: 20px; color: var(--accent); text-shadow: var(--neon); letter-spacing: 3px; cursor: pointer; user-select: none; }
     .header-right { display: flex; align-items: center; gap: 10px; }
-    .cart-btn {
-      display: flex; align-items: center; gap: 8px;
-      background: transparent; color: var(--text);
-      border: 1px solid #2a2a2a; padding: 8px 14px;
-      font-size: 15px; cursor: pointer;
-      transition: border-color 0.2s;
-    }
+    .cart-btn { display: flex; align-items: center; gap: 8px; background: transparent; color: var(--text); border: 1px solid #2a2a2a; padding: 8px 14px; font-size: 15px; cursor: pointer; transition: border-color 0.2s; }
     .cart-btn:hover { border-color: var(--accent); }
-    .cart-badge {
-      font-family: 'CyberpunkRus', sans-serif;
-      background: var(--accent); color: var(--accent-fg);
-      min-width: 20px; height: 20px; padding: 0 4px;
-      display: flex; align-items: center; justify-content: center;
-      font-size: 11px; font-weight: 700;
-    }
+    .cart-badge { font-family: 'CyberpunkRus', sans-serif; background: var(--accent); color: var(--accent-fg); min-width: 20px; height: 20px; padding: 0 4px; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; }
     .cart-badge[data-count="0"] { display: none; }
-    .menu-btn {
-      background: transparent; border: 1px solid #2a2a2a;
-      color: var(--text); width: 40px; height: 40px;
-      font-size: 19px; cursor: pointer;
-      display: flex; align-items: center; justify-content: center;
-      transition: border-color 0.2s, color 0.2s;
-    }
+    .menu-btn { background: transparent; border: 1px solid #2a2a2a; color: var(--text); width: 40px; height: 40px; font-size: 19px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: border-color 0.2s, color 0.2s; }
     .menu-btn:hover { border-color: var(--accent); color: var(--accent); }
 
     /* ── Shared overlay ───────────────────────────────────────────────────── */
-    .overlay {
-      position: fixed; inset: 0;
-      background: rgba(0,0,0,0.65);
-      z-index: 350; opacity: 0; pointer-events: none;
-      transition: opacity 0.3s;
-    }
+    .overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.65); z-index: 350; opacity: 0; pointer-events: none; transition: opacity 0.3s; }
     .overlay.show { opacity: 1; pointer-events: all; }
 
     /* ── Nav sidebar ──────────────────────────────────────────────────────── */
-    .nav-sidebar {
-      position: fixed; top: 0; right: 0;
-      width: 280px; height: 100%;
-      z-index: 400;
-      background: #0a0a0a;
-      border-left: 2px solid var(--accent);
-      box-shadow: -4px 0 40px rgba(168,255,62,0.08);
-      transform: translateX(100%);
-      transition: transform 400ms cubic-bezier(0.16, 1, 0.3, 1);
-      display: flex; flex-direction: column; overflow: hidden;
-    }
+    .nav-sidebar { position: fixed; top: 0; right: 0; width: 280px; height: 100%; z-index: 400; background: #0a0a0a; border-left: 2px solid var(--accent); box-shadow: -4px 0 40px rgba(168,255,62,0.08); transform: translateX(100%); transition: transform 400ms cubic-bezier(0.16, 1, 0.3, 1); display: flex; flex-direction: column; overflow: hidden; }
     .nav-sidebar.open { transform: translateX(0); }
-    .nav-header {
-      padding: 18px 20px;
-      border-bottom: 1px solid #161616;
-      display: flex; align-items: center; justify-content: space-between;
-      flex-shrink: 0;
-    }
-    .nav-title {
-      font-family: 'CyberpunkRus', sans-serif;
-      color: var(--accent); font-size: 17px;
-      text-shadow: 0 0 12px rgba(168,255,62,0.4); letter-spacing: 3px;
-    }
-    .nav-close, .cart-close {
-      background: transparent; border: 1px solid #2a2a2a;
-      color: var(--text); width: 32px; height: 32px;
-      font-size: 16px; cursor: pointer;
-      display: flex; align-items: center; justify-content: center;
-      transition: border-color 0.2s, color 0.2s;
-    }
+    .nav-header { padding: 18px 20px; border-bottom: 1px solid #161616; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
+    .nav-title { font-family: 'CyberpunkRus', sans-serif; color: var(--accent); font-size: 17px; text-shadow: 0 0 12px rgba(168,255,62,0.4); letter-spacing: 3px; }
+    .nav-close, .cart-close { background: transparent; border: 1px solid #2a2a2a; color: var(--text); width: 32px; height: 32px; font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: border-color 0.2s, color 0.2s; }
     .nav-close:hover, .cart-close:hover { border-color: var(--accent); color: var(--accent); }
     .nav-list { flex: 1; overflow-y: auto; padding: 8px 0; }
     .nav-list::-webkit-scrollbar { width: 3px; }
     .nav-list::-webkit-scrollbar-thumb { background: #222; }
-    .nav-item {
-      display: flex; align-items: center;
-      padding: 15px 20px;
-      font-family: 'CyberpunkRus', sans-serif;
-      font-size: 14px; color: var(--text);
-      cursor: pointer; border-bottom: 1px solid #0f0f0f;
-      transition: color 0.2s, padding-left 0.25s, background 0.2s;
-      letter-spacing: 1.5px; user-select: none;
-    }
+    .nav-item { display: flex; align-items: center; padding: 15px 20px; font-family: 'CyberpunkRus', sans-serif; font-size: 14px; color: var(--text); cursor: pointer; border-bottom: 1px solid #0f0f0f; transition: color 0.2s, padding-left 0.25s, background 0.2s; letter-spacing: 1.5px; user-select: none; }
     .nav-item:hover { color: var(--accent); padding-left: 28px; background: rgba(168,255,62,0.03); }
     .nav-item.active { color: var(--accent); border-left: 3px solid var(--accent); padding-left: 17px; }
     .nav-item-all { color: var(--hint); }
     .nav-item-all.active { color: var(--accent); }
 
     /* ── Marquee bar ──────────────────────────────────────────────────────── */
-    .marquee-bar {
-      position: sticky;
-      top: var(--header-h);
-      z-index: 490;
-      height: var(--marquee-h);
-      background: #0d0d0d;
-      border-bottom: 1px solid #1a1a1a;
-      display: flex; align-items: center;
-      overflow: hidden;
-    }
-    .marquee-track {
-      display: flex;
-      animation: marquee 20s linear infinite;
-      flex-shrink: 0;
-    }
-    .marquee-track span {
-      font-family: 'Courier New', monospace;
-      font-size: 14px;
-      color: #a8ff3e;
-      text-shadow: 0 0 8px rgba(168,255,62,0.6);
-      white-space: nowrap;
-      padding-right: 80px;
-      letter-spacing: 2px;
-    }
-    @keyframes marquee {
-      from { transform: translateX(0); }
-      to   { transform: translateX(-50%); }
-    }
+    .marquee-bar { position: sticky; top: var(--header-h); z-index: 490; height: var(--marquee-h); background: #0d0d0d; border-bottom: 1px solid #1a1a1a; display: flex; align-items: center; overflow: hidden; }
+    .marquee-track { display: flex; animation: marquee 20s linear infinite; flex-shrink: 0; }
+    .marquee-track span { font-family: 'Courier New', monospace; font-size: 14px; color: #a8ff3e; text-shadow: 0 0 8px rgba(168,255,62,0.6); white-space: nowrap; padding-right: 80px; letter-spacing: 2px; }
+    @keyframes marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
 
     /* ── Hero slider ──────────────────────────────────────────────────────── */
-    .hero-slider {
-      position: relative;
-      width: 100%; height: 60vh;
-      overflow: hidden;
-      background: #0a0a0a;
-    }
-    /* Scanlines overlay */
-    .hero-slider::after {
-      content: '';
-      position: absolute; inset: 0;
-      background: repeating-linear-gradient(
-        0deg, transparent, transparent 2px,
-        rgba(0,0,0,0.05) 2px, rgba(0,0,0,0.05) 4px
-      );
-      pointer-events: none; z-index: 3;
-    }
-    /* Fallback when no banners */
-    .hero-slider-fallback {
-      position: absolute; inset: 0;
-      background: linear-gradient(135deg, #0a0a0a 0%, #111111 100%);
-      display: flex; align-items: center; justify-content: center;
-      z-index: 1;
-    }
-    .hero-slider-fallback-text {
-      font-family: 'CyberpunkRus', sans-serif;
-      font-size: clamp(32px, 8vw, 90px);
-      color: #fff;
-      text-shadow: 0 0 40px rgba(168,255,62,0.15);
-      letter-spacing: 6px;
-    }
+    .hero-slider { position: relative; width: 100%; height: 60vh; overflow: hidden; background: #0a0a0a; }
+    .hero-slider::after { content: ''; position: absolute; inset: 0; background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.05) 2px, rgba(0,0,0,0.05) 4px); pointer-events: none; z-index: 3; }
+    .hero-slider-fallback { position: absolute; inset: 0; background: linear-gradient(135deg, #0a0a0a 0%, #111111 100%); display: flex; align-items: center; justify-content: center; z-index: 1; }
+    .hero-slider-fallback-text { font-family: 'CyberpunkRus', sans-serif; font-size: clamp(32px, 8vw, 90px); color: #fff; text-shadow: 0 0 40px rgba(168,255,62,0.15); letter-spacing: 6px; }
     .hero-slider-fallback-text span { color: var(--accent); text-shadow: var(--neon); }
-    /* Individual slides */
-    .hero-slide {
-      position: absolute; inset: 0;
-      opacity: 0;
-      transition: opacity 800ms ease;
-      background-size: cover; background-position: center;
-      display: flex; align-items: flex-end;
-      z-index: 1;
-    }
+    .hero-slide { position: absolute; inset: 0; opacity: 0; transition: opacity 800ms ease; background-size: cover; background-position: center; display: flex; align-items: flex-end; z-index: 1; }
     .hero-slide.active { opacity: 1; }
-    .hero-slide-caption {
-      position: relative; z-index: 2;
-      width: 100%;
-      padding: 32px 36px;
-      background: linear-gradient(to top, rgba(0,0,0,0.75) 0%, transparent 100%);
-    }
-    .hero-slide-title {
-      font-family: 'CyberpunkRus', sans-serif;
-      font-size: clamp(20px, 4vw, 52px);
-      color: #fff;
-      text-shadow: 0 0 10px #a8ff3e, 0 0 30px rgba(168,255,62,0.4);
-      letter-spacing: 2px; line-height: 1.1;
-    }
-    .hero-slide-subtitle {
-      font-size: clamp(11px, 2vw, 15px);
-      color: rgba(255,255,255,0.7);
-      letter-spacing: 2px; margin-top: 6px;
-    }
-    /* Slider bottom fade & controls */
-    .slider-bottom-fade {
-      position: absolute; bottom: 0; left: 0; right: 0; height: 80px;
-      background: linear-gradient(to top, rgba(10,10,10,0.85) 0%, transparent 100%);
-      z-index: 5; pointer-events: none;
-    }
-    .slider-controls {
-      position: absolute; bottom: 14px; right: 16px;
-      display: flex; align-items: center; gap: 8px;
-      pointer-events: all;
-    }
+    .hero-slide-caption { position: relative; z-index: 2; width: 100%; padding: 32px 36px; background: linear-gradient(to top, rgba(0,0,0,0.75) 0%, transparent 100%); }
+    .hero-slide-title { font-family: 'CyberpunkRus', sans-serif; font-size: clamp(20px, 4vw, 52px); color: #fff; text-shadow: 0 0 10px #a8ff3e, 0 0 30px rgba(168,255,62,0.4); letter-spacing: 2px; line-height: 1.1; }
+    .hero-slide-subtitle { font-size: clamp(11px, 2vw, 15px); color: rgba(255,255,255,0.7); letter-spacing: 2px; margin-top: 6px; }
+    .slider-bottom-fade { position: absolute; bottom: 0; left: 0; right: 0; height: 80px; background: linear-gradient(to top, rgba(10,10,10,0.85) 0%, transparent 100%); z-index: 5; pointer-events: none; }
+    .slider-controls { position: absolute; bottom: 14px; right: 16px; display: flex; align-items: center; gap: 8px; pointer-events: all; }
     .slider-dots { display: flex; align-items: center; gap: 6px; }
-    .slider-dot {
-      width: 8px; height: 8px; border-radius: 50%;
-      background: rgba(255,255,255,0.35); cursor: pointer;
-      transition: width 0.3s ease, border-radius 0.3s ease;
-      overflow: hidden; flex-shrink: 0;
-      position: relative;
-    }
-    .slider-dot.active {
-      width: 48px; border-radius: 4px;
-      background: rgba(255,255,255,0.15);
-    }
+    .slider-dot { width: 8px; height: 8px; border-radius: 50%; background: rgba(255,255,255,0.35); cursor: pointer; transition: width 0.3s ease, border-radius 0.3s ease; overflow: hidden; flex-shrink: 0; position: relative; }
+    .slider-dot.active { width: 48px; border-radius: 4px; background: rgba(255,255,255,0.15); }
     @keyframes fillProgress { from { width: 0 } to { width: 100% } }
-    .slider-dot .fill {
-      position: absolute; top: 0; left: 0;
-      height: 100%; width: 0;
-      background: #a8ff3e;
-      animation: fillProgress 5s linear forwards;
-    }
+    .slider-dot .fill { position: absolute; top: 0; left: 0; height: 100%; width: 0; background: #a8ff3e; animation: fillProgress 5s linear forwards; }
     .slider-nav { display: flex; gap: 4px; }
     .slider-nav.hidden { display: none; }
-    .slider-nav-btn {
-      width: 32px; height: 32px;
-      background: rgba(10,10,10,0.6);
-      border: 1px solid rgba(255,255,255,0.2);
-      color: #ffffff; font-size: 18px;
-      display: flex; align-items: center; justify-content: center;
-      cursor: pointer; user-select: none;
-      transition: border-color 0.2s;
-    }
+    .slider-nav-btn { width: 32px; height: 32px; background: rgba(10,10,10,0.6); border: 1px solid rgba(255,255,255,0.2); color: #ffffff; font-size: 18px; display: flex; align-items: center; justify-content: center; cursor: pointer; user-select: none; transition: border-color 0.2s; }
     .slider-nav-btn:hover { border-color: #a8ff3e; }
 
     /* ── Category banners ─────────────────────────────────────────────────── */
     #banners-wrap { margin-top: 60px; scroll-margin-top: calc(var(--header-h) + var(--marquee-h)); }
-    #banners { }
-    .banners-title {
-      font-family: 'CyberpunkRus', sans-serif;
-      font-size: clamp(24px, 4vw, 48px);
-      color: #ffffff;
-      border-left: 3px solid #a8ff3e;
-      padding-left: 16px;
-      margin-bottom: 32px;
-      margin-left: 20px;
-    }
-    @media (max-width: 768px) {
-      #banners-wrap { margin-top: 40px; }
-    }
-
-    .banner {
-      position: relative; height: 220px;
-      overflow: hidden; cursor: pointer;
-      border-bottom: 2px solid #1e1e1e;
-      transition: border-color 0.3s, box-shadow 0.3s;
-      user-select: none;
-    }
+    .banners-title { font-family: 'CyberpunkRus', sans-serif; font-size: clamp(24px, 4vw, 48px); color: #ffffff; border-left: 3px solid #a8ff3e; padding-left: 16px; margin-bottom: 32px; margin-left: 20px; }
+    @media (max-width: 768px) { #banners-wrap { margin-top: 40px; } }
+    .banner { position: relative; height: 220px; overflow: hidden; cursor: pointer; border-bottom: 2px solid #1e1e1e; transition: border-color 0.3s, box-shadow 0.3s; user-select: none; }
     @media (min-width: 768px) { .banner { height: 300px; } }
     .banner:hover { border-bottom-color: var(--accent); box-shadow: inset 0 -4px 24px rgba(168,255,62,0.18); }
     .banner:active { transform: scale(0.995); }
     .banner.active-cat { border-left: 4px solid var(--accent); box-shadow: inset 0 0 60px rgba(168,255,62,0.07); }
-    .banner-bg {
-      position: absolute; inset: 0;
-      background-size: cover; background-position: center;
-      transition: transform 0.7s ease;
-    }
+    .banner-bg { position: absolute; inset: 0; background-size: cover; background-position: center; transition: transform 0.7s ease; }
     .banner:hover .banner-bg { transform: scale(1.04); }
     .banner-overlay { position: absolute; inset: 0; z-index: 1; }
-    .banner-text {
-      position: absolute; top: 50%; transform: translateY(-50%);
-      max-width: 58%; z-index: 2;
-    }
+    .banner-text { position: absolute; top: 50%; transform: translateY(-50%); max-width: 58%; z-index: 2; }
     .banner-text--left  { left: 36px; }
     .banner-text--right { right: 36px; text-align: right; }
-    @media (max-width: 480px) {
-      .banner-text--left  { left: 20px; }
-      .banner-text--right { right: 20px; }
-      .banner-text { max-width: 65%; }
-    }
-    .banner-title {
-      font-family: 'CyberpunkRus', sans-serif;
-      font-size: clamp(28px, 5vw, 72px);
-      color: #fff; text-transform: uppercase;
-      text-shadow: 0 0 10px #a8ff3e, 0 0 30px #a8ff3e, 0 0 60px rgba(168,255,62,0.5);
-      line-height: 1; letter-spacing: 2px; margin-bottom: 10px;
-    }
+    @media (max-width: 480px) { .banner-text--left { left: 20px; } .banner-text--right { right: 20px; } .banner-text { max-width: 65%; } }
+    .banner-title { font-family: 'CyberpunkRus', sans-serif; font-size: clamp(28px, 5vw, 72px); color: #fff; text-transform: uppercase; text-shadow: 0 0 10px #a8ff3e, 0 0 30px #a8ff3e, 0 0 60px rgba(168,255,62,0.5); line-height: 1; letter-spacing: 2px; margin-bottom: 10px; }
     .banner-count { font-size: 12px; color: var(--accent); letter-spacing: 2px; text-transform: uppercase; }
-    .banner-anim {
-      opacity: 0;
-      transition: opacity 600ms cubic-bezier(0.16, 1, 0.3, 1),
-                  transform 600ms cubic-bezier(0.16, 1, 0.3, 1);
-    }
+    .banner-anim { opacity: 0; transition: opacity 600ms cubic-bezier(0.16, 1, 0.3, 1), transform 600ms cubic-bezier(0.16, 1, 0.3, 1); }
     .banner-anim[data-dir="left"]  { transform: translateX(-60px); }
-    .banner-anim[data-dir="right"] { transform: translateX(60px);  }
+    .banner-anim[data-dir="right"] { transform: translateX(60px); }
     .banner-anim.in-view { opacity: 1; transform: translateX(0); }
 
     /* ── Catalog section ──────────────────────────────────────────────────── */
     #catalog { scroll-margin-top: calc(var(--header-h) + var(--marquee-h)); padding-bottom: 120px; }
-    .catalog-header { padding: 36px 20px 20px; border-bottom: 1px solid #161616; margin-bottom: 16px; }
+    .catalog-header { padding: 36px 20px 20px; border-bottom: 1px solid #161616; }
     .catalog-title { font-family: 'CyberpunkRus', sans-serif; font-size: 28px; color: var(--text); letter-spacing: 3px; }
     .catalog-sub { font-size: 12px; color: var(--hint); margin-top: 4px; letter-spacing: 2px; text-transform: uppercase; }
 
+    /* ── Brand filter bar ─────────────────────────────────────────────────── */
+    .brand-filter-wrap { border-bottom: 1px solid #1a1a1a; }
+    .brand-filter-label { padding: 10px 16px 0; font-size: 10px; color: #555; letter-spacing: 2px; font-family: 'CyberpunkRus', sans-serif; }
+    .brand-filter-bar {
+      display: flex; overflow-x: auto; gap: 8px;
+      padding: 8px 16px 12px;
+      scrollbar-width: none; -ms-overflow-style: none;
+    }
+    .brand-filter-bar::-webkit-scrollbar { display: none; }
+    .brand-filter-tab {
+      flex-shrink: 0; padding: 6px 14px; background: transparent;
+      border: 1px solid #2a2a2a; color: #555;
+      font-family: 'CyberpunkRus', sans-serif; font-size: 12px;
+      letter-spacing: 1px; cursor: pointer; white-space: nowrap;
+      transition: border-color 0.2s, color 0.2s, background 0.2s; user-select: none;
+    }
+    .brand-filter-tab:hover { border-color: rgba(168,255,62,0.5); color: var(--accent); }
+    .brand-filter-tab.active { border-color: #a8ff3e; color: #a8ff3e; background: rgba(168,255,62,0.05); }
+
     /* ── Product grid ─────────────────────────────────────────────────────── */
-    .products { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 0 16px; }
-    .state-msg {
-      grid-column: 1 / -1; text-align: center;
-      padding: 48px 0; color: var(--hint); font-size: 14px; letter-spacing: 2px;
-    }
+    .products { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 16px 16px 0; }
+    .state-msg { grid-column: 1 / -1; text-align: center; padding: 48px 0; color: var(--hint); font-size: 14px; letter-spacing: 2px; }
+    @keyframes cardIn { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
 
-    @keyframes cardIn {
-      from { transform: translateY(20px); opacity: 0; }
-      to   { transform: translateY(0);    opacity: 1; }
-    }
-
-    /* Приглушённый стиль карточек */
     .product-card {
-      background: var(--surface);
-      border: 1px solid #2a2a2a;
-      box-shadow: none;
-      overflow: hidden;
-      display: flex; flex-direction: column;
+      background: var(--surface); border: 1px solid #2a2a2a;
+      overflow: hidden; display: flex; flex-direction: column;
       animation: cardIn 350ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
-      transition: border-color 0.2s, box-shadow 0.2s;
-      cursor: pointer;
+      transition: border-color 0.2s, box-shadow 0.2s; cursor: pointer;
     }
-    .product-card:hover {
-      border-color: rgba(255,255,255,0.4);
-      box-shadow: 0 0 15px rgba(255,255,255,0.08);
-    }
-    .product-card:active {
-      box-shadow: 0 0 20px rgba(255,255,255,0.15);
-    }
-    .product-photo { width: 100%; aspect-ratio: 1 / 1; object-fit: contain; display: block; pointer-events: none; background: #111111; }
-    .product-photo-ph {
-      width: 100%; aspect-ratio: 1 / 1;
-      display: flex; align-items: center; justify-content: center;
-      font-size: 40px; background: #111111; pointer-events: none;
-    }
-    .product-info { padding: 10px; flex: 1; display: flex; flex-direction: column; gap: 6px; }
-    .product-name {
-      font-size: 12px; font-weight: 500; line-height: 1.4;
-      display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
-      overflow: hidden; color: var(--text);
-    }
-    .product-price { font-family: 'CyberpunkRus', sans-serif; font-size: 16px; color: var(--accent); }
-    .product-desc { font-size: 12px; color: #888888; margin-top: 6px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; text-overflow: ellipsis; }
-    .add-btn {
-      margin-top: auto;
-      background: var(--accent); color: var(--accent-fg);
-      border: none; padding: 9px 6px;
-      font-family: 'CyberpunkRus', sans-serif;
-      font-size: 11px; font-weight: 700; letter-spacing: 1.5px;
-      cursor: pointer; width: 100%;
-      transition: transform 150ms cubic-bezier(0.34, 1.56, 0.64, 1);
-    }
-    .add-btn:active { transform: scale(0.95); }
+    .product-card:hover { border-color: rgba(255,255,255,0.4); box-shadow: 0 0 15px rgba(255,255,255,0.08); }
+    .product-card:active { box-shadow: 0 0 20px rgba(255,255,255,0.15); }
 
-    .box-button {
-      cursor: pointer;
-      border: 4px solid #333;
-      background-color: #555;
-      padding-bottom: 8px;
-      transition: 0.1s ease-in-out;
-      user-select: none;
-      width: 100%;
-      display: block;
-      text-align: center;
+    /* Photo wrap with badge & hover dots */
+    .product-photo-wrap { position: relative; width: 100%; aspect-ratio: 1 / 1; background: #1a1a1a; overflow: hidden; }
+    .product-photo { width: 100%; height: 100%; object-fit: contain; display: block; pointer-events: none; transition: opacity 0.15s; background: #1a1a1a; }
+    .product-photo-ph { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 40px; pointer-events: none; background: #1a1a1a; }
+    .product-badge {
+      position: absolute; top: 8px; left: 8px; z-index: 2;
+      background: #0a0a0a; color: var(--accent);
+      font-family: 'CyberpunkRus', sans-serif; font-size: 9px; font-weight: 700;
+      padding: 3px 8px; letter-spacing: 1.5px;
+      border: 1px solid var(--accent);
     }
-    .box-button .button {
-      background-color: #dddddd;
-      border: 4px solid #ffffff;
-      padding: 10px 16px;
-      width: 100%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      box-sizing: border-box;
+    .product-hover-dots {
+      position: absolute; bottom: 8px; left: 0; right: 0;
+      display: flex; justify-content: center; gap: 5px;
+      opacity: 0; transition: opacity 0.2s; z-index: 3; pointer-events: none;
     }
-    .box-button .button span {
-      font-family: 'CyberpunkRus', monospace;
-      font-size: 0.95em;
-      letter-spacing: 2px;
-      color: #111111;
-      text-transform: uppercase;
-      display: block;
-      text-align: center;
+    .product-photo-wrap:hover .product-hover-dots { opacity: 1; }
+    .product-hover-dots span { width: 6px; height: 6px; border-radius: 50%; background: rgba(255,255,255,0.4); transition: background 0.2s; }
+    .product-hover-dots span.active { background: var(--accent); }
+
+    .product-info { padding: 10px; flex: 1; display: flex; flex-direction: column; gap: 5px; }
+    .product-name { font-size: 12px; font-weight: 500; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; color: var(--text); }
+    .product-price { font-family: 'CyberpunkRus', sans-serif; font-size: 16px; color: var(--accent); }
+    .product-attr-chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+    .product-attr-chip {
+      display: inline-block; padding: 2px 8px; border: 1px solid #333;
+      font-size: 11px; color: var(--hint); letter-spacing: 0.3px; white-space: nowrap;
+      border-radius: 2px; cursor: pointer; user-select: none;
+      transition: border-color 0.15s, color 0.15s;
     }
-    .box-button:active {
-      padding: 0;
-      margin-bottom: 8px;
-      transform: translateY(8px);
-    }
+    .product-attr-chip:hover { border-color: rgba(168,255,62,0.5); color: var(--text); }
+    .product-attr-chip.active { border-color: var(--accent); color: var(--accent); }
+    .product-btn-wrap { margin-top: auto; }
+    .product-btn-wrap.hidden { display: none; }
+
+    .box-button { cursor: pointer; border: 4px solid #333; background-color: #555; padding-bottom: 8px; transition: 0.1s ease-in-out; user-select: none; width: 100%; display: block; text-align: center; }
+    .box-button .button { background-color: #dddddd; border: 4px solid #ffffff; padding: 10px 16px; width: 100%; display: flex; align-items: center; justify-content: center; box-sizing: border-box; }
+    .box-button .button span { font-family: 'CyberpunkRus', monospace; font-size: 0.95em; letter-spacing: 2px; color: #111111; text-transform: uppercase; display: block; text-align: center; }
+    .box-button:active { padding: 0; margin-bottom: 8px; transform: translateY(8px); }
     .box-button.disabled { opacity: 0.3; cursor: default; pointer-events: none; }
-    .product-info .box-button { margin-top: auto; }
+    .product-info .box-button { margin-top: 0; }
 
     /* ── Product Modal ────────────────────────────────────────────────────── */
     .product-modal {
-      position: fixed; inset: 0;
-      z-index: 8000;
+      position: fixed; inset: 0; z-index: 8000;
       display: flex; flex-direction: column;
-      opacity: 0; transform: translateY(30px);
-      pointer-events: none;
+      opacity: 0; transform: translateY(30px); pointer-events: none;
       transition: opacity 300ms ease, transform 300ms ease;
     }
     .product-modal.open { opacity: 1; transform: translateY(0); pointer-events: all; }
-
     .modal-scroll { flex: 1; overflow-y: auto; background: #0a0a0a; position: relative; }
     .modal-scroll::-webkit-scrollbar { width: 3px; }
     .modal-scroll::-webkit-scrollbar-thumb { background: #222; }
-
     .modal-close-btn {
       position: absolute; top: 16px; right: 16px; z-index: 10;
-      width: 40px; height: 40px;
-      background: rgba(10,10,10,0.85);
-      border: 1px solid #2a2a2a; color: var(--text);
-      font-size: 20px; cursor: pointer;
+      width: 40px; height: 40px; background: rgba(10,10,10,0.85);
+      border: 1px solid #2a2a2a; color: var(--text); font-size: 20px; cursor: pointer;
       display: flex; align-items: center; justify-content: center;
       transition: border-color 0.2s, color 0.2s;
     }
     .modal-close-btn:hover { border-color: var(--accent); color: var(--accent); }
 
     /* Photo carousel */
-    .modal-carousel {
-      position: relative; width: 100%; max-height: 60vh;
-      background: #111111; flex-shrink: 0; overflow: hidden;
-    }
-    .modal-carousel-img { width: 100%; height: 100%; object-fit: contain; display: block; background: #111111; }
-    .modal-carousel-ph {
-      width: 100%; height: 100%;
-      display: flex; align-items: center; justify-content: center;
-      font-size: 72px;
-    }
+    .modal-carousel { position: relative; width: 100%; max-height: 55vh; background: #1a1a1a; flex-shrink: 0; overflow: hidden; }
+    .modal-carousel-img { width: 100%; height: 100%; object-fit: contain; display: block; background: #1a1a1a; }
+    .modal-carousel-ph { width: 100%; height: 280px; display: flex; align-items: center; justify-content: center; font-size: 72px; background: #1a1a1a; }
+    .product-photo, .product-photo-wrap, .modal-carousel-img, .modal-carousel, .cart-item-thumb,
+    img[src*="/api/"] { background-color: #1a1a1a !important; }
     .modal-carousel-arrow {
       position: absolute; top: 50%; transform: translateY(-50%);
-      z-index: 5; width: 40px; height: 40px;
-      background: rgba(0,0,0,0.6);
-      border: 1px solid rgba(168,255,62,0.3);
-      color: #a8ff3e; font-size: 22px;
-      display: flex; align-items: center; justify-content: center;
-      cursor: pointer;
+      z-index: 5; width: 40px; height: 40px; background: rgba(0,0,0,0.6);
+      border: 1px solid rgba(168,255,62,0.3); color: #a8ff3e; font-size: 22px;
+      display: flex; align-items: center; justify-content: center; cursor: pointer;
     }
     .modal-carousel-arrow.hidden { display: none; }
     .modal-carousel-prev { left: 10px; }
     .modal-carousel-next { right: 10px; }
+    .modal-carousel-dots {
+      position: absolute; bottom: 10px; left: 0; right: 0;
+      display: flex; justify-content: center; gap: 6px; z-index: 5;
+    }
+    .modal-carousel-dot { width: 7px; height: 7px; border-radius: 50%; background: rgba(255,255,255,0.35); cursor: pointer; transition: background 0.2s, transform 0.2s; }
+    .modal-carousel-dot.active { background: var(--accent); transform: scale(1.3); }
+
+    /* Badge in modal */
+    .modal-badge {
+      position: absolute; top: 12px; left: 12px; z-index: 6;
+      background: #0a0a0a; color: var(--accent);
+      font-family: 'CyberpunkRus', sans-serif; font-size: 11px; font-weight: 700;
+      padding: 4px 12px; letter-spacing: 2px;
+      border: 1px solid var(--accent);
+    }
 
     /* Modal body */
-    .modal-body { padding: 24px 20px 32px; }
-    .modal-product-name {
-      font-family: 'CyberpunkRus', sans-serif;
-      font-size: clamp(22px, 5vw, 38px);
-      color: #fff; letter-spacing: 2px; line-height: 1.1; margin-bottom: 12px;
-    }
-    .modal-product-price {
-      font-family: 'CyberpunkRus', sans-serif;
-      font-size: 28px; color: var(--accent);
-      text-shadow: var(--neon); margin-bottom: 16px;
-    }
-    .modal-product-desc { font-size: 14px; color: #aaaaaa; line-height: 1.6; letter-spacing: 0.5px; margin-top: 12px; }
+    .modal-body { padding: 20px 20px 16px; }
+    .modal-product-name { font-family: 'CyberpunkRus', sans-serif; font-size: clamp(20px, 5vw, 36px); color: #fff; letter-spacing: 2px; line-height: 1.1; margin-bottom: 8px; }
+    .modal-product-price { font-family: 'CyberpunkRus', sans-serif; font-size: 26px; color: var(--accent); text-shadow: var(--neon); margin-bottom: 8px; }
 
-    /* Modal footer — part of flex layout (not fixed), always at bottom */
-    .modal-footer {
-      flex-shrink: 0;
-      background: rgba(10,10,10,0.97);
-      border-top: 1px solid #1a1a1a;
-      padding: 16px 20px;
+    /* Attrs section */
+    .modal-attrs-section { margin: 16px 0 8px; }
+    .modal-attr-group { margin-bottom: 14px; }
+    .modal-attr-label { font-size: 11px; color: var(--hint); letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 8px; }
+    .modal-attr-row { display: flex; flex-wrap: wrap; gap: 8px; }
+    .modal-attr-btn {
+      padding: 7px 14px; background: transparent; border: 1px solid #333;
+      color: var(--text); font-size: 13px; cursor: pointer; user-select: none;
+      transition: border-color 0.15s, background 0.15s, color 0.15s;
     }
-    .modal-add-btn {
-      width: 100%; padding: 16px;
-      background: var(--accent); color: var(--accent-fg);
-      border: none;
-      font-family: 'CyberpunkRus', sans-serif;
-      font-size: 16px; font-weight: 700; letter-spacing: 3px;
-      cursor: pointer;
-      clip-path: polygon(10px 0%, 100% 0%, calc(100% - 10px) 100%, 0% 100%);
-      transition: transform 150ms, box-shadow 0.2s;
+    .modal-attr-btn:hover { border-color: rgba(168,255,62,0.5); }
+    .modal-attr-btn.active { border-color: var(--accent); background: var(--accent); color: var(--accent-fg); }
+    .modal-attr-btn.unavailable { opacity: 0.28; cursor: not-allowed; }
+    .modal-attr-btn.unavailable:hover { border-color: #333; }
+
+    /* Delivery info */
+    .modal-delivery-block { border: 1px solid #222; padding: 12px; margin: 16px 0; }
+    .modal-delivery-row { display: flex; gap: 10px; align-items: flex-start; }
+    .modal-delivery-row + .modal-delivery-row { margin-top: 10px; border-top: 1px solid #1a1a1a; padding-top: 10px; }
+    .modal-delivery-label { font-family: 'CyberpunkRus', sans-serif; font-size: 10px; color: var(--accent); letter-spacing: 1.5px; min-width: 90px; flex-shrink: 0; padding-top: 2px; }
+    .modal-delivery-desc { font-size: 11px; color: var(--hint); line-height: 1.5; }
+
+    /* Attr selection hint */
+    .modal-attr-hint { font-size: 11px; color: #ff6b6b; letter-spacing: 1px; margin-top: 8px; display: none; }
+    @keyframes attrsShake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-5px); } 75% { transform: translateX(5px); } }
+    .modal-attrs-section.highlight { animation: attrsShake 0.35s ease; }
+
+    /* Make modal add button always clickable to show hint */
+    #modalAddBtn { pointer-events: all; }
+    #modalAddBtn.disabled { cursor: default; }
+
+    /* Accordions */
+    .modal-accordion { border-top: 1px solid #1a1a1a; }
+    .modal-accordion-header {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 14px 0; cursor: pointer; user-select: none;
+      font-family: 'CyberpunkRus', sans-serif; font-size: 12px; color: var(--hint);
+      letter-spacing: 2px; transition: color 0.2s;
     }
-    .modal-add-btn:hover { box-shadow: 0 0 30px rgba(168,255,62,0.3); }
-    .modal-add-btn:active { transform: scale(0.97); }
+    .modal-accordion-header:hover { color: var(--text); }
+    .modal-accordion.open .modal-accordion-header { color: var(--accent); }
+    .modal-accordion-arrow { font-size: 10px; transition: transform 0.25s; }
+    .modal-accordion.open .modal-accordion-arrow { transform: rotate(180deg); }
+    .modal-accordion-body { overflow: hidden; max-height: 0; opacity: 0; transition: max-height 0.3s ease, opacity 0.25s ease; }
+    .modal-accordion.open .modal-accordion-body { max-height: 800px; opacity: 1; padding-bottom: 16px; }
+    .modal-spec-row { display: flex; justify-content: space-between; padding: 7px 0; font-size: 12px; border-bottom: 1px solid #111; }
+    .modal-spec-row:last-child { border-bottom: none; }
+    .modal-spec-key { color: var(--hint); }
+    .modal-spec-val { color: var(--text); text-align: right; max-width: 55%; }
+    .modal-product-desc { font-size: 14px; color: #aaaaaa; line-height: 1.6; letter-spacing: 0.5px; }
+
+    /* Modal footer */
+    .modal-footer { flex-shrink: 0; background: rgba(10,10,10,0.97); border-top: 1px solid #1a1a1a; padding: 16px 20px; }
 
     /* ── Cart sidebar ─────────────────────────────────────────────────────── */
-    .cart-sidebar {
-      position: fixed; top: 0; right: 0;
-      width: min(400px, 100vw); height: 100%;
-      z-index: 400;
-      background: #0a0a0a;
-      border-left: 2px solid var(--accent);
-      box-shadow: -4px 0 40px rgba(168,255,62,0.08);
-      transform: translateX(100%);
-      transition: transform 400ms cubic-bezier(0.16, 1, 0.3, 1);
-      display: flex; flex-direction: column;
-      padding-top: var(--header-h);
-    }
+    .cart-sidebar { position: fixed; top: 0; right: 0; width: min(400px, 100vw); height: 100%; z-index: 400; background: #0a0a0a; border-left: 2px solid var(--accent); box-shadow: -4px 0 40px rgba(168,255,62,0.08); transform: translateX(100%); transition: transform 400ms cubic-bezier(0.16, 1, 0.3, 1); display: flex; flex-direction: column; padding-top: var(--header-h); }
     .cart-sidebar.open { transform: translateX(0); }
-    .cart-head {
-      padding: 18px 20px; border-bottom: 1px solid #161616;
-      display: flex; align-items: center; justify-content: space-between;
-      flex-shrink: 0;
-      position: sticky; top: 0; z-index: 10; background: var(--bg);
-    }
-    .cart-head-title {
-      font-family: 'CyberpunkRus', sans-serif;
-      font-size: 18px; color: var(--accent);
-      text-shadow: 0 0 12px rgba(168,255,62,0.4); letter-spacing: 3px;
-    }
+    .cart-head { padding: 18px 20px; border-bottom: 1px solid #161616; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; position: sticky; top: 0; z-index: 10; background: var(--bg); }
+    .cart-head-title { font-family: 'CyberpunkRus', sans-serif; font-size: 18px; color: var(--accent); text-shadow: 0 0 12px rgba(168,255,62,0.4); letter-spacing: 3px; }
     .cart-body { flex: 1; overflow-y: auto; padding: 16px 20px; }
     .cart-body::-webkit-scrollbar { width: 3px; }
     .cart-body::-webkit-scrollbar-thumb { background: #222; }
@@ -614,57 +372,24 @@
     .cart-empty-icon { font-size: 52px; display: block; margin-bottom: 14px; }
     .cart-empty-text { font-size: 14px; letter-spacing: 1px; }
     .cart-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 20px; }
-    .cart-item {
-      display: flex; align-items: center; gap: 10px;
-      background: var(--surface); border: 1px solid #222; padding: 10px 12px;
-    }
-    .cart-item-thumb { width: 48px; height: 48px; object-fit: cover; flex-shrink: 0; background: #111; display: block; }
-    .cart-item-ph { width: 48px; height: 48px; flex-shrink: 0; background: #111; display: flex; align-items: center; justify-content: center; font-size: 22px; }
+    .cart-item { display: flex; align-items: center; gap: 10px; background: var(--surface); border: 1px solid #222; padding: 10px 12px; }
+    .cart-item-thumb { width: 48px; height: 48px; object-fit: cover; flex-shrink: 0; background: #1a1a1a; display: block; }
+    .cart-item-ph { width: 48px; height: 48px; flex-shrink: 0; background: #1a1a1a; display: flex; align-items: center; justify-content: center; font-size: 22px; }
     .cart-item-info { flex: 1; min-width: 0; }
     .cart-item-name { font-size: 12px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 3px; }
     .cart-item-sub { font-size: 11px; color: var(--hint); }
     .qty-ctrl { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
-    .qty-btn {
-      width: 28px; height: 28px; border: 1px solid #2a2a2a;
-      background: var(--bg); color: var(--text); font-size: 17px; line-height: 1;
-      cursor: pointer; display: flex; align-items: center; justify-content: center;
-      transition: border-color 0.15s, color 0.15s;
-    }
+    .qty-btn { width: 28px; height: 28px; border: 1px solid #2a2a2a; background: var(--bg); color: var(--text); font-size: 17px; line-height: 1; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: border-color 0.15s, color 0.15s; }
     .qty-btn:hover { border-color: var(--accent); color: var(--accent); }
     .qty-btn:disabled { opacity: 0.32; cursor: not-allowed; border-color: #1e1e1e; color: #444; }
-    .qty-btn:disabled:hover { border-color: #1e1e1e; color: #444; }
-
-    /* ── Toast notification ───────────────────────────────────────────────── */
-    .toast {
-      position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%) translateY(10px);
-      background: #1a1a1a; border: 1px solid #333;
-      color: var(--text); padding: 10px 20px;
-      font-size: 12px; letter-spacing: 1.5px; text-transform: uppercase;
-      z-index: 9999; opacity: 0;
-      transition: opacity 0.2s, transform 0.2s;
-      pointer-events: none; white-space: nowrap;
-    }
-    .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
     .qty-val { font-size: 14px; font-weight: 600; min-width: 20px; text-align: center; }
     .section-label { font-size: 10px; font-weight: 600; letter-spacing: 3px; color: var(--hint); text-transform: uppercase; margin-bottom: 10px; }
     .pay-group { display: flex; gap: 8px; margin-bottom: 16px; }
-    .pay-btn {
-      flex: 1; padding: 10px 4px;
-      border: 1px solid #2a2a2a; background: var(--surface);
-      color: var(--text); font-family: 'CyberpunkRus', sans-serif;
-      font-size: 10px; cursor: pointer; text-align: center;
-      letter-spacing: 0.5px; line-height: 1.4;
-      transition: border-color 0.15s, background 0.15s, color 0.15s;
-    }
+    .pay-btn { flex: 1; padding: 10px 4px; border: 1px solid #2a2a2a; background: var(--surface); color: var(--text); font-family: 'CyberpunkRus', sans-serif; font-size: 10px; cursor: pointer; text-align: center; letter-spacing: 0.5px; line-height: 1.4; transition: border-color 0.15s, background 0.15s, color 0.15s; }
     .pay-btn:active { transform: scale(0.97); }
     .pay-btn.sel { border-color: var(--accent); background: var(--accent); color: var(--accent-fg); }
     .pay-icon { display: block; font-size: 17px; margin-bottom: 4px; }
-    .comm-breakdown {
-      background: var(--surface); border: 1px solid #222;
-      padding: 0 12px; margin-bottom: 12px;
-      max-height: 0; opacity: 0; overflow: hidden;
-      transition: max-height 0.3s ease, opacity 0.25s ease, padding 0.25s ease;
-    }
+    .comm-breakdown { background: var(--surface); border: 1px solid #222; padding: 0 12px; margin-bottom: 12px; max-height: 0; opacity: 0; overflow: hidden; transition: max-height 0.3s ease, opacity 0.25s ease, padding 0.25s ease; }
     .comm-breakdown.show { max-height: 100px; opacity: 1; padding: 10px 12px; }
     .comm-row { display: flex; justify-content: space-between; font-size: 11px; padding: 3px 0; color: var(--hint); }
     .comm-val { color: #ff6b6b; font-weight: 600; }
@@ -674,17 +399,52 @@
     .total-row.main span { font-size: 14px; font-weight: 600; }
     .total-amount { font-family: 'CyberpunkRus', sans-serif; color: var(--accent); font-size: 20px !important; }
     .cart-footer { padding: 16px 20px; border-top: 1px solid #161616; flex-shrink: 0; position: sticky; bottom: 0; background: var(--bg); }
-    .checkout-btn {
-      width: 100%; padding: 15px;
-      background: var(--accent); color: var(--accent-fg);
-      border: none; font-family: 'CyberpunkRus', sans-serif;
-      font-size: 16px; font-weight: 700; letter-spacing: 3px; cursor: pointer;
-      clip-path: polygon(10px 0%, 100% 0%, calc(100% - 10px) 100%, 0% 100%);
-      transition: transform 150ms, opacity 0.15s, box-shadow 0.2s;
-    }
-    .checkout-btn:disabled { opacity: 0.3; cursor: default; }
-    .checkout-btn:not(:disabled):hover { box-shadow: 0 0 30px rgba(168,255,62,0.3); }
-    .checkout-btn:not(:disabled):active { transform: scale(0.97); }
+
+    /* ── Toast ────────────────────────────────────────────────────────────── */
+    .toast { position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%) translateY(10px); background: #1a1a1a; border: 1px solid #333; color: var(--text); padding: 10px 20px; font-size: 12px; letter-spacing: 1.5px; text-transform: uppercase; z-index: 9999; opacity: 0; transition: opacity 0.2s, transform 0.2s; pointer-events: none; white-space: nowrap; }
+    .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+    /* ── Customer form ────────────────────────────────────────────────────── */
+    @keyframes glitch-label { 0% { transform: translate(0px, 0px); } 25% { transform: translate(-2px, 1px) skewX(1deg); } 50% { transform: translate(2px, -1px) skewX(-1deg); } 75% { transform: translate(-1px, 2px); } 100% { transform: translate(0px, 0px); } }
+    .customer-form { margin-bottom: 20px; }
+    .cform-title { font-size: 10px; font-weight: 600; letter-spacing: 3px; color: var(--hint); text-transform: uppercase; margin-bottom: 14px; }
+    .cform-field { position: relative; margin-bottom: 24px; }
+    .cform-field input, .cform-field textarea { width: 100%; background: transparent; border: none; border-bottom: 2px solid rgba(168,255,62,0.3); padding: 8px 0 6px; color: #e5e5e5; font-family: 'Courier New', monospace; font-size: 14px; outline: none; resize: none; transition: border-bottom-color 0.2s; }
+    .cform-field input:focus, .cform-field textarea:focus { border-bottom-color: #a8ff3e; }
+    .cform-field input.cform-error, .cform-field textarea.cform-error { border-bottom-color: #ff4444; }
+    .cform-field label { position: absolute; left: 0; top: 8px; color: rgba(168,255,62,0.6); font-family: 'Courier New', monospace; font-size: 12px; letter-spacing: 1.5px; text-transform: uppercase; pointer-events: none; transition: top 0.2s ease, font-size 0.2s ease; }
+    .cform-field input:focus ~ label, .cform-field input:not(:placeholder-shown) ~ label, .cform-field textarea:focus ~ label, .cform-field textarea:not(:placeholder-shown) ~ label { top: -14px; font-size: 10px; }
+    .cform-field input:focus ~ label, .cform-field textarea:focus ~ label { animation: glitch-label 0.25s steps(3) 1; }
+    .delivery-toggle { display: flex; gap: 8px; margin-bottom: 14px; }
+    .dtoggle-btn { flex: 1; padding: 10px 8px; background: transparent; border: 1px solid #333; color: #555; font-family: 'Courier New', monospace; font-size: 11px; letter-spacing: 2px; cursor: pointer; transition: border-color 0.2s, color 0.2s, text-shadow 0.2s; }
+    .dtoggle-btn.active { border-color: #a8ff3e; color: #a8ff3e; text-shadow: 0 0 8px rgba(168,255,62,0.5); }
+    .delivery-addr-wrap { overflow: hidden; max-height: 0; opacity: 0; transition: max-height 0.3s ease, opacity 0.3s ease; }
+    .delivery-addr-wrap.show { max-height: 130px; opacity: 1; }
+    .pickup-info { border-left: 2px solid #a8ff3e; padding: 10px 0 10px 12px; color: #888; font-size: 12px; line-height: 1.7; letter-spacing: 0.5px; overflow: hidden; max-height: 0; opacity: 0; transition: max-height 0.3s ease, opacity 0.3s ease; }
+    .pickup-info.show { max-height: 140px; opacity: 1; }
+
+    /* ── Site footer ──────────────────────────────────────────────────────── */
+    .site-footer { background: #0a0a0a; border-top: 1px solid #1a1a1a; padding: 40px 20px; }
+    .footer-top { display: flex; flex-direction: column; gap: 6px; margin-bottom: 28px; }
+    .footer-logo { font-family: 'CyberpunkRus', sans-serif; font-size: 22px; color: #a8ff3e; letter-spacing: 4px; text-shadow: 0 0 12px rgba(168,255,62,0.4); }
+    .footer-address { color: #555; font-size: 12px; letter-spacing: 1px; line-height: 1.7; }
+    .footer-links { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 16px; margin-bottom: 28px; }
+    @media (min-width: 600px) { .footer-links { grid-template-columns: repeat(4, 1fr); } }
+    .footer-link { color: #555; font-size: 12px; letter-spacing: 0.5px; text-decoration: none; cursor: pointer; background: none; border: none; padding: 0; font-family: inherit; text-align: left; transition: color 0.2s; }
+    .footer-link:hover { color: #a8ff3e; }
+    .footer-copy { color: #333; font-size: 11px; text-align: center; letter-spacing: 1px; border-top: 1px solid #111; padding-top: 16px; }
+
+    /* ── Footer modals ────────────────────────────────────────────────────── */
+    .fmodal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.75); z-index: 9500; display: flex; align-items: flex-end; justify-content: center; opacity: 0; pointer-events: none; transition: opacity 0.25s; }
+    .fmodal-backdrop.show { opacity: 1; pointer-events: all; }
+    .fmodal { position: relative; background: #0f0f0f; border: 1px solid #2a2a2a; border-bottom: none; width: 100%; max-width: 600px; max-height: 70vh; overflow-y: auto; padding: 28px 24px; transform: translateY(30px); transition: transform 0.3s ease; }
+    .fmodal::-webkit-scrollbar { width: 3px; }
+    .fmodal::-webkit-scrollbar-thumb { background: #222; }
+    .fmodal-backdrop.show .fmodal { transform: translateY(0); }
+    .fmodal-title { font-family: 'CyberpunkRus', sans-serif; font-size: 18px; color: #a8ff3e; letter-spacing: 3px; margin-bottom: 16px; border-bottom: 1px solid #1a1a1a; padding-bottom: 12px; padding-right: 32px; }
+    .fmodal-body { color: #888; font-size: 13px; line-height: 1.7; }
+    .fmodal-close { position: absolute; top: 16px; right: 16px; background: transparent; border: 1px solid #2a2a2a; color: #888; width: 32px; height: 32px; font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: border-color 0.2s, color 0.2s; }
+    .fmodal-close:hover { border-color: #a8ff3e; color: #a8ff3e; }
 
     /* ── Media queries ────────────────────────────────────────────────────── */
     @media (max-width: 768px) {
@@ -693,7 +453,7 @@
       .slider-nav-btn { width: 28px; height: 28px; font-size: 16px; }
       .cart-sidebar { width: 100vw; }
       .modal-carousel { max-height: 50vh; }
-      .modal-body { padding: 16px 16px 28px; }
+      .modal-body { padding: 16px 16px 12px; }
     }
     @media (max-width: 480px) {
       .products { grid-template-columns: 1fr; }
@@ -703,20 +463,16 @@
 </head>
 <body>
 
-  <!-- Custom cursor -->
   <div id="cursor"></div>
 
-  <!-- Page loader -->
   <div id="loader">
     <div class="loader-title">BENDER.EXE</div>
     <div class="loader-bar-wrap"><div class="loader-bar" id="loaderBar"></div></div>
     <div class="loader-sub">Инициализация системы…</div>
   </div>
 
-  <!-- Shared overlay -->
   <div class="overlay" id="overlay"></div>
 
-  <!-- Nav sidebar -->
   <nav class="nav-sidebar" id="navSidebar">
     <div class="nav-header">
       <span class="nav-title">КАТАЛОГ</span>
@@ -727,7 +483,6 @@
     </div>
   </nav>
 
-  <!-- Toast notification -->
   <div class="toast" id="toast"></div>
 
   <!-- Cart sidebar -->
@@ -743,6 +498,34 @@
       </div>
       <div id="cartFilled" style="display:none">
         <div class="cart-list" id="cartList"></div>
+        <p class="cform-title">Данные покупателя</p>
+        <div class="customer-form">
+          <div class="cform-field">
+            <input type="text" id="cfName" placeholder=" " autocomplete="name">
+            <label for="cfName">ФИО</label>
+          </div>
+          <div class="cform-field">
+            <input type="tel" id="cfPhone" placeholder=" " autocomplete="tel">
+            <label for="cfPhone">Телефон (+7)</label>
+          </div>
+          <p class="cform-title">Способ получения</p>
+          <div class="delivery-toggle">
+            <button class="dtoggle-btn active" data-dt="pickup" onclick="setDeliveryType('pickup')">САМОВЫВОЗ</button>
+            <button class="dtoggle-btn" data-dt="delivery" onclick="setDeliveryType('delivery')">ДОСТАВКА</button>
+          </div>
+          <div class="delivery-addr-wrap" id="deliveryAddrWrap">
+            <div class="cform-field">
+              <textarea id="cfAddress" rows="2" placeholder=" "></textarea>
+              <label for="cfAddress">Адрес доставки</label>
+            </div>
+          </div>
+          <div class="pickup-info show" id="pickupInfo">
+            📍 Барклая 8 (ТЦ Горбушка)<br>
+            2й этаж (не перепутать с 1,5ым)<br>
+            Павильон 211/1<br>
+            ⏰ Работаем с 11:00 до 20:00
+          </div>
+        </div>
         <p class="section-label">Способ оплаты</p>
         <div class="pay-group">
           <button class="pay-btn" data-method="cash"><span class="pay-icon">💵</span>НАЛИЧНЫЕ</button>
@@ -770,19 +553,50 @@
     <div class="modal-scroll" id="modalScroll">
       <button class="modal-close-btn" id="modalCloseBtn" aria-label="Закрыть">✕</button>
       <div class="modal-carousel" id="modalCarousel">
+        <div class="modal-badge" id="modalBadge" style="display:none"></div>
         <div class="modal-carousel-ph" id="modalCarouselPh">📦</div>
-        <img class="modal-carousel-img" id="modalCarouselImg" src="" alt="" style="display:none" loading="lazy">
+        <img class="modal-carousel-img" id="modalCarouselImg" src="" alt="" style="display:none;background-color:#1a1a1a" loading="lazy">
         <button class="modal-carousel-arrow modal-carousel-prev hidden" id="modalCarouselPrev">‹</button>
         <button class="modal-carousel-arrow modal-carousel-next hidden" id="modalCarouselNext">›</button>
+        <div class="modal-carousel-dots" id="modalCarouselDots"></div>
       </div>
       <div class="modal-body">
         <div class="modal-product-name" id="modalProductName"></div>
         <div class="modal-product-price" id="modalProductPrice"></div>
-        <div class="modal-product-desc" id="modalProductDesc"></div>
+
+        <div class="modal-attrs-section" id="modalAttrsSection" style="display:none"></div>
+        <div class="modal-attr-hint" id="modalAttrHint">Выберите вариант</div>
+
+        <div class="modal-delivery-block">
+          <div class="modal-delivery-row">
+            <span class="modal-delivery-label">САМОВЫВОЗ</span>
+            <span class="modal-delivery-desc">Барклая 8, ТЦ Горбушка, Павильон 211/1<br>11:00 — 20:00</span>
+          </div>
+          <div class="modal-delivery-row">
+            <span class="modal-delivery-label">ДОСТАВКА</span>
+            <span class="modal-delivery-desc">Уточните у менеджера</span>
+          </div>
+        </div>
+
+        <div class="modal-accordion" id="modalSpecsAccordion" style="display:none">
+          <div class="modal-accordion-header" onclick="toggleAccordion('modalSpecsAccordion')">
+            <span>ХАРАКТЕРИСТИКИ</span><span class="modal-accordion-arrow">▼</span>
+          </div>
+          <div class="modal-accordion-body" id="modalSpecsBody"></div>
+        </div>
+
+        <div class="modal-accordion" id="modalDescAccordion" style="display:none">
+          <div class="modal-accordion-header" onclick="toggleAccordion('modalDescAccordion')">
+            <span>ОПИСАНИЕ</span><span class="modal-accordion-arrow">▼</span>
+          </div>
+          <div class="modal-accordion-body">
+            <div class="modal-product-desc" id="modalProductDesc"></div>
+          </div>
+        </div>
       </div>
     </div>
     <div class="modal-footer">
-      <div class="box-button" id="modalAddBtn">
+      <div class="box-button disabled" id="modalAddBtn">
         <div class="button"><span>ВЗЯТЬ У БЕНДЕРА</span></div>
       </div>
     </div>
@@ -800,7 +614,6 @@
   </header>
 
   <main style="padding-top: var(--header-h)">
-    <!-- Бегущая строка -->
     <div class="marquee-bar" id="marqueeBar">
       <div class="marquee-track" id="marqueeTrack">
         <span id="marqueeSpan1">BENDER SHOP // ТЕХНИКА. СТИЛЬ. БЕНДЕР. // ЛУЧШИЙ МАГАЗИН ТЕХНИКИ //</span>
@@ -808,7 +621,6 @@
       </div>
     </div>
 
-    <!-- Hero slider -->
     <div class="hero-slider" id="heroSlider">
       <div class="slider-bottom-fade">
         <div class="slider-controls">
@@ -821,17 +633,19 @@
       </div>
     </div>
 
-    <!-- Category banners -->
     <div id="banners-wrap">
       <h2 class="banners-title">КАТЕГОРИИ</h2>
       <section id="banners"></section>
     </div>
 
-    <!-- Catalog -->
     <section id="catalog">
       <div class="catalog-header">
         <h2 class="catalog-title" id="catalogTitle">КАТАЛОГ</h2>
         <p class="catalog-sub" id="catalogSub">Все товары</p>
+      </div>
+      <div class="brand-filter-wrap">
+        <div class="brand-filter-label">БРЕНДЫ</div>
+        <div class="brand-filter-bar" id="brandFilterBar"></div>
       </div>
       <div class="products" id="grid">
         <div class="state-msg">Загрузка…</div>
@@ -839,38 +653,103 @@
     </section>
   </main>
 
+  <footer class="site-footer">
+    <div class="footer-top">
+      <div class="footer-logo">BENDER SHOP</div>
+      <div class="footer-address">Барклая 8, ТЦ Горбушка, Павильон 211/1<br>Время работы: 11:00 — 20:00</div>
+    </div>
+    <div class="footer-links">
+      <button class="footer-link" onclick="openFModal('terms')">Условия продажи</button>
+      <button class="footer-link" onclick="openFModal('agreement')">Пользовательское соглашение</button>
+      <button class="footer-link" onclick="openFModal('privacy')">Политика конфиденциальности</button>
+      <button class="footer-link" onclick="openFModal('help')">Помощь</button>
+    </div>
+    <div class="footer-copy">© 2026 Bender Shop. Все права защищены.</div>
+  </footer>
+
+  <div class="fmodal-backdrop" id="fmodalBackdrop" onclick="if(event.target===this)closeFModal()">
+    <div class="fmodal">
+      <button class="fmodal-close" onclick="closeFModal()">✕</button>
+      <div class="fmodal-title" id="fmodalTitle"></div>
+      <div class="fmodal-body" id="fmodalBody"></div>
+    </div>
+  </div>
+
   <script>
-    // ── Telegram WebApp ───────────────────────────────────────────────────────
     const tg = window.Telegram && window.Telegram.WebApp
     if (tg) { tg.ready(); tg.expand() }
 
     // ── State ─────────────────────────────────────────────────────────────────
-    let allProducts    = []
-    let categories     = []
-    let cart           = []
-    let payMethod      = ''
-    let activeCat      = ''
-    let menuOpen       = false
-    let cartOpen       = false
+    let allProducts   = []
+    let categories    = []
+    let cart          = []
+    let payMethod     = ''
+    let activeCat     = ''
+    let activeBrand   = ''
+    let brands        = []
+    let menuOpen      = false
+    let cartOpen      = false
+    let deliveryType  = 'pickup'
 
-    // Слайдер
-    let heroSlides     = []
-    let sliderIdx      = 0
-    let sliderTimer    = null
+    // Slider
+    let heroSlides  = []
+    let sliderIdx   = 0
+    let sliderTimer = null
 
-    // Модалка
-    let modalProductId = null
-    let modalPhotos    = []
-    let modalPhotoIdx  = 0
+    // Card quick-select state: productId → {attrKey: selectedVal}
+    const cardSelectedAttrs = new Map()
+
+    // Modal
+    let modalProduct       = null
+    let modalSelectedAttrs = {}
+    let modalActiveVariant = null
+    let modalPhotos        = []
+    let modalPhotoIdx      = 0
 
     // ── Helpers ───────────────────────────────────────────────────────────────
     function fmt(n) { return Number(n).toLocaleString('ru-RU') }
     function subtotal() { return cart.reduce((s, i) => s + Number(i.price) * i.qty, 0) }
     function totalWithFee() { const s = subtotal(); return payMethod === 'card' ? s * 1.14 : s }
-    function esc(s) {
-      return String(s)
-        .replace(/&/g,'&amp;').replace(/</g,'&lt;')
-        .replace(/>/g,'&gt;').replace(/"/g,'&quot;')
+    function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;') }
+    function photoUrl(fid) { return '/api/banner/' + encodeURIComponent(fid) }
+
+    // ── Variant helpers ───────────────────────────────────────────────────────
+    function findVariant(product, selectedAttrs) {
+      if (!product.variants || !product.variants.length) return null
+      const keys = Object.keys(selectedAttrs)
+      if (!keys.length) return null
+      return product.variants.find(v => {
+        if (!v.inStock) return false
+        return keys.every(k => (v.attributes || {})[k] === selectedAttrs[k])
+      }) || null
+    }
+
+    function getProductPhotos(p, variant) {
+      if (variant && Array.isArray(variant.photos) && variant.photos.length) {
+        return variant.photos.map(photoUrl)
+      }
+      if (Array.isArray(p.photos) && p.photos.length) {
+        return p.photos.map(photoUrl)
+      }
+      return p.photoUrl ? [p.photoUrl] : []
+    }
+
+    function minVariantPrice(p) {
+      if (!p.variants || !p.variants.length) return Number(p.price)
+      const prices = p.variants.filter(v => v.inStock).map(v => Number(v.price))
+      return prices.length ? Math.min(...prices) : Number(p.price)
+    }
+
+    function getCardVariant(productId) {
+      const p = allProducts.find(x => x.id === productId)
+      if (!p || !p.variants || !p.variants.length) return null
+      const selected = cardSelectedAttrs.get(productId) || {}
+      if (!Object.keys(selected).length) return null
+      return p.variants.find(v => {
+        if (!v.inStock) return false
+        const va = v.attributes || {}
+        return Object.keys(selected).every(k => va[k] === selected[k])
+      }) || null
     }
 
     // ── Custom cursor ─────────────────────────────────────────────────────────
@@ -922,17 +801,12 @@
       if (!menuOpen) overlay.classList.remove('show')
     }
 
-    document.getElementById('menuBtn').addEventListener('click', () => {
-      if (menuOpen) { closeMenu() } else { openMenu() }
-    })
+    document.getElementById('menuBtn').addEventListener('click', () => { menuOpen ? closeMenu() : openMenu() })
     document.getElementById('navClose').addEventListener('click', closeMenu)
-    document.getElementById('cartBtn').addEventListener('click', () => {
-      if (cartOpen) { closeCart() } else { openCart() }
-    })
+    document.getElementById('cartBtn').addEventListener('click', () => { cartOpen ? closeCart() : openCart() })
     document.getElementById('cartClose').addEventListener('click', closeCart)
     overlay.addEventListener('click', () => { closeMenu(); closeCart() })
 
-    // ── Scroll helpers ────────────────────────────────────────────────────────
     function scrollToTop() { window.scrollTo({ top: 0, behavior: 'smooth' }) }
 
     // ── Marquee ───────────────────────────────────────────────────────────────
@@ -962,13 +836,10 @@
 
       if (!heroSlides.length) {
         sliderEl.insertAdjacentHTML('afterbegin',
-          `<div class="hero-slider-fallback">
-            <div class="hero-slider-fallback-text">BENDER <span>SHOP</span></div>
-          </div>`)
+          `<div class="hero-slider-fallback"><div class="hero-slider-fallback-text">BENDER <span>SHOP</span></div></div>`)
         return
       }
 
-      // Создаём слайды
       const fadeEl = sliderEl.querySelector('.slider-bottom-fade')
       heroSlides.forEach((s, i) => {
         const el = document.createElement('div')
@@ -985,37 +856,23 @@
         sliderEl.insertBefore(el, fadeEl)
       })
 
-      // Точки-индикаторы
       heroSlides.forEach((_, i) => {
         const dot = document.createElement('div')
         dot.className = 'slider-dot' + (i === 0 ? ' active' : '')
-        if (i === 0) {
-          const fill = document.createElement('span')
-          fill.className = 'fill'
-          dot.appendChild(fill)
-        }
+        if (i === 0) { const fill = document.createElement('span'); fill.className = 'fill'; dot.appendChild(fill) }
         dot.addEventListener('click', () => manualGoToSlide(i))
         dotsEl.appendChild(dot)
       })
 
-      if (heroSlides.length > 1) {
-        navEl.classList.remove('hidden')
-        startSliderAuto()
-      }
-
+      if (heroSlides.length > 1) { navEl.classList.remove('hidden'); startSliderAuto() }
       prevBtn.addEventListener('click', () => manualGoToSlide((sliderIdx - 1 + heroSlides.length) % heroSlides.length))
       nextBtn.addEventListener('click', () => manualGoToSlide((sliderIdx + 1) % heroSlides.length))
 
-      // Touch/swipe
       let touchStartX = 0
       sliderEl.addEventListener('touchstart', e => { touchStartX = e.touches[0].clientX }, { passive: true })
       sliderEl.addEventListener('touchend', e => {
         const dx = e.changedTouches[0].clientX - touchStartX
-        if (Math.abs(dx) > 50) {
-          manualGoToSlide(dx < 0
-            ? (sliderIdx + 1) % heroSlides.length
-            : (sliderIdx - 1 + heroSlides.length) % heroSlides.length)
-        }
+        if (Math.abs(dx) > 50) manualGoToSlide(dx < 0 ? (sliderIdx + 1) % heroSlides.length : (sliderIdx - 1 + heroSlides.length) % heroSlides.length)
       }, { passive: true })
     }
 
@@ -1024,29 +881,13 @@
       document.querySelectorAll('.hero-slide').forEach((el, i) => el.classList.toggle('active', i === sliderIdx))
       document.querySelectorAll('.slider-dot').forEach((el, i) => {
         if (i === sliderIdx) {
-          el.classList.add('active')
-          el.innerHTML = ''
-          const fill = document.createElement('span')
-          fill.className = 'fill'
-          el.appendChild(fill)
-        } else {
-          el.classList.remove('active')
-          el.innerHTML = ''
-        }
+          el.classList.add('active'); el.innerHTML = ''
+          const fill = document.createElement('span'); fill.className = 'fill'; el.appendChild(fill)
+        } else { el.classList.remove('active'); el.innerHTML = '' }
       })
     }
-
-    function manualGoToSlide(idx) {
-      clearInterval(sliderTimer); sliderTimer = null
-      goToSlide(idx)
-      if (heroSlides.length > 1) startSliderAuto()
-    }
-
-    function startSliderAuto() {
-      sliderTimer = setInterval(() => {
-        goToSlide((sliderIdx + 1) % heroSlides.length)
-      }, 5000)
-    }
+    function manualGoToSlide(idx) { clearInterval(sliderTimer); sliderTimer = null; goToSlide(idx); if (heroSlides.length > 1) startSliderAuto() }
+    function startSliderAuto() { sliderTimer = setInterval(() => goToSlide((sliderIdx + 1) % heroSlides.length), 5000) }
 
     // ── Load categories ───────────────────────────────────────────────────────
     async function loadCategories() {
@@ -1070,6 +911,57 @@
       })
     }
 
+    function computeBrands() {
+      const map = {}
+      allProducts.forEach(p => {
+        const b = (p.brand && p.brand.trim()) ? p.brand.trim() : (p.name || '').split(' ')[0]
+        if (!b) return
+        map[b] = (map[b] || 0) + 1
+      })
+      brands = Object.entries(map)
+        .map(([name, count]) => ({ name, count }))
+        .sort((a, b) => b.count - a.count)
+    }
+
+    function renderBrandFilterBar() {
+      const bar = document.getElementById('brandFilterBar')
+      if (!bar) return
+      let html = `<div class="brand-filter-tab${activeBrand === '' ? ' active' : ''}" data-brand="">ВСЕ</div>`
+      html += brands.map(b =>
+        `<div class="brand-filter-tab${activeBrand === b.name ? ' active' : ''}" data-brand="${esc(b.name)}">${esc(b.name)}</div>`
+      ).join('')
+      bar.innerHTML = html
+      bar.querySelectorAll('.brand-filter-tab').forEach(el => {
+        el.addEventListener('click', () => selectBrand(el.dataset.brand))
+      })
+      setupBrandDrag(bar)
+    }
+
+    function setupBrandDrag(bar) {
+      let startX = 0, scrollLeft = 0, isDragging = false
+      bar.addEventListener('mousedown', e => {
+        isDragging = true; startX = e.pageX - bar.offsetLeft; scrollLeft = bar.scrollLeft
+        bar.style.cursor = 'grabbing'; bar.style.userSelect = 'none'
+      })
+      document.addEventListener('mouseup', () => {
+        if (!isDragging) return
+        isDragging = false; bar.style.cursor = ''; bar.style.userSelect = ''
+      })
+      bar.addEventListener('mousemove', e => {
+        if (!isDragging) return
+        e.preventDefault()
+        bar.scrollLeft = scrollLeft - (e.pageX - bar.offsetLeft - startX) * 1.5
+      })
+    }
+
+    function selectBrand(brand) {
+      activeBrand = brand
+      document.querySelectorAll('.brand-filter-tab').forEach(el => {
+        el.classList.toggle('active', el.dataset.brand === brand)
+      })
+      renderGrid()
+    }
+
     function renderBanners() {
       const section = document.getElementById('banners')
       if (!categories.length) { section.innerHTML = ''; return }
@@ -1079,10 +971,8 @@
         const dir     = i % 2 === 0 ? 'left' : 'right'
         const gradDir = side === 'left' ? 'to right' : 'to left'
         const grad    = `linear-gradient(${gradDir}, rgba(10,10,10,0.92) 0%, rgba(10,10,10,0.92) 45%, rgba(10,10,10,0.1) 100%)`
-        const bgImg   = cat.imageUrl
-          ? `url('${esc(cat.imageUrl)}')`
-          : 'linear-gradient(135deg, #1a1a1a 0%, #0d0d0d 100%)'
-        const count = cat.productCount
+        const bgImg   = cat.imageUrl ? `url('${esc(cat.imageUrl)}')` : 'linear-gradient(135deg, #1a1a1a 0%, #0d0d0d 100%)'
+        const count   = cat.productCount
         const countTxt = count === 0 ? 'Нет товаров' : count === 1 ? '1 товар' : count + ' товаров'
         return `
 <div class="banner banner-anim${activeCat === cat.name ? ' active-cat' : ''}" data-cat="${esc(cat.name)}" data-dir="${dir}" data-index="${i}">
@@ -1136,39 +1026,176 @@
     async function loadProducts(cat) {
       const grid = document.getElementById('grid')
       grid.innerHTML = '<div class="state-msg">Загрузка…</div>'
+      activeBrand = ''
       try {
         const url  = cat ? `/api/products?category=${encodeURIComponent(cat)}` : '/api/products'
         const res  = await fetch(url)
         allProducts = await res.json()
+        computeBrands()
+        renderBrandFilterBar()
         renderGrid()
       } catch {
         grid.innerHTML = '<div class="state-msg">Не удалось загрузить товары</div>'
       }
     }
 
+    // ── Render product grid ───────────────────────────────────────────────────
     function renderGrid() {
       const grid = document.getElementById('grid')
-      if (!allProducts.length) { grid.innerHTML = '<div class="state-msg">Товаров нет</div>'; return }
-      grid.innerHTML = allProducts.map((p, i) => {
-        const photoHtml = p.photoUrl
-          ? `<img class="product-photo" src="${esc(p.photoUrl)}" alt="" loading="lazy"
-               onerror="this.style.display='none';this.nextSibling.style.display='flex'">`
-          : ''
-        const phStyle = p.photoUrl ? 'style="display:none"' : ''
-        return `
-<div class="product-card" style="animation-delay:${i * 50}ms" onclick="openProductModal(${p.id})">
-  ${photoHtml}
-  <div class="product-photo-ph" ${phStyle}>📦</div>
+      const products = activeBrand
+        ? allProducts.filter(p => {
+            const b = (p.brand && p.brand.trim()) ? p.brand.trim() : (p.name || '').split(' ')[0]
+            return b === activeBrand
+          })
+        : allProducts
+      if (!products.length) { grid.innerHTML = '<div class="state-msg">Товаров нет</div>'; return }
+
+      grid.innerHTML = products.map((p, i) => {
+        const photos = getProductPhotos(p, null)
+        const mainPhoto = photos[0] || null
+
+        // Price
+        const hasVariants = p.variants && p.variants.length > 0
+        const priceText = hasVariants ? 'от ' + fmt(minVariantPrice(p)) + ' ₽' : fmt(p.price) + ' ₽'
+
+        // Badge
+        const badgeHtml = p.badge ? `<div class="product-badge">${esc(p.badge)}</div>` : ''
+
+        // Photo area
+        const photosData = JSON.stringify(photos).replace(/'/g, '&#39;').replace(/"/g, '&quot;')
+        const photoAreaHtml = `<div class="product-photo-wrap" data-photos="${photosData}" style="background-color:#1a1a1a">
+  ${badgeHtml}
+  ${mainPhoto
+    ? `<img class="product-photo" src="${esc(mainPhoto)}" alt="" loading="lazy" style="background-color:#1a1a1a">`
+    : '<div class="product-photo-ph">📦</div>'}
+  ${photos.length > 1
+    ? `<div class="product-hover-dots">${photos.slice(0, 3).map((_, j) => `<span class="${j === 0 ? 'active' : ''}"></span>`).join('')}</div>`
+    : ''}
+</div>`
+
+        // Attr chips — first dimension only, interactive
+        let chipsHtml = ''
+        if (p.attributes && typeof p.attributes === 'object') {
+          const attrKeys = Object.keys(p.attributes)
+          if (attrKeys.length) {
+            const key  = attrKeys[0]
+            const vals = p.attributes[key]
+            if (Array.isArray(vals) && vals.length) {
+              chipsHtml = `<div class="product-attr-chips">${vals.slice(0, 6).map(v =>
+                `<span class="product-attr-chip" data-pid="${p.id}" data-key="${esc(key)}" data-val="${esc(v)}">${esc(v)}</span>`
+              ).join('')}</div>`
+            }
+          }
+        }
+
+        // ВЗЯТЬ: always shown if no variants; hidden until chip selected otherwise
+        const showBtn = !hasVariants
+        return `<div class="product-card" data-id="${p.id}" style="animation-delay:${i * 50}ms" onclick="openProductModal(${p.id})">
+  ${photoAreaHtml}
   <div class="product-info">
     <div class="product-name">${esc(p.name)}</div>
-    <div class="product-price">${fmt(p.price)} ₽</div>
-    ${p.description ? `<div class="product-desc">${esc(p.description)}</div>` : ''}
-    <div class="box-button" onclick="event.stopPropagation();addToCart(${p.id})">
-      <div class="button"><span>ВЗЯТЬ</span></div>
+    <div class="product-price" data-base="${esc(priceText)}">${esc(priceText)}</div>
+    ${chipsHtml}
+    <div class="product-btn-wrap${showBtn ? '' : ' hidden'}">
+      <div class="box-button" onclick="cardBtnClick(event,${p.id})">
+        <div class="button"><span>ВЗЯТЬ</span></div>
+      </div>
     </div>
   </div>
 </div>`
       }).join('')
+
+      setupCardHoverCycling()
+      setupCardChips()
+    }
+
+    function cardBtnClick(event, productId) {
+      event.stopPropagation()
+      const p = allProducts.find(x => x.id === productId)
+      if (!p) return
+      const hasVariants = p.variants && p.variants.length > 0
+      if (!hasVariants) {
+        addToCart(productId, null)
+        showToast('Добавлено в корзину')
+      } else {
+        const variant = getCardVariant(productId)
+        if (variant) {
+          addToCart(productId, variant.id)
+          showToast('Добавлено в корзину')
+        }
+      }
+    }
+
+    function setupCardChips() {
+      document.querySelectorAll('.product-attr-chip[data-pid]').forEach(chip => {
+        chip.addEventListener('click', e => {
+          e.stopPropagation()
+          selectCardAttr(Number(chip.dataset.pid), chip.dataset.key, chip.dataset.val)
+        })
+      })
+    }
+
+    function selectCardAttr(productId, key, val) {
+      const prev = cardSelectedAttrs.get(productId) || {}
+      prev[key] = val
+      cardSelectedAttrs.set(productId, prev)
+
+      const card = document.querySelector(`.product-card[data-id="${productId}"]`)
+      if (!card) return
+
+      // Update chip active states for this key
+      card.querySelectorAll(`.product-attr-chip[data-key]`).forEach(chip => {
+        if (chip.dataset.key === key) chip.classList.toggle('active', chip.dataset.val === val)
+      })
+
+      // Find matching variant
+      const variant = getCardVariant(productId)
+
+      // Show/hide ВЗЯТЬ
+      const btnWrap = card.querySelector('.product-btn-wrap')
+      if (btnWrap) btnWrap.classList.toggle('hidden', !variant)
+
+      // Update price
+      const priceEl = card.querySelector('.product-price')
+      if (priceEl) {
+        priceEl.textContent = variant ? fmt(variant.price) + ' ₽' : priceEl.dataset.base
+      }
+
+      // Update card photo — показываем фото варианта если есть, иначе фото товара
+      const p = allProducts.find(x => x.id === productId)
+      if (p) {
+        const newPhotos = getProductPhotos(p, variant)
+        const photoWrap = card.querySelector('.product-photo-wrap')
+        const cardImg   = card.querySelector('.product-photo')
+        if (photoWrap) photoWrap.dataset.photos = JSON.stringify(newPhotos)
+        if (cardImg && newPhotos.length > 0) cardImg.src = newPhotos[0]
+      }
+    }
+
+    function setupCardHoverCycling() {
+      document.querySelectorAll('.product-photo-wrap[data-photos]').forEach(wrap => {
+        let timer = null
+        let idx   = 0
+        const img  = wrap.querySelector('.product-photo')
+        const dots = wrap.querySelectorAll('.product-hover-dots span')
+        let photos = []
+        try { photos = JSON.parse(wrap.dataset.photos.replace(/&quot;/g, '"')) } catch { return }
+        if (photos.length <= 1) return
+
+        wrap.addEventListener('mouseenter', () => {
+          idx = 0
+          timer = setInterval(() => {
+            idx = (idx + 1) % Math.min(photos.length, 3)
+            if (img) img.src = photos[idx]
+            dots.forEach((d, i) => d.classList.toggle('active', i === idx))
+          }, 800)
+        })
+        wrap.addEventListener('mouseleave', () => {
+          clearInterval(timer); timer = null; idx = 0
+          if (img && photos[0]) img.src = photos[0]
+          dots.forEach((d, i) => d.classList.toggle('active', i === 0))
+        })
+      })
     }
 
     // ── Product modal ─────────────────────────────────────────────────────────
@@ -1177,22 +1204,26 @@
     function openProductModal(productId) {
       const p = allProducts.find(x => x.id === productId)
       if (!p) return
-      modalProductId = productId
 
-      // Поддержка массива photos (file_id) → /api/photo?file_id=XXX
-      if (Array.isArray(p.photos) && p.photos.length) {
-        modalPhotos = p.photos.map(fid => '/api/photo?file_id=' + encodeURIComponent(fid))
-      } else {
-        modalPhotos = p.photoUrl ? [p.photoUrl] : []
+      modalProduct       = p
+      modalSelectedAttrs = {}
+      modalActiveVariant = null
+      modalPhotoIdx      = 0
+
+      // If only one variant — auto-select its attributes
+      if (p.variants && p.variants.length === 1) {
+        const v = p.variants[0]
+        if (v.attributes) modalSelectedAttrs = Object.assign({}, v.attributes)
+        modalActiveVariant = v.inStock ? v : null
       }
-      modalPhotoIdx  = 0
 
-      document.getElementById('modalProductName').textContent  = p.name
-      document.getElementById('modalProductPrice').textContent = fmt(p.price) + ' ₽'
-      document.getElementById('modalProductDesc').textContent  = p.description || ''
+      // If no defined attrs on product but has variants — auto-pick first in-stock
+      if (p.variants && p.variants.length > 0 && (!p.attributes || !Object.keys(p.attributes).length)) {
+        modalActiveVariant = p.variants.find(v => v.inStock) || null
+      }
+
+      renderModalContent()
       document.getElementById('modalScroll').scrollTop = 0
-
-      renderModalCarousel()
       productModal.classList.add('open')
       document.body.style.overflow = 'hidden'
     }
@@ -1200,57 +1231,233 @@
     function closeProductModal() {
       productModal.classList.remove('open')
       document.body.style.overflow = ''
-      modalProductId = null
+      modalProduct = null
     }
 
-    function renderModalCarousel() {
+    function renderModalContent() {
+      const p = modalProduct
+      if (!p) return
+
+      // Badge
+      const badgeEl = document.getElementById('modalBadge')
+      badgeEl.textContent  = p.badge || ''
+      badgeEl.style.display = p.badge ? '' : 'none'
+
+      // Name
+      document.getElementById('modalProductName').textContent = p.name
+
+      // Price
+      const priceEl = document.getElementById('modalProductPrice')
+      if (modalActiveVariant) {
+        priceEl.textContent = fmt(modalActiveVariant.price) + ' ₽'
+      } else if (p.variants && p.variants.length) {
+        priceEl.textContent = 'от ' + fmt(minVariantPrice(p)) + ' ₽'
+      } else {
+        priceEl.textContent = fmt(p.price) + ' ₽'
+      }
+
+      // Carousel
+      updateModalPhotos(modalActiveVariant, p)
+
+      // Attrs
+      renderModalAttrs()
+
+      // Specs
+      renderModalSpecs()
+
+      // Description
+      const descText = p.description || ''
+      document.getElementById('modalProductDesc').textContent = descText
+      document.getElementById('modalDescAccordion').style.display = descText ? '' : 'none'
+
+      // Button
+      updateModalBtn()
+    }
+
+    function updateModalPhotos(variant, product) {
+      const photos = getProductPhotos(product, variant)
+      modalPhotoIdx = 0
+      renderModalCarousel(photos)
+    }
+
+    function renderModalCarousel(photos) {
+      modalPhotos = photos
       const imgEl  = document.getElementById('modalCarouselImg')
       const phEl   = document.getElementById('modalCarouselPh')
       const prevEl = document.getElementById('modalCarouselPrev')
       const nextEl = document.getElementById('modalCarouselNext')
+      const dotsEl = document.getElementById('modalCarouselDots')
 
-      if (modalPhotos.length > 0) {
-        imgEl.src = modalPhotos[modalPhotoIdx]
+      if (photos.length > 0) {
+        if (modalPhotoIdx >= photos.length) modalPhotoIdx = 0
+        imgEl.src = photos[modalPhotoIdx]
         imgEl.style.display = 'block'
         phEl.style.display  = 'none'
       } else {
         imgEl.style.display = 'none'
         phEl.style.display  = 'flex'
       }
-      const multi = modalPhotos.length > 1
+
+      const multi = photos.length > 1
       prevEl.classList.toggle('hidden', !multi)
       nextEl.classList.toggle('hidden', !multi)
+
+      dotsEl.innerHTML = multi
+        ? photos.map((_, i) => `<span class="modal-carousel-dot${i === modalPhotoIdx ? ' active' : ''}"></span>`).join('')
+        : ''
+      dotsEl.querySelectorAll('.modal-carousel-dot').forEach((dot, i) => {
+        dot.addEventListener('click', () => {
+          modalPhotoIdx = i
+          renderModalCarousel(modalPhotos)
+        })
+      })
     }
 
+    function renderModalAttrs() {
+      const section = document.getElementById('modalAttrsSection')
+      const p = modalProduct
+      if (!p || !p.attributes || !Object.keys(p.attributes).length) {
+        section.style.display = 'none'
+        return
+      }
+      section.style.display = ''
+      const keys = Object.keys(p.attributes)
+      section.innerHTML = keys.map(key => {
+        const vals = p.attributes[key]
+        if (!Array.isArray(vals) || !vals.length) return ''
+        const selectedVal = modalSelectedAttrs[key]
+        const label = selectedVal ? key + ' : ' + selectedVal : key
+        const btns = vals.map(v => {
+          const testAttrs = Object.assign({}, modalSelectedAttrs, { [key]: v })
+          const available = (p.variants && p.variants.length)
+            ? p.variants.some(variant => {
+                if (!variant.inStock) return false
+                return Object.keys(testAttrs).every(k => (variant.attributes || {})[k] === testAttrs[k])
+              })
+            : true
+          const isActive = selectedVal === v
+          return `<button class="modal-attr-btn${isActive ? ' active' : ''}${!available ? ' unavailable' : ''}"
+            data-key="${esc(key)}" data-val="${esc(v)}">${esc(v)}</button>`
+        }).join('')
+        return `<div class="modal-attr-group">
+  <div class="modal-attr-label">${esc(label)}</div>
+  <div class="modal-attr-row">${btns}</div>
+</div>`
+      }).join('')
+
+      section.querySelectorAll('.modal-attr-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          if (btn.classList.contains('unavailable')) return
+          selectModalAttr(btn.dataset.key, btn.dataset.val)
+        })
+      })
+    }
+
+    function selectModalAttr(key, val) {
+      modalSelectedAttrs[key] = val
+      modalActiveVariant = findVariant(modalProduct, modalSelectedAttrs)
+
+      updateModalPhotos(modalActiveVariant, modalProduct)
+
+      const priceEl = document.getElementById('modalProductPrice')
+      if (modalActiveVariant) {
+        priceEl.textContent = fmt(modalActiveVariant.price) + ' ₽'
+      } else {
+        priceEl.textContent = 'от ' + fmt(minVariantPrice(modalProduct)) + ' ₽'
+      }
+
+      renderModalAttrs()
+      updateModalBtn()
+    }
+
+    function renderModalSpecs() {
+      const el = document.getElementById('modalSpecsAccordion')
+      const p  = modalProduct
+      if (!p || !p.specs || !Object.keys(p.specs).length) { el.style.display = 'none'; return }
+      el.style.display = ''
+      document.getElementById('modalSpecsBody').innerHTML = Object.entries(p.specs).map(([k, v]) =>
+        `<div class="modal-spec-row"><span class="modal-spec-key">${esc(k)}</span><span class="modal-spec-val">${esc(String(v))}</span></div>`
+      ).join('')
+    }
+
+    function updateModalBtn() {
+      const btn  = document.getElementById('modalAddBtn')
+      const hint = document.getElementById('modalAttrHint')
+      const p    = modalProduct
+      if (!p) { btn.classList.add('disabled'); return }
+
+      const hasVariants = p.variants && p.variants.length > 0
+      const attrKeys    = (p.attributes && typeof p.attributes === 'object') ? Object.keys(p.attributes) : []
+      const allSelected = attrKeys.every(k => modalSelectedAttrs[k])
+
+      let canAdd = false
+      if (!hasVariants) {
+        canAdd = p.quantity > 0
+      } else {
+        canAdd = allSelected && modalActiveVariant !== null
+      }
+      btn.classList.toggle('disabled', !canAdd)
+      if (hint) hint.style.display = 'none'
+    }
+
+    function toggleAccordion(id) {
+      const el = document.getElementById(id)
+      if (el) el.classList.toggle('open')
+    }
+
+    // Modal carousel nav
     document.getElementById('modalCarouselPrev').addEventListener('click', () => {
       if (!modalPhotos.length) return
       modalPhotoIdx = (modalPhotoIdx - 1 + modalPhotos.length) % modalPhotos.length
-      renderModalCarousel()
+      renderModalCarousel(modalPhotos)
     })
     document.getElementById('modalCarouselNext').addEventListener('click', () => {
       if (!modalPhotos.length) return
       modalPhotoIdx = (modalPhotoIdx + 1) % modalPhotos.length
-      renderModalCarousel()
+      renderModalCarousel(modalPhotos)
     })
+
+    // Modal carousel swipe
+    let modalTouchX = 0
+    document.getElementById('modalCarousel').addEventListener('touchstart', e => {
+      modalTouchX = e.touches[0].clientX
+    }, { passive: true })
+    document.getElementById('modalCarousel').addEventListener('touchend', e => {
+      const dx = e.changedTouches[0].clientX - modalTouchX
+      if (Math.abs(dx) > 40 && modalPhotos.length > 1) {
+        modalPhotoIdx = dx < 0
+          ? (modalPhotoIdx + 1) % modalPhotos.length
+          : (modalPhotoIdx - 1 + modalPhotos.length) % modalPhotos.length
+        renderModalCarousel(modalPhotos)
+      }
+    }, { passive: true })
 
     document.getElementById('modalCloseBtn').addEventListener('click', closeProductModal)
-
-    // Закрыть по клику на фон (не на контент)
-    productModal.addEventListener('click', e => {
-      if (e.target === productModal) closeProductModal()
-    })
-
-    // Закрыть по Escape
     document.addEventListener('keydown', e => {
       if (e.key === 'Escape' && productModal.classList.contains('open')) closeProductModal()
     })
 
-    // Добавить в корзину из модалки
     document.getElementById('modalAddBtn').addEventListener('click', () => {
-      if (modalProductId !== null) {
-        addToCart(modalProductId)
-        closeProductModal()
+      if (!modalProduct) return
+      const btn = document.getElementById('modalAddBtn')
+      if (btn.classList.contains('disabled')) {
+        // Show "choose variant" hint and shake attrs section
+        const hint    = document.getElementById('modalAttrHint')
+        const section = document.getElementById('modalAttrsSection')
+        if (hint) hint.style.display = 'block'
+        if (section && section.style.display !== 'none') {
+          section.classList.remove('highlight')
+          void section.offsetWidth
+          section.classList.add('highlight')
+          setTimeout(() => section.classList.remove('highlight'), 400)
+          section.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+        }
+        return
       }
+      const variantId = modalActiveVariant ? modalActiveVariant.id : null
+      addToCart(modalProduct.id, variantId)
+      showToast('Добавлено в корзину')
+      closeProductModal()
     })
 
     // ── Toast ─────────────────────────────────────────────────────────────────
@@ -1263,19 +1470,34 @@
     }
 
     // ── Cart logic ────────────────────────────────────────────────────────────
-    function addToCart(productId) {
+    function addToCart(productId, variantId) {
       const p = allProducts.find(x => x.id === productId)
       if (!p) return
-      const existing = cart.find(i => i.id === p.id)
-      const currentQty = existing ? existing.qty : 0
-      if (currentQty >= p.quantity) {
-        showToast('Больше нет в наличии')
-        return
+      const variant  = variantId ? (p.variants || []).find(v => v.id === variantId) : null
+      const cartKey  = variantId ? productId + '-' + variantId : String(productId)
+      const price    = variant ? variant.price : p.price
+      const quantity = variant ? variant.quantity : p.quantity
+      const name     = (variant && variant.attributes && Object.keys(variant.attributes).length)
+        ? p.name + ' (' + Object.values(variant.attributes).join(' / ') + ')'
+        : p.name
+
+      let itemPhotoUrl = null
+      if (variant && Array.isArray(variant.photos) && variant.photos.length) {
+        itemPhotoUrl = photoUrl(variant.photos[0])
+      } else if (Array.isArray(p.photos) && p.photos.length) {
+        itemPhotoUrl = photoUrl(p.photos[0])
+      } else if (p.photoUrl) {
+        itemPhotoUrl = p.photoUrl
       }
+
+      const existing   = cart.find(i => i.key === cartKey)
+      const currentQty = existing ? existing.qty : 0
+      if (currentQty >= quantity) { showToast('Больше нет в наличии'); return }
+
       if (existing) {
         existing.qty++
       } else {
-        cart.push({ id: p.id, name: p.name, price: p.price, photoUrl: p.photoUrl, qty: 1, quantity: p.quantity })
+        cart.push({ key: cartKey, id: p.id, variantId: variantId || null, name, price, photoUrl: itemPhotoUrl, qty: 1, quantity })
       }
       updateBadge()
       if (tg && tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light')
@@ -1291,10 +1513,7 @@
     function changeQty(idx, d) {
       if (d > 0) {
         const item = cart[idx]
-        if (item.qty >= item.quantity) {
-          showToast('Больше нет в наличии')
-          return
-        }
+        if (item.qty >= item.quantity) { showToast('Больше нет в наличии'); return }
       }
       cart[idx].qty += d
       if (cart[idx].qty <= 0) cart.splice(idx, 1)
@@ -1309,12 +1528,10 @@
       filled.style.display = 'block'
       document.getElementById('cartList').innerHTML = cart.map((item, i) => {
         const thumb = item.photoUrl
-          ? `<img class="cart-item-thumb" src="${esc(item.photoUrl)}" alt=""
-               onerror="this.parentNode.querySelector('.cart-item-ph').style.display='flex';this.style.display='none'">`
+          ? `<img class="cart-item-thumb" src="${esc(item.photoUrl)}" alt="" style="background-color:#1a1a1a" onerror="this.style.display='none';this.parentNode.querySelector('.cart-item-ph').style.display='flex'">`
           : ''
         const ph = `<div class="cart-item-ph"${item.photoUrl ? ' style="display:none"' : ''}>📦</div>`
-        return `
-<div class="cart-item">
+        return `<div class="cart-item">
   ${thumb}${ph}
   <div class="cart-item-info">
     <div class="cart-item-name">${esc(item.name)}</div>
@@ -1323,7 +1540,7 @@
   <div class="qty-ctrl">
     <button class="qty-btn" onclick="changeQty(${i},-1)">−</button>
     <span class="qty-val">${item.qty}</span>
-    <button class="qty-btn" onclick="changeQty(${i},1)" ${item.qty >= item.quantity ? 'disabled' : ''} style="opacity:${item.qty >= item.quantity ? 0.3 : 1};cursor:${item.qty >= item.quantity ? 'not-allowed' : 'pointer'}">+</button>
+    <button class="qty-btn" onclick="changeQty(${i},1)" ${item.qty >= item.quantity ? 'disabled' : ''}>+</button>
   </div>
 </div>`
       }).join('')
@@ -1340,15 +1557,13 @@
         document.getElementById('commSubtotal').textContent = fmt(sub) + ' ₽'
         document.getElementById('commFee').textContent      = '+' + fmt(comm) + ' ₽'
         bd.classList.add('show')
-      } else {
-        bd.classList.remove('show')
-      }
+      } else { bd.classList.remove('show') }
       const checkoutBtn = document.getElementById('checkoutBtn')
       if (!payMethod || !cart.length) checkoutBtn.classList.add('disabled')
       else checkoutBtn.classList.remove('disabled')
     }
 
-    // ── Payment selection ─────────────────────────────────────────────────────
+    // ── Payment ───────────────────────────────────────────────────────────────
     document.querySelectorAll('.pay-btn').forEach(btn => {
       btn.addEventListener('click', () => {
         document.querySelectorAll('.pay-btn').forEach(b => b.classList.remove('sel'))
@@ -1358,24 +1573,49 @@
       })
     })
 
+    // ── Delivery type ─────────────────────────────────────────────────────────
+    function setDeliveryType(type) {
+      deliveryType = type
+      document.querySelectorAll('.dtoggle-btn').forEach(b => b.classList.toggle('active', b.dataset.dt === type))
+      document.getElementById('deliveryAddrWrap').classList.toggle('show', type === 'delivery')
+      document.getElementById('pickupInfo').classList.toggle('show', type === 'pickup')
+    }
+
+    function validateCustomerForm() {
+      let ok = true
+      const name  = document.getElementById('cfName')
+      const phone = document.getElementById('cfPhone')
+      const addr  = document.getElementById('cfAddress')
+      ;[name, phone, addr].forEach(el => { if (el) el.classList.remove('cform-error') })
+      if (!name.value.trim())  { name.classList.add('cform-error');  ok = false }
+      if (!phone.value.trim()) { phone.classList.add('cform-error'); ok = false }
+      if (deliveryType === 'delivery' && !addr.value.trim()) { addr.classList.add('cform-error'); ok = false }
+      return ok
+    }
+
     // ── Checkout ──────────────────────────────────────────────────────────────
     async function checkout() {
       if (!payMethod || !cart.length) return
-      const btn = document.getElementById('checkoutBtn')
+      if (!validateCustomerForm()) return
+      const btn     = document.getElementById('checkoutBtn')
       const btnSpan = btn.querySelector('span')
       btn.classList.add('disabled'); btnSpan.textContent = 'ОФОРМЛЯЕМ…'
 
-      const telegramId = (tg && tg.initDataUnsafe && tg.initDataUnsafe.user)
-        ? String(tg.initDataUnsafe.user.id) : ''
-      const totalAmt = totalWithFee().toFixed(2)
-      const items    = cart.map(i => ({ productId: i.id, name: i.name, price: i.price, qty: i.qty }))
+      const telegramId     = (tg && tg.initDataUnsafe && tg.initDataUnsafe.user) ? String(tg.initDataUnsafe.user.id) : ''
+      const totalAmt       = totalWithFee().toFixed(2)
+      const customerName   = document.getElementById('cfName').value.trim()
+      const customerPhone  = document.getElementById('cfPhone').value.trim()
+      const deliveryAddress = deliveryType === 'delivery' ? document.getElementById('cfAddress').value.trim() : undefined
+      const items = cart.map(i => {
+        const item = { productId: i.id, name: i.name, price: i.price, qty: i.qty }
+        if (i.variantId) item.variantId = i.variantId
+        return item
+      })
 
       try {
-        const res  = await fetch('/api/orders', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ telegramId, items, totalAmount: totalAmt, payment: payMethod }),
-        })
+        const body = { telegramId, items, totalAmount: totalAmt, payment: payMethod, customerName, customerPhone, deliveryType }
+        if (deliveryAddress) body.deliveryAddress = deliveryAddress
+        const res  = await fetch('/api/orders', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
         const json = await res.json().catch(() => ({}))
         if (!res.ok) {
           btn.classList.remove('disabled'); btnSpan.textContent = 'ОФОРМИТЬ'
@@ -1386,7 +1626,7 @@
           return
         }
         const orderId = json.orderId || 0
-        const payload = JSON.stringify({ orderId, items, payment: payMethod, total: totalAmt })
+        const payload = JSON.stringify({ orderId, items, payment: payMethod, total: totalAmt, customerName, customerPhone, deliveryType, deliveryAddress })
         cart = []; updateBadge(); closeCart()
         if (tg && tg.sendData) { tg.sendData(payload) }
         else { alert('Заказ #' + orderId + ' принят!') }
@@ -1402,17 +1642,34 @@
         const res = await fetch('/api/cache-version?_=' + Date.now())
         const json = await res.json()
         const serverVersion = json.version ?? '0'
-        const localVersion = localStorage.getItem('cache_v') ?? ''
+        const localVersion  = localStorage.getItem('cache_v') ?? ''
         if (localVersion && localVersion !== serverVersion) {
           localStorage.setItem('cache_v', serverVersion)
-          loadMarquee()
-          loadHeroSlider()
-          loadCategories()
-          loadProducts(activeCat)
+          loadMarquee(); loadHeroSlider(); loadCategories(); loadProducts(activeCat)
         } else if (!localVersion) {
           localStorage.setItem('cache_v', serverVersion)
         }
       } catch { /* ignore */ }
+    }
+
+    // ── Footer modals ─────────────────────────────────────────────────────────
+    const fmodalContent = {
+      terms:     { title: 'УСЛОВИЯ ПРОДАЖИ',               body: 'Товар обмену и возврату подлежит в течение 14 дней с момента покупки при сохранении товарного вида и упаковки. Возврат осуществляется на основании чека или другого документа, подтверждающего факт оплаты. Гарантийные обязательства определяются производителем товара.' },
+      agreement: { title: 'ПОЛЬЗОВАТЕЛЬСКОЕ СОГЛАШЕНИЕ',   body: 'Используя данный сайт, вы соглашаетесь с условиями его использования. Администрация оставляет за собой право изменять условия без предварительного уведомления. Продолжая использование сайта, вы принимаете актуальные условия соглашения. Запрещается использование сайта в незаконных целях.' },
+      privacy:   { title: 'ПОЛИТИКА КОНФИДЕНЦИАЛЬНОСТИ',   body: 'Мы не передаём ваши данные третьим лицам. Персональные данные (имя, телефон, адрес доставки) используются исключительно для обработки и доставки заказов. Данные хранятся в защищённом виде и не используются в коммерческих целях без вашего согласия. Вы вправе запросить удаление своих данных.' },
+      help:      { title: 'ПОМОЩЬ',                        body: '📍 Адрес: Барклая 8, ТЦ Горбушка<br>2й этаж, Павильон 211/1<br><br>⏰ Время работы: 11:00 — 20:00<br><br>По всем вопросам обращайтесь к нашему менеджеру через Telegram или посетите магазин лично.' }
+    }
+
+    function openFModal(key) {
+      const c = fmodalContent[key]; if (!c) return
+      document.getElementById('fmodalTitle').textContent = c.title
+      document.getElementById('fmodalBody').innerHTML   = c.body
+      document.getElementById('fmodalBackdrop').classList.add('show')
+      document.body.style.overflow = 'hidden'
+    }
+    function closeFModal() {
+      document.getElementById('fmodalBackdrop').classList.remove('show')
+      document.body.style.overflow = ''
     }
 
     // ── Init ──────────────────────────────────────────────────────────────────

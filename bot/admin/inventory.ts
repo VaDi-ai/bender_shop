@@ -58,6 +58,75 @@ type CategoryAddFlow =
 type CategoryRenameFlow = { flow: 'category_rename'; step: 'name'; categoryId: number; oldName: string }
 type CategoryBannerFlow = { flow: 'category_banner'; step: 'photo'; categoryId: number; categoryName: string }
 
+type VariantAddFlow =
+  | { flow: 'variant_add'; step: 'sku'; productId: number }
+  | { flow: 'variant_add'; step: 'price'; productId: number; sku: string }
+  | { flow: 'variant_add'; step: 'qty'; productId: number; sku: string; price: number }
+  | {
+      flow: 'variant_add'
+      step: 'attrs'
+      productId: number
+      sku: string
+      price: number
+      qty: number
+      attrKeys: string[]
+      selectedAttrs: Record<string, string>
+      currentAttrIndex: number
+    }
+  | {
+      flow: 'variant_add'
+      step: 'photo'
+      productId: number
+      sku: string
+      price: number
+      qty: number
+      attrs: Record<string, string>
+      photos: string[]
+    }
+
+type AttrAddFlow =
+  | { flow: 'attr_add'; step: 'name'; productId: number }
+  | { flow: 'attr_add'; step: 'values'; productId: number; attrName: string }
+
+type AttrEditFlow = { flow: 'attr_edit'; step: 'values'; productId: number; attrName: string }
+
+type SpecAddFlow = { flow: 'spec_add'; step: 'input'; productId: number }
+
+type BrandEditFlow = { flow: 'brand_edit'; step: 'input'; productId: number }
+
+type ProductPhotoFlow = {
+  flow: 'product_photo'
+  step: 'uploading'
+  productId: number
+  pendingPhotos: string[]
+}
+
+type VariantPhotoEditFlow = {
+  flow: 'variant_photo_edit'
+  step: 'uploading'
+  variantId: number
+  productId: number
+  pendingPhotos: string[]
+}
+
+type ReceiveVariantFlow = {
+  flow: 'receive_variant'
+  step: 'qty'
+  variantId: number
+  variantSku: string
+  productName: string
+  currentQty: number
+}
+
+type WriteoffVariantFlow = {
+  flow: 'writeoff_variant'
+  step: 'qty'
+  variantId: number
+  variantSku: string
+  productName: string
+  currentQty: number
+}
+
 export type InventoryFlowState =
   | AddFlow
   | ReceiveFlow
@@ -68,6 +137,15 @@ export type InventoryFlowState =
   | CategoryAddFlow
   | CategoryRenameFlow
   | CategoryBannerFlow
+  | VariantAddFlow
+  | AttrAddFlow
+  | AttrEditFlow
+  | SpecAddFlow
+  | ReceiveVariantFlow
+  | WriteoffVariantFlow
+  | BrandEditFlow
+  | ProductPhotoFlow
+  | VariantPhotoEditFlow
 
 // userId → активный флоу (сбрасывается после завершения или отмены)
 export const inventoryState = new Map<number, InventoryFlowState>()
@@ -209,6 +287,9 @@ export async function showInventory(ctx: Context): Promise<void> {
   const keyboard = Markup.inlineKeyboard([
     [
       Markup.button.callback('➕ Добавить', 'inv:add'),
+      Markup.button.callback('📝 Редактировать', 'inv:edit_product'),
+    ],
+    [
       Markup.button.callback('📥 Оприходовать', 'inv:receive'),
       Markup.button.callback('📤 Списать', 'inv:writeoff'),
     ],
@@ -371,6 +452,268 @@ async function showProductsForPick(
   await ctx.reply('Выберите товар:', Markup.inlineKeyboard(rows))
 }
 
+// ─── Функции для редактирования товаров ───────────────────────────────────────
+
+async function showCategoriesForProductEdit(ctx: Context): Promise<void> {
+  const categories = await prisma.category.findMany({ orderBy: { name: 'asc' } })
+  if (categories.length === 0) {
+    await ctx.reply('❌ Категорий нет. Добавьте товары сначала.')
+    return
+  }
+  const rows: ReturnType<typeof Markup.button.callback>[][] = categories.map((c) => [
+    Markup.button.callback(c.name, `inv:ep_cat:${c.id}`),
+  ])
+  rows.push([Markup.button.callback('🔙 К товароучёту', 'inv:back')])
+  await ctx.reply('📝 Редактирование товара\n\nВыберите категорию:', Markup.inlineKeyboard(rows))
+}
+
+async function showProductsForEdit(ctx: Context, categoryId: number): Promise<void> {
+  const products = await prisma.product.findMany({
+    where: { categoryId },
+    orderBy: { name: 'asc' },
+  })
+  if (products.length === 0) {
+    await ctx.reply('❌ В этой категории нет товаров.')
+    await showCategoriesForProductEdit(ctx)
+    return
+  }
+  const rows: ReturnType<typeof Markup.button.callback>[][] = products.map((p) => [
+    Markup.button.callback(`${p.name} [${p.sku}]`, `inv:ep_prod:${p.id}`),
+  ])
+  rows.push([Markup.button.callback('🔙 Назад', 'inv:edit_product')])
+  await ctx.reply('Выберите товар:', Markup.inlineKeyboard(rows))
+}
+
+async function showVariantsForPick(
+  ctx: Context,
+  flow: 'receive' | 'writeoff',
+  product: { id: number; name: string; variants: { id: number; sku: string; quantity: number; attributes: unknown }[] },
+): Promise<void> {
+  const prefix = flow === 'receive' ? 'r' : 'w'
+  const label = flow === 'receive' ? '📥 Оприходование' : '📤 Списание'
+  const rows: ReturnType<typeof Markup.button.callback>[][] = product.variants.map((v) => {
+    const attrs = v.attributes as Record<string, string>
+    const attrStr = Object.values(attrs).join(' / ')
+    const btnLabel = `${attrStr || v.sku} — ${v.quantity} шт.`
+    return [Markup.button.callback(btnLabel.slice(0, 60), `inv:${prefix}_variant:${v.id}`)]
+  })
+  rows.push([Markup.button.callback('🔙 Назад', `inv:${prefix}_from_list`)])
+  await ctx.reply(
+    `${label} — ${product.name}\n\nВыберите вариант:`,
+    Markup.inlineKeyboard(rows),
+  )
+}
+
+async function showProductCard(ctx: Context, productId: number): Promise<void> {
+  const product = await prisma.product.findUnique({
+    where: { id: productId },
+    include: { category: true, variants: true },
+  })
+  if (!product) {
+    await ctx.reply('❌ Товар не найден.')
+    return
+  }
+  const attrs = product.attributes as Record<string, string[]> | null
+  const specs = product.specs as Record<string, string> | null
+  const lines: string[] = [
+    `📦 ${product.name} [${product.sku}]`,
+    `Категория: ${product.category?.name ?? '—'}`,
+    `Цена: ${product.price} ₽`,
+    `Остаток: ${product.stock} шт.`,
+  ]
+  if (product.badge) lines.push(`Метка: ${product.badge}`)
+  if (product.brand) lines.push(`Бренд: ${product.brand}`)
+  if (product.variants.length > 0) lines.push(`Вариантов: ${product.variants.length}`)
+  if (attrs && Object.keys(attrs).length > 0) lines.push(`Атрибуты: ${Object.keys(attrs).join(', ')}`)
+  if (specs && Object.keys(specs).length > 0) lines.push(`Характеристики: ${Object.keys(specs).length} шт.`)
+
+  await ctx.reply(
+    lines.join('\n'),
+    Markup.inlineKeyboard([
+      [
+        Markup.button.callback('🎛️ Варианты', `inv:prod_variants:${productId}`),
+        Markup.button.callback('🏷️ Атрибуты', `inv:prod_attrs:${productId}`),
+      ],
+      [
+        Markup.button.callback('📋 Характеристики', `inv:prod_specs:${productId}`),
+        Markup.button.callback('🏅 Метка', `inv:prod_badge:${productId}`),
+      ],
+      [
+        Markup.button.callback('🖼️ Превью товара', `inv:prod_photos:${productId}`),
+        Markup.button.callback('🏢 Бренд', `inv:prod_brand:${productId}`),
+      ],
+      [Markup.button.callback('🔙 К товароучёту', 'inv:back')],
+    ]),
+  )
+}
+
+async function showVariantsList(ctx: Context, productId: number): Promise<void> {
+  const product = await prisma.product.findUnique({
+    where: { id: productId },
+    include: { variants: { orderBy: { id: 'asc' } } },
+  })
+  if (!product) {
+    await ctx.reply('❌ Товар не найден.')
+    return
+  }
+  const rows: ReturnType<typeof Markup.button.callback>[][] = product.variants.map((v) => {
+    const attrs = v.attributes as Record<string, string>
+    const attrStr = Object.values(attrs).join(' / ')
+    const label = `${v.sku}: ${attrStr || '—'} — ${v.price}₽ (${v.quantity} шт.)`
+    return [
+      Markup.button.callback(label.slice(0, 44), `inv:var_view:${v.id}`),
+      Markup.button.callback('🖼️ Фото', `inv:var_photos:${v.id}`),
+      Markup.button.callback('🗑️', `inv:var_del:${v.id}:${productId}`),
+    ]
+  })
+  rows.push([Markup.button.callback('➕ Добавить вариант', `inv:variant_add:${productId}`)])
+  rows.push([Markup.button.callback('🔙 Назад', `inv:ep_prod:${productId}`)])
+  const text =
+    product.variants.length === 0
+      ? `🎛️ Варианты — ${product.name}\n\nВариантов пока нет.`
+      : `🎛️ Варианты — ${product.name} (${product.variants.length} шт.)`
+  await ctx.reply(text, Markup.inlineKeyboard(rows))
+}
+
+async function showProductAttrs(ctx: Context, productId: number): Promise<void> {
+  const product = await prisma.product.findUnique({ where: { id: productId } })
+  if (!product) {
+    await ctx.reply('❌ Товар не найден.')
+    return
+  }
+  const attrs = (product.attributes as Record<string, string[]> | null) ?? {}
+  const lines: string[] = [`🏷️ Атрибуты — ${product.name}\n`]
+  for (const [key, values] of Object.entries(attrs)) {
+    lines.push(`${key}: ${Array.isArray(values) ? values.join(', ') : values}`)
+  }
+  if (Object.keys(attrs).length === 0) lines.push('Атрибуты не заданы.')
+
+  const rows: ReturnType<typeof Markup.button.callback>[][] = []
+  for (const key of Object.keys(attrs)) {
+    const safeKey = key.slice(0, 20) // ограничиваем длину для callback_data
+    rows.push([
+      Markup.button.callback(`✏️ ${key}`, `inv:attr_edit:${productId}:${safeKey}`),
+      Markup.button.callback('🗑️', `inv:attr_del:${productId}:${safeKey}`),
+    ])
+  }
+  rows.push([Markup.button.callback('➕ Добавить атрибут', `inv:attr_add:${productId}`)])
+  rows.push([Markup.button.callback('🔙 Назад', `inv:ep_prod:${productId}`)])
+  await ctx.reply(lines.join('\n'), Markup.inlineKeyboard(rows))
+}
+
+async function showProductSpecs(ctx: Context, productId: number): Promise<void> {
+  const product = await prisma.product.findUnique({ where: { id: productId } })
+  if (!product) {
+    await ctx.reply('❌ Товар не найден.')
+    return
+  }
+  const specs = (product.specs as Record<string, string> | null) ?? {}
+  const lines: string[] = [`📋 Характеристики — ${product.name}\n`]
+  for (const [key, value] of Object.entries(specs)) {
+    lines.push(`${key}: ${value}`)
+  }
+  if (Object.keys(specs).length === 0) lines.push('Характеристики не заданы.')
+
+  const rows: ReturnType<typeof Markup.button.callback>[][] = []
+  for (const key of Object.keys(specs)) {
+    const safeKey = key.slice(0, 20)
+    rows.push([
+      Markup.button.callback(`🗑️ ${key}`, `inv:spec_del:${productId}:${safeKey}`),
+    ])
+  }
+  rows.push([Markup.button.callback('➕ Добавить', `inv:spec_add:${productId}`)])
+  rows.push([Markup.button.callback('🔙 Назад', `inv:ep_prod:${productId}`)])
+  await ctx.reply(lines.join('\n'), Markup.inlineKeyboard(rows))
+}
+
+async function showProductPhotos(ctx: Context, productId: number): Promise<void> {
+  const product = await prisma.product.findUnique({ where: { id: productId } })
+  if (!product) {
+    await ctx.reply('❌ Товар не найден.')
+    return
+  }
+  const count = product.photos.length
+  await ctx.reply(
+    `🖼️ Фото товара — ${product.name}\n\nТекущих фото: ${count}`,
+    Markup.inlineKeyboard([
+      [
+        Markup.button.callback('➕ Добавить фото', `inv:prod_photo_add:${productId}`),
+        Markup.button.callback('🗑️ Очистить все фото', `inv:prod_photo_clear:${productId}`),
+      ],
+      [Markup.button.callback('🔙 Назад', `inv:ep_prod:${productId}`)],
+    ]),
+  )
+}
+
+async function showVariantPhotos(ctx: Context, variantId: number): Promise<void> {
+  const variant = await prisma.productVariant.findUnique({
+    where: { id: variantId },
+    include: { product: true },
+  })
+  if (!variant) {
+    await ctx.reply('❌ Вариант не найден.')
+    return
+  }
+  const attrs = variant.attributes as Record<string, string>
+  const attrStr = Object.values(attrs).join(' / ')
+  await ctx.reply(
+    `🖼️ Фото варианта — ${variant.product.name}\n${attrStr || variant.sku}\n\nТекущих фото: ${variant.photos.length}`,
+    Markup.inlineKeyboard([
+      [
+        Markup.button.callback('➕ Добавить фото', `inv:var_photo_add:${variantId}`),
+        Markup.button.callback('🗑️ Очистить фото варианта', `inv:var_photo_clr:${variantId}`),
+      ],
+      [Markup.button.callback('🔙 Назад', `inv:prod_variants:${variant.productId}`)],
+    ]),
+  )
+}
+
+async function saveVariant(
+  ctx: Context,
+  userId: number,
+  s: Extract<VariantAddFlow, { step: 'photo' }>,
+): Promise<void> {
+  try {
+    const existing = await prisma.productVariant.findUnique({ where: { sku: s.sku } })
+    if (existing) {
+      await ctx.reply(`❌ Артикул «${s.sku}» уже занят. Попробуйте добавить вариант снова с другим SKU.`, Markup.removeKeyboard())
+      inventoryState.delete(userId)
+      await showVariantsList(ctx, s.productId)
+      return
+    }
+    const variant = await prisma.productVariant.create({
+      data: {
+        productId: s.productId,
+        sku: s.sku,
+        price: s.price,
+        quantity: s.qty,
+        inStock: s.qty > 0,
+        attributes: s.attrs,
+        photos: s.photos,
+      },
+    })
+    inventoryState.delete(userId)
+    const attrStr = Object.entries(s.attrs).map(([k, v]) => `${k}: ${v}`).join(', ')
+    await ctx.reply(
+      [
+        '✅ Вариант добавлен!',
+        `Артикул:    ${variant.sku}`,
+        `Атрибуты:   ${attrStr || '—'}`,
+        `Цена:       ${variant.price} ₽`,
+        `Количество: ${variant.quantity} шт.`,
+        `Фото:       ${s.photos.length} шт.`,
+      ].join('\n'),
+      Markup.removeKeyboard(),
+    )
+    await showVariantsList(ctx, s.productId)
+  } catch (err) {
+    console.error('saveVariant error:', err)
+    inventoryState.delete(userId)
+    await ctx.reply('❌ Ошибка при сохранении варианта.', Markup.removeKeyboard())
+    await showVariantsList(ctx, s.productId)
+  }
+}
+
 // ─── Регистрация action-обработчиков ─────────────────────────────────────────
 
 const FILE_FORMAT_HINT = [
@@ -441,9 +784,13 @@ export function setupInventoryHandlers(bot: Telegraf): void {
     try { await ctx.answerCbQuery() } catch { /* ignore stale query */ }
     const userId = ctx.from!.id
     const sku = (ctx.match as RegExpMatchArray)[1]
-    const product = await prisma.product.findUnique({ where: { sku } })
+    const product = await prisma.product.findUnique({ where: { sku }, include: { variants: true } })
     if (!product) {
       await ctx.reply('❌ Товар не найден.')
+      return
+    }
+    if (product.variants.length > 0) {
+      await showVariantsForPick(ctx, 'receive', product)
       return
     }
     inventoryState.set(userId, {
@@ -486,9 +833,13 @@ export function setupInventoryHandlers(bot: Telegraf): void {
     try { await ctx.answerCbQuery() } catch { /* ignore stale query */ }
     const userId = ctx.from!.id
     const sku = (ctx.match as RegExpMatchArray)[1]
-    const product = await prisma.product.findUnique({ where: { sku } })
+    const product = await prisma.product.findUnique({ where: { sku }, include: { variants: true } })
     if (!product) {
       await ctx.reply('❌ Товар не найден.')
+      return
+    }
+    if (product.variants.length > 0) {
+      await showVariantsForPick(ctx, 'writeoff', product)
       return
     }
     inventoryState.set(userId, {
@@ -786,6 +1137,497 @@ export function setupInventoryHandlers(bot: Telegraf): void {
     await ctx.reply(`✅ Категория «${cat.name}» удалена.`)
     await showCategories(ctx)
   })
+
+  // ── Редактирование товара — выбор категории и товара ───────────────────────
+
+  bot.action('inv:edit_product', async (ctx) => {
+    try { await ctx.answerCbQuery() } catch { /* ignore stale query */ }
+    await showCategoriesForProductEdit(ctx)
+  })
+
+  bot.action(/^inv:ep_cat:(\d+)$/, async (ctx) => {
+    try { await ctx.answerCbQuery() } catch { /* ignore stale query */ }
+    const categoryId = parseInt((ctx.match as RegExpMatchArray)[1], 10)
+    await showProductsForEdit(ctx, categoryId)
+  })
+
+  bot.action(/^inv:ep_prod:(\d+)$/, async (ctx) => {
+    try { await ctx.answerCbQuery() } catch { /* ignore stale query */ }
+    const productId = parseInt((ctx.match as RegExpMatchArray)[1], 10)
+    await showProductCard(ctx, productId)
+  })
+
+  // ── Варианты товара ────────────────────────────────────────────────────────
+
+  bot.action(/^inv:prod_variants:(\d+)$/, async (ctx) => {
+    try { await ctx.answerCbQuery() } catch { /* ignore stale query */ }
+    const productId = parseInt((ctx.match as RegExpMatchArray)[1], 10)
+    await showVariantsList(ctx, productId)
+  })
+
+  bot.action(/^inv:variant_add:(\d+)$/, async (ctx) => {
+    try { await ctx.answerCbQuery() } catch { /* ignore stale query */ }
+    const userId = ctx.from!.id
+    const productId = parseInt((ctx.match as RegExpMatchArray)[1], 10)
+    const product = await prisma.product.findUnique({ where: { id: productId } })
+    inventoryState.set(userId, { flow: 'variant_add', step: 'sku', productId })
+    await ctx.reply(
+      `➕ Новый вариант — ${product?.name ?? ''}\n\nШаг 1 — введите артикул (SKU):\n(Пример: ${product?.sku ?? 'SKU'}-256-BLK)`,
+      Markup.keyboard([['❌ Отмена']]).resize(),
+    )
+  })
+
+  bot.action(/^inv:var_view:(\d+)$/, async (ctx) => {
+    try { await ctx.answerCbQuery() } catch { /* ignore stale query */ }
+    const variantId = parseInt((ctx.match as RegExpMatchArray)[1], 10)
+    const variant = await prisma.productVariant.findUnique({
+      where: { id: variantId },
+      include: { product: true },
+    })
+    if (!variant) {
+      await ctx.reply('❌ Вариант не найден.')
+      return
+    }
+    const attrs = variant.attributes as Record<string, string>
+    const lines = [
+      `🎛️ Вариант [${variant.sku}]`,
+      `Товар: ${variant.product.name}`,
+      ...Object.entries(attrs).map(([k, v]) => `${k}: ${v}`),
+      `Цена: ${variant.price} ₽`,
+      `Остаток: ${variant.quantity} шт.`,
+      `В наличии: ${variant.inStock ? 'Да' : 'Нет'}`,
+      `Фото: ${variant.photos.length} шт.`,
+    ]
+    await ctx.reply(
+      lines.join('\n'),
+      Markup.inlineKeyboard([
+        [Markup.button.callback('🔙 Назад', `inv:prod_variants:${variant.productId}`)],
+      ]),
+    )
+  })
+
+  bot.action(/^inv:var_del:(\d+):(\d+)$/, async (ctx) => {
+    try { await ctx.answerCbQuery() } catch { /* ignore stale query */ }
+    const m = ctx.match as RegExpMatchArray
+    const variantId = parseInt(m[1], 10)
+    const productId = parseInt(m[2], 10)
+    const variant = await prisma.productVariant.findUnique({ where: { id: variantId } })
+    if (!variant) {
+      await ctx.reply('❌ Вариант не найден.')
+      return
+    }
+    const attrs = variant.attributes as Record<string, string>
+    const attrStr = Object.values(attrs).join(' / ')
+    await ctx.reply(
+      `🗑️ Удалить вариант?\n\n${variant.sku}: ${attrStr || '—'} — ${variant.price}₽ (${variant.quantity} шт.)`,
+      Markup.inlineKeyboard([
+        [
+          Markup.button.callback('✅ Да, удалить', `inv:var_del_ok:${variantId}:${productId}`),
+          Markup.button.callback('❌ Отмена', `inv:prod_variants:${productId}`),
+        ],
+      ]),
+    )
+  })
+
+  bot.action(/^inv:var_del_ok:(\d+):(\d+)$/, async (ctx) => {
+    try { await ctx.answerCbQuery() } catch { /* ignore stale query */ }
+    const m = ctx.match as RegExpMatchArray
+    const variantId = parseInt(m[1], 10)
+    const productId = parseInt(m[2], 10)
+    await prisma.productVariant.delete({ where: { id: variantId } })
+    await ctx.reply('✅ Вариант удалён.')
+    await showVariantsList(ctx, productId)
+  })
+
+  // ── Фото существующего варианта ───────────────────────────────────────────
+
+  bot.action(/^inv:var_photos:(\d+)$/, async (ctx) => {
+    try { await ctx.answerCbQuery() } catch { /* ignore stale query */ }
+    const variantId = parseInt((ctx.match as RegExpMatchArray)[1], 10)
+    await showVariantPhotos(ctx, variantId)
+  })
+
+  bot.action(/^inv:var_photo_add:(\d+)$/, async (ctx) => {
+    try { await ctx.answerCbQuery() } catch { /* ignore stale query */ }
+    const userId = ctx.from!.id
+    const variantId = parseInt((ctx.match as RegExpMatchArray)[1], 10)
+    const variant = await prisma.productVariant.findUnique({ where: { id: variantId } })
+    if (!variant) { await ctx.reply('❌ Вариант не найден.'); return }
+    inventoryState.set(userId, {
+      flow: 'variant_photo_edit',
+      step: 'uploading',
+      variantId,
+      productId: variant.productId,
+      pendingPhotos: [],
+    })
+    await ctx.reply(
+      `Отправьте фото варианта (до 7 штук).\nУже загружено: ${variant.photos.length}\nНажмите ✅ Готово когда закончите.`,
+      Markup.inlineKeyboard([[Markup.button.callback('✅ Готово', `inv:var_photo_done_e:${variantId}`)]]),
+    )
+  })
+
+  bot.action(/^inv:var_photo_done_e:(\d+)$/, async (ctx) => {
+    try { await ctx.answerCbQuery() } catch { /* ignore stale query */ }
+    const userId = ctx.from!.id
+    const variantId = parseInt((ctx.match as RegExpMatchArray)[1], 10)
+    const state = inventoryState.get(userId)
+    const pending = state?.flow === 'variant_photo_edit' ? state.pendingPhotos : []
+    inventoryState.delete(userId)
+    const variant = await prisma.productVariant.findUnique({ where: { id: variantId } })
+    if (!variant) { await ctx.reply('❌ Вариант не найден.', Markup.removeKeyboard()); return }
+    const updatedPhotos = [...variant.photos, ...pending]
+    await prisma.productVariant.update({ where: { id: variantId }, data: { photos: updatedPhotos } })
+    await ctx.reply(`✅ Сохранено. Фото варианта: ${updatedPhotos.length} шт.`, Markup.removeKeyboard())
+    await showVariantPhotos(ctx, variantId)
+  })
+
+  bot.action(/^inv:var_photo_clr:(\d+)$/, async (ctx) => {
+    try { await ctx.answerCbQuery() } catch { /* ignore stale query */ }
+    const variantId = parseInt((ctx.match as RegExpMatchArray)[1], 10)
+    await ctx.reply(
+      '🗑️ Удалить все фото варианта?',
+      Markup.inlineKeyboard([
+        [
+          Markup.button.callback('✅ Да, удалить', `inv:var_photo_clr_ok:${variantId}`),
+          Markup.button.callback('❌ Отмена', `inv:var_photos:${variantId}`),
+        ],
+      ]),
+    )
+  })
+
+  bot.action(/^inv:var_photo_clr_ok:(\d+)$/, async (ctx) => {
+    try { await ctx.answerCbQuery() } catch { /* ignore stale query */ }
+    const variantId = parseInt((ctx.match as RegExpMatchArray)[1], 10)
+    await prisma.productVariant.update({ where: { id: variantId }, data: { photos: [] } })
+    await ctx.reply('✅ Фото варианта очищены.')
+    await showVariantPhotos(ctx, variantId)
+  })
+
+  // ── Выбор значения атрибута при добавлении варианта ──────────────────────
+
+  bot.action(/^inv:var_attr:(.+)$/, async (ctx) => {
+    try { await ctx.answerCbQuery() } catch { /* ignore stale query */ }
+    const userId = ctx.from!.id
+    const state = inventoryState.get(userId)
+    if (!state || state.flow !== 'variant_add' || state.step !== 'attrs') return
+    const value = decodeURIComponent((ctx.match as RegExpMatchArray)[1])
+    const s = state as Extract<VariantAddFlow, { step: 'attrs' }>
+    const currentKey = s.attrKeys[s.currentAttrIndex]
+    const newSelectedAttrs = { ...s.selectedAttrs, [currentKey]: value }
+    const nextIndex = s.currentAttrIndex + 1
+
+    if (nextIndex >= s.attrKeys.length) {
+      inventoryState.set(userId, {
+        flow: 'variant_add',
+        step: 'photo',
+        productId: s.productId,
+        sku: s.sku,
+        price: s.price,
+        qty: s.qty,
+        attrs: newSelectedAttrs,
+        photos: [],
+      })
+      await ctx.reply(
+        `${currentKey}: ${value} ✅\n\nШаг 5 — добавьте фото варианта (до 5 штук) или пропустите:`,
+        Markup.inlineKeyboard([
+          [Markup.button.callback('⏭️ Пропустить', 'inv:var_photo_skip')],
+        ]),
+      )
+    } else {
+      inventoryState.set(userId, {
+        flow: 'variant_add',
+        step: 'attrs',
+        productId: s.productId,
+        sku: s.sku,
+        price: s.price,
+        qty: s.qty,
+        attrKeys: s.attrKeys,
+        selectedAttrs: newSelectedAttrs,
+        currentAttrIndex: nextIndex,
+      })
+      const product = await prisma.product.findUnique({ where: { id: s.productId } })
+      const productAttrs = product?.attributes as Record<string, string[]> | null
+      const nextKey = s.attrKeys[nextIndex]
+      const nextValues = productAttrs?.[nextKey] ?? []
+      const valButtons = nextValues.map((v) => Markup.button.callback(v, `inv:var_attr:${encodeURIComponent(v)}`))
+      const valRows: ReturnType<typeof Markup.button.callback>[][] = []
+      for (let i = 0; i < valButtons.length; i += 3) valRows.push(valButtons.slice(i, i + 3))
+      await ctx.reply(
+        `${currentKey}: ${value} ✅\n\nВыберите ${nextKey}:`,
+        Markup.inlineKeyboard(valRows),
+      )
+    }
+  })
+
+  bot.action('inv:var_photo_skip', async (ctx) => {
+    try { await ctx.answerCbQuery() } catch { /* ignore stale query */ }
+    const userId = ctx.from!.id
+    const state = inventoryState.get(userId)
+    if (!state || state.flow !== 'variant_add' || state.step !== 'photo') return
+    await saveVariant(ctx, userId, state as Extract<VariantAddFlow, { step: 'photo' }>)
+  })
+
+  bot.action('inv:var_photo_done', async (ctx) => {
+    try { await ctx.answerCbQuery() } catch { /* ignore stale query */ }
+    const userId = ctx.from!.id
+    const state = inventoryState.get(userId)
+    if (!state || state.flow !== 'variant_add' || state.step !== 'photo') return
+    await saveVariant(ctx, userId, state as Extract<VariantAddFlow, { step: 'photo' }>)
+  })
+
+  // ── Атрибуты товара ────────────────────────────────────────────────────────
+
+  bot.action(/^inv:prod_attrs:(\d+)$/, async (ctx) => {
+    try { await ctx.answerCbQuery() } catch { /* ignore stale query */ }
+    const productId = parseInt((ctx.match as RegExpMatchArray)[1], 10)
+    await showProductAttrs(ctx, productId)
+  })
+
+  bot.action(/^inv:attr_add:(\d+)$/, async (ctx) => {
+    try { await ctx.answerCbQuery() } catch { /* ignore stale query */ }
+    const userId = ctx.from!.id
+    const productId = parseInt((ctx.match as RegExpMatchArray)[1], 10)
+    inventoryState.set(userId, { flow: 'attr_add', step: 'name', productId })
+    await ctx.reply(
+      '🏷️ Добавление атрибута\n\nШаг 1 — введите название (например: Память, Цвет):',
+      Markup.keyboard([['❌ Отмена']]).resize(),
+    )
+  })
+
+  bot.action(/^inv:attr_edit:(\d+):(.+)$/, async (ctx) => {
+    try { await ctx.answerCbQuery() } catch { /* ignore stale query */ }
+    const userId = ctx.from!.id
+    const m = ctx.match as RegExpMatchArray
+    const productId = parseInt(m[1], 10)
+    const attrName = m[2]
+    inventoryState.set(userId, { flow: 'attr_edit', step: 'values', productId, attrName })
+    const product = await prisma.product.findUnique({ where: { id: productId } })
+    const existingAttrs = (product?.attributes as Record<string, string[]> | null) ?? {}
+    const currentValues = (existingAttrs[attrName] ?? []).join(', ')
+    await ctx.reply(
+      `✏️ Атрибут «${attrName}»\nТекущие значения: ${currentValues || '—'}\n\nВведите новые значения через запятую:`,
+      Markup.keyboard([['❌ Отмена']]).resize(),
+    )
+  })
+
+  bot.action(/^inv:attr_del:(\d+):(.+)$/, async (ctx) => {
+    try { await ctx.answerCbQuery() } catch { /* ignore stale query */ }
+    const m = ctx.match as RegExpMatchArray
+    const productId = parseInt(m[1], 10)
+    const attrName = m[2]
+    const product = await prisma.product.findUnique({ where: { id: productId } })
+    if (!product) return
+    const attrs = (product.attributes as Record<string, string[]> | null) ?? {}
+    delete attrs[attrName]
+    await prisma.product.update({ where: { id: productId }, data: { attributes: attrs } })
+    await ctx.reply(`✅ Атрибут «${attrName}» удалён.`)
+    await showProductAttrs(ctx, productId)
+  })
+
+  // ── Характеристики товара ──────────────────────────────────────────────────
+
+  bot.action(/^inv:prod_specs:(\d+)$/, async (ctx) => {
+    try { await ctx.answerCbQuery() } catch { /* ignore stale query */ }
+    const productId = parseInt((ctx.match as RegExpMatchArray)[1], 10)
+    await showProductSpecs(ctx, productId)
+  })
+
+  bot.action(/^inv:spec_add:(\d+)$/, async (ctx) => {
+    try { await ctx.answerCbQuery() } catch { /* ignore stale query */ }
+    const userId = ctx.from!.id
+    const productId = parseInt((ctx.match as RegExpMatchArray)[1], 10)
+    inventoryState.set(userId, { flow: 'spec_add', step: 'input', productId })
+    await ctx.reply(
+      '📋 Добавление характеристики\n\nВведите в формате:\nНазвание : Значение\n\nПример: Процессор : Apple A18',
+      Markup.keyboard([['❌ Отмена']]).resize(),
+    )
+  })
+
+  bot.action(/^inv:spec_del:(\d+):(.+)$/, async (ctx) => {
+    try { await ctx.answerCbQuery() } catch { /* ignore stale query */ }
+    const m = ctx.match as RegExpMatchArray
+    const productId = parseInt(m[1], 10)
+    const specName = m[2]
+    const product = await prisma.product.findUnique({ where: { id: productId } })
+    if (!product) return
+    const specs = (product.specs as Record<string, string> | null) ?? {}
+    delete specs[specName]
+    await prisma.product.update({ where: { id: productId }, data: { specs } })
+    await ctx.reply(`✅ Характеристика «${specName}» удалена.`)
+    await showProductSpecs(ctx, productId)
+  })
+
+  // ── Метка товара ───────────────────────────────────────────────────────────
+
+  bot.action(/^inv:prod_badge:(\d+)$/, async (ctx) => {
+    try { await ctx.answerCbQuery() } catch { /* ignore stale query */ }
+    const productId = parseInt((ctx.match as RegExpMatchArray)[1], 10)
+    const product = await prisma.product.findUnique({ where: { id: productId } })
+    if (!product) return
+    await ctx.reply(
+      `🏅 Метка товара\n\n${product.name}\nТекущая метка: ${product.badge ?? '—'}`,
+      Markup.inlineKeyboard([
+        [
+          Markup.button.callback('ХИТ', `inv:badge_set:${productId}:ХИТ`),
+          Markup.button.callback('НОВИНКА', `inv:badge_set:${productId}:НОВИНКА`),
+          Markup.button.callback('АКЦИЯ', `inv:badge_set:${productId}:АКЦИЯ`),
+        ],
+        [Markup.button.callback('❌ Убрать метку', `inv:badge_clear:${productId}`)],
+        [Markup.button.callback('🔙 Назад', `inv:ep_prod:${productId}`)],
+      ]),
+    )
+  })
+
+  bot.action(/^inv:badge_set:(\d+):(.+)$/, async (ctx) => {
+    try { await ctx.answerCbQuery() } catch { /* ignore stale query */ }
+    const m = ctx.match as RegExpMatchArray
+    const productId = parseInt(m[1], 10)
+    const badge = m[2]
+    await prisma.product.update({ where: { id: productId }, data: { badge } })
+    await ctx.reply(`✅ Метка «${badge}» установлена.`)
+    await showProductCard(ctx, productId)
+  })
+
+  bot.action(/^inv:badge_clear:(\d+)$/, async (ctx) => {
+    try { await ctx.answerCbQuery() } catch { /* ignore stale query */ }
+    const productId = parseInt((ctx.match as RegExpMatchArray)[1], 10)
+    await prisma.product.update({ where: { id: productId }, data: { badge: null } })
+    await ctx.reply('✅ Метка убрана.')
+    await showProductCard(ctx, productId)
+  })
+
+  // ── Бренд товара ────────────────────────────────────────────────────────────
+
+  bot.action(/^inv:prod_brand:(\d+)$/, async (ctx) => {
+    try { await ctx.answerCbQuery() } catch { /* ignore stale query */ }
+    const userId = ctx.from!.id
+    const productId = parseInt((ctx.match as RegExpMatchArray)[1], 10)
+    const product = await prisma.product.findUnique({ where: { id: productId } })
+    if (!product) return
+    inventoryState.set(userId, { flow: 'brand_edit', step: 'input', productId })
+    await ctx.reply(
+      `🏢 Бренд товара\n\n${product.name}\nТекущий бренд: ${product.brand ?? '—'}\n\nВведите название бренда (или «-» чтобы очистить):`,
+      Markup.keyboard([['❌ Отмена']]).resize(),
+    )
+  })
+
+  // ── Фото товара ─────────────────────────────────────────────────────────────
+
+  bot.action(/^inv:prod_photos:(\d+)$/, async (ctx) => {
+    try { await ctx.answerCbQuery() } catch { /* ignore stale query */ }
+    const productId = parseInt((ctx.match as RegExpMatchArray)[1], 10)
+    await showProductPhotos(ctx, productId)
+  })
+
+  bot.action(/^inv:prod_photo_add:(\d+)$/, async (ctx) => {
+    try { await ctx.answerCbQuery() } catch { /* ignore stale query */ }
+    const userId = ctx.from!.id
+    const productId = parseInt((ctx.match as RegExpMatchArray)[1], 10)
+    inventoryState.set(userId, { flow: 'product_photo', step: 'uploading', productId, pendingPhotos: [] })
+    await ctx.reply(
+      'Отправьте фото товара (можно несколько, до 7 штук). Нажмите ✅ Готово когда закончите.',
+      Markup.inlineKeyboard([[Markup.button.callback('✅ Готово', `inv:prod_photo_done:${productId}`)]]),
+    )
+  })
+
+  bot.action(/^inv:prod_photo_done:(\d+)$/, async (ctx) => {
+    try { await ctx.answerCbQuery() } catch { /* ignore stale query */ }
+    const userId = ctx.from!.id
+    const productId = parseInt((ctx.match as RegExpMatchArray)[1], 10)
+    const state = inventoryState.get(userId)
+    const pending = (state?.flow === 'product_photo' ? state.pendingPhotos : [])
+    inventoryState.delete(userId)
+
+    const product = await prisma.product.findUnique({ where: { id: productId } })
+    if (!product) {
+      await ctx.reply('❌ Товар не найден.', Markup.removeKeyboard())
+      return
+    }
+    const updatedPhotos = [...product.photos, ...pending]
+    await prisma.product.update({ where: { id: productId }, data: { photos: updatedPhotos } })
+    await ctx.reply(`✅ Сохранено. Фото товара: ${updatedPhotos.length} шт.`, Markup.removeKeyboard())
+    await showProductCard(ctx, productId)
+  })
+
+  bot.action(/^inv:prod_photo_clear:(\d+)$/, async (ctx) => {
+    try { await ctx.answerCbQuery() } catch { /* ignore stale query */ }
+    const productId = parseInt((ctx.match as RegExpMatchArray)[1], 10)
+    await ctx.reply(
+      '🗑️ Удалить все фото товара?',
+      Markup.inlineKeyboard([
+        [
+          Markup.button.callback('✅ Да, удалить все', `inv:prod_photo_clear_ok:${productId}`),
+          Markup.button.callback('❌ Отмена', `inv:prod_photos:${productId}`),
+        ],
+      ]),
+    )
+  })
+
+  bot.action(/^inv:prod_photo_clear_ok:(\d+)$/, async (ctx) => {
+    try { await ctx.answerCbQuery() } catch { /* ignore stale query */ }
+    const productId = parseInt((ctx.match as RegExpMatchArray)[1], 10)
+    await prisma.product.update({ where: { id: productId }, data: { photos: [] } })
+    await ctx.reply('✅ Все фото удалены.')
+    await showProductPhotos(ctx, productId)
+  })
+
+  // ── Оприходование/списание конкретного варианта ───────────────────────────
+
+  bot.action(/^inv:r_variant:(\d+)$/, async (ctx) => {
+    try { await ctx.answerCbQuery() } catch { /* ignore stale query */ }
+    const userId = ctx.from!.id
+    const variantId = parseInt((ctx.match as RegExpMatchArray)[1], 10)
+    const variant = await prisma.productVariant.findUnique({
+      where: { id: variantId },
+      include: { product: true },
+    })
+    if (!variant) {
+      await ctx.reply('❌ Вариант не найден.')
+      return
+    }
+    const attrs = variant.attributes as Record<string, string>
+    const attrStr = Object.values(attrs).join(' / ')
+    inventoryState.set(userId, {
+      flow: 'receive_variant',
+      step: 'qty',
+      variantId,
+      variantSku: variant.sku,
+      productName: `${variant.product.name} [${attrStr || variant.sku}]`,
+      currentQty: variant.quantity,
+    })
+    await ctx.reply(
+      `📥 ${variant.product.name}\nВариант: ${attrStr || variant.sku}\nТекущий остаток: ${variant.quantity} шт.\n\nСколько единиц добавить?`,
+      Markup.keyboard([['❌ Отмена']]).resize(),
+    )
+  })
+
+  bot.action(/^inv:w_variant:(\d+)$/, async (ctx) => {
+    try { await ctx.answerCbQuery() } catch { /* ignore stale query */ }
+    const userId = ctx.from!.id
+    const variantId = parseInt((ctx.match as RegExpMatchArray)[1], 10)
+    const variant = await prisma.productVariant.findUnique({
+      where: { id: variantId },
+      include: { product: true },
+    })
+    if (!variant) {
+      await ctx.reply('❌ Вариант не найден.')
+      return
+    }
+    const attrs = variant.attributes as Record<string, string>
+    const attrStr = Object.values(attrs).join(' / ')
+    inventoryState.set(userId, {
+      flow: 'writeoff_variant',
+      step: 'qty',
+      variantId,
+      variantSku: variant.sku,
+      productName: `${variant.product.name} [${attrStr || variant.sku}]`,
+      currentQty: variant.quantity,
+    })
+    await ctx.reply(
+      `📤 ${variant.product.name}\nВариант: ${attrStr || variant.sku}\nТекущий остаток: ${variant.quantity} шт.\n\nСколько единиц списать?`,
+      Markup.keyboard([['❌ Отмена']]).resize(),
+    )
+  })
 }
 
 // ─── Пошаговый обработчик текста ─────────────────────────────────────────────
@@ -806,6 +1648,20 @@ export async function handleInventoryMessage(
       return handleReceiveFlow(ctx, userId, text, state)
     case 'writeoff':
       return handleWriteoffFlow(ctx, userId, text, state)
+    case 'variant_add':
+      return handleVariantAddFlow(ctx, userId, text, state)
+    case 'attr_add':
+      return handleAttrAddFlow(ctx, userId, text, state)
+    case 'attr_edit':
+      return handleAttrEditFlow(ctx, userId, text, state)
+    case 'spec_add':
+      return handleSpecAddFlow(ctx, userId, text, state)
+    case 'receive_variant':
+      return handleReceiveVariantFlow(ctx, userId, text, state)
+    case 'writeoff_variant':
+      return handleWriteoffVariantFlow(ctx, userId, text, state)
+    case 'brand_edit':
+      return handleBrandEditFlow(ctx, userId, text, state)
     case 'category_add':
       return handleCategoryAddFlow(ctx, userId, text, state)
     case 'category_rename':
@@ -817,6 +1673,28 @@ export async function handleInventoryMessage(
         await showCategories(ctx)
       } else {
         await ctx.reply('📷 Пришлите фото баннера (или нажмите ❌ Отмена)')
+      }
+      return true
+    }
+    case 'product_photo': {
+      if (text === '❌ Отмена') {
+        const productId = (state as ProductPhotoFlow).productId
+        inventoryState.delete(userId)
+        await ctx.reply('Отменено.', Markup.removeKeyboard())
+        await showProductCard(ctx, productId)
+      } else {
+        await ctx.reply('📷 Отправьте фото или нажмите ✅ Готово')
+      }
+      return true
+    }
+    case 'variant_photo_edit': {
+      if (text === '❌ Отмена') {
+        const variantId = (state as VariantPhotoEditFlow).variantId
+        inventoryState.delete(userId)
+        await ctx.reply('Отменено.', Markup.removeKeyboard())
+        await showVariantPhotos(ctx, variantId)
+      } else {
+        await ctx.reply('📷 Отправьте фото или нажмите ✅ Готово')
       }
       return true
     }
@@ -842,10 +1720,18 @@ export async function handleInventoryPhoto(ctx: Context, userId: number): Promis
   const state = inventoryState.get(userId)
   if (!state) return false
 
-  const photos = (ctx.message as { photo?: Array<{ file_id: string }> })?.photo
-  if (!photos || !Array.isArray(photos) || photos.length === 0) return false
+  const msg = ctx.message as {
+    photo?: Array<{ file_id: string }>
+    document?: { file_id: string; mime_type?: string }
+  }
 
-  const bestPhoto = photos[photos.length - 1]
+  let fileId: string | null = null
+  if (msg?.photo && Array.isArray(msg.photo) && msg.photo.length > 0) {
+    fileId = msg.photo[msg.photo.length - 1].file_id
+  } else if (msg?.document?.mime_type?.startsWith('image/')) {
+    fileId = msg.document.file_id
+  }
+  if (!fileId) return false
 
   // ── Баннер категории ───────────────────────────────────────────────────────
   if (state.flow === 'category_banner' && state.step === 'photo') {
@@ -853,7 +1739,7 @@ export async function handleInventoryPhoto(ctx: Context, userId: number): Promis
     try {
       await prisma.category.update({
         where: { id: s.categoryId },
-        data: { imageFile: bestPhoto.file_id },
+        data: { imageFile: fileId },
       })
       inventoryState.delete(userId)
       await ctx.reply(`✅ Баннер для «${s.categoryName}» сохранён.`, Markup.removeKeyboard())
@@ -863,6 +1749,76 @@ export async function handleInventoryPhoto(ctx: Context, userId: number): Promis
       inventoryState.delete(userId)
       await ctx.reply('❌ Ошибка при сохранении баннера.', Markup.removeKeyboard())
     }
+    return true
+  }
+
+  // ── Фото варианта ──────────────────────────────────────────────────────────
+  if (state.flow === 'variant_add' && state.step === 'photo') {
+    const s = state as Extract<VariantAddFlow, { step: 'photo' }>
+    if (s.photos.length >= 5) {
+      await ctx.reply(
+        '❌ Лимит 5 фото достигнут.',
+        Markup.inlineKeyboard([
+          [
+            Markup.button.callback('✅ Сохранить', 'inv:var_photo_done'),
+            Markup.button.callback('⏭️ Пропустить', 'inv:var_photo_skip'),
+          ],
+        ]),
+      )
+      return true
+    }
+    const newPhotos = [...s.photos, fileId]
+    inventoryState.set(userId, { ...s, photos: newPhotos })
+    const remaining = 5 - newPhotos.length
+    await ctx.reply(
+      `📸 Фото ${newPhotos.length}/5 добавлено.${remaining > 0 ? ` Ещё ${remaining}.` : ' Лимит.'}\nНажмите ✅ Сохранить или добавьте ещё.`,
+      Markup.inlineKeyboard([
+        [
+          Markup.button.callback('✅ Сохранить', 'inv:var_photo_done'),
+          Markup.button.callback('⏭️ Пропустить фото', 'inv:var_photo_skip'),
+        ],
+      ]),
+    )
+    return true
+  }
+
+  // ── Фото при редактировании товара ────────────────────────────────────────
+  if (state.flow === 'product_photo' && state.step === 'uploading') {
+    const s = state as ProductPhotoFlow
+    if (s.pendingPhotos.length >= 7) {
+      await ctx.reply(
+        '❌ Лимит 7 фото достигнут.',
+        Markup.inlineKeyboard([[Markup.button.callback('✅ Готово', `inv:prod_photo_done:${s.productId}`)]]),
+      )
+      return true
+    }
+    const newPhotos = [...s.pendingPhotos, fileId]
+    inventoryState.set(userId, { ...s, pendingPhotos: newPhotos })
+    const remaining = 7 - newPhotos.length
+    await ctx.reply(
+      `📸 Фото ${newPhotos.length}/7 добавлено.${remaining > 0 ? ` Ещё ${remaining}.` : ' Лимит.'}`,
+      Markup.inlineKeyboard([[Markup.button.callback('✅ Готово', `inv:prod_photo_done:${s.productId}`)]]),
+    )
+    return true
+  }
+
+  // ── Фото существующего варианта (редактирование) ──────────────────────────
+  if (state.flow === 'variant_photo_edit' && state.step === 'uploading') {
+    const s = state as VariantPhotoEditFlow
+    if (s.pendingPhotos.length >= 7) {
+      await ctx.reply(
+        '❌ Лимит 7 фото достигнут.',
+        Markup.inlineKeyboard([[Markup.button.callback('✅ Готово', `inv:var_photo_done_e:${s.variantId}`)]]),
+      )
+      return true
+    }
+    const newPhotos = [...s.pendingPhotos, fileId]
+    inventoryState.set(userId, { ...s, pendingPhotos: newPhotos })
+    const remaining = 7 - newPhotos.length
+    await ctx.reply(
+      `📸 Добавлено ${newPhotos.length} фото.${remaining > 0 ? ` Ещё ${remaining}.` : ' Лимит.'}`,
+      Markup.inlineKeyboard([[Markup.button.callback('✅ Готово', `inv:var_photo_done_e:${s.variantId}`)]]),
+    )
     return true
   }
 
@@ -880,7 +1836,7 @@ export async function handleInventoryPhoto(ctx: Context, userId: number): Promis
   }
 
   // Берём последний элемент массива — самое высокое качество
-  const newFileIds = [...s.photoFileIds, bestPhoto.file_id]
+  const newFileIds = [...s.photoFileIds, fileId]
   inventoryState.set(userId, { ...s, photoFileIds: newFileIds })
 
   const count = newFileIds.length
@@ -1298,9 +2254,15 @@ async function handleReceiveFlow(
 
   switch (state.step) {
     case 'sku': {
-      const product = await prisma.product.findUnique({ where: { sku: text } })
+      const product = await prisma.product.findUnique({ where: { sku: text }, include: { variants: true } })
       if (!product) {
         await ctx.reply(`❌ Товар с артикулом «${text}» не найден. Проверьте SKU:`)
+        return true
+      }
+      if (product.variants.length > 0) {
+        inventoryState.delete(userId)
+        await ctx.reply('Товар имеет варианты. Выберите вариант:', Markup.removeKeyboard())
+        await showVariantsForPick(ctx, 'receive', product)
         return true
       }
       inventoryState.set(userId, {
@@ -1373,9 +2335,15 @@ async function handleWriteoffFlow(
 
   switch (state.step) {
     case 'sku': {
-      const product = await prisma.product.findUnique({ where: { sku: text } })
+      const product = await prisma.product.findUnique({ where: { sku: text }, include: { variants: true } })
       if (!product) {
         await ctx.reply(`❌ Товар с артикулом «${text}» не найден. Проверьте SKU:`)
+        return true
+      }
+      if (product.variants.length > 0) {
+        inventoryState.delete(userId)
+        await ctx.reply('Товар имеет варианты. Выберите вариант:', Markup.removeKeyboard())
+        await showVariantsForPick(ctx, 'writeoff', product)
         return true
       }
       inventoryState.set(userId, {
@@ -1512,6 +2480,365 @@ async function handleCategoryRenameFlow(
     inventoryState.delete(userId)
     await ctx.reply('❌ Ошибка при переименовании.', Markup.removeKeyboard())
     await showCategories(ctx)
+  }
+  return true
+}
+
+// ─── Флоу: добавление варианта ────────────────────────────────────────────────
+
+async function handleVariantAddFlow(
+  ctx: Context,
+  userId: number,
+  text: string,
+  state: VariantAddFlow,
+): Promise<boolean> {
+  if (text === '❌ Отмена') {
+    const productId = state.productId
+    inventoryState.delete(userId)
+    await ctx.reply('Отменено.', Markup.removeKeyboard())
+    await showVariantsList(ctx, productId)
+    return true
+  }
+
+  switch (state.step) {
+    case 'sku': {
+      const existing = await prisma.productVariant.findUnique({ where: { sku: text } })
+      if (existing) {
+        await ctx.reply(`❌ Артикул «${text}» уже занят. Введите другой SKU:`)
+        return true
+      }
+      inventoryState.set(userId, { flow: 'variant_add', step: 'price', productId: state.productId, sku: text })
+      await ctx.reply(`SKU: ${text}\n\nШаг 2 — введите цену в рублях:`)
+      return true
+    }
+
+    case 'price': {
+      const price = parseFloat(text.replace(',', '.'))
+      if (isNaN(price) || price < 0) {
+        await ctx.reply('❌ Введите корректную цену (например: 89990)')
+        return true
+      }
+      inventoryState.set(userId, {
+        flow: 'variant_add',
+        step: 'qty',
+        productId: state.productId,
+        sku: state.sku,
+        price,
+      })
+      await ctx.reply(`Цена: ${price} ₽\n\nШаг 3 — введите количество на складе:`)
+      return true
+    }
+
+    case 'qty': {
+      const qty = parseInt(text, 10)
+      if (isNaN(qty) || qty < 0) {
+        await ctx.reply('❌ Введите целое неотрицательное число')
+        return true
+      }
+      const product = await prisma.product.findUnique({ where: { id: state.productId } })
+      const productAttrs = (product?.attributes as Record<string, string[]> | null) ?? {}
+      const attrKeys = Object.keys(productAttrs)
+
+      if (attrKeys.length === 0) {
+        inventoryState.set(userId, {
+          flow: 'variant_add',
+          step: 'photo',
+          productId: state.productId,
+          sku: state.sku,
+          price: state.price,
+          qty,
+          attrs: {},
+          photos: [],
+        })
+        await ctx.reply(
+          `Количество: ${qty} шт.\n\nШаг 5 — добавьте фото варианта (до 5 штук) или пропустите:`,
+          Markup.inlineKeyboard([[Markup.button.callback('⏭️ Пропустить', 'inv:var_photo_skip')]]),
+        )
+      } else {
+        inventoryState.set(userId, {
+          flow: 'variant_add',
+          step: 'attrs',
+          productId: state.productId,
+          sku: state.sku,
+          price: state.price,
+          qty,
+          attrKeys,
+          selectedAttrs: {},
+          currentAttrIndex: 0,
+        })
+        const firstKey = attrKeys[0]
+        const firstValues = productAttrs[firstKey] ?? []
+        const valButtons = firstValues.map((v) =>
+          Markup.button.callback(v, `inv:var_attr:${encodeURIComponent(v)}`),
+        )
+        const valRows: ReturnType<typeof Markup.button.callback>[][] = []
+        for (let i = 0; i < valButtons.length; i += 3) valRows.push(valButtons.slice(i, i + 3))
+        await ctx.reply(
+          `Количество: ${qty} шт.\n\nШаг 4 — выберите ${firstKey}:`,
+          Markup.inlineKeyboard(valRows),
+        )
+      }
+      return true
+    }
+
+    case 'attrs': {
+      await ctx.reply('Используйте кнопки выше для выбора значения атрибута.')
+      return true
+    }
+
+    case 'photo': {
+      await ctx.reply(
+        'Отправьте фото или нажмите кнопку:',
+        Markup.inlineKeyboard([
+          [
+            Markup.button.callback('✅ Сохранить', 'inv:var_photo_done'),
+            Markup.button.callback('⏭️ Пропустить', 'inv:var_photo_skip'),
+          ],
+        ]),
+      )
+      return true
+    }
+  }
+}
+
+// ─── Флоу: добавление атрибута ────────────────────────────────────────────────
+
+async function handleAttrAddFlow(
+  ctx: Context,
+  userId: number,
+  text: string,
+  state: AttrAddFlow,
+): Promise<boolean> {
+  if (text === '❌ Отмена') {
+    const productId = state.productId
+    inventoryState.delete(userId)
+    await ctx.reply('Отменено.', Markup.removeKeyboard())
+    await showProductAttrs(ctx, productId)
+    return true
+  }
+
+  if (state.step === 'name') {
+    const trimmed = text.trim()
+    if (!trimmed) {
+      await ctx.reply('❌ Название не может быть пустым.')
+      return true
+    }
+    inventoryState.set(userId, {
+      flow: 'attr_add',
+      step: 'values',
+      productId: state.productId,
+      attrName: trimmed,
+    })
+    await ctx.reply(
+      `Атрибут: «${trimmed}»\n\nШаг 2 — введите значения через запятую:\n(Пример: 128GB, 256GB, 512GB)`,
+    )
+    return true
+  }
+
+  if (state.step === 'values') {
+    const values = text.split(',').map((v) => v.trim()).filter(Boolean)
+    if (values.length === 0) {
+      await ctx.reply('❌ Введите хотя бы одно значение.')
+      return true
+    }
+    const product = await prisma.product.findUnique({ where: { id: state.productId } })
+    const attrs = (product?.attributes as Record<string, string[]> | null) ?? {}
+    attrs[state.attrName] = values
+    await prisma.product.update({ where: { id: state.productId }, data: { attributes: attrs } })
+    inventoryState.delete(userId)
+    await ctx.reply(
+      `✅ Атрибут «${state.attrName}» добавлен: ${values.join(', ')}`,
+      Markup.removeKeyboard(),
+    )
+    await showProductAttrs(ctx, state.productId)
+    return true
+  }
+
+  return true
+}
+
+// ─── Флоу: редактирование атрибута ────────────────────────────────────────────
+
+async function handleAttrEditFlow(
+  ctx: Context,
+  userId: number,
+  text: string,
+  state: AttrEditFlow,
+): Promise<boolean> {
+  if (text === '❌ Отмена') {
+    const productId = state.productId
+    inventoryState.delete(userId)
+    await ctx.reply('Отменено.', Markup.removeKeyboard())
+    await showProductAttrs(ctx, productId)
+    return true
+  }
+
+  const values = text.split(',').map((v) => v.trim()).filter(Boolean)
+  if (values.length === 0) {
+    await ctx.reply('❌ Введите хотя бы одно значение.')
+    return true
+  }
+  const product = await prisma.product.findUnique({ where: { id: state.productId } })
+  const attrs = (product?.attributes as Record<string, string[]> | null) ?? {}
+  attrs[state.attrName] = values
+  await prisma.product.update({ where: { id: state.productId }, data: { attributes: attrs } })
+  inventoryState.delete(userId)
+  await ctx.reply(
+    `✅ Атрибут «${state.attrName}» обновлён: ${values.join(', ')}`,
+    Markup.removeKeyboard(),
+  )
+  await showProductAttrs(ctx, state.productId)
+  return true
+}
+
+// ─── Флоу: добавление характеристики ─────────────────────────────────────────
+
+async function handleSpecAddFlow(
+  ctx: Context,
+  userId: number,
+  text: string,
+  state: SpecAddFlow,
+): Promise<boolean> {
+  if (text === '❌ Отмена') {
+    const productId = state.productId
+    inventoryState.delete(userId)
+    await ctx.reply('Отменено.', Markup.removeKeyboard())
+    await showProductSpecs(ctx, productId)
+    return true
+  }
+
+  const colonIdx = text.indexOf(':')
+  if (colonIdx < 1) {
+    await ctx.reply('❌ Неверный формат. Используйте: Название : Значение')
+    return true
+  }
+  const key = text.slice(0, colonIdx).trim()
+  const value = text.slice(colonIdx + 1).trim()
+  if (!key || !value) {
+    await ctx.reply('❌ Название и значение не могут быть пустыми.')
+    return true
+  }
+
+  const product = await prisma.product.findUnique({ where: { id: state.productId } })
+  const specs = (product?.specs as Record<string, string> | null) ?? {}
+  specs[key] = value
+  await prisma.product.update({ where: { id: state.productId }, data: { specs } })
+  inventoryState.delete(userId)
+  await ctx.reply(`✅ Характеристика добавлена: ${key}: ${value}`, Markup.removeKeyboard())
+  await showProductSpecs(ctx, state.productId)
+  return true
+}
+
+// ─── Флоу: редактирование бренда ─────────────────────────────────────────────
+
+async function handleBrandEditFlow(
+  ctx: Context,
+  userId: number,
+  text: string,
+  state: BrandEditFlow,
+): Promise<boolean> {
+  if (text === '❌ Отмена') {
+    inventoryState.delete(userId)
+    await ctx.reply('Отменено.', Markup.removeKeyboard())
+    await showProductCard(ctx, state.productId)
+    return true
+  }
+  const trimmed = text.trim()
+  const brand = trimmed === '-' ? null : trimmed
+  await prisma.product.update({ where: { id: state.productId }, data: { brand } })
+  inventoryState.delete(userId)
+  await ctx.reply(
+    brand ? `✅ Бренд установлен: ${brand}` : '✅ Бренд очищен.',
+    Markup.removeKeyboard(),
+  )
+  await showProductCard(ctx, state.productId)
+  return true
+}
+
+// ─── Флоу: оприходование варианта ────────────────────────────────────────────
+
+async function handleReceiveVariantFlow(
+  ctx: Context,
+  userId: number,
+  text: string,
+  state: ReceiveVariantFlow,
+): Promise<boolean> {
+  if (text === '❌ Отмена') {
+    inventoryState.delete(userId)
+    await ctx.reply('Отменено.', Markup.removeKeyboard())
+    await showInventory(ctx)
+    return true
+  }
+
+  const qty = parseInt(text, 10)
+  if (isNaN(qty) || qty <= 0) {
+    await ctx.reply('❌ Введите положительное целое число')
+    return true
+  }
+  try {
+    const variant = await prisma.productVariant.update({
+      where: { id: state.variantId },
+      data: { quantity: { increment: qty }, inStock: true },
+    })
+    inventoryState.delete(userId)
+    await ctx.reply(
+      `✅ Оприходовано\n\n${state.productName}\nДобавлено: +${qty} шт.\nНовый остаток: ${variant.quantity} шт.`,
+      Markup.removeKeyboard(),
+    )
+    await showInventory(ctx)
+  } catch (err) {
+    console.error('receive_variant error:', err)
+    inventoryState.delete(userId)
+    await ctx.reply('❌ Ошибка при обновлении.', Markup.removeKeyboard())
+    await showInventory(ctx)
+  }
+  return true
+}
+
+// ─── Флоу: списание варианта ──────────────────────────────────────────────────
+
+async function handleWriteoffVariantFlow(
+  ctx: Context,
+  userId: number,
+  text: string,
+  state: WriteoffVariantFlow,
+): Promise<boolean> {
+  if (text === '❌ Отмена') {
+    inventoryState.delete(userId)
+    await ctx.reply('Отменено.', Markup.removeKeyboard())
+    await showInventory(ctx)
+    return true
+  }
+
+  const qty = parseInt(text, 10)
+  if (isNaN(qty) || qty <= 0) {
+    await ctx.reply('❌ Введите положительное целое число')
+    return true
+  }
+  if (qty > state.currentQty) {
+    await ctx.reply(
+      `❌ Нельзя списать ${qty} шт. — на складе только ${state.currentQty} шт.`,
+    )
+    return true
+  }
+  const newQty = state.currentQty - qty
+  try {
+    const variant = await prisma.productVariant.update({
+      where: { id: state.variantId },
+      data: { quantity: newQty, inStock: newQty > 0 },
+    })
+    inventoryState.delete(userId)
+    const notice = variant.quantity === 0 ? '\n⚠️ Остаток 0 — вариант снят с продажи.' : ''
+    await ctx.reply(
+      `✅ Списано\n\n${state.productName}\nСписано: −${qty} шт.\nОстаток: ${variant.quantity} шт.${notice}`,
+      Markup.removeKeyboard(),
+    )
+    await showInventory(ctx)
+  } catch (err) {
+    console.error('writeoff_variant error:', err)
+    inventoryState.delete(userId)
+    await ctx.reply('❌ Ошибка при обновлении.', Markup.removeKeyboard())
+    await showInventory(ctx)
   }
   return true
 }

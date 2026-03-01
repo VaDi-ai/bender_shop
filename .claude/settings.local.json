@@ -12,7 +12,8 @@
       "Bash(cd \"D:\\\\Va\\\\проекты\\\\bender-shop\" && npx tsc --noEmit 2>&1)",
       "Bash(cd /d/Va/проекты/bender-shop && npx tsc --noEmit 2>&1)",
       "Bash(cd \"D:/Va/проекты/bender-shop\" && npx tsc --noEmit 2>&1)",
-      "Bash(npx tsc:*)"
+      "Bash(npx tsc:*)",
+      "Bash(node:*)"
     ]
   }
 }

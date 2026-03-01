@@ -67,21 +67,37 @@ export function startApiServer(): void {
         const products = await prisma.product.findMany({
           where: {
             isAvailable: true,
-            quantity: { gt: 0 },
             ...(category ? { category: { name: category } } : {}),
           },
-          include: { category: true },
+          include: { variants: true, category: true },
           orderBy: { name: 'asc' },
         })
 
         const payload = products.map((p) => ({
           id: p.id,
+          sku: p.sku,
           name: p.name,
           description: p.description ?? '',
           price: p.price.toString(),
           category: p.category?.name ?? '',
+          categoryId: p.categoryId ?? null,
           photoUrl: p.photoUrl ?? '',
+          photos: p.photos,
           quantity: p.quantity,
+          badge: p.badge ?? null,
+          brand: p.brand ?? null,
+          attributes: p.attributes ?? null,
+          specs: p.specs ?? null,
+          variants: p.variants.map((v) => ({
+            id: v.id,
+            sku: v.sku,
+            price: v.price.toString(),
+            quantity: v.quantity,
+            reserved: v.reserved,
+            inStock: v.inStock,
+            attributes: v.attributes,
+            photos: v.photos,
+          })),
         }))
 
         res.writeHead(200, { 'Content-Type': 'application/json' })
@@ -103,6 +119,25 @@ export function startApiServer(): void {
           imageUrl: c.imageFile ? `/api/banner/${c.imageFile}` : null,
         }))
 
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        return res.end(JSON.stringify(payload))
+      }
+
+      // ── GET /api/brands ─────────────────────────────────────────────────────
+      if (req.method === 'GET' && url.pathname === '/api/brands') {
+        const products = await prisma.product.findMany({
+          where: { isAvailable: true },
+          select: { name: true, brand: true },
+        })
+        const map = new Map<string, number>()
+        for (const p of products) {
+          const b = p.brand?.trim() || p.name.split(' ')[0]
+          if (!b) continue
+          map.set(b, (map.get(b) ?? 0) + 1)
+        }
+        const payload = [...map.entries()]
+          .map(([name, count]) => ({ name, count }))
+          .sort((a, b) => b.count - a.count)
         res.writeHead(200, { 'Content-Type': 'application/json' })
         return res.end(JSON.stringify(payload))
       }
@@ -194,7 +229,13 @@ export function startApiServer(): void {
         const body = await readBody(req)
         const data = JSON.parse(body) as {
           telegramId?: string
-          items: Array<{ productId: number; name: string; price: string; qty: number }>
+          items: Array<{
+            variantId?: number   // торговое предложение (приоритет)
+            productId?: number   // для обратной совместимости (без вариантов)
+            name: string
+            price: string
+            qty: number
+          }>
           totalAmount: string
           payment: string
         }
@@ -204,12 +245,20 @@ export function startApiServer(): void {
           return res.end(JSON.stringify({ error: 'Missing required fields' }))
         }
 
-        // Проверить наличие остатков для каждого товара
+        // Проверить наличие остатков
         for (const item of data.items) {
-          const product = await prisma.product.findUnique({ where: { id: item.productId } })
-          if (!product || product.quantity < item.qty) {
-            res.writeHead(409, { 'Content-Type': 'application/json' })
-            return res.end(JSON.stringify({ error: 'Товар закончился', product: item.name }))
+          if (item.variantId) {
+            const variant = await prisma.productVariant.findUnique({ where: { id: item.variantId } })
+            if (!variant || !variant.inStock || variant.quantity < item.qty) {
+              res.writeHead(409, { 'Content-Type': 'application/json' })
+              return res.end(JSON.stringify({ error: 'Товар закончился', product: item.name }))
+            }
+          } else if (item.productId) {
+            const product = await prisma.product.findUnique({ where: { id: item.productId } })
+            if (!product || product.quantity < item.qty) {
+              res.writeHead(409, { 'Content-Type': 'application/json' })
+              return res.end(JSON.stringify({ error: 'Товар закончился', product: item.name }))
+            }
           }
         }
 
@@ -232,20 +281,33 @@ export function startApiServer(): void {
           },
         })
 
-        // Уменьшить quantity и stock для каждого товара
+        // Уменьшить quantity для варианта или товара
         for (const item of data.items) {
-          const updated = await prisma.product.update({
-            where: { id: item.productId },
-            data: {
-              quantity: { decrement: item.qty },
-              stock: { decrement: item.qty },
-            },
-          })
-          if (updated.quantity <= 0) {
-            await prisma.product.update({
-              where: { id: item.productId },
-              data: { isAvailable: false },
+          if (item.variantId) {
+            const updatedVariant = await prisma.productVariant.update({
+              where: { id: item.variantId },
+              data: { quantity: { decrement: item.qty } },
             })
+            if (updatedVariant.quantity <= 0) {
+              await prisma.productVariant.update({
+                where: { id: item.variantId },
+                data: { inStock: false },
+              })
+            }
+          } else if (item.productId) {
+            const updated = await prisma.product.update({
+              where: { id: item.productId },
+              data: {
+                quantity: { decrement: item.qty },
+                stock: { decrement: item.qty },
+              },
+            })
+            if (updated.quantity <= 0) {
+              await prisma.product.update({
+                where: { id: item.productId },
+                data: { isAvailable: false },
+              })
+            }
           }
         }
 

@@ -151,17 +151,44 @@ model Product {
   quantity    Int       @default(0)  // доступное количество
   reserved    Int       @default(0)  // зарезервировано
   categoryId  Int?
-  photoUrl    String?   // URL фото товара
+  photoUrl    String?   // URL главного фото (обратная совместимость)
+  photos      String[]  // массив file_id фото товара
   isAvailable Boolean   @default(true)
+
+  // Торговые предложения
+  attributes Json?     // { "Память": ["128GB","256GB"], "Цвет": ["Черный","Белый"] }
+  specs       Json?     // { "Процессор": "A18", "Экран": "6.1 дюйм" }
+  badge       String?   // "ХИТ", "НОВИНКА", "АКЦИЯ"
+  brand       String?   // бренд / производитель (Apple, Samsung и т.д.)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  category     Category?     @relation(fields: [categoryId], references: [id])
+  category     Category?      @relation(fields: [categoryId], references: [id])
   reservations Reservation[]
+  variants     ProductVariant[]
 
   @@index([categoryId])
   @@index([isAvailable])
+}
+
+model ProductVariant {
+  id        Int     @id @default(autoincrement())
+  productId Int
+  sku       String  @unique  // артикул варианта
+  price     Decimal @db.Decimal(12, 2)
+  quantity  Int     @default(0)   // доступное количество
+  reserved  Int     @default(0)   // зарезервировано
+  inStock   Boolean @default(true)
+  attributes Json   // { "Память": "256GB", "Цвет": "Черный" }
+  photos    String[]              // массив file_id фото (специфичные для варианта)
+
+  createdAt DateTime @default(now())
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+  @@index([inStock])
 }
 
 model Order {
