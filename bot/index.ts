@@ -31,7 +31,13 @@ import {
   showAnalyticsToday,
   handleAnalyticsMessage,
 } from './admin/analytics'
-import { showAISettings, setupAISettingsHandlers } from './admin/ai_settings'
+import {
+  showAISettings, setupAISettingsHandlers,
+  showApiKeysMenu, setupApiKeysHandlers, handleApiKeysMessage, apiKeysState,
+} from './admin/ai_settings'
+import { initAdminNotifications } from '../lib/notify-admins'
+import { reinitClient as reinitAgentClient } from './ai/agent'
+import { reinitClient as reinitParserClient } from '../lib/ai-parser'
 import {
   storefrontState,
   setupStorefrontHandlers,
@@ -39,6 +45,30 @@ import {
   handleStorefrontPhoto,
   showStorefront,
 } from './admin/storefront'
+import {
+  broadcastsState,
+  setupBroadcastHandlers,
+  showBroadcastMenu,
+  handleBroadcastMessage,
+  handleBroadcastPhoto,
+  handleBroadcastVideo,
+} from './admin/broadcasts'
+import {
+  promotionsState,
+  setupPromotionsHandlers,
+  showPromotionsMenu,
+  handlePromotionsMessage,
+} from './admin/promotions'
+import {
+  pricingState,
+  setupPricingHandlers,
+  showPricingMenu,
+  handlePricingMessage,
+  handlePricingDocument,
+  sendDailyCurrencyRates,
+  lastCurrencyChanges,
+} from './admin/pricing'
+import { cancelPromotion } from '../lib/promotions'
 
 const BOT_TOKEN = process.env.BOT_TOKEN
 const ADMIN_IDS = (process.env.ADMIN_IDS ?? '').split(',').map((id) => Number(id.trim()))
@@ -49,13 +79,11 @@ if (!BOT_TOKEN) {
 
 const bot = new Telegraf(BOT_TOKEN)
 
+initAdminNotifications(bot, ADMIN_IDS)
+
 // ─── Режим техработ (in-memory) ───────────────────────────────────────────────
 
 let maintenanceMode = false
-
-// ─── Состояние рассылки ───────────────────────────────────────────────────────
-
-const broadcastState = new Map<number, true>()
 
 // ─── Главное меню ─────────────────────────────────────────────────────────────
 
@@ -65,7 +93,7 @@ const adminKeyboard = Markup.keyboard([
   ['🏷️ Акции', '🔧 Техработы'],
   ['📦 Товароучёт', '🔑 API Ключи'],
   ['📂 Сегменты', '🤖 AI Агент'],
-  ['🖼️ Витрина'],
+  ['🖼️ Витрина', '💰 Цены'],
 ]).resize()
 
 // Кнопки главного меню — для сброса пошаговых флоу при нажатии
@@ -81,6 +109,7 @@ const MENU_BUTTONS = new Set([
   '📂 Сегменты',
   '🤖 AI Агент',
   '🖼️ Витрина',
+  '💰 Цены',
 ])
 
 // ─── Обработка сообщений от клиентов ─────────────────────────────────────────
@@ -110,36 +139,21 @@ bot.on(message('text'), async (ctx, next) => {
   // Нажатие кнопки главного меню — сбрасываем любой активный флоу
   if (MENU_BUTTONS.has(text)) {
     inventoryState.delete(userId)
-    broadcastState.delete(userId)
+    broadcastsState.delete(userId)
     segmentsState.delete(userId)
     salesState.delete(userId)
     analyticsState.delete(userId)
     storefrontState.delete(userId)
+    promotionsState.delete(userId)
+    pricingState.delete(userId)
+    apiKeysState.delete(userId)
     return next()
   }
 
   // Флоу рассылки
-  if (broadcastState.has(userId)) {
-    broadcastState.delete(userId)
-    if (text === '❌ Отмена') {
-      await ctx.reply('Рассылка отменена.', Markup.removeKeyboard())
-      return
-    }
-    await ctx.reply('Отправляю рассылку…', Markup.removeKeyboard())
-    const clients = await prisma.client.findMany({
-      where: { source: 'telegram', externalId: { not: null } },
-    })
-    let sent = 0
-    for (const client of clients) {
-      try {
-        await ctx.telegram.sendMessage(client.externalId!, text)
-        sent++
-      } catch {
-        // клиент заблокировал бота или ещё не начинал диалог
-      }
-    }
-    await ctx.reply(`✅ Рассылка отправлена ${sent} из ${clients.length} клиентов.`)
-    return
+  if (broadcastsState.has(userId)) {
+    const handled = await handleBroadcastMessage(ctx, userId, text)
+    if (handled) return
   }
 
   // Флоу аналитики (произвольный период)
@@ -172,6 +186,24 @@ bot.on(message('text'), async (ctx, next) => {
     if (handled) return
   }
 
+  // Флоу акций
+  if (promotionsState.has(userId)) {
+    const handled = await handlePromotionsMessage(ctx, userId, text)
+    if (handled) return
+  }
+
+  // Флоу цен
+  if (pricingState.has(userId)) {
+    const handled = await handlePricingMessage(ctx, userId, text)
+    if (handled) return
+  }
+
+  // Флоу API ключей
+  if (apiKeysState.has(userId)) {
+    const handled = await handleApiKeysMessage(ctx, userId, text)
+    if (handled) return
+  }
+
   return next()
 })
 
@@ -180,10 +212,20 @@ bot.on(message('text'), async (ctx, next) => {
 bot.on(message('photo'), async (ctx, next) => {
   const userId = ctx.from?.id
   if (!userId) return next()
+  const handledBcast = await handleBroadcastPhoto(ctx, userId)
+  if (handledBcast) return
   const handled = await handleInventoryPhoto(ctx, userId)
   if (handled) return
   const handledSf = await handleStorefrontPhoto(ctx as any, userId)
   if (handledSf) return
+  return next()
+})
+
+bot.on(message('video'), async (ctx, next) => {
+  const userId = ctx.from?.id
+  if (!userId) return next()
+  const handled = await handleBroadcastVideo(ctx, userId)
+  if (handled) return
   return next()
 })
 
@@ -206,12 +248,14 @@ bot.on(message('document'), async (ctx, next) => {
     if (handledSf) return
   }
 
+  // xlsx прайс-лист для обновления цен
+  if (!doc?.mime_type?.startsWith('image/')) {
+    const handledPricing = await handlePricingDocument(ctx as any, userId)
+    if (handledPricing) return
+  }
+
   const state = inventoryState.get(userId)
-  if (
-    state?.flow === 'import' ||
-    state?.flow === 'receive_file' ||
-    state?.flow === 'writeoff_file'
-  ) {
+  if (state?.flow === 'import_file') {
     await handleInventoryDocument(ctx, userId)
     return
   }
@@ -276,27 +320,10 @@ bot.hears('📬 Входящие', async (ctx) => {
 
 // ─── 📢 Рассылки ──────────────────────────────────────────────────────────────
 
-bot.hears('📢 Рассылки', async (ctx) => {
-  const totalTg = await prisma.client.count({
-    where: { source: 'telegram', externalId: { not: null } },
-  })
-  await ctx.reply(
-    `📢 Рассылки\n\nTelegram-клиентов: ${totalTg}\n\nРассылка будет отправлена всем, кто писал боту.`,
-    Markup.inlineKeyboard([
-      [Markup.button.callback('✉️ Создать рассылку', 'broadcast:new')],
-      [Markup.button.callback('🏠 Главное меню', 'back:main')],
-    ]),
-  )
-})
+setupBroadcastHandlers(bot)
 
-bot.action('broadcast:new', async (ctx) => {
-  await ctx.answerCbQuery()
-  const userId = ctx.from!.id
-  broadcastState.set(userId, true)
-  await ctx.reply(
-    'Введите текст рассылки.\nОн будет отправлен всем Telegram-клиентам.',
-    Markup.keyboard([['❌ Отмена']]).resize(),
-  )
+bot.hears('📢 Рассылки', async (ctx) => {
+  await showBroadcastMenu(ctx)
 })
 
 // ─── 💰 Балансы ───────────────────────────────────────────────────────────────
@@ -349,29 +376,10 @@ bot.hears('💰 Балансы', async (ctx) => {
 
 // ─── 🏷️ Акции ─────────────────────────────────────────────────────────────────
 
+setupPromotionsHandlers(bot)
+
 bot.hears('🏷️ Акции', async (ctx) => {
-  const pending = await prisma.task.count({
-    where: { action: 'promo_notify', status: 'pending' },
-  })
-
-  await ctx.reply(
-    `🏷️ Акции\n\nОжидают уведомления о скидке: ${pending} клиент(ов).\n\nПри запуске акции все они получат сообщение в течение 10 минут.`,
-    Markup.inlineKeyboard([
-      [Markup.button.callback(`🚀 Запустить акцию (${pending} клиент.)`, 'promo:fire')],
-      [Markup.button.callback('🏠 Главное меню', 'back:main')],
-    ]),
-  )
-})
-
-bot.action('promo:fire', async (ctx) => {
-  await ctx.answerCbQuery()
-  const updated = await prisma.task.updateMany({
-    where: { action: 'promo_notify', status: 'pending' },
-    data: { scheduledAt: new Date() },
-  })
-  await ctx.reply(
-    `🚀 Акция запущена! ${updated.count} клиентов получат уведомление в ближайшие 10 минут.`,
-  )
+  await showPromotionsMenu(ctx)
 })
 
 // ─── 🔧 Техработы ────────────────────────────────────────────────────────────
@@ -391,13 +399,13 @@ bot.hears('🔧 Техработы', async (ctx) => {
 })
 
 bot.action('maint:on', async (ctx) => {
-  await ctx.answerCbQuery()
+  try { await ctx.answerCbQuery() } catch {}
   maintenanceMode = true
   await ctx.reply('🔧 Техработы включены. Клиенты получат автоответ.')
 })
 
 bot.action('maint:off', async (ctx) => {
-  await ctx.answerCbQuery()
+  try { await ctx.answerCbQuery() } catch {}
   maintenanceMode = false
   await ctx.reply('✅ Техработы выключены. Бот работает в штатном режиме.')
 })
@@ -408,10 +416,17 @@ export { maintenanceMode }
 // ─── 🏠 Назад в главное меню ──────────────────────────────────────────────────
 
 bot.action('back:main', async (ctx) => {
-  await ctx.answerCbQuery()
+  try { await ctx.answerCbQuery() } catch {}
   const userId = ctx.from!.id
   inventoryState.delete(userId)
-  broadcastState.delete(userId)
+  broadcastsState.delete(userId)
+  segmentsState.delete(userId)
+  salesState.delete(userId)
+  analyticsState.delete(userId)
+  storefrontState.delete(userId)
+  promotionsState.delete(userId)
+  pricingState.delete(userId)
+  apiKeysState.delete(userId)
   await ctx.reply('🏠 Главное меню', adminKeyboard)
 })
 
@@ -447,6 +462,14 @@ bot.hears('🖼️ Витрина', async (ctx) => {
   await showStorefront(ctx)
 })
 
+// ─── 💰 Цены ──────────────────────────────────────────────────────────────────
+
+setupPricingHandlers(bot)
+
+bot.hears('💰 Цены', async (ctx) => {
+  await showPricingMenu(ctx)
+})
+
 // ─── 💰 Продажи и резервы ─────────────────────────────────────────────────────
 
 setupSalesHandlers(bot)
@@ -454,26 +477,10 @@ registerSkipCommentHandlers(bot)
 
 // ─── 🔑 API Ключи ─────────────────────────────────────────────────────────────
 
-bot.hears('🔑 API Ключи', (ctx) => {
-  const mask = (v: string | undefined) =>
-    v ? v.slice(0, 6) + '…' + v.slice(-4) : '❌ не задан'
+setupApiKeysHandlers(bot)
 
-  const lines = [
-    '🔑 Конфигурация',
-    '',
-    `BOT_TOKEN:          ${mask(process.env.BOT_TOKEN)}`,
-    `CRM_GROUP:          ${process.env.CRM_GROUP_ID ?? '❌ не задан'}`,
-    `ADMIN_IDS:          ${process.env.ADMIN_IDS ?? '❌ не задан'}`,
-    `DATABASE_URL:       ${mask(process.env.DATABASE_URL)}`,
-    `API_PORT:           ${process.env.API_PORT ?? '3000 (default)'}`,
-    `WEBAPP_URL:         ${process.env.WEBAPP_URL ?? '❌ не задан'}`,
-    `OPENROUTER_API_KEY: ${mask(process.env.OPENROUTER_API_KEY)}`,
-  ]
-
-  return ctx.reply(
-    lines.join('\n'),
-    Markup.inlineKeyboard([[Markup.button.callback('🏠 Главное меню', 'back:main')]]),
-  )
+bot.hears('🔑 API Ключи', async (ctx) => {
+  await showApiKeysMenu(ctx)
 })
 
 // ─── Запуск ───────────────────────────────────────────────────────────────────
@@ -487,6 +494,43 @@ console.log('Бот запущен')
 startScheduler(bot)
 startApiServer()
 
+// ─── Загрузка OpenRouter ключа из БД ─────────────────────────────────────────
+
+;(async () => {
+  try {
+    const savedKey = await prisma.apiKey.findFirst({ where: { service: 'openrouter_key' } })
+    if (savedKey?.value) {
+      process.env.OPENROUTER_API_KEY = savedKey.value
+      reinitAgentClient(savedKey.value)
+      reinitParserClient(savedKey.value)
+      console.log('OpenRouter ключ загружен из БД')
+    }
+  } catch (e) {
+    console.error('Load OpenRouter key error:', e)
+  }
+})()
+
+// ─── Инициализация дефолтных регионов ────────────────────────────────────────
+
+const DEFAULT_REGIONS = [
+  { code: 'HK', name: 'Гонконг',  flag: '🇭🇰', currency: 'HKD' },
+  { code: 'EU', name: 'Европа',   flag: '🇪🇺', currency: 'EUR' },
+  { code: 'IN', name: 'Индия',    flag: '🇮🇳', currency: 'INR' },
+  { code: 'RU', name: 'Россия',   flag: '🇷🇺', currency: 'RUB' },
+  { code: 'CN', name: 'Китай',    flag: '🇨🇳', currency: 'CNY' },
+] as const
+
+;(async () => {
+  for (const r of DEFAULT_REGIONS) {
+    await prisma.region.upsert({
+      where: { code: r.code },
+      create: r,
+      update: {},
+    })
+  }
+  console.log('Регионы инициализированы')
+})().catch((e) => console.error('Seed regions error:', e))
+
 // ─── DB keepalive: предотвращает разрыв соединения на db.prisma.io ────────────
 
 setInterval(async () => {
@@ -496,6 +540,65 @@ setInterval(async () => {
     console.log('DB keepalive failed, reconnecting...')
   }
 }, 4 * 60 * 1000)
+
+// ─── Автозавершение акций по истечению срока (каждые 10 минут) ───────────────
+
+setInterval(async () => {
+  try {
+    const expired = await prisma.promotion.findMany({
+      where: { isActive: true, endsAt: { lt: new Date() } },
+    })
+    for (const promo of expired) {
+      await cancelPromotion(promo.id)
+      for (const adminId of ADMIN_IDS) {
+        try {
+          await bot.telegram.sendMessage(
+            adminId,
+            `⏰ Акция «${promo.name}» завершена автоматически — срок истёк.`,
+          )
+        } catch {
+          // ignore
+        }
+      }
+    }
+  } catch (e) {
+    console.error('Promo auto-cancel error:', e)
+  }
+}, 10 * 60 * 1000)
+
+// ─── Ежедневное уведомление о курсах валют в 10:00 МСК ───────────────────────
+// Проверяем раз в час; если час === 10 и сегодня ещё не отправляли — отправляем.
+
+setInterval(async () => {
+  try {
+    const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Europe/Moscow' }))
+    if (now.getHours() !== 10) return
+
+    const todayStr = now.toISOString().slice(0, 10)
+    const notifyKey = await prisma.apiKey.findUnique({ where: { service: 'currency_notify_date' } })
+    if (notifyKey?.value === todayStr) return // уже отправляли сегодня
+
+    // Отмечаем как отправленное
+    await prisma.apiKey.upsert({
+      where: { service: 'currency_notify_date' },
+      create: { service: 'currency_notify_date', value: todayStr },
+      update: { value: todayStr },
+    })
+
+    for (const adminId of ADMIN_IDS) {
+      try {
+        const result = await sendDailyCurrencyRates(async (text, keyboard) => {
+          await bot.telegram.sendMessage(adminId, text, { parse_mode: 'HTML', ...keyboard })
+        })
+        if (result?.changes) {
+          lastCurrencyChanges.splice(0, lastCurrencyChanges.length, ...result.changes)
+        }
+      } catch { /* ignore */ }
+    }
+  } catch (e) {
+    console.error('Currency notify error:', e)
+  }
+}, 60 * 60 * 1000)
 
 // ─── Инициализация технического топика «📦 Продажи и резервы» ─────────────────
 

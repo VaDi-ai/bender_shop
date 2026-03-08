@@ -11,6 +11,7 @@
 
 import OpenAI from 'openai'
 import { prisma } from '../../lib/prisma'
+import { notifyAdminsAboutApiError } from '../../lib/notify-admins'
 
 // ─── Клиент OpenRouter ────────────────────────────────────────────────────────
 
@@ -26,6 +27,10 @@ function getClient(): OpenAI {
     })
   }
   return openRouterClient
+}
+
+export function reinitClient(newKey: string): void {
+  openRouterClient = new OpenAI({ baseURL: 'https://openrouter.ai/api/v1', apiKey: newKey })
 }
 
 // ─── Режим работы ─────────────────────────────────────────────────────────────
@@ -241,16 +246,20 @@ ${productsText}
 История переписки:
 ${historyText}${webSearchContext}`
 
-  const response = await client.chat.completions.create({
-    model: 'anthropic/claude-sonnet-4-5',
-    messages: [
-      { role: 'system', content: systemPrompt },
-      { role: 'user', content: newMessage },
-    ],
-    max_tokens: 500,
-  })
-
-  const text = response.choices[0]?.message?.content?.trim()
-  if (!text) throw new Error('Пустой ответ от модели')
-  return text
+  try {
+    const response = await client.chat.completions.create({
+      model: 'anthropic/claude-sonnet-4-5',
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: newMessage },
+      ],
+      max_tokens: 500,
+    })
+    const text = response.choices[0]?.message?.content?.trim()
+    if (!text) throw new Error('Пустой ответ от модели')
+    return text
+  } catch (err) {
+    notifyAdminsAboutApiError(err, 'AI ответ клиенту').catch(() => {})
+    throw err
+  }
 }

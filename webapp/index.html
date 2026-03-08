@@ -708,6 +708,16 @@
 
     // ── Helpers ───────────────────────────────────────────────────────────────
     function fmt(n) { return Number(n).toLocaleString('ru-RU') }
+
+    const REGION_FLAGS = {
+      HK: '🇭🇰', EU: '🇪🇺', IN: '🇮🇳', RU: '🇷🇺', US: '🇺🇸', CN: '🇨🇳',
+      GB: '🇬🇧', JP: '🇯🇵', AU: '🇦🇺', TR: '🇹🇷', AE: '🇦🇪', KZ: '🇰🇿', AZ: '🇦🇿',
+    }
+    function regionFlag(variant) {
+      if (!variant || !variant.attributes) return ''
+      const code = variant.attributes['Регион']
+      return code ? (REGION_FLAGS[code] || '') : ''
+    }
     function subtotal() { return cart.reduce((s, i) => s + Number(i.price) * i.qty, 0) }
     function totalWithFee() { const s = subtotal(); return payMethod === 'card' ? s * 1.14 : s }
     function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;') }
@@ -1249,7 +1259,8 @@
       // Price
       const priceEl = document.getElementById('modalProductPrice')
       if (modalActiveVariant) {
-        priceEl.textContent = fmt(modalActiveVariant.price) + ' ₽'
+        const flag = regionFlag(modalActiveVariant)
+        priceEl.textContent = (flag ? flag + ' ' : '') + fmt(modalActiveVariant.price) + ' ₽'
       } else if (p.variants && p.variants.length) {
         priceEl.textContent = 'от ' + fmt(minVariantPrice(p)) + ' ₽'
       } else {
@@ -1321,7 +1332,8 @@
         return
       }
       section.style.display = ''
-      const keys = Object.keys(p.attributes)
+      const keys = Object.keys(p.attributes).filter(k => k !== 'Регион')
+      if (!keys.length) { section.style.display = 'none'; return }
       section.innerHTML = keys.map(key => {
         const vals = p.attributes[key]
         if (!Array.isArray(vals) || !vals.length) return ''
@@ -1361,7 +1373,8 @@
 
       const priceEl = document.getElementById('modalProductPrice')
       if (modalActiveVariant) {
-        priceEl.textContent = fmt(modalActiveVariant.price) + ' ₽'
+        const flag = regionFlag(modalActiveVariant)
+        priceEl.textContent = (flag ? flag + ' ' : '') + fmt(modalActiveVariant.price) + ' ₽'
       } else {
         priceEl.textContent = 'от ' + fmt(minVariantPrice(modalProduct)) + ' ₽'
       }

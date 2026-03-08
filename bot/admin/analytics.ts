@@ -341,7 +341,7 @@ export async function handleAnalyticsMessage(
 export function setupAnalyticsHandlers(bot: Telegraf): void {
   // Возврат к аналитике за сегодня
   bot.action('an:main', async (ctx) => {
-    await ctx.answerCbQuery()
+    try { await ctx.answerCbQuery('⏳ Загрузка...') } catch {}
     const userId = ctx.from!.id
     analyticsState.delete(userId)
     const now = new Date()
@@ -355,25 +355,25 @@ export function setupAnalyticsHandlers(bot: Telegraf): void {
 
   // Выбор периода для основного отчёта
   bot.action('an:period', async (ctx) => {
-    await ctx.answerCbQuery()
+    try { await ctx.answerCbQuery('⏳ Загрузка...') } catch {}
     await ctx.reply('📅 Выберите период:', periodButtons('main'))
   })
 
   // Выбор периода для топ товаров
   bot.action('an:tp', async (ctx) => {
-    await ctx.answerCbQuery()
+    try { await ctx.answerCbQuery('⏳ Загрузка...') } catch {}
     await ctx.reply('🏆 Топ товаров — выберите период:', periodButtons('top_prod'))
   })
 
   // Выбор периода для топ клиентов
   bot.action('an:tc', async (ctx) => {
-    await ctx.answerCbQuery()
+    try { await ctx.answerCbQuery('⏳ Загрузка...') } catch {}
     await ctx.reply('👑 Топ клиентов — выберите период:', periodButtons('top_cli'))
   })
 
   // Универсальный обработчик периода: an:p:{target}:{period}
   bot.action(/^an:p:(\w+):(\w+)$/, async (ctx) => {
-    await ctx.answerCbQuery()
+    try { await ctx.answerCbQuery('⏳ Загрузка...') } catch {}
     const userId = ctx.from!.id
     const target = ctx.match[1] as 'main' | 'top_prod' | 'top_cli'
     const period = ctx.match[2]
@@ -402,7 +402,7 @@ export function setupAnalyticsHandlers(bot: Telegraf): void {
 
   // Список клиентов с пагинацией: an:cli:{page}
   bot.action(/^an:cli:(\d+)$/, async (ctx) => {
-    await ctx.answerCbQuery()
+    try { await ctx.answerCbQuery('⏳ Загрузка...') } catch {}
     const page = Number(ctx.match[1])
     const perPage = 10
 
@@ -441,7 +441,7 @@ export function setupAnalyticsHandlers(bot: Telegraf): void {
 
   // Отчёт по клиенту: an:c:{clientId}
   bot.action(/^an:c:(\d+)$/, async (ctx) => {
-    await ctx.answerCbQuery()
+    try { await ctx.answerCbQuery('⏳ Загрузка...') } catch {}
     const clientId = Number(ctx.match[1])
     await sendClientReport(ctx, clientId)
   })

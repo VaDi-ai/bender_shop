@@ -110,18 +110,18 @@ async function showBanners(ctx: Context): Promise<void> {
 export function setupStorefrontHandlers(bot: Telegraf): void {
   // Главный экран
   bot.action('sf:back', async (ctx) => {
-    await ctx.answerCbQuery()
+    try { await ctx.answerCbQuery() } catch {}
     await showStorefront(ctx)
   })
 
   // Бегущая строка
   bot.action('sf:marquee', async (ctx) => {
-    await ctx.answerCbQuery()
+    try { await ctx.answerCbQuery() } catch {}
     await showMarquee(ctx)
   })
 
   bot.action('sf:marquee_edit', async (ctx) => {
-    await ctx.answerCbQuery()
+    try { await ctx.answerCbQuery() } catch {}
     const userId = ctx.from!.id
     storefrontState.set(userId, { flow: 'marquee', step: 'text' })
     await ctx.reply(
@@ -132,7 +132,7 @@ export function setupStorefrontHandlers(bot: Telegraf): void {
 
   // Сброс кэша
   bot.action('sf:cache_reset', async (ctx) => {
-    await ctx.answerCbQuery()
+    try { await ctx.answerCbQuery() } catch {}
     const version = Date.now().toString()
     await prisma.apiKey.upsert({
       where: { service: 'cache_version' },
@@ -145,12 +145,12 @@ export function setupStorefrontHandlers(bot: Telegraf): void {
 
   // Баннеры
   bot.action('sf:banners', async (ctx) => {
-    await ctx.answerCbQuery()
+    try { await ctx.answerCbQuery() } catch {}
     await showBanners(ctx)
   })
 
   bot.action('sf:banner_add', async (ctx) => {
-    await ctx.answerCbQuery()
+    try { await ctx.answerCbQuery() } catch {}
     const userId = ctx.from!.id
     storefrontState.set(userId, { flow: 'banner_add', step: 'photo' })
     await ctx.reply(
@@ -161,7 +161,7 @@ export function setupStorefrontHandlers(bot: Telegraf): void {
 
   // Переместить вверх (уменьшить order)
   bot.action(/^sf:banner_up:(\d+)$/, async (ctx) => {
-    await ctx.answerCbQuery()
+    try { await ctx.answerCbQuery() } catch {}
     const id = Number((ctx.match as RegExpMatchArray)[1])
     const banner = await prisma.heroBanner.findUnique({ where: { id } })
     if (banner && banner.order > 0) {
@@ -172,7 +172,7 @@ export function setupStorefrontHandlers(bot: Telegraf): void {
 
   // Переместить вниз (увеличить order)
   bot.action(/^sf:banner_down:(\d+)$/, async (ctx) => {
-    await ctx.answerCbQuery()
+    try { await ctx.answerCbQuery() } catch {}
     const id = Number((ctx.match as RegExpMatchArray)[1])
     const banner = await prisma.heroBanner.findUnique({ where: { id } })
     if (banner) {
@@ -183,7 +183,7 @@ export function setupStorefrontHandlers(bot: Telegraf): void {
 
   // Удалить баннер
   bot.action(/^sf:banner_del:(\d+)$/, async (ctx) => {
-    await ctx.answerCbQuery()
+    try { await ctx.answerCbQuery() } catch {}
     const id = Number((ctx.match as RegExpMatchArray)[1])
     await prisma.heroBanner.delete({ where: { id } })
     await ctx.reply(`🗑️ Баннер #${id} удалён.`)

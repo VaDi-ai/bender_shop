@@ -74,13 +74,13 @@ export async function showSegments(ctx: Context): Promise<void> {
 export function setupSegmentHandlers(bot: Telegraf): void {
   // Список сегментов (inline-кнопка из аналитики)
   bot.action('segs:list', async (ctx) => {
-    await ctx.answerCbQuery()
+    try { await ctx.answerCbQuery() } catch {}
     await showSegments(ctx)
   })
 
   // Начать переименование
   bot.action(/^segs:rename:(\d+)$/, async (ctx) => {
-    await ctx.answerCbQuery()
+    try { await ctx.answerCbQuery() } catch {}
     const userId = ctx.from!.id
     const segmentId = parseInt(ctx.match[1], 10)
     const seg = await prisma.segment.findUnique({ where: { id: segmentId } })
@@ -92,7 +92,7 @@ export function setupSegmentHandlers(bot: Telegraf): void {
 
   // Подтверждение удаления
   bot.action(/^segs:del_confirm:(\d+)$/, async (ctx) => {
-    await ctx.answerCbQuery()
+    try { await ctx.answerCbQuery() } catch {}
     const segmentId = parseInt(ctx.match[1], 10)
 
     const [seg, defaultSeg] = await Promise.all([
@@ -129,7 +129,7 @@ export function setupSegmentHandlers(bot: Telegraf): void {
 
   // Подтверждённое удаление
   bot.action(/^segs:del:(\d+)$/, async (ctx) => {
-    await ctx.answerCbQuery()
+    try { await ctx.answerCbQuery() } catch {}
     const segmentId = parseInt(ctx.match[1], 10)
 
     const seg = await prisma.segment.findUnique({ where: { id: segmentId } })
@@ -151,7 +151,7 @@ export function setupSegmentHandlers(bot: Telegraf): void {
 
   // Начать добавление
   bot.action('segs:add', async (ctx) => {
-    await ctx.answerCbQuery()
+    try { await ctx.answerCbQuery() } catch {}
     const userId = ctx.from!.id
     segmentsState.set(userId, { flow: 'add_name' })
     await ctx.reply('Введите название нового сегмента:')
@@ -159,7 +159,7 @@ export function setupSegmentHandlers(bot: Telegraf): void {
 
   // Выбор цвета (вызывается из handleSegmentMessage после ввода названия)
   bot.action(/^segs:color:(.+)$/, async (ctx) => {
-    await ctx.answerCbQuery()
+    try { await ctx.answerCbQuery() } catch {}
     const userId = ctx.from!.id
     const state = segmentsState.get(userId)
 

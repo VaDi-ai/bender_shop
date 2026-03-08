@@ -12,7 +12,9 @@ import http from 'http'
 import https from 'https'
 import fs from 'fs'
 import path from 'path'
+import ExcelJS from 'exceljs'
 import { prisma } from '../lib/prisma'
+import { stockOut } from '../lib/stock'
 
 const BOT_TOKEN = process.env.BOT_TOKEN ?? ''
 
@@ -224,6 +226,141 @@ export function startApiServer(): void {
         return
       }
 
+      // ── GET /api/download/price-list ────────────────────────────────────────
+      if (req.method === 'GET' && url.pathname === '/api/download/price-list') {
+        const { generatePriceListBuffer } = await import('../bot/admin/pricing')
+        const buffer = await generatePriceListBuffer()
+        const dateStr = new Date().toLocaleDateString('ru-RU').replace(/\./g, '-')
+        res.writeHead(200, {
+          'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          'Content-Disposition': `attachment; filename="price-list-${dateStr}.xlsx"`,
+        })
+        return res.end(buffer)
+      }
+
+      // ── GET /api/download/template ──────────────────────────────────────────
+      if (req.method === 'GET' && url.pathname === '/api/download/template') {
+        const variants = await prisma.productVariant.findMany({
+          include: { product: true },
+          orderBy: { id: 'asc' },
+        })
+
+        const wb = new ExcelJS.Workbook()
+
+        // ── Лист 1: Оприходование ──────────────────────────────────────────
+        const ws1 = wb.addWorksheet('Оприходование')
+        ws1.columns = [
+          { key: 'sku',      width: 28 },
+          { key: 'qty',      width: 15 },
+          { key: 'comment',  width: 30 },
+          { key: 'name',     width: 35 },
+        ]
+
+        const headerFill: ExcelJS.FillPattern = {
+          type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1A1A1A' },
+        }
+        const headerFont: Partial<ExcelJS.Font> = {
+          bold: true, color: { argb: 'FFCCFF00' },
+        }
+        const exampleFill: ExcelJS.FillPattern = {
+          type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2A2A2A' },
+        }
+        const exampleFont: Partial<ExcelJS.Font> = { color: { argb: 'FF888888' } }
+
+        const headerRow = ws1.addRow([
+          'SKU варианта*', 'Количество*', 'Комментарий', 'Название (справочно)',
+        ])
+        headerRow.eachCell((cell) => {
+          cell.fill = headerFill
+          cell.font = headerFont
+        })
+
+        // Примеры — первые два варианта из БД (или хардкод если меньше двух)
+        const ex1 = variants[0]
+        const ex2 = variants[1]
+
+        const exRows = [
+          ex1
+            ? [
+                ex1.sku,
+                5,
+                'Приход со склада',
+                ex1.product.name + ' — ' +
+                  Object.entries(ex1.attributes as Record<string, string>)
+                    .map(([k, v]) => `${k}: ${v}`).join(', '),
+              ]
+            : ['VARIANT-SKU-001', 5, 'Приход со склада', 'Название товара'],
+          ex2
+            ? [
+                ex2.sku,
+                -2,
+                'Возврат',
+                ex2.product.name + ' — ' +
+                  Object.entries(ex2.attributes as Record<string, string>)
+                    .map(([k, v]) => `${k}: ${v}`).join(', '),
+              ]
+            : ['VARIANT-SKU-002', -2, 'Возврат', 'Название товара'],
+        ]
+
+        for (const rowData of exRows) {
+          const row = ws1.addRow(rowData)
+          row.eachCell((cell) => {
+            cell.fill = exampleFill
+            cell.font = exampleFont
+          })
+        }
+
+        ws1.views = [{ state: 'frozen', ySplit: 1 }]
+
+        // ── Лист 2: Справочник SKU ─────────────────────────────────────────
+        const ws2 = wb.addWorksheet('Справочник SKU')
+        ws2.columns = [
+          { key: 'sku',      width: 28 },
+          { key: 'product',  width: 30 },
+          { key: 'attrs',    width: 35 },
+          { key: 'price',    width: 15 },
+          { key: 'qty',      width: 12 },
+          { key: 'reserved', width: 18 },
+          { key: 'inStock',  width: 14 },
+        ]
+
+        const refHeader = ws2.addRow([
+          'SKU', 'Товар', 'Атрибуты', 'Цена', 'Остаток', 'Зарезервировано', 'В наличии',
+        ])
+        refHeader.eachCell((cell) => {
+          cell.fill = headerFill
+          cell.font = headerFont
+        })
+
+        const rowFills = ['FF1A1A1A', 'FF111111']
+        variants.forEach((v, i) => {
+          const attrs = Object.entries(v.attributes as Record<string, string>)
+            .map(([k, val]) => `${k}: ${val}`).join(', ')
+          const row = ws2.addRow([
+            v.sku,
+            v.product.name,
+            attrs,
+            v.price.toString(),
+            v.quantity,
+            v.reserved,
+            v.inStock ? 'Да' : 'Нет',
+          ])
+          const fill: ExcelJS.FillPattern = {
+            type: 'pattern', pattern: 'solid', fgColor: { argb: rowFills[i % 2] },
+          }
+          row.eachCell((cell) => { cell.fill = fill })
+        })
+
+        ws2.views = [{ state: 'frozen', ySplit: 1 }]
+
+        const buffer = await wb.xlsx.writeBuffer()
+        res.writeHead(200, {
+          'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          'Content-Disposition': 'attachment; filename="bender-shop-template.xlsx"',
+        })
+        return res.end(Buffer.from(buffer))
+      }
+
       // ── POST /api/orders ────────────────────────────────────────────────────
       if (req.method === 'POST' && url.pathname === '/api/orders') {
         const body = await readBody(req)
@@ -281,19 +418,15 @@ export function startApiServer(): void {
           },
         })
 
-        // Уменьшить quantity для варианта или товара
+        // Уменьшить quantity: для вариантов через stockOut(), для legacy-товаров напрямую
         for (const item of data.items) {
           if (item.variantId) {
-            const updatedVariant = await prisma.productVariant.update({
-              where: { id: item.variantId },
-              data: { quantity: { decrement: item.qty } },
-            })
-            if (updatedVariant.quantity <= 0) {
-              await prisma.productVariant.update({
-                where: { id: item.variantId },
-                data: { inStock: false },
-              })
-            }
+            await stockOut(
+              item.variantId,
+              item.qty,
+              `Заказ #${order.id}`,
+              data.telegramId ?? 'shop'
+            )
           } else if (item.productId) {
             const updated = await prisma.product.update({
               where: { id: item.productId },
