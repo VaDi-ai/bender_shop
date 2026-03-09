@@ -16,6 +16,8 @@
   "license": "ISC",
   "type": "commonjs",
   "devDependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
     "@types/node": "^25.3.0",
     "ts-node": "^10.9.2",
     "typescript": "^5.9.3"
@@ -25,8 +27,13 @@
     "@prisma/adapter-pg": "^7.4.1",
     "@prisma/client": "^7.4.1",
     "@types/pg": "^8.16.0",
+    "cors": "^2.8.6",
     "dotenv": "^17.3.1",
     "exceljs": "^4.4.0",
+    "express": "^5.2.1",
+    "express-rate-limit": "^8.3.0",
+    "express-validator": "^7.3.1",
+    "helmet": "^8.1.0",
     "openai": "^6.25.0",
     "pg": "^8.18.0",
     "prisma": "^7.4.1",

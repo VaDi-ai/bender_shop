@@ -69,6 +69,7 @@ import {
   lastCurrencyChanges,
 } from './admin/pricing'
 import { cancelPromotion } from '../lib/promotions'
+import { logSecurityEvent, initSecurityAlerts } from '../lib/security-log'
 
 const BOT_TOKEN = process.env.BOT_TOKEN
 const ADMIN_IDS = (process.env.ADMIN_IDS ?? '').split(',').map((id) => Number(id.trim()))
@@ -80,10 +81,55 @@ if (!BOT_TOKEN) {
 const bot = new Telegraf(BOT_TOKEN)
 
 initAdminNotifications(bot, ADMIN_IDS)
+initSecurityAlerts(bot, ADMIN_IDS)
 
 // ─── Режим техработ (in-memory) ───────────────────────────────────────────────
 
 let maintenanceMode = false
+
+// ─── Защита от флуда ─────────────────────────────────────────────────────────
+
+const userRequestCount = new Map<number, { count: number; resetAt: number }>()
+
+bot.use(async (ctx, next) => {
+  const userId = ctx.from?.id
+  if (!userId) return next()
+
+  const now = Date.now()
+  const stats = userRequestCount.get(userId) ?? { count: 0, resetAt: now + 60_000 }
+
+  if (now > stats.resetAt) {
+    stats.count = 0
+    stats.resetAt = now + 60_000
+  }
+
+  stats.count++
+  userRequestCount.set(userId, stats)
+
+  if (stats.count > 30) {
+    if (stats.count === 31) {
+      await ctx.reply('⚠️ Слишком много запросов. Подождите минуту.')
+      logSecurityEvent('rate_limit_exceeded', { userId, count: stats.count })
+    }
+    return
+  }
+
+  return next()
+})
+
+// ─── Хелпер: только для администраторов ──────────────────────────────────────
+
+export function adminOnly(ctx: any, next: any) {
+  const userId = ctx.from?.id
+  if (!ADMIN_IDS.includes(userId)) {
+    logSecurityEvent('unauthorized_access', {
+      userId,
+      command: ctx.message?.text ?? ctx.callbackQuery?.data,
+    })
+    return ctx.reply('⛔ Нет доступа.')
+  }
+  return next()
+}
 
 // ─── Главное меню ─────────────────────────────────────────────────────────────
 

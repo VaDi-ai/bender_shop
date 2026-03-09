@@ -15,6 +15,7 @@ import { prisma } from '../../lib/prisma'
 import { humanizeApiError } from '../../lib/api-errors'
 import { getAIMode, setAIMode, getAIStats, reinitClient as reinitAgentClient, type AIMode } from '../ai/agent'
 import { reinitClient as reinitParserClient } from '../../lib/ai-parser'
+import type { SecurityEvent } from '../../lib/security-log'
 
 // ─── Лейблы режимов ───────────────────────────────────────────────────────────
 
@@ -100,6 +101,70 @@ export async function showAISettings(ctx: Context): Promise<void> {
   )
 }
 
+// ─── Панель безопасности ──────────────────────────────────────────────────────
+
+const EVENT_LABELS: Partial<Record<SecurityEvent, string>> = {
+  invalid_telegram_signature: '🚫 Неверных подписей Telegram',
+  rate_limit_exceeded:        '⏳ Rate limit превышен',
+  unauthorized_access:        '🔑 Попыток несанкционированного доступа',
+  price_manipulation_attempt: '💰 Попыток подмены цены',
+}
+
+export async function showSecurityLog(ctx: Context): Promise<void> {
+  const since = new Date(Date.now() - 24 * 60 * 60 * 1000)
+
+  const [counts, recent] = await Promise.all([
+    prisma.securityLog.groupBy({
+      by: ['event'],
+      where: { createdAt: { gte: since } },
+      _count: true,
+    }),
+    prisma.securityLog.findMany({
+      orderBy: { createdAt: 'desc' },
+      take: 10,
+    }),
+  ])
+
+  const countMap = new Map(counts.map((c) => [c.event, c._count]))
+
+  const statsLines = (Object.entries(EVENT_LABELS) as [SecurityEvent, string][]).map(
+    ([ev, label]) => `${label}: ${countMap.get(ev) ?? 0}`
+  )
+
+  const recentLines = recent.map((log) => {
+    const time = log.createdAt.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })
+    const details = (() => {
+      try {
+        const d = JSON.parse(log.details)
+        return Object.entries(d).map(([k, v]) => `${k}: ${v}`).join(', ')
+      } catch {
+        return log.details.slice(0, 60)
+      }
+    })()
+    return `• ${time} ${log.event} — ${details}`
+  })
+
+  const text = [
+    '🛡️ Безопасность — последние 24 часа:',
+    '',
+    ...statsLines,
+    '',
+    'Последние события:',
+    recent.length > 0 ? recentLines.join('\n') : '—',
+  ].join('\n')
+
+  await ctx.reply(
+    text,
+    Markup.inlineKeyboard([
+      [
+        Markup.button.callback('🗑️ Очистить лог', 'sec:clear'),
+        Markup.button.callback('🔄 Обновить', 'sec:refresh'),
+      ],
+      [Markup.button.callback('🔙 Назад', 'sec:back')],
+    ]),
+  )
+}
+
 // ─── Меню API ключей ──────────────────────────────────────────────────────────
 
 export async function showApiKeysMenu(ctx: Context): Promise<void> {
@@ -135,6 +200,7 @@ export async function showApiKeysMenu(ctx: Context): Promise<void> {
     lines.join('\n'),
     Markup.inlineKeyboard([
       [Markup.button.callback('🔄 Обновить ключ OpenRouter', 'api_key_update_openrouter')],
+      [Markup.button.callback('🛡️ Безопасность', 'sec:view')],
       [Markup.button.callback('🏠 Главное меню', 'back:main')],
     ]),
   )
@@ -223,6 +289,28 @@ export function setupApiKeysHandlers(bot: Telegraf): void {
   bot.action('api_key_cancel', async (ctx) => {
     try { await ctx.answerCbQuery() } catch {}
     apiKeysState.delete(ctx.from!.id)
+    await showApiKeysMenu(ctx)
+  })
+
+  bot.action('sec:view', async (ctx) => {
+    try { await ctx.answerCbQuery() } catch {}
+    await showSecurityLog(ctx)
+  })
+
+  bot.action('sec:refresh', async (ctx) => {
+    try { await ctx.answerCbQuery('Обновлено') } catch {}
+    await showSecurityLog(ctx)
+  })
+
+  bot.action('sec:clear', async (ctx) => {
+    try { await ctx.answerCbQuery() } catch {}
+    await prisma.securityLog.deleteMany()
+    await ctx.reply('🗑️ Лог безопасности очищен.')
+    await showSecurityLog(ctx)
+  })
+
+  bot.action('sec:back', async (ctx) => {
+    try { await ctx.answerCbQuery() } catch {}
     await showApiKeysMenu(ctx)
   })
 }

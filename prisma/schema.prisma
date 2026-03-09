@@ -210,14 +210,18 @@ model StockMovement {
 }
 
 model Order {
-  id          Int      @id @default(autoincrement())
-  clientId    Int?
-  telegramId  String   // Telegram user ID из WebApp
-  items       Json     // [{ productId, name, price, qty }]
-  totalAmount Decimal  @db.Decimal(12, 2)
-  payment     String   // "cash" | "transfer" | "card"
-  status      String   @default("new")
-  createdAt   DateTime @default(now())
+  id              Int      @id @default(autoincrement())
+  clientId        Int?
+  telegramId      String   // Telegram user ID из WebApp
+  items           Json     // [{ variantId, name, price, quantity }]
+  totalAmount     Decimal  @db.Decimal(12, 2)
+  payment         String   // "cash" | "card"
+  status          String   @default("new")
+  customerName    String?
+  customerPhone   String?
+  deliveryType    String?  // "pickup" | "delivery"
+  deliveryAddress String?
+  createdAt       DateTime @default(now())
 
   client Client? @relation(fields: [clientId], references: [id])
 
@@ -344,4 +348,15 @@ model CurrencyRate {
   updatedAt    DateTime @updatedAt
 
   @@index([currency])
+}
+
+model SecurityLog {
+  id        Int      @id @default(autoincrement())
+  event     String
+  details   String
+  ip        String?
+  createdAt DateTime @default(now())
+
+  @@index([event])
+  @@index([createdAt])
 }
