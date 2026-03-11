@@ -2,8 +2,10 @@
   "name": "bender-shop",
   "version": "1.0.0",
   "description": "",
-  "main": "dist/index.js",
+  "main": "dist/bot/index.js",
   "scripts": {
+    "start": "node dist/bot/index.js",
+    "dev": "ts-node bot/index.ts",
     "prebuild": "prisma generate",
     "build": "tsc",
     "dev": "ts-node src/index.ts",
