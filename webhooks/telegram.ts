@@ -163,7 +163,7 @@ function sourceLabel(source: string): string {
 export function setupClientHandlers(bot: Telegraf): void {
   // ── Обработчик нажатий inline-кнопок ────────────────────────────────────────
 
-  bot.on('callback_query', async (ctx, next) => {
+  bot.on('callback_query', async (ctx: Context, next: () => Promise<void>) => {
     const query = ctx.callbackQuery as unknown as Record<string, unknown>
     const data = query['data'] as string | undefined
     if (!data) return next()
@@ -665,11 +665,12 @@ export function setupClientHandlers(bot: Telegraf): void {
 
   // ── Обработчик входящих сообщений ───────────────────────────────────────────
 
-  bot.on('message', async (ctx, next) => {
+  bot.on('message', async (ctx: Context, next: () => Promise<void>) => {
     const { chat, from } = ctx
     const rawMsg = ctx.message as unknown as Record<string, unknown>
 
     if (!from) return next()
+    if (!chat) return next()
 
     // ── Сообщения из CRM-группы: ответ менеджера → клиент ────────────────────
     if (chat.id === CRM_GROUP_ID) {

@@ -9,13 +9,17 @@
 
 import { prisma } from './prisma'
 import { roundPrice } from './currency'
+import type { ProductVariantModel } from '../generated/prisma/models'
+import type { ProductModel } from '../generated/prisma/models'
 
 // ─── Выборка вариантов по фильтру ────────────────────────────────────────────
+
+type VariantWithProduct = ProductVariantModel & { product: ProductModel }
 
 export async function findVariantsByFilter(
   filterType: string,
   filterValue: string,
-) {
+): Promise<VariantWithProduct[]> {
   if (filterType === 'category') {
     return prisma.productVariant.findMany({
       where: { product: { category: { name: filterValue } } },

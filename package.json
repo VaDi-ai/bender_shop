@@ -4,6 +4,7 @@
   "description": "",
   "main": "dist/index.js",
   "scripts": {
+    "prebuild": "prisma generate",
     "build": "tsc",
     "dev": "ts-node src/index.ts",
     "db:migrate": "prisma migrate dev",
