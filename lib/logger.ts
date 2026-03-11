@@ -1,4 +1,4 @@
-const SECRET_FIELDS = ['token', 'key', 'password', 'secret', 'api_key', 'BOT_TOKEN']
+const SECRET_SUBSTRINGS = ['token', 'key', 'password', 'secret']
 
 export function safeLog(message: string, data?: Record<string, any>): void {
   if (!data) {
@@ -7,8 +7,10 @@ export function safeLog(message: string, data?: Record<string, any>): void {
   }
 
   const sanitized = { ...data }
-  for (const field of SECRET_FIELDS) {
-    if (sanitized[field]) sanitized[field] = '***'
+  for (const field of Object.keys(sanitized)) {
+    if (SECRET_SUBSTRINGS.some((s) => field.toLowerCase().includes(s))) {
+      sanitized[field] = '***'
+    }
   }
   console.log(message, sanitized)
 }

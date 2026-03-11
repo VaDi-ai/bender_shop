@@ -55,7 +55,10 @@ function validateTelegramWebApp(initData: string): { valid: boolean; userId?: nu
       .update(dataCheckString)
       .digest('hex')
 
-    if (expectedHash !== hash) return { valid: false }
+    const expected = Buffer.from(expectedHash, 'hex')
+    const received = Buffer.from(hash, 'hex')
+    if (expected.length !== received.length || !crypto.timingSafeEqual(expected, received))
+      return { valid: false }
 
     const user = JSON.parse(params.get('user') || '{}')
     return { valid: true, userId: user.id }
@@ -76,7 +79,9 @@ function requireTelegramAuth(req: Request, res: Response, next: NextFunction): v
   if (!valid) {
     logSecurityEvent('invalid_telegram_signature', {
       ip: req.ip,
-      initData: initData.slice(0, 50),
+      initDataLength: initData.length,
+      hasHash: initData.includes('hash='),
+      fields: [...new URLSearchParams(initData).keys()],
     })
     res.status(401).json({ error: 'Неверная подпись Telegram' })
     return
@@ -132,8 +137,13 @@ export function startApiServer(): void {
     windowMs: 60 * 1000,
     max: 60,
   })
-  app.use('/api/photo', photoLimiter)
   app.use('/api/banner', photoLimiter)
+
+  const downloadLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    max: 5,
+    message: { error: 'Слишком много запросов на скачивание. Подождите минуту.' },
+  })
 
   // ── Таймаут для долгих запросов ───────────────────────────────────────────
   app.use((_req, res, next) => {
@@ -280,7 +290,7 @@ export function startApiServer(): void {
   })
 
   // ── GET /api/settings ──────────────────────────────────────────────────────
-  app.get('/api/settings', async (req, res) => {
+  app.get('/api/settings', requireTelegramAuth, async (req, res) => {
     const key = req.query.key as string
     if (!key) {
       res.status(400).json({ error: 'Missing key param' })
@@ -358,7 +368,7 @@ export function startApiServer(): void {
   })
 
   // ── GET /api/download/price-list ───────────────────────────────────────────
-  app.get('/api/download/price-list', async (_req, res) => {
+  app.get('/api/download/price-list', downloadLimiter, requireTelegramAuth, async (_req, res) => {
     const { generatePriceListBuffer } = await import('../bot/admin/pricing')
     const buffer = await generatePriceListBuffer()
     const dateStr = new Date().toLocaleDateString('ru-RU').replace(/\./g, '-')
@@ -371,7 +381,7 @@ export function startApiServer(): void {
   })
 
   // ── GET /api/download/template ─────────────────────────────────────────────
-  app.get('/api/download/template', async (_req, res) => {
+  app.get('/api/download/template', downloadLimiter, requireTelegramAuth, async (_req, res) => {
     const variants = await prisma.productVariant.findMany({
       include: { product: true },
       orderBy: { id: 'asc' },
@@ -572,6 +582,15 @@ export function startApiServer(): void {
 
       // Цена всегда из БД — никогда от клиента
       const actualPrice = Number(variant.price)
+      if (item.price !== undefined && Number(item.price) !== actualPrice) {
+        await logSecurityEvent('price_manipulation_attempt', {
+          ip: req.ip,
+          telegramId,
+          variantId: item.variantId,
+          submittedPrice: item.price,
+          actualPrice,
+        })
+      }
       totalAmount += actualPrice * item.quantity
 
       enrichedItems.push({

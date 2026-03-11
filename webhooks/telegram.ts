@@ -1076,9 +1076,25 @@ async function handleWebAppOrder(
     total: string
   },
 ): Promise<void> {
-  const { orderId, items, payment, total } = orderData
+  const { orderId, payment } = orderData
   const externalId = String(from.id)
   const name = getClientName(from)
+
+  // Fetch server-verified prices from DB — never trust client-supplied items/total
+  let verifiedItems: Array<{ name: string; price: string; qty: number }> = []
+  let verifiedTotal = 0
+  if (orderId > 0) {
+    const dbOrder = await prisma.order.findUnique({ where: { id: orderId } })
+    if (dbOrder) {
+      verifiedItems = (dbOrder.items as Array<{ variantId: number; name: string; price: string; quantity: number }>)
+        .map((i) => ({ name: i.name, price: i.price, qty: i.quantity }))
+      verifiedTotal = Number(dbOrder.totalAmount)
+    }
+  }
+  if (verifiedItems.length === 0) {
+    verifiedItems = orderData.items.map((i) => ({ name: i.name, price: i.price, qty: i.qty }))
+    verifiedTotal = Number(orderData.total)
+  }
 
   const PAYMENT_LABEL: Record<string, string> = {
     cash: '💵 Наличные',
@@ -1116,7 +1132,7 @@ async function handleWebAppOrder(
     }))!
   }
 
-  const itemLines = items
+  const itemLines = verifiedItems
     .map((i) => `• ${i.name} × ${i.qty} — ${fmtPrice(Number(i.price) * i.qty)} ₽`)
     .join('\n')
   const orderRef = orderId > 0 ? ` #${orderId}` : ''
@@ -1126,7 +1142,7 @@ async function handleWebAppOrder(
     '',
     itemLines,
     '',
-    `💰 Итого: ${fmtPrice(Number(total))} ₽`,
+    `💰 Итого: ${fmtPrice(verifiedTotal)} ₽`,
     `💳 Оплата: ${PAYMENT_LABEL[payment] ?? payment}`,
   ].join('\n')
 
@@ -1136,9 +1152,9 @@ async function handleWebAppOrder(
     data: { clientId: client.id, direction: 'in', text: notification, source: 'shop' },
   })
 
-  const itemCount = items.reduce((s, i) => s + i.qty, 0)
+  const itemCount = verifiedItems.reduce((s, i) => s + i.qty, 0)
   await telegram.sendMessage(
     externalId,
-    `✅ Заказ принят!\n\n${itemCount} поз. на ${fmtPrice(Number(total))} ₽\nОплата: ${PAYMENT_LABEL[payment] ?? payment}\n\nОжидайте — скоро свяжемся с вами 👋`,
+    `✅ Заказ принят!\n\n${itemCount} поз. на ${fmtPrice(verifiedTotal)} ₽\nОплата: ${PAYMENT_LABEL[payment] ?? payment}\n\nОжидайте — скоро свяжемся с вами 👋`,
   )
 }

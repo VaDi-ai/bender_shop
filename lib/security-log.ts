@@ -34,11 +34,31 @@ const EVENT_DESCRIPTIONS: Record<SecurityEvent, string> = {
   invalid_order_data:         '📋 Неверные данные заказа',
 }
 
+const SENSITIVE_KEY_PATTERNS = ['token', 'key', 'hash', 'secret']
+
+function sanitizeDetails(obj: Record<string, any>, depth = 0): Record<string, any> {
+  const result: Record<string, any> = {}
+  for (const [k, v] of Object.entries(obj)) {
+    const lk = k.toLowerCase()
+    if (SENSITIVE_KEY_PATTERNS.some((p) => lk.includes(p))) {
+      result[k] = '***'
+    } else if (depth < 2 && v !== null && typeof v === 'object' && !Array.isArray(v)) {
+      result[k] = sanitizeDetails(v as Record<string, any>, depth + 1)
+    } else if (typeof v === 'string') {
+      result[k] = v.slice(0, 200)
+    } else {
+      result[k] = v
+    }
+  }
+  return result
+}
+
 function formatSecurityAlert(event: SecurityEvent, details: Record<string, any>): string {
   const time = new Date().toLocaleString('ru-RU', { timeZone: 'Europe/Moscow' })
   const desc = EVENT_DESCRIPTIONS[event] ?? event
-  const detailsStr = Object.entries(details)
-    .map(([k, v]) => `${k}: ${v}`)
+  const safe = sanitizeDetails(details)
+  const detailsStr = Object.entries(safe)
+    .map(([k, v]) => `${k}: ${String(v).replace(/\n/g, '\\n')}`)
     .join('\n')
   return `⚠️ СОБЫТИЕ БЕЗОПАСНОСТИ\n\n${desc}\nВремя: ${time}\n\n${detailsStr}`
 }
@@ -49,20 +69,21 @@ export async function logSecurityEvent(
   event: SecurityEvent,
   details: Record<string, any>
 ): Promise<void> {
-  console.warn(`[SECURITY] ${event}:`, details)
+  const safe = sanitizeDetails(details)
+  console.warn(`[SECURITY] ${event}:`, safe)
 
   try {
     await prisma.securityLog.create({
       data: {
         event,
-        details: JSON.stringify(details),
+        details: JSON.stringify(safe),
         ip: details.ip ?? null,
       },
     })
   } catch {}
 
   if (CRITICAL_EVENTS.includes(event) && _bot && _adminIds.length > 0) {
-    const text = formatSecurityAlert(event, details)
+    const text = formatSecurityAlert(event, safe)
     for (const adminId of _adminIds) {
       try {
         await _bot.telegram.sendMessage(adminId, text)

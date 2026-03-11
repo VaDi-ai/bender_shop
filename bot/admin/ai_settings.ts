@@ -190,7 +190,7 @@ export async function showApiKeysMenu(ctx: Context): Promise<void> {
     '',
     `BOT_TOKEN:    ${mask(process.env.BOT_TOKEN)}`,
     `CRM_GROUP_ID: ${process.env.CRM_GROUP_ID ?? '❌ не задан'}`,
-    `ADMIN_IDS:    ${process.env.ADMIN_IDS ?? '❌ не задан'}`,
+    `ADMIN_IDS:    ${mask(process.env.ADMIN_IDS)}`,
     `DATABASE_URL: ${mask(process.env.DATABASE_URL)}`,
     `API_PORT:     ${process.env.API_PORT ?? '3000 (default)'}`,
     `WEBAPP_URL:   ${process.env.WEBAPP_URL ?? '❌ не задан'}`,
