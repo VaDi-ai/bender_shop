@@ -602,31 +602,36 @@ bot.hears('🔑 API Ключи', async (ctx) => {
 
 // ─── Запуск ───────────────────────────────────────────────────────────────────
 
-if (process.env.NODE_ENV === 'production') {
-  await bot.launch({
-    webhook: {
-      domain: process.env.WEBAPP_URL || 'https://bendershop.store',
-      path: '/webhook/telegram',
-      secretToken: process.env.WEBHOOK_SECRET,
-    },
-    allowedUpdates: ['message', 'callback_query', 'chat_member'],
-  })
-} else {
-  bot.launch({ allowedUpdates: ['message', 'callback_query', 'chat_member'] })
-}
-
-console.log('Бот запущен')
-
-// Кнопка-меню Mini App в личных чатах
-if (WEBAPP_URL) {
-  bot.telegram
-    .setChatMenuButton({
-      menuButton: { type: 'web_app', text: '🛍 Магазин', web_app: { url: WEBAPP_URL } },
+;(async () => {
+  if (process.env.NODE_ENV === 'production') {
+    await bot.launch({
+      webhook: {
+        domain: process.env.WEBAPP_URL || 'https://bendershop.store',
+        path: '/webhook/telegram',
+        secretToken: process.env.WEBHOOK_SECRET,
+      },
+      allowedUpdates: ['message', 'callback_query', 'chat_member'],
     })
-    .catch((e) => console.error('setChatMenuButton error:', e))
-}
+  } else {
+    bot.launch({ allowedUpdates: ['message', 'callback_query', 'chat_member'] })
+  }
 
-startScheduler(bot)
+  console.log('Бот запущен')
+
+  // Кнопка-меню Mini App в личных чатах
+  if (WEBAPP_URL) {
+    bot.telegram
+      .setChatMenuButton({
+        menuButton: { type: 'web_app', text: '🛍 Магазин', web_app: { url: WEBAPP_URL } },
+      })
+      .catch((e) => console.error('setChatMenuButton error:', e))
+  }
+
+  startScheduler(bot)
+})().catch((err) => {
+  console.error('Fatal error:', err)
+  process.exit(1)
+})
 startApiServer(process.env.NODE_ENV === 'production' ? bot : undefined)
 
 // ─── Загрузка OpenRouter ключа из БД ─────────────────────────────────────────
