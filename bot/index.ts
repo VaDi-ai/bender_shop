@@ -168,7 +168,7 @@ setupClientHandlers(bot)
 
 const WEBAPP_URL = process.env.WEBAPP_URL
 
-if (WEBAPP_URL && !process.env.WEBHOOK_SECRET) {
+if (process.env.NODE_ENV === 'production' && !process.env.WEBHOOK_SECRET) {
   throw new Error('WEBHOOK_SECRET is required when WEBHOOK_URL is set')
 }
 
