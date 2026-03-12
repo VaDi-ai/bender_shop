@@ -168,6 +168,10 @@ setupClientHandlers(bot)
 
 const WEBAPP_URL = process.env.WEBAPP_URL
 
+if (WEBAPP_URL && !process.env.WEBHOOK_SECRET) {
+  throw new Error('WEBHOOK_SECRET is required when WEBHOOK_URL is set')
+}
+
 // /start с payload shop или startapp=shop — открыть Mini App
 bot.start(async (ctx, next) => {
   if (!WEBAPP_URL) return next()
@@ -598,15 +602,18 @@ bot.hears('🔑 API Ключи', async (ctx) => {
 
 // ─── Запуск ───────────────────────────────────────────────────────────────────
 
-bot.launch({
-  allowedUpdates: ['message', 'callback_query', 'chat_member'],
-  ...(process.env.WEBHOOK_URL ? {
+if (process.env.NODE_ENV === 'production') {
+  await bot.launch({
     webhook: {
-      domain: process.env.WEBHOOK_URL,
+      domain: process.env.WEBAPP_URL || 'https://bendershop.store',
+      path: '/webhook/telegram',
       secretToken: process.env.WEBHOOK_SECRET,
     },
-  } : {}),
-})
+    allowedUpdates: ['message', 'callback_query', 'chat_member'],
+  })
+} else {
+  bot.launch({ allowedUpdates: ['message', 'callback_query', 'chat_member'] })
+}
 
 console.log('Бот запущен')
 
@@ -620,7 +627,7 @@ if (WEBAPP_URL) {
 }
 
 startScheduler(bot)
-startApiServer()
+startApiServer(process.env.NODE_ENV === 'production' ? bot : undefined)
 
 // ─── Загрузка OpenRouter ключа из БД ─────────────────────────────────────────
 

@@ -17,6 +17,7 @@ import helmet from 'helmet'
 import cors from 'cors'
 import rateLimit from 'express-rate-limit'
 import ExcelJS from 'exceljs'
+import type { Telegraf } from 'telegraf'
 import { prisma } from '../lib/prisma'
 import { stockOut } from '../lib/stock'
 import { logSecurityEvent } from '../lib/security-log'
@@ -93,9 +94,14 @@ function requireTelegramAuth(req: Request, res: Response, next: NextFunction): v
 
 // ─── Запуск сервера ───────────────────────────────────────────────────────────
 
-export function startApiServer(): void {
+export function startApiServer(bot?: Telegraf): void {
   const app = express()
   app.set('trust proxy', 1)
+
+  // ── Telegram webhook (production, before body parsers) ─────────────────────
+  if (bot) {
+    app.post('/webhook/telegram', bot.webhookCallback('/webhook/telegram'))
+  }
 
   // ── Helmet (безопасные заголовки) ──────────────────────────────────────────
   app.use(helmet({
@@ -118,7 +124,7 @@ export function startApiServer(): void {
           'https://webz.telegram.org',
           process.env.WEBAPP_URL,
         ].filter(Boolean) as string[]
-        if (origin && allowed.some((o) => origin.startsWith(o))) {
+        if (origin && allowed.some((o) => origin === o)) {
           callback(null, true)
         } else {
           callback(new Error('CORS: недопустимый источник'))
@@ -339,8 +345,9 @@ export function startApiServer(): void {
   // ── GET /api/banner/:fileId ────────────────────────────────────────────────
   app.get('/api/banner/:fileId', async (req, res) => {
     const { fileId } = req.params
-    if (!fileId) {
-      res.status(400).send('Missing file id')
+    const FILE_ID_RE = /^[A-Za-z0-9_\-]{10,200}$/
+    if (!fileId || !FILE_ID_RE.test(fileId)) {
+      res.status(400).send('Invalid file id')
       return
     }
 

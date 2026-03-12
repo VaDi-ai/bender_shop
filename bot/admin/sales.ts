@@ -593,43 +593,33 @@ export function setupSalesHandlers(bot: Telegraf): void {
     const comment = state.comment
 
     try {
-      // Без clientId — безымянный резерв
-      let reservationId: number | null = null
-      await prisma.reservation.create({
+      const reservation = await prisma.reservation.create({
         data: {
-          clientId: 0, // заглушка — нет привязки к клиенту в БД
+          clientId: null,
           productId,
           quantity: qty,
           comment: `${clientName}${comment ? ': ' + comment : ''}`,
           status: 'active',
         },
-      }).then((r) => { reservationId = r.id }).catch(() => {
-        // если FK нарушен (clientId=0) — создаём без clientId через rawQuery не нужно,
-        // просто логируем и продолжаем
-        console.warn('res_nc: clientId=0 not in DB, reservation not saved')
       })
       await prisma.product.update({
         where: { id: productId },
         data: { reserved: { increment: qty } },
       })
       const msg = `🔖 Резерв: ${productName} × ${qty} для ${clientName} до отдельного уведомления${comment ? '\n📝 ' + comment : ''}`
-      if (reservationId !== null) {
-        await ctx.reply(
-          msg,
-          Markup.inlineKeyboard([
-            [
-              Markup.button.callback('✅ Выдан', `res:do_complete:${reservationId}`),
-              Markup.button.callback('❌ Отменить', `res:do_cancel:${reservationId}`),
-            ],
-          ]),
-        )
-      } else {
-        await ctx.reply(msg)
-      }
+      await ctx.reply(
+        msg,
+        Markup.inlineKeyboard([
+          [
+            Markup.button.callback('✅ Выдан', `res:do_complete:${reservation.id}`),
+            Markup.button.callback('❌ Отменить', `res:do_cancel:${reservation.id}`),
+          ],
+        ]),
+      )
       await notifyToSalesTopic(ctx, msg, clientName)
     } catch (err) {
       console.error('res_nc:confirm error:', err)
-      await ctx.reply('Ошибка при оформлении резерва.')
+      await ctx.reply(`⚠️ Ошибка при оформлении резерва: ${err instanceof Error ? err.message : String(err)}`)
     }
   })
 
