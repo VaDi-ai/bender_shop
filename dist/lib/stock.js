@@ -18,21 +18,20 @@ async function stockIn(variantId, qty, comment, userId) {
 }
 // Списание товара
 async function stockOut(variantId, qty, comment, userId) {
-    const variant = await prisma_1.prisma.productVariant.findUnique({ where: { id: variantId } });
-    if (!variant || variant.quantity < qty)
+    const updated = await prisma_1.prisma.productVariant.updateMany({
+        where: { id: variantId, quantity: { gte: qty } },
+        data: { quantity: { decrement: qty }, inStock: true },
+    });
+    if (updated.count === 0)
         throw new Error('Недостаточно товара');
-    await prisma_1.prisma.$transaction([
-        prisma_1.prisma.productVariant.update({
-            where: { id: variantId },
-            data: {
-                quantity: { decrement: qty },
-                inStock: variant.quantity - qty > 0,
-            },
-        }),
-        prisma_1.prisma.stockMovement.create({
-            data: { variantId, type: 'out', quantity: qty, comment, createdBy: userId },
-        }),
-    ]);
+    // Mark out-of-stock atomically after decrement
+    await prisma_1.prisma.productVariant.updateMany({
+        where: { id: variantId, quantity: { lte: 0 } },
+        data: { inStock: false },
+    });
+    await prisma_1.prisma.stockMovement.create({
+        data: { variantId, type: 'out', quantity: qty, comment, createdBy: userId },
+    });
 }
 // История движения по варианту
 async function getStockHistory(variantId) {

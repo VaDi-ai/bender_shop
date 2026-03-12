@@ -127,6 +127,7 @@ function sourceLabel(source) {
  */
 function setupClientHandlers(bot) {
     // ── Обработчик нажатий inline-кнопок ────────────────────────────────────────
+    const ADMIN_ACTION_PREFIXES = ['cp:', 'seg:', 'st:', 'note:', 'hist:', 'card:', 'edit:', 'crm:', 'tags:', 'ai:'];
     bot.on('callback_query', async (ctx, next) => {
         const query = ctx.callbackQuery;
         const data = query['data'];
@@ -136,6 +137,12 @@ function setupClientHandlers(bot) {
         const chatId = msg?.['chat']?.['id'];
         const messageId = msg?.['message_id'];
         const threadId = msg?.['message_thread_id'];
+        const callerId = ctx.from?.id;
+        if (ADMIN_ACTION_PREFIXES.some((p) => data.startsWith(p))) {
+            if (!callerId || !ADMIN_IDS.includes(callerId)) {
+                return ctx.answerCbQuery();
+            }
+        }
         try {
             // ── Панель управления: cp:{action}:{clientId} ────────────────────────────
             if (data.startsWith('cp:')) {
@@ -596,6 +603,18 @@ async function handleEditMessage(telegram, userId, text) {
     editMode.delete(userId);
     const { clientId, field } = edit;
     let value = text.trim();
+    if (field === 'phone') {
+        if (!/^\+?[0-9\s\-()]{7,20}$/.test(value)) {
+            await telegram.sendMessage(userId, '❌ Неверный формат телефона. Пример: +79001234567');
+            return;
+        }
+    }
+    if (field === 'email') {
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
+            await telegram.sendMessage(userId, '❌ Неверный формат email. Пример: user@example.com');
+            return;
+        }
+    }
     if (field === 'birthDate') {
         const parts = value.split('.');
         if (parts.length !== 3) {
@@ -856,20 +875,18 @@ async function handleWebAppOrder(telegram, from, orderData) {
     const externalId = String(from.id);
     const name = getClientName(from);
     // Fetch server-verified prices from DB — never trust client-supplied items/total
-    let verifiedItems = [];
-    let verifiedTotal = 0;
-    if (orderId > 0) {
-        const dbOrder = await prisma_1.prisma.order.findUnique({ where: { id: orderId } });
-        if (dbOrder) {
-            verifiedItems = dbOrder.items
-                .map((i) => ({ name: i.name, price: i.price, qty: i.quantity }));
-            verifiedTotal = Number(dbOrder.totalAmount);
-        }
+    if (!orderId || orderId <= 0) {
+        console.warn('[handleWebAppOrder] Rejected order with missing/zero orderId from user', from.id);
+        return;
     }
-    if (verifiedItems.length === 0) {
-        verifiedItems = orderData.items.map((i) => ({ name: i.name, price: i.price, qty: i.qty }));
-        verifiedTotal = Number(orderData.total);
+    const dbOrder = await prisma_1.prisma.order.findUnique({ where: { id: orderId } });
+    if (!dbOrder) {
+        console.warn('[handleWebAppOrder] orderId not found in DB:', orderId, 'user:', from.id);
+        return;
     }
+    const verifiedItems = dbOrder.items
+        .map((i) => ({ name: i.name, price: i.price, qty: i.quantity }));
+    const verifiedTotal = Number(dbOrder.totalAmount);
     const PAYMENT_LABEL = {
         cash: '💵 Наличные',
         transfer: '📲 Перевод',

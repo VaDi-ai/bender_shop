@@ -10,16 +10,42 @@
  * Документация: https://developers.avito.ru/api-catalog/messenger/documentation
  *
  * Пример подключения Express:
- *   app.post('/webhook/avito', express.json(), async (req, res) => {
- *     await handleAvitoWebhook(req.body, bot.telegram)
- *     res.sendStatus(200)
+ *   app.post('/webhook/avito', express.raw({ type: 'application/json' }), async (req, res) => {
+ *     try {
+ *       await handleAvitoWebhook(JSON.parse(req.body), bot.telegram, req.body, req.headers['x-avito-signature'] as string | undefined)
+ *       res.sendStatus(200)
+ *     } catch (e) {
+ *       if (e instanceof AvitoSignatureError) return res.sendStatus(401)
+ *       throw e
+ *     }
  *   })
  */
 
+import crypto from 'crypto'
 import { Telegram } from 'telegraf'
 import { prisma } from '../lib/prisma'
 
 const CRM_GROUP_ID = Number(process.env.CRM_GROUP_ID)
+const AVITO_SECRET = process.env.AVITO_WEBHOOK_SECRET ?? ''
+
+// ─── HMAC-SHA256 verification ─────────────────────────────────────────────────
+
+export class AvitoSignatureError extends Error {
+  constructor() { super('Invalid or missing X-Avito-Signature') }
+}
+
+function verifyAvitoSignature(rawBody: string | Buffer, signature: string | undefined): void {
+  if (!signature) throw new AvitoSignatureError()
+  const expected = crypto
+    .createHmac('sha256', AVITO_SECRET)
+    .update(rawBody)
+    .digest('hex')
+  const sigBuf = Buffer.from(signature, 'hex')
+  const expBuf = Buffer.from(expected, 'hex')
+  if (sigBuf.length !== expBuf.length || !crypto.timingSafeEqual(sigBuf, expBuf)) {
+    throw new AvitoSignatureError()
+  }
+}
 
 // ─── Типы payload Avito Messenger Webhook ────────────────────────────────────
 
@@ -57,11 +83,22 @@ export interface AvitoWebhookBody {
 export async function handleAvitoWebhook(
   body: AvitoWebhookBody,
   telegram: Telegram,
+  rawBody: string | Buffer,
+  signature: string | undefined,
 ): Promise<void> {
+  verifyAvitoSignature(rawBody, signature)
   for (const event of body.events) {
     if (event.type !== 'message') continue
     await processAvitoMessage(event.payload, telegram)
   }
+}
+
+// ─── Санитизация строк из внешнего источника ──────────────────────────────────
+
+function sanitizeField(raw: string, maxLen = 500): string {
+  return raw
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '') // strip control chars except \t(\x09) and \n(\x0A)
+    .slice(0, maxLen)
 }
 
 // ─── Обработка одного сообщения ──────────────────────────────────────────────
@@ -71,8 +108,8 @@ async function processAvitoMessage(
   telegram: Telegram,
 ): Promise<void> {
   const externalId = String(payload.author.id)
-  const name = payload.author.name
-  const text = payload.message.text
+  const name = sanitizeField(payload.author.name)
+  const text = sanitizeField(payload.message.text)
 
   // Найти или создать клиента
   let client = await prisma.client.findUnique({

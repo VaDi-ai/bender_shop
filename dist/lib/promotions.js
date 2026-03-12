@@ -12,6 +12,7 @@ exports.findVariantsByFilter = findVariantsByFilter;
 exports.applyPromotion = applyPromotion;
 exports.cancelPromotion = cancelPromotion;
 exports.filterLabel = filterLabel;
+const client_1 = require("@prisma/client/runtime/client");
 const prisma_1 = require("./prisma");
 const currency_1 = require("./currency");
 async function findVariantsByFilter(filterType, filterValue) {
@@ -61,12 +62,14 @@ async function applyPromotion(promotionId) {
     });
     // Применяем скидку
     for (const variant of variants) {
+        const price = new client_1.Decimal(variant.price);
+        const discountValue = new client_1.Decimal(promo.discountValue);
         let newPrice;
         if (promo.discountType === 'percent') {
-            newPrice = Number(variant.price) * (1 - Number(promo.discountValue) / 100);
+            newPrice = price.mul(new client_1.Decimal(1).sub(discountValue.div(100))).toNumber();
         }
         else {
-            newPrice = Number(variant.price) - Number(promo.discountValue);
+            newPrice = price.sub(discountValue).toNumber();
         }
         newPrice = Math.max(1, (0, currency_1.roundPrice)(newPrice));
         await prisma_1.prisma.productVariant.update({

@@ -10,12 +10,20 @@
  * Документация: https://developers.avito.ru/api-catalog/messenger/documentation
  *
  * Пример подключения Express:
- *   app.post('/webhook/avito', express.json(), async (req, res) => {
- *     await handleAvitoWebhook(req.body, bot.telegram)
- *     res.sendStatus(200)
+ *   app.post('/webhook/avito', express.raw({ type: 'application/json' }), async (req, res) => {
+ *     try {
+ *       await handleAvitoWebhook(JSON.parse(req.body), bot.telegram, req.body, req.headers['x-avito-signature'] as string | undefined)
+ *       res.sendStatus(200)
+ *     } catch (e) {
+ *       if (e instanceof AvitoSignatureError) return res.sendStatus(401)
+ *       throw e
+ *     }
  *   })
  */
 import { Telegram } from 'telegraf';
+export declare class AvitoSignatureError extends Error {
+    constructor();
+}
 interface AvitoAuthor {
     id: number;
     name: string;
@@ -40,6 +48,6 @@ export interface AvitoWebhookBody {
  * Обрабатывает тело Avito webhook: создаёт/находит клиента,
  * создаёт топик в CRM-группе, сохраняет сообщение в БД.
  */
-export declare function handleAvitoWebhook(body: AvitoWebhookBody, telegram: Telegram): Promise<void>;
+export declare function handleAvitoWebhook(body: AvitoWebhookBody, telegram: Telegram, rawBody: string | Buffer, signature: string | undefined): Promise<void>;
 export {};
 //# sourceMappingURL=avito.d.ts.map

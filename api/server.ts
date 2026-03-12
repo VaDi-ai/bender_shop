@@ -21,7 +21,8 @@ import { prisma } from '../lib/prisma'
 import { stockOut } from '../lib/stock'
 import { logSecurityEvent } from '../lib/security-log'
 
-const BOT_TOKEN = process.env.BOT_TOKEN ?? ''
+if (!process.env.BOT_TOKEN) throw new Error('BOT_TOKEN is required')
+const BOT_TOKEN = process.env.BOT_TOKEN
 const PORT = Number(process.env.API_PORT ?? 3000)
 const WEBAPP_FILE = path.join(__dirname, '../webapp/index.html')
 
@@ -94,9 +95,18 @@ function requireTelegramAuth(req: Request, res: Response, next: NextFunction): v
 
 export function startApiServer(): void {
   const app = express()
+  app.set('trust proxy', 1)
 
   // ── Helmet (безопасные заголовки) ──────────────────────────────────────────
-  app.use(helmet({ contentSecurityPolicy: false }))
+  app.use(helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'", 'https://telegram.org'],
+        frameSrc: ["'self'", 'https://telegram.org'],
+      },
+    },
+  }))
 
   // ── CORS — только Telegram-домены и WEBAPP_URL ─────────────────────────────
   app.use(
@@ -108,7 +118,7 @@ export function startApiServer(): void {
           'https://webz.telegram.org',
           process.env.WEBAPP_URL,
         ].filter(Boolean) as string[]
-        if (!origin || allowed.some((o) => origin.startsWith(o))) {
+        if (origin && allowed.some((o) => origin.startsWith(o))) {
           callback(null, true)
         } else {
           callback(new Error('CORS: недопустимый источник'))
@@ -334,6 +344,12 @@ export function startApiServer(): void {
       return
     }
 
+    const banner = await prisma.heroBanner.findFirst({ where: { imageFile: fileId } })
+    if (!banner) {
+      res.status(404).send('Not found')
+      return
+    }
+
     const filePath = await new Promise<string>((resolve, reject) => {
       const tgUrl = `https://api.telegram.org/bot${BOT_TOKEN}/getFile?file_id=${encodeURIComponent(fileId)}`
       https
@@ -483,7 +499,6 @@ export function startApiServer(): void {
         attrs,
         v.price.toString(),
         v.quantity,
-        v.reserved,
         v.inStock ? 'Да' : 'Нет',
       ])
       const fill: ExcelJS.FillPattern = {

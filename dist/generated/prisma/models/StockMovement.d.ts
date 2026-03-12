@@ -1,4 +1,5 @@
 import type * as runtime from "@prisma/client/runtime/client";
+import type * as $Enums from "../enums";
 import type * as Prisma from "../internal/prismaNamespace";
 /**
  * Model StockMovement
@@ -25,7 +26,7 @@ export type StockMovementSumAggregateOutputType = {
 export type StockMovementMinAggregateOutputType = {
     id: number | null;
     variantId: number | null;
-    type: string | null;
+    type: $Enums.StockMovementType | null;
     quantity: number | null;
     comment: string | null;
     createdBy: string | null;
@@ -34,7 +35,7 @@ export type StockMovementMinAggregateOutputType = {
 export type StockMovementMaxAggregateOutputType = {
     id: number | null;
     variantId: number | null;
-    type: string | null;
+    type: $Enums.StockMovementType | null;
     quantity: number | null;
     comment: string | null;
     createdBy: string | null;
@@ -167,7 +168,7 @@ export type StockMovementGroupByArgs<ExtArgs extends runtime.Types.Extensions.In
 export type StockMovementGroupByOutputType = {
     id: number;
     variantId: number;
-    type: string;
+    type: $Enums.StockMovementType;
     quantity: number;
     comment: string | null;
     createdBy: string | null;
@@ -187,7 +188,7 @@ export type StockMovementWhereInput = {
     NOT?: Prisma.StockMovementWhereInput | Prisma.StockMovementWhereInput[];
     id?: Prisma.IntFilter<"StockMovement"> | number;
     variantId?: Prisma.IntFilter<"StockMovement"> | number;
-    type?: Prisma.StringFilter<"StockMovement"> | string;
+    type?: Prisma.EnumStockMovementTypeFilter<"StockMovement"> | $Enums.StockMovementType;
     quantity?: Prisma.IntFilter<"StockMovement"> | number;
     comment?: Prisma.StringNullableFilter<"StockMovement"> | string | null;
     createdBy?: Prisma.StringNullableFilter<"StockMovement"> | string | null;
@@ -210,7 +211,7 @@ export type StockMovementWhereUniqueInput = Prisma.AtLeast<{
     OR?: Prisma.StockMovementWhereInput[];
     NOT?: Prisma.StockMovementWhereInput | Prisma.StockMovementWhereInput[];
     variantId?: Prisma.IntFilter<"StockMovement"> | number;
-    type?: Prisma.StringFilter<"StockMovement"> | string;
+    type?: Prisma.EnumStockMovementTypeFilter<"StockMovement"> | $Enums.StockMovementType;
     quantity?: Prisma.IntFilter<"StockMovement"> | number;
     comment?: Prisma.StringNullableFilter<"StockMovement"> | string | null;
     createdBy?: Prisma.StringNullableFilter<"StockMovement"> | string | null;
@@ -237,14 +238,14 @@ export type StockMovementScalarWhereWithAggregatesInput = {
     NOT?: Prisma.StockMovementScalarWhereWithAggregatesInput | Prisma.StockMovementScalarWhereWithAggregatesInput[];
     id?: Prisma.IntWithAggregatesFilter<"StockMovement"> | number;
     variantId?: Prisma.IntWithAggregatesFilter<"StockMovement"> | number;
-    type?: Prisma.StringWithAggregatesFilter<"StockMovement"> | string;
+    type?: Prisma.EnumStockMovementTypeWithAggregatesFilter<"StockMovement"> | $Enums.StockMovementType;
     quantity?: Prisma.IntWithAggregatesFilter<"StockMovement"> | number;
     comment?: Prisma.StringNullableWithAggregatesFilter<"StockMovement"> | string | null;
     createdBy?: Prisma.StringNullableWithAggregatesFilter<"StockMovement"> | string | null;
     createdAt?: Prisma.DateTimeWithAggregatesFilter<"StockMovement"> | Date | string;
 };
 export type StockMovementCreateInput = {
-    type: string;
+    type: $Enums.StockMovementType;
     quantity: number;
     comment?: string | null;
     createdBy?: string | null;
@@ -254,14 +255,14 @@ export type StockMovementCreateInput = {
 export type StockMovementUncheckedCreateInput = {
     id?: number;
     variantId: number;
-    type: string;
+    type: $Enums.StockMovementType;
     quantity: number;
     comment?: string | null;
     createdBy?: string | null;
     createdAt?: Date | string;
 };
 export type StockMovementUpdateInput = {
-    type?: Prisma.StringFieldUpdateOperationsInput | string;
+    type?: Prisma.EnumStockMovementTypeFieldUpdateOperationsInput | $Enums.StockMovementType;
     quantity?: Prisma.IntFieldUpdateOperationsInput | number;
     comment?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
     createdBy?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
@@ -271,7 +272,7 @@ export type StockMovementUpdateInput = {
 export type StockMovementUncheckedUpdateInput = {
     id?: Prisma.IntFieldUpdateOperationsInput | number;
     variantId?: Prisma.IntFieldUpdateOperationsInput | number;
-    type?: Prisma.StringFieldUpdateOperationsInput | string;
+    type?: Prisma.EnumStockMovementTypeFieldUpdateOperationsInput | $Enums.StockMovementType;
     quantity?: Prisma.IntFieldUpdateOperationsInput | number;
     comment?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
     createdBy?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
@@ -280,14 +281,14 @@ export type StockMovementUncheckedUpdateInput = {
 export type StockMovementCreateManyInput = {
     id?: number;
     variantId: number;
-    type: string;
+    type: $Enums.StockMovementType;
     quantity: number;
     comment?: string | null;
     createdBy?: string | null;
     createdAt?: Date | string;
 };
 export type StockMovementUpdateManyMutationInput = {
-    type?: Prisma.StringFieldUpdateOperationsInput | string;
+    type?: Prisma.EnumStockMovementTypeFieldUpdateOperationsInput | $Enums.StockMovementType;
     quantity?: Prisma.IntFieldUpdateOperationsInput | number;
     comment?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
     createdBy?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
@@ -296,7 +297,7 @@ export type StockMovementUpdateManyMutationInput = {
 export type StockMovementUncheckedUpdateManyInput = {
     id?: Prisma.IntFieldUpdateOperationsInput | number;
     variantId?: Prisma.IntFieldUpdateOperationsInput | number;
-    type?: Prisma.StringFieldUpdateOperationsInput | string;
+    type?: Prisma.EnumStockMovementTypeFieldUpdateOperationsInput | $Enums.StockMovementType;
     quantity?: Prisma.IntFieldUpdateOperationsInput | number;
     comment?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
     createdBy?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
@@ -385,8 +386,11 @@ export type StockMovementUncheckedUpdateManyWithoutVariantNestedInput = {
     updateMany?: Prisma.StockMovementUpdateManyWithWhereWithoutVariantInput | Prisma.StockMovementUpdateManyWithWhereWithoutVariantInput[];
     deleteMany?: Prisma.StockMovementScalarWhereInput | Prisma.StockMovementScalarWhereInput[];
 };
+export type EnumStockMovementTypeFieldUpdateOperationsInput = {
+    set?: $Enums.StockMovementType;
+};
 export type StockMovementCreateWithoutVariantInput = {
-    type: string;
+    type: $Enums.StockMovementType;
     quantity: number;
     comment?: string | null;
     createdBy?: string | null;
@@ -394,7 +398,7 @@ export type StockMovementCreateWithoutVariantInput = {
 };
 export type StockMovementUncheckedCreateWithoutVariantInput = {
     id?: number;
-    type: string;
+    type: $Enums.StockMovementType;
     quantity: number;
     comment?: string | null;
     createdBy?: string | null;
@@ -427,7 +431,7 @@ export type StockMovementScalarWhereInput = {
     NOT?: Prisma.StockMovementScalarWhereInput | Prisma.StockMovementScalarWhereInput[];
     id?: Prisma.IntFilter<"StockMovement"> | number;
     variantId?: Prisma.IntFilter<"StockMovement"> | number;
-    type?: Prisma.StringFilter<"StockMovement"> | string;
+    type?: Prisma.EnumStockMovementTypeFilter<"StockMovement"> | $Enums.StockMovementType;
     quantity?: Prisma.IntFilter<"StockMovement"> | number;
     comment?: Prisma.StringNullableFilter<"StockMovement"> | string | null;
     createdBy?: Prisma.StringNullableFilter<"StockMovement"> | string | null;
@@ -435,14 +439,14 @@ export type StockMovementScalarWhereInput = {
 };
 export type StockMovementCreateManyVariantInput = {
     id?: number;
-    type: string;
+    type: $Enums.StockMovementType;
     quantity: number;
     comment?: string | null;
     createdBy?: string | null;
     createdAt?: Date | string;
 };
 export type StockMovementUpdateWithoutVariantInput = {
-    type?: Prisma.StringFieldUpdateOperationsInput | string;
+    type?: Prisma.EnumStockMovementTypeFieldUpdateOperationsInput | $Enums.StockMovementType;
     quantity?: Prisma.IntFieldUpdateOperationsInput | number;
     comment?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
     createdBy?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
@@ -450,7 +454,7 @@ export type StockMovementUpdateWithoutVariantInput = {
 };
 export type StockMovementUncheckedUpdateWithoutVariantInput = {
     id?: Prisma.IntFieldUpdateOperationsInput | number;
-    type?: Prisma.StringFieldUpdateOperationsInput | string;
+    type?: Prisma.EnumStockMovementTypeFieldUpdateOperationsInput | $Enums.StockMovementType;
     quantity?: Prisma.IntFieldUpdateOperationsInput | number;
     comment?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
     createdBy?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
@@ -458,7 +462,7 @@ export type StockMovementUncheckedUpdateWithoutVariantInput = {
 };
 export type StockMovementUncheckedUpdateManyWithoutVariantInput = {
     id?: Prisma.IntFieldUpdateOperationsInput | number;
-    type?: Prisma.StringFieldUpdateOperationsInput | string;
+    type?: Prisma.EnumStockMovementTypeFieldUpdateOperationsInput | $Enums.StockMovementType;
     quantity?: Prisma.IntFieldUpdateOperationsInput | number;
     comment?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
     createdBy?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
@@ -521,7 +525,7 @@ export type $StockMovementPayload<ExtArgs extends runtime.Types.Extensions.Inter
     scalars: runtime.Types.Extensions.GetPayloadResult<{
         id: number;
         variantId: number;
-        type: string;
+        type: $Enums.StockMovementType;
         quantity: number;
         comment: string | null;
         createdBy: string | null;
@@ -883,7 +887,7 @@ export interface Prisma__StockMovementClient<T, Null = never, ExtArgs extends ru
 export interface StockMovementFieldRefs {
     readonly id: Prisma.FieldRef<"StockMovement", 'Int'>;
     readonly variantId: Prisma.FieldRef<"StockMovement", 'Int'>;
-    readonly type: Prisma.FieldRef<"StockMovement", 'String'>;
+    readonly type: Prisma.FieldRef<"StockMovement", 'StockMovementType'>;
     readonly quantity: Prisma.FieldRef<"StockMovement", 'Int'>;
     readonly comment: Prisma.FieldRef<"StockMovement", 'String'>;
     readonly createdBy: Prisma.FieldRef<"StockMovement", 'String'>;

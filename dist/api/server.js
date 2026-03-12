@@ -59,7 +59,9 @@ const exceljs_1 = __importDefault(require("exceljs"));
 const prisma_1 = require("../lib/prisma");
 const stock_1 = require("../lib/stock");
 const security_log_1 = require("../lib/security-log");
-const BOT_TOKEN = process.env.BOT_TOKEN ?? '';
+if (!process.env.BOT_TOKEN)
+    throw new Error('BOT_TOKEN is required');
+const BOT_TOKEN = process.env.BOT_TOKEN;
 const PORT = Number(process.env.API_PORT ?? 3000);
 const WEBAPP_FILE = path_1.default.join(__dirname, '../webapp/index.html');
 // ─── Хелпер: форматируем цену ─────────────────────────────────────────────────
@@ -123,7 +125,15 @@ function requireTelegramAuth(req, res, next) {
 function startApiServer() {
     const app = (0, express_1.default)();
     // ── Helmet (безопасные заголовки) ──────────────────────────────────────────
-    app.use((0, helmet_1.default)({ contentSecurityPolicy: false }));
+    app.use((0, helmet_1.default)({
+        contentSecurityPolicy: {
+            directives: {
+                defaultSrc: ["'self'"],
+                scriptSrc: ["'self'", 'https://telegram.org'],
+                frameSrc: ["'self'", 'https://telegram.org'],
+            },
+        },
+    }));
     // ── CORS — только Telegram-домены и WEBAPP_URL ─────────────────────────────
     app.use((0, cors_1.default)({
         origin: (origin, callback) => {
@@ -133,7 +143,7 @@ function startApiServer() {
                 'https://webz.telegram.org',
                 process.env.WEBAPP_URL,
             ].filter(Boolean);
-            if (!origin || allowed.some((o) => origin.startsWith(o))) {
+            if (origin && allowed.some((o) => origin.startsWith(o))) {
                 callback(null, true);
             }
             else {
@@ -338,6 +348,11 @@ function startApiServer() {
             res.status(400).send('Missing file id');
             return;
         }
+        const banner = await prisma_1.prisma.heroBanner.findFirst({ where: { imageFile: fileId } });
+        if (!banner) {
+            res.status(404).send('Not found');
+            return;
+        }
         const filePath = await new Promise((resolve, reject) => {
             const tgUrl = `https://api.telegram.org/bot${BOT_TOKEN}/getFile?file_id=${encodeURIComponent(fileId)}`;
             https_1.default
@@ -473,7 +488,6 @@ function startApiServer() {
                 attrs,
                 v.price.toString(),
                 v.quantity,
-                v.reserved,
                 v.inStock ? 'Да' : 'Нет',
             ]);
             const fill = {

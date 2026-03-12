@@ -1953,7 +1953,6 @@ export declare const ProductVariantScalarFieldEnum: {
     readonly sku: "sku";
     readonly price: "price";
     readonly quantity: "quantity";
-    readonly reserved: "reserved";
     readonly inStock: "inStock";
     readonly attributes: "attributes";
     readonly photos: "photos";
@@ -1989,6 +1988,7 @@ export declare const ReservationScalarFieldEnum: {
     readonly id: "id";
     readonly clientId: "clientId";
     readonly productId: "productId";
+    readonly variantId: "variantId";
     readonly quantity: "quantity";
     readonly status: "status";
     readonly comment: "comment";
@@ -2195,6 +2195,30 @@ export type EnumTemplateTypeFieldRefInput<$PrismaModel> = FieldRefInputType<$Pri
  * Reference to a field of type 'TemplateType[]'
  */
 export type ListEnumTemplateTypeFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'TemplateType[]'>;
+/**
+ * Reference to a field of type 'StockMovementType'
+ */
+export type EnumStockMovementTypeFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'StockMovementType'>;
+/**
+ * Reference to a field of type 'StockMovementType[]'
+ */
+export type ListEnumStockMovementTypeFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'StockMovementType[]'>;
+/**
+ * Reference to a field of type 'OrderPayment'
+ */
+export type EnumOrderPaymentFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'OrderPayment'>;
+/**
+ * Reference to a field of type 'OrderPayment[]'
+ */
+export type ListEnumOrderPaymentFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'OrderPayment[]'>;
+/**
+ * Reference to a field of type 'OrderStatus'
+ */
+export type EnumOrderStatusFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'OrderStatus'>;
+/**
+ * Reference to a field of type 'OrderStatus[]'
+ */
+export type ListEnumOrderStatusFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'OrderStatus[]'>;
 /**
  * Reference to a field of type 'ReservationStatus'
  */

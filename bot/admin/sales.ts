@@ -294,6 +294,24 @@ export function setupSalesHandlers(bot: Telegraf): void {
         },
       })
 
+      // Если продажа закрывает активный резерв — завершить его и освободить reserved
+      const activeReservation = await prisma.reservation.findFirst({
+        where: { clientId, productId, status: 'active' },
+        orderBy: { createdAt: 'asc' },
+      })
+      if (activeReservation) {
+        await prisma.$transaction([
+          prisma.reservation.update({
+            where: { id: activeReservation.id },
+            data: { status: 'completed' },
+          }),
+          prisma.product.update({
+            where: { id: productId },
+            data: { reserved: { decrement: activeReservation.quantity } },
+          }),
+        ])
+      }
+
       const msg = `✅ Продажа оформлена: ${productName} × ${qty} — ${fmtPrice(total)} ₽`
       await ctx.reply(msg)
       await notifyToSalesTopic(ctx, msg, client.name)
@@ -322,7 +340,7 @@ export function setupSalesHandlers(bot: Telegraf): void {
       if (!client) return ctx.reply('Клиент не найден.')
 
       // Создаём резерв
-      await prisma.reservation.create({
+      const reservation = await prisma.reservation.create({
         data: { clientId, productId, quantity: qty, comment, status: 'active' },
       })
 
@@ -333,7 +351,15 @@ export function setupSalesHandlers(bot: Telegraf): void {
       })
 
       const msg = `🔖 Резерв: ${productName} × ${qty} для ${client.name} до отдельного уведомления`
-      await ctx.reply(msg)
+      await ctx.reply(
+        msg,
+        Markup.inlineKeyboard([
+          [
+            Markup.button.callback('✅ Выдан', `res:do_complete:${reservation.id}`),
+            Markup.button.callback('❌ Отменить', `res:do_cancel:${reservation.id}`),
+          ],
+        ]),
+      )
       await notifyToSalesTopic(ctx, msg, client.name)
       if (client.telegramTopicId) {
         await sendToTopic(ctx, CRM_GROUP_ID, client.telegramTopicId, msg)
@@ -568,6 +594,7 @@ export function setupSalesHandlers(bot: Telegraf): void {
 
     try {
       // Без clientId — безымянный резерв
+      let reservationId: number | null = null
       await prisma.reservation.create({
         data: {
           clientId: 0, // заглушка — нет привязки к клиенту в БД
@@ -576,7 +603,7 @@ export function setupSalesHandlers(bot: Telegraf): void {
           comment: `${clientName}${comment ? ': ' + comment : ''}`,
           status: 'active',
         },
-      }).catch(() => {
+      }).then((r) => { reservationId = r.id }).catch(() => {
         // если FK нарушен (clientId=0) — создаём без clientId через rawQuery не нужно,
         // просто логируем и продолжаем
         console.warn('res_nc: clientId=0 not in DB, reservation not saved')
@@ -586,11 +613,79 @@ export function setupSalesHandlers(bot: Telegraf): void {
         data: { reserved: { increment: qty } },
       })
       const msg = `🔖 Резерв: ${productName} × ${qty} для ${clientName} до отдельного уведомления${comment ? '\n📝 ' + comment : ''}`
-      await ctx.reply(msg)
+      if (reservationId !== null) {
+        await ctx.reply(
+          msg,
+          Markup.inlineKeyboard([
+            [
+              Markup.button.callback('✅ Выдан', `res:do_complete:${reservationId}`),
+              Markup.button.callback('❌ Отменить', `res:do_cancel:${reservationId}`),
+            ],
+          ]),
+        )
+      } else {
+        await ctx.reply(msg)
+      }
       await notifyToSalesTopic(ctx, msg, clientName)
     } catch (err) {
       console.error('res_nc:confirm error:', err)
       await ctx.reply('Ошибка при оформлении резерва.')
+    }
+  })
+
+  // ── Завершить резерв (выдан) ───────────────────────────────────────────────
+  bot.action(/^res:do_complete:(\d+)$/, async (ctx) => {
+    try { await ctx.answerCbQuery() } catch {}
+    const reservationId = parseInt(ctx.match[1], 10)
+    try {
+      const reservation = await prisma.reservation.findUnique({ where: { id: reservationId } })
+      if (!reservation || reservation.status !== 'active') {
+        return ctx.answerCbQuery('Резерв уже закрыт или не найден')
+      }
+      await prisma.$transaction([
+        prisma.reservation.update({
+          where: { id: reservationId },
+          data: { status: 'completed' },
+        }),
+        // Place 2: status → 'completed' — освобождаем reserved
+        prisma.product.update({
+          where: { id: reservation.productId },
+          data: { reserved: { decrement: reservation.quantity } },
+        }),
+      ])
+      await ctx.editMessageReplyMarkup({ inline_keyboard: [] }).catch(() => {})
+      await ctx.reply(`✅ Резерв #${reservationId} завершён — товар выдан.`)
+    } catch (err) {
+      console.error('res:do_complete error:', err)
+      await ctx.reply('Ошибка при завершении резерва.')
+    }
+  })
+
+  // ── Отменить резерв ────────────────────────────────────────────────────────
+  bot.action(/^res:do_cancel:(\d+)$/, async (ctx) => {
+    try { await ctx.answerCbQuery() } catch {}
+    const reservationId = parseInt(ctx.match[1], 10)
+    try {
+      const reservation = await prisma.reservation.findUnique({ where: { id: reservationId } })
+      if (!reservation || reservation.status !== 'active') {
+        return ctx.answerCbQuery('Резерв уже закрыт или не найден')
+      }
+      await prisma.$transaction([
+        prisma.reservation.update({
+          where: { id: reservationId },
+          data: { status: 'cancelled' },
+        }),
+        // Place 1: status → 'cancelled' — освобождаем reserved
+        prisma.product.update({
+          where: { id: reservation.productId },
+          data: { reserved: { decrement: reservation.quantity } },
+        }),
+      ])
+      await ctx.editMessageReplyMarkup({ inline_keyboard: [] }).catch(() => {})
+      await ctx.reply(`❌ Резерв #${reservationId} отменён.`)
+    } catch (err) {
+      console.error('res:do_cancel error:', err)
+      await ctx.reply('Ошибка при отмене резерва.')
     }
   })
 }

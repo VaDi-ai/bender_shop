@@ -7,6 +7,7 @@
  *   findVariantsByFilter — выборка вариантов по фильтру акции
  */
 
+import { Decimal } from '@prisma/client/runtime/client'
 import { prisma } from './prisma'
 import { roundPrice } from './currency'
 import type { ProductVariantModel } from '../generated/prisma/models'
@@ -74,11 +75,13 @@ export async function applyPromotion(promotionId: number): Promise<number> {
 
   // Применяем скидку
   for (const variant of variants) {
+    const price = new Decimal(variant.price)
+    const discountValue = new Decimal(promo.discountValue)
     let newPrice: number
     if (promo.discountType === 'percent') {
-      newPrice = Number(variant.price) * (1 - Number(promo.discountValue) / 100)
+      newPrice = price.mul(new Decimal(1).sub(discountValue.div(100))).toNumber()
     } else {
-      newPrice = Number(variant.price) - Number(promo.discountValue)
+      newPrice = price.sub(discountValue).toNumber()
     }
     newPrice = Math.max(1, roundPrice(newPrice))
     await prisma.productVariant.update({

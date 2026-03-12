@@ -18,7 +18,7 @@ const INTERVAL_MS = 10 * 60 * 1000; // 10 минут
 // ─── Запуск планировщика ──────────────────────────────────────────────────────
 function startScheduler(bot) {
     console.log('Планировщик запущен (интервал: 10 мин)');
-    setInterval(() => runTick(bot), INTERVAL_MS);
+    setInterval(() => { runTick(bot).catch(err => console.error('[Scheduler]', err)); }, INTERVAL_MS);
 }
 // ─── Один «тик» — проверяем и выполняем задачи ───────────────────────────────
 async function runTick(bot) {

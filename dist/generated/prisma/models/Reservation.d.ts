@@ -17,18 +17,21 @@ export type ReservationAvgAggregateOutputType = {
     id: number | null;
     clientId: number | null;
     productId: number | null;
+    variantId: number | null;
     quantity: number | null;
 };
 export type ReservationSumAggregateOutputType = {
     id: number | null;
     clientId: number | null;
     productId: number | null;
+    variantId: number | null;
     quantity: number | null;
 };
 export type ReservationMinAggregateOutputType = {
     id: number | null;
     clientId: number | null;
     productId: number | null;
+    variantId: number | null;
     quantity: number | null;
     status: $Enums.ReservationStatus | null;
     comment: string | null;
@@ -39,6 +42,7 @@ export type ReservationMaxAggregateOutputType = {
     id: number | null;
     clientId: number | null;
     productId: number | null;
+    variantId: number | null;
     quantity: number | null;
     status: $Enums.ReservationStatus | null;
     comment: string | null;
@@ -49,6 +53,7 @@ export type ReservationCountAggregateOutputType = {
     id: number;
     clientId: number;
     productId: number;
+    variantId: number;
     quantity: number;
     status: number;
     comment: number;
@@ -60,18 +65,21 @@ export type ReservationAvgAggregateInputType = {
     id?: true;
     clientId?: true;
     productId?: true;
+    variantId?: true;
     quantity?: true;
 };
 export type ReservationSumAggregateInputType = {
     id?: true;
     clientId?: true;
     productId?: true;
+    variantId?: true;
     quantity?: true;
 };
 export type ReservationMinAggregateInputType = {
     id?: true;
     clientId?: true;
     productId?: true;
+    variantId?: true;
     quantity?: true;
     status?: true;
     comment?: true;
@@ -82,6 +90,7 @@ export type ReservationMaxAggregateInputType = {
     id?: true;
     clientId?: true;
     productId?: true;
+    variantId?: true;
     quantity?: true;
     status?: true;
     comment?: true;
@@ -92,6 +101,7 @@ export type ReservationCountAggregateInputType = {
     id?: true;
     clientId?: true;
     productId?: true;
+    variantId?: true;
     quantity?: true;
     status?: true;
     comment?: true;
@@ -179,6 +189,7 @@ export type ReservationGroupByOutputType = {
     id: number;
     clientId: number;
     productId: number;
+    variantId: number | null;
     quantity: number;
     status: $Enums.ReservationStatus;
     comment: string | null;
@@ -200,6 +211,7 @@ export type ReservationWhereInput = {
     id?: Prisma.IntFilter<"Reservation"> | number;
     clientId?: Prisma.IntFilter<"Reservation"> | number;
     productId?: Prisma.IntFilter<"Reservation"> | number;
+    variantId?: Prisma.IntNullableFilter<"Reservation"> | number | null;
     quantity?: Prisma.IntFilter<"Reservation"> | number;
     status?: Prisma.EnumReservationStatusFilter<"Reservation"> | $Enums.ReservationStatus;
     comment?: Prisma.StringNullableFilter<"Reservation"> | string | null;
@@ -207,11 +219,13 @@ export type ReservationWhereInput = {
     updatedAt?: Prisma.DateTimeFilter<"Reservation"> | Date | string;
     client?: Prisma.XOR<Prisma.ClientScalarRelationFilter, Prisma.ClientWhereInput>;
     product?: Prisma.XOR<Prisma.ProductScalarRelationFilter, Prisma.ProductWhereInput>;
+    variant?: Prisma.XOR<Prisma.ProductVariantNullableScalarRelationFilter, Prisma.ProductVariantWhereInput> | null;
 };
 export type ReservationOrderByWithRelationInput = {
     id?: Prisma.SortOrder;
     clientId?: Prisma.SortOrder;
     productId?: Prisma.SortOrder;
+    variantId?: Prisma.SortOrderInput | Prisma.SortOrder;
     quantity?: Prisma.SortOrder;
     status?: Prisma.SortOrder;
     comment?: Prisma.SortOrderInput | Prisma.SortOrder;
@@ -219,6 +233,7 @@ export type ReservationOrderByWithRelationInput = {
     updatedAt?: Prisma.SortOrder;
     client?: Prisma.ClientOrderByWithRelationInput;
     product?: Prisma.ProductOrderByWithRelationInput;
+    variant?: Prisma.ProductVariantOrderByWithRelationInput;
 };
 export type ReservationWhereUniqueInput = Prisma.AtLeast<{
     id?: number;
@@ -227,6 +242,7 @@ export type ReservationWhereUniqueInput = Prisma.AtLeast<{
     NOT?: Prisma.ReservationWhereInput | Prisma.ReservationWhereInput[];
     clientId?: Prisma.IntFilter<"Reservation"> | number;
     productId?: Prisma.IntFilter<"Reservation"> | number;
+    variantId?: Prisma.IntNullableFilter<"Reservation"> | number | null;
     quantity?: Prisma.IntFilter<"Reservation"> | number;
     status?: Prisma.EnumReservationStatusFilter<"Reservation"> | $Enums.ReservationStatus;
     comment?: Prisma.StringNullableFilter<"Reservation"> | string | null;
@@ -234,11 +250,13 @@ export type ReservationWhereUniqueInput = Prisma.AtLeast<{
     updatedAt?: Prisma.DateTimeFilter<"Reservation"> | Date | string;
     client?: Prisma.XOR<Prisma.ClientScalarRelationFilter, Prisma.ClientWhereInput>;
     product?: Prisma.XOR<Prisma.ProductScalarRelationFilter, Prisma.ProductWhereInput>;
+    variant?: Prisma.XOR<Prisma.ProductVariantNullableScalarRelationFilter, Prisma.ProductVariantWhereInput> | null;
 }, "id">;
 export type ReservationOrderByWithAggregationInput = {
     id?: Prisma.SortOrder;
     clientId?: Prisma.SortOrder;
     productId?: Prisma.SortOrder;
+    variantId?: Prisma.SortOrderInput | Prisma.SortOrder;
     quantity?: Prisma.SortOrder;
     status?: Prisma.SortOrder;
     comment?: Prisma.SortOrderInput | Prisma.SortOrder;
@@ -257,6 +275,7 @@ export type ReservationScalarWhereWithAggregatesInput = {
     id?: Prisma.IntWithAggregatesFilter<"Reservation"> | number;
     clientId?: Prisma.IntWithAggregatesFilter<"Reservation"> | number;
     productId?: Prisma.IntWithAggregatesFilter<"Reservation"> | number;
+    variantId?: Prisma.IntNullableWithAggregatesFilter<"Reservation"> | number | null;
     quantity?: Prisma.IntWithAggregatesFilter<"Reservation"> | number;
     status?: Prisma.EnumReservationStatusWithAggregatesFilter<"Reservation"> | $Enums.ReservationStatus;
     comment?: Prisma.StringNullableWithAggregatesFilter<"Reservation"> | string | null;
@@ -271,11 +290,13 @@ export type ReservationCreateInput = {
     updatedAt?: Date | string;
     client: Prisma.ClientCreateNestedOneWithoutReservationsInput;
     product: Prisma.ProductCreateNestedOneWithoutReservationsInput;
+    variant?: Prisma.ProductVariantCreateNestedOneWithoutReservationsInput;
 };
 export type ReservationUncheckedCreateInput = {
     id?: number;
     clientId: number;
     productId: number;
+    variantId?: number | null;
     quantity: number;
     status?: $Enums.ReservationStatus;
     comment?: string | null;
@@ -290,11 +311,13 @@ export type ReservationUpdateInput = {
     updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
     client?: Prisma.ClientUpdateOneRequiredWithoutReservationsNestedInput;
     product?: Prisma.ProductUpdateOneRequiredWithoutReservationsNestedInput;
+    variant?: Prisma.ProductVariantUpdateOneWithoutReservationsNestedInput;
 };
 export type ReservationUncheckedUpdateInput = {
     id?: Prisma.IntFieldUpdateOperationsInput | number;
     clientId?: Prisma.IntFieldUpdateOperationsInput | number;
     productId?: Prisma.IntFieldUpdateOperationsInput | number;
+    variantId?: Prisma.NullableIntFieldUpdateOperationsInput | number | null;
     quantity?: Prisma.IntFieldUpdateOperationsInput | number;
     status?: Prisma.EnumReservationStatusFieldUpdateOperationsInput | $Enums.ReservationStatus;
     comment?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
@@ -305,6 +328,7 @@ export type ReservationCreateManyInput = {
     id?: number;
     clientId: number;
     productId: number;
+    variantId?: number | null;
     quantity: number;
     status?: $Enums.ReservationStatus;
     comment?: string | null;
@@ -322,6 +346,7 @@ export type ReservationUncheckedUpdateManyInput = {
     id?: Prisma.IntFieldUpdateOperationsInput | number;
     clientId?: Prisma.IntFieldUpdateOperationsInput | number;
     productId?: Prisma.IntFieldUpdateOperationsInput | number;
+    variantId?: Prisma.NullableIntFieldUpdateOperationsInput | number | null;
     quantity?: Prisma.IntFieldUpdateOperationsInput | number;
     status?: Prisma.EnumReservationStatusFieldUpdateOperationsInput | $Enums.ReservationStatus;
     comment?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
@@ -340,6 +365,7 @@ export type ReservationCountOrderByAggregateInput = {
     id?: Prisma.SortOrder;
     clientId?: Prisma.SortOrder;
     productId?: Prisma.SortOrder;
+    variantId?: Prisma.SortOrder;
     quantity?: Prisma.SortOrder;
     status?: Prisma.SortOrder;
     comment?: Prisma.SortOrder;
@@ -350,12 +376,14 @@ export type ReservationAvgOrderByAggregateInput = {
     id?: Prisma.SortOrder;
     clientId?: Prisma.SortOrder;
     productId?: Prisma.SortOrder;
+    variantId?: Prisma.SortOrder;
     quantity?: Prisma.SortOrder;
 };
 export type ReservationMaxOrderByAggregateInput = {
     id?: Prisma.SortOrder;
     clientId?: Prisma.SortOrder;
     productId?: Prisma.SortOrder;
+    variantId?: Prisma.SortOrder;
     quantity?: Prisma.SortOrder;
     status?: Prisma.SortOrder;
     comment?: Prisma.SortOrder;
@@ -366,6 +394,7 @@ export type ReservationMinOrderByAggregateInput = {
     id?: Prisma.SortOrder;
     clientId?: Prisma.SortOrder;
     productId?: Prisma.SortOrder;
+    variantId?: Prisma.SortOrder;
     quantity?: Prisma.SortOrder;
     status?: Prisma.SortOrder;
     comment?: Prisma.SortOrder;
@@ -376,6 +405,7 @@ export type ReservationSumOrderByAggregateInput = {
     id?: Prisma.SortOrder;
     clientId?: Prisma.SortOrder;
     productId?: Prisma.SortOrder;
+    variantId?: Prisma.SortOrder;
     quantity?: Prisma.SortOrder;
 };
 export type ReservationCreateNestedManyWithoutClientInput = {
@@ -454,6 +484,44 @@ export type ReservationUncheckedUpdateManyWithoutProductNestedInput = {
     updateMany?: Prisma.ReservationUpdateManyWithWhereWithoutProductInput | Prisma.ReservationUpdateManyWithWhereWithoutProductInput[];
     deleteMany?: Prisma.ReservationScalarWhereInput | Prisma.ReservationScalarWhereInput[];
 };
+export type ReservationCreateNestedManyWithoutVariantInput = {
+    create?: Prisma.XOR<Prisma.ReservationCreateWithoutVariantInput, Prisma.ReservationUncheckedCreateWithoutVariantInput> | Prisma.ReservationCreateWithoutVariantInput[] | Prisma.ReservationUncheckedCreateWithoutVariantInput[];
+    connectOrCreate?: Prisma.ReservationCreateOrConnectWithoutVariantInput | Prisma.ReservationCreateOrConnectWithoutVariantInput[];
+    createMany?: Prisma.ReservationCreateManyVariantInputEnvelope;
+    connect?: Prisma.ReservationWhereUniqueInput | Prisma.ReservationWhereUniqueInput[];
+};
+export type ReservationUncheckedCreateNestedManyWithoutVariantInput = {
+    create?: Prisma.XOR<Prisma.ReservationCreateWithoutVariantInput, Prisma.ReservationUncheckedCreateWithoutVariantInput> | Prisma.ReservationCreateWithoutVariantInput[] | Prisma.ReservationUncheckedCreateWithoutVariantInput[];
+    connectOrCreate?: Prisma.ReservationCreateOrConnectWithoutVariantInput | Prisma.ReservationCreateOrConnectWithoutVariantInput[];
+    createMany?: Prisma.ReservationCreateManyVariantInputEnvelope;
+    connect?: Prisma.ReservationWhereUniqueInput | Prisma.ReservationWhereUniqueInput[];
+};
+export type ReservationUpdateManyWithoutVariantNestedInput = {
+    create?: Prisma.XOR<Prisma.ReservationCreateWithoutVariantInput, Prisma.ReservationUncheckedCreateWithoutVariantInput> | Prisma.ReservationCreateWithoutVariantInput[] | Prisma.ReservationUncheckedCreateWithoutVariantInput[];
+    connectOrCreate?: Prisma.ReservationCreateOrConnectWithoutVariantInput | Prisma.ReservationCreateOrConnectWithoutVariantInput[];
+    upsert?: Prisma.ReservationUpsertWithWhereUniqueWithoutVariantInput | Prisma.ReservationUpsertWithWhereUniqueWithoutVariantInput[];
+    createMany?: Prisma.ReservationCreateManyVariantInputEnvelope;
+    set?: Prisma.ReservationWhereUniqueInput | Prisma.ReservationWhereUniqueInput[];
+    disconnect?: Prisma.ReservationWhereUniqueInput | Prisma.ReservationWhereUniqueInput[];
+    delete?: Prisma.ReservationWhereUniqueInput | Prisma.ReservationWhereUniqueInput[];
+    connect?: Prisma.ReservationWhereUniqueInput | Prisma.ReservationWhereUniqueInput[];
+    update?: Prisma.ReservationUpdateWithWhereUniqueWithoutVariantInput | Prisma.ReservationUpdateWithWhereUniqueWithoutVariantInput[];
+    updateMany?: Prisma.ReservationUpdateManyWithWhereWithoutVariantInput | Prisma.ReservationUpdateManyWithWhereWithoutVariantInput[];
+    deleteMany?: Prisma.ReservationScalarWhereInput | Prisma.ReservationScalarWhereInput[];
+};
+export type ReservationUncheckedUpdateManyWithoutVariantNestedInput = {
+    create?: Prisma.XOR<Prisma.ReservationCreateWithoutVariantInput, Prisma.ReservationUncheckedCreateWithoutVariantInput> | Prisma.ReservationCreateWithoutVariantInput[] | Prisma.ReservationUncheckedCreateWithoutVariantInput[];
+    connectOrCreate?: Prisma.ReservationCreateOrConnectWithoutVariantInput | Prisma.ReservationCreateOrConnectWithoutVariantInput[];
+    upsert?: Prisma.ReservationUpsertWithWhereUniqueWithoutVariantInput | Prisma.ReservationUpsertWithWhereUniqueWithoutVariantInput[];
+    createMany?: Prisma.ReservationCreateManyVariantInputEnvelope;
+    set?: Prisma.ReservationWhereUniqueInput | Prisma.ReservationWhereUniqueInput[];
+    disconnect?: Prisma.ReservationWhereUniqueInput | Prisma.ReservationWhereUniqueInput[];
+    delete?: Prisma.ReservationWhereUniqueInput | Prisma.ReservationWhereUniqueInput[];
+    connect?: Prisma.ReservationWhereUniqueInput | Prisma.ReservationWhereUniqueInput[];
+    update?: Prisma.ReservationUpdateWithWhereUniqueWithoutVariantInput | Prisma.ReservationUpdateWithWhereUniqueWithoutVariantInput[];
+    updateMany?: Prisma.ReservationUpdateManyWithWhereWithoutVariantInput | Prisma.ReservationUpdateManyWithWhereWithoutVariantInput[];
+    deleteMany?: Prisma.ReservationScalarWhereInput | Prisma.ReservationScalarWhereInput[];
+};
 export type EnumReservationStatusFieldUpdateOperationsInput = {
     set?: $Enums.ReservationStatus;
 };
@@ -464,10 +532,12 @@ export type ReservationCreateWithoutClientInput = {
     createdAt?: Date | string;
     updatedAt?: Date | string;
     product: Prisma.ProductCreateNestedOneWithoutReservationsInput;
+    variant?: Prisma.ProductVariantCreateNestedOneWithoutReservationsInput;
 };
 export type ReservationUncheckedCreateWithoutClientInput = {
     id?: number;
     productId: number;
+    variantId?: number | null;
     quantity: number;
     status?: $Enums.ReservationStatus;
     comment?: string | null;
@@ -502,6 +572,7 @@ export type ReservationScalarWhereInput = {
     id?: Prisma.IntFilter<"Reservation"> | number;
     clientId?: Prisma.IntFilter<"Reservation"> | number;
     productId?: Prisma.IntFilter<"Reservation"> | number;
+    variantId?: Prisma.IntNullableFilter<"Reservation"> | number | null;
     quantity?: Prisma.IntFilter<"Reservation"> | number;
     status?: Prisma.EnumReservationStatusFilter<"Reservation"> | $Enums.ReservationStatus;
     comment?: Prisma.StringNullableFilter<"Reservation"> | string | null;
@@ -515,10 +586,12 @@ export type ReservationCreateWithoutProductInput = {
     createdAt?: Date | string;
     updatedAt?: Date | string;
     client: Prisma.ClientCreateNestedOneWithoutReservationsInput;
+    variant?: Prisma.ProductVariantCreateNestedOneWithoutReservationsInput;
 };
 export type ReservationUncheckedCreateWithoutProductInput = {
     id?: number;
     clientId: number;
+    variantId?: number | null;
     quantity: number;
     status?: $Enums.ReservationStatus;
     comment?: string | null;
@@ -546,9 +619,50 @@ export type ReservationUpdateManyWithWhereWithoutProductInput = {
     where: Prisma.ReservationScalarWhereInput;
     data: Prisma.XOR<Prisma.ReservationUpdateManyMutationInput, Prisma.ReservationUncheckedUpdateManyWithoutProductInput>;
 };
+export type ReservationCreateWithoutVariantInput = {
+    quantity: number;
+    status?: $Enums.ReservationStatus;
+    comment?: string | null;
+    createdAt?: Date | string;
+    updatedAt?: Date | string;
+    client: Prisma.ClientCreateNestedOneWithoutReservationsInput;
+    product: Prisma.ProductCreateNestedOneWithoutReservationsInput;
+};
+export type ReservationUncheckedCreateWithoutVariantInput = {
+    id?: number;
+    clientId: number;
+    productId: number;
+    quantity: number;
+    status?: $Enums.ReservationStatus;
+    comment?: string | null;
+    createdAt?: Date | string;
+    updatedAt?: Date | string;
+};
+export type ReservationCreateOrConnectWithoutVariantInput = {
+    where: Prisma.ReservationWhereUniqueInput;
+    create: Prisma.XOR<Prisma.ReservationCreateWithoutVariantInput, Prisma.ReservationUncheckedCreateWithoutVariantInput>;
+};
+export type ReservationCreateManyVariantInputEnvelope = {
+    data: Prisma.ReservationCreateManyVariantInput | Prisma.ReservationCreateManyVariantInput[];
+    skipDuplicates?: boolean;
+};
+export type ReservationUpsertWithWhereUniqueWithoutVariantInput = {
+    where: Prisma.ReservationWhereUniqueInput;
+    update: Prisma.XOR<Prisma.ReservationUpdateWithoutVariantInput, Prisma.ReservationUncheckedUpdateWithoutVariantInput>;
+    create: Prisma.XOR<Prisma.ReservationCreateWithoutVariantInput, Prisma.ReservationUncheckedCreateWithoutVariantInput>;
+};
+export type ReservationUpdateWithWhereUniqueWithoutVariantInput = {
+    where: Prisma.ReservationWhereUniqueInput;
+    data: Prisma.XOR<Prisma.ReservationUpdateWithoutVariantInput, Prisma.ReservationUncheckedUpdateWithoutVariantInput>;
+};
+export type ReservationUpdateManyWithWhereWithoutVariantInput = {
+    where: Prisma.ReservationScalarWhereInput;
+    data: Prisma.XOR<Prisma.ReservationUpdateManyMutationInput, Prisma.ReservationUncheckedUpdateManyWithoutVariantInput>;
+};
 export type ReservationCreateManyClientInput = {
     id?: number;
     productId: number;
+    variantId?: number | null;
     quantity: number;
     status?: $Enums.ReservationStatus;
     comment?: string | null;
@@ -562,10 +676,12 @@ export type ReservationUpdateWithoutClientInput = {
     createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
     updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
     product?: Prisma.ProductUpdateOneRequiredWithoutReservationsNestedInput;
+    variant?: Prisma.ProductVariantUpdateOneWithoutReservationsNestedInput;
 };
 export type ReservationUncheckedUpdateWithoutClientInput = {
     id?: Prisma.IntFieldUpdateOperationsInput | number;
     productId?: Prisma.IntFieldUpdateOperationsInput | number;
+    variantId?: Prisma.NullableIntFieldUpdateOperationsInput | number | null;
     quantity?: Prisma.IntFieldUpdateOperationsInput | number;
     status?: Prisma.EnumReservationStatusFieldUpdateOperationsInput | $Enums.ReservationStatus;
     comment?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
@@ -575,6 +691,7 @@ export type ReservationUncheckedUpdateWithoutClientInput = {
 export type ReservationUncheckedUpdateManyWithoutClientInput = {
     id?: Prisma.IntFieldUpdateOperationsInput | number;
     productId?: Prisma.IntFieldUpdateOperationsInput | number;
+    variantId?: Prisma.NullableIntFieldUpdateOperationsInput | number | null;
     quantity?: Prisma.IntFieldUpdateOperationsInput | number;
     status?: Prisma.EnumReservationStatusFieldUpdateOperationsInput | $Enums.ReservationStatus;
     comment?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
@@ -584,6 +701,7 @@ export type ReservationUncheckedUpdateManyWithoutClientInput = {
 export type ReservationCreateManyProductInput = {
     id?: number;
     clientId: number;
+    variantId?: number | null;
     quantity: number;
     status?: $Enums.ReservationStatus;
     comment?: string | null;
@@ -597,10 +715,12 @@ export type ReservationUpdateWithoutProductInput = {
     createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
     updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
     client?: Prisma.ClientUpdateOneRequiredWithoutReservationsNestedInput;
+    variant?: Prisma.ProductVariantUpdateOneWithoutReservationsNestedInput;
 };
 export type ReservationUncheckedUpdateWithoutProductInput = {
     id?: Prisma.IntFieldUpdateOperationsInput | number;
     clientId?: Prisma.IntFieldUpdateOperationsInput | number;
+    variantId?: Prisma.NullableIntFieldUpdateOperationsInput | number | null;
     quantity?: Prisma.IntFieldUpdateOperationsInput | number;
     status?: Prisma.EnumReservationStatusFieldUpdateOperationsInput | $Enums.ReservationStatus;
     comment?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
@@ -610,6 +730,46 @@ export type ReservationUncheckedUpdateWithoutProductInput = {
 export type ReservationUncheckedUpdateManyWithoutProductInput = {
     id?: Prisma.IntFieldUpdateOperationsInput | number;
     clientId?: Prisma.IntFieldUpdateOperationsInput | number;
+    variantId?: Prisma.NullableIntFieldUpdateOperationsInput | number | null;
+    quantity?: Prisma.IntFieldUpdateOperationsInput | number;
+    status?: Prisma.EnumReservationStatusFieldUpdateOperationsInput | $Enums.ReservationStatus;
+    comment?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+    createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
+    updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
+};
+export type ReservationCreateManyVariantInput = {
+    id?: number;
+    clientId: number;
+    productId: number;
+    quantity: number;
+    status?: $Enums.ReservationStatus;
+    comment?: string | null;
+    createdAt?: Date | string;
+    updatedAt?: Date | string;
+};
+export type ReservationUpdateWithoutVariantInput = {
+    quantity?: Prisma.IntFieldUpdateOperationsInput | number;
+    status?: Prisma.EnumReservationStatusFieldUpdateOperationsInput | $Enums.ReservationStatus;
+    comment?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+    createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
+    updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
+    client?: Prisma.ClientUpdateOneRequiredWithoutReservationsNestedInput;
+    product?: Prisma.ProductUpdateOneRequiredWithoutReservationsNestedInput;
+};
+export type ReservationUncheckedUpdateWithoutVariantInput = {
+    id?: Prisma.IntFieldUpdateOperationsInput | number;
+    clientId?: Prisma.IntFieldUpdateOperationsInput | number;
+    productId?: Prisma.IntFieldUpdateOperationsInput | number;
+    quantity?: Prisma.IntFieldUpdateOperationsInput | number;
+    status?: Prisma.EnumReservationStatusFieldUpdateOperationsInput | $Enums.ReservationStatus;
+    comment?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+    createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
+    updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
+};
+export type ReservationUncheckedUpdateManyWithoutVariantInput = {
+    id?: Prisma.IntFieldUpdateOperationsInput | number;
+    clientId?: Prisma.IntFieldUpdateOperationsInput | number;
+    productId?: Prisma.IntFieldUpdateOperationsInput | number;
     quantity?: Prisma.IntFieldUpdateOperationsInput | number;
     status?: Prisma.EnumReservationStatusFieldUpdateOperationsInput | $Enums.ReservationStatus;
     comment?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
@@ -620,6 +780,7 @@ export type ReservationSelect<ExtArgs extends runtime.Types.Extensions.InternalA
     id?: boolean;
     clientId?: boolean;
     productId?: boolean;
+    variantId?: boolean;
     quantity?: boolean;
     status?: boolean;
     comment?: boolean;
@@ -627,11 +788,13 @@ export type ReservationSelect<ExtArgs extends runtime.Types.Extensions.InternalA
     updatedAt?: boolean;
     client?: boolean | Prisma.ClientDefaultArgs<ExtArgs>;
     product?: boolean | Prisma.ProductDefaultArgs<ExtArgs>;
+    variant?: boolean | Prisma.Reservation$variantArgs<ExtArgs>;
 }, ExtArgs["result"]["reservation"]>;
 export type ReservationSelectCreateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
     id?: boolean;
     clientId?: boolean;
     productId?: boolean;
+    variantId?: boolean;
     quantity?: boolean;
     status?: boolean;
     comment?: boolean;
@@ -639,11 +802,13 @@ export type ReservationSelectCreateManyAndReturn<ExtArgs extends runtime.Types.E
     updatedAt?: boolean;
     client?: boolean | Prisma.ClientDefaultArgs<ExtArgs>;
     product?: boolean | Prisma.ProductDefaultArgs<ExtArgs>;
+    variant?: boolean | Prisma.Reservation$variantArgs<ExtArgs>;
 }, ExtArgs["result"]["reservation"]>;
 export type ReservationSelectUpdateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
     id?: boolean;
     clientId?: boolean;
     productId?: boolean;
+    variantId?: boolean;
     quantity?: boolean;
     status?: boolean;
     comment?: boolean;
@@ -651,40 +816,47 @@ export type ReservationSelectUpdateManyAndReturn<ExtArgs extends runtime.Types.E
     updatedAt?: boolean;
     client?: boolean | Prisma.ClientDefaultArgs<ExtArgs>;
     product?: boolean | Prisma.ProductDefaultArgs<ExtArgs>;
+    variant?: boolean | Prisma.Reservation$variantArgs<ExtArgs>;
 }, ExtArgs["result"]["reservation"]>;
 export type ReservationSelectScalar = {
     id?: boolean;
     clientId?: boolean;
     productId?: boolean;
+    variantId?: boolean;
     quantity?: boolean;
     status?: boolean;
     comment?: boolean;
     createdAt?: boolean;
     updatedAt?: boolean;
 };
-export type ReservationOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "clientId" | "productId" | "quantity" | "status" | "comment" | "createdAt" | "updatedAt", ExtArgs["result"]["reservation"]>;
+export type ReservationOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "clientId" | "productId" | "variantId" | "quantity" | "status" | "comment" | "createdAt" | "updatedAt", ExtArgs["result"]["reservation"]>;
 export type ReservationInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
     client?: boolean | Prisma.ClientDefaultArgs<ExtArgs>;
     product?: boolean | Prisma.ProductDefaultArgs<ExtArgs>;
+    variant?: boolean | Prisma.Reservation$variantArgs<ExtArgs>;
 };
 export type ReservationIncludeCreateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
     client?: boolean | Prisma.ClientDefaultArgs<ExtArgs>;
     product?: boolean | Prisma.ProductDefaultArgs<ExtArgs>;
+    variant?: boolean | Prisma.Reservation$variantArgs<ExtArgs>;
 };
 export type ReservationIncludeUpdateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
     client?: boolean | Prisma.ClientDefaultArgs<ExtArgs>;
     product?: boolean | Prisma.ProductDefaultArgs<ExtArgs>;
+    variant?: boolean | Prisma.Reservation$variantArgs<ExtArgs>;
 };
 export type $ReservationPayload<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
     name: "Reservation";
     objects: {
         client: Prisma.$ClientPayload<ExtArgs>;
         product: Prisma.$ProductPayload<ExtArgs>;
+        variant: Prisma.$ProductVariantPayload<ExtArgs> | null;
     };
     scalars: runtime.Types.Extensions.GetPayloadResult<{
         id: number;
         clientId: number;
         productId: number;
+        variantId: number | null;
         quantity: number;
         status: $Enums.ReservationStatus;
         comment: string | null;
@@ -1021,6 +1193,7 @@ export interface Prisma__ReservationClient<T, Null = never, ExtArgs extends runt
     readonly [Symbol.toStringTag]: "PrismaPromise";
     client<T extends Prisma.ClientDefaultArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.ClientDefaultArgs<ExtArgs>>): Prisma.Prisma__ClientClient<runtime.Types.Result.GetResult<Prisma.$ClientPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | Null, Null, ExtArgs, GlobalOmitOptions>;
     product<T extends Prisma.ProductDefaultArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.ProductDefaultArgs<ExtArgs>>): Prisma.Prisma__ProductClient<runtime.Types.Result.GetResult<Prisma.$ProductPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | Null, Null, ExtArgs, GlobalOmitOptions>;
+    variant<T extends Prisma.Reservation$variantArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Reservation$variantArgs<ExtArgs>>): Prisma.Prisma__ProductVariantClient<runtime.Types.Result.GetResult<Prisma.$ProductVariantPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | null, null, ExtArgs, GlobalOmitOptions>;
     /**
      * Attaches callbacks for the resolution and/or rejection of the Promise.
      * @param onfulfilled The callback to execute when the Promise is resolved.
@@ -1049,6 +1222,7 @@ export interface ReservationFieldRefs {
     readonly id: Prisma.FieldRef<"Reservation", 'Int'>;
     readonly clientId: Prisma.FieldRef<"Reservation", 'Int'>;
     readonly productId: Prisma.FieldRef<"Reservation", 'Int'>;
+    readonly variantId: Prisma.FieldRef<"Reservation", 'Int'>;
     readonly quantity: Prisma.FieldRef<"Reservation", 'Int'>;
     readonly status: Prisma.FieldRef<"Reservation", 'ReservationStatus'>;
     readonly comment: Prisma.FieldRef<"Reservation", 'String'>;
@@ -1431,6 +1605,24 @@ export type ReservationDeleteManyArgs<ExtArgs extends runtime.Types.Extensions.I
      * Limit how many Reservations to delete.
      */
     limit?: number;
+};
+/**
+ * Reservation.variant
+ */
+export type Reservation$variantArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ProductVariant
+     */
+    select?: Prisma.ProductVariantSelect<ExtArgs> | null;
+    /**
+     * Omit specific fields from the ProductVariant
+     */
+    omit?: Prisma.ProductVariantOmit<ExtArgs> | null;
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: Prisma.ProductVariantInclude<ExtArgs> | null;
+    where?: Prisma.ProductVariantWhereInput;
 };
 /**
  * Reservation without action

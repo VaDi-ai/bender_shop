@@ -4,7 +4,7 @@ import { message } from 'telegraf/filters'
 import { setupClientHandlers } from '../webhooks/telegram'
 import { startScheduler } from './scheduler'
 import { startApiServer } from '../api/server'
-import { prisma } from '../lib/prisma'
+import { prisma, initPrismaAlerts } from '../lib/prisma'
 import {
   inventoryState,
   setupInventoryHandlers,
@@ -82,6 +82,7 @@ const bot = new Telegraf(BOT_TOKEN)
 
 initAdminNotifications(bot, ADMIN_IDS)
 initSecurityAlerts(bot, ADMIN_IDS)
+initPrismaAlerts(bot, ADMIN_IDS)
 
 // ─── Режим техработ (in-memory) ───────────────────────────────────────────────
 
@@ -109,7 +110,7 @@ bot.use(async (ctx, next) => {
   if (stats.count > 30) {
     if (stats.count === 31) {
       await ctx.reply('⚠️ Слишком много запросов. Подождите минуту.')
-      logSecurityEvent('rate_limit_exceeded', { userId, count: stats.count })
+      await logSecurityEvent('rate_limit_exceeded', { userId, count: stats.count })
     }
     return
   }
@@ -119,10 +120,10 @@ bot.use(async (ctx, next) => {
 
 // ─── Хелпер: только для администраторов ──────────────────────────────────────
 
-export function adminOnly(ctx: any, next: any) {
+export async function adminOnly(ctx: any, next: any) {
   const userId = ctx.from?.id
   if (!ADMIN_IDS.includes(userId)) {
-    logSecurityEvent('unauthorized_access', {
+    await logSecurityEvent('unauthorized_access', {
       userId,
       command: ctx.message?.text ?? ctx.callbackQuery?.data,
     })
@@ -599,6 +600,12 @@ bot.hears('🔑 API Ключи', async (ctx) => {
 
 bot.launch({
   allowedUpdates: ['message', 'callback_query', 'chat_member'],
+  ...(process.env.WEBHOOK_URL ? {
+    webhook: {
+      domain: process.env.WEBHOOK_URL,
+      secretToken: process.env.WEBHOOK_SECRET,
+    },
+  } : {}),
 })
 
 console.log('Бот запущен')
@@ -762,7 +769,7 @@ async function ensureSalesTopic(): Promise<void> {
   }
 }
 
-ensureSalesTopic()
+;(async () => { await ensureSalesTopic() })()
 
 process.once('SIGINT', () => bot.stop('SIGINT'))
 process.once('SIGTERM', () => bot.stop('SIGTERM'))

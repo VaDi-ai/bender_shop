@@ -2285,7 +2285,7 @@ async function exportInventory(ctx) {
         variants.forEach((v, i) => {
             const attrs = Object.entries(v.attributes)
                 .map(([k, val]) => `${k}: ${val}`).join(', ');
-            const row = ws.addRow([v.sku, v.product.name, attrs, v.price.toString(), v.quantity, v.reserved]);
+            const row = ws.addRow([v.sku, v.product.name, attrs, v.price.toString(), v.quantity]);
             const fill = {
                 type: 'pattern', pattern: 'solid', fgColor: { argb: rowFills[i % 2] },
             };

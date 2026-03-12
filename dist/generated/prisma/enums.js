@@ -9,7 +9,7 @@
 * 🟢 You can import this file directly.
 */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.ReservationStatus = exports.TemplateType = exports.TaskStatus = exports.MessageDirection = exports.ClientSource = void 0;
+exports.OrderPayment = exports.OrderStatus = exports.StockMovementType = exports.ReservationStatus = exports.TemplateType = exports.TaskStatus = exports.MessageDirection = exports.ClientSource = void 0;
 exports.ClientSource = {
     avito: 'avito',
     instagram: 'instagram',
@@ -35,5 +35,23 @@ exports.ReservationStatus = {
     active: 'active',
     cancelled: 'cancelled',
     completed: 'completed'
+};
+exports.StockMovementType = {
+    in: 'in',
+    out: 'out',
+    reserve: 'reserve',
+    sale: 'sale'
+};
+exports.OrderStatus = {
+    new: 'new',
+    processing: 'processing',
+    completed: 'completed',
+    cancelled: 'cancelled'
+};
+exports.OrderPayment = {
+    cash: 'cash',
+    card: 'card',
+    transfer: 'transfer',
+    crm: 'crm'
 };
 //# sourceMappingURL=enums.js.map

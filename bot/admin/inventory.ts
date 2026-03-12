@@ -2568,7 +2568,7 @@ async function exportInventory(ctx: Context): Promise<void> {
     variants.forEach((v, i) => {
       const attrs = Object.entries(v.attributes as Record<string, string>)
         .map(([k, val]) => `${k}: ${val}`).join(', ')
-      const row = ws.addRow([v.sku, v.product.name, attrs, v.price.toString(), v.quantity, v.reserved])
+      const row = ws.addRow([v.sku, v.product.name, attrs, v.price.toString(), v.quantity])
       const fill: ExcelJS.FillPattern = {
         type: 'pattern', pattern: 'solid', fgColor: { argb: rowFills[i % 2] },
       }

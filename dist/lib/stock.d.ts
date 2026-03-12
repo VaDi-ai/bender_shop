@@ -5,7 +5,7 @@ export declare function getStockHistory(variantId: number): Promise<{
     quantity: number;
     createdAt: Date;
     variantId: number;
-    type: string;
+    type: import("../generated/prisma/enums").StockMovementType;
     comment: string | null;
     createdBy: string | null;
 }[]>;

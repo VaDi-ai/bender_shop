@@ -18,20 +18,28 @@
  *       res.sendStatus(403)
  *     }
  *   })
- *   // Приём событий (POST)
- *   app.post('/webhook/instagram', express.json(), async (req, res) => {
- *     await handleInstagramWebhook(req.body, bot.telegram)
- *     res.sendStatus(200)
+ *   // Приём событий (POST) — используйте express.raw() чтобы получить rawBody для проверки подписи
+ *   app.post('/webhook/instagram', express.raw({ type: 'application/json' }), async (req, res) => {
+ *     try {
+ *       await handleInstagramWebhook(JSON.parse(req.body), bot.telegram, req.body, req.headers['x-hub-signature-256'] as string | undefined)
+ *       res.sendStatus(200)
+ *     } catch (e) {
+ *       if (e instanceof InstagramSignatureError) return res.sendStatus(401)
+ *       throw e
+ *     }
  *   })
  */
 import { Telegram } from 'telegraf';
+export declare class InstagramSignatureError extends Error {
+    constructor();
+}
 export interface InstagramWebhookBody {
     object: string;
     entry: unknown[];
 }
 /**
  * Обрабатывает входящий Instagram webhook.
- * Пока не реализован — только логирует полученный payload.
+ * Верифицирует подпись X-Hub-Signature-256, затем логирует payload.
  */
-export declare function handleInstagramWebhook(body: InstagramWebhookBody, _telegram: Telegram): Promise<void>;
+export declare function handleInstagramWebhook(body: InstagramWebhookBody, _telegram: Telegram, rawBody: string | Buffer, signature: string | undefined): Promise<void>;
 //# sourceMappingURL=instagram.d.ts.map

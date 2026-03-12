@@ -31,6 +31,7 @@ if (!BOT_TOKEN) {
 const bot = new telegraf_1.Telegraf(BOT_TOKEN);
 (0, notify_admins_1.initAdminNotifications)(bot, ADMIN_IDS);
 (0, security_log_1.initSecurityAlerts)(bot, ADMIN_IDS);
+(0, prisma_1.initPrismaAlerts)(bot, ADMIN_IDS);
 // ─── Режим техработ (in-memory) ───────────────────────────────────────────────
 let maintenanceMode = false;
 exports.maintenanceMode = maintenanceMode;
@@ -51,17 +52,17 @@ bot.use(async (ctx, next) => {
     if (stats.count > 30) {
         if (stats.count === 31) {
             await ctx.reply('⚠️ Слишком много запросов. Подождите минуту.');
-            (0, security_log_1.logSecurityEvent)('rate_limit_exceeded', { userId, count: stats.count });
+            await (0, security_log_1.logSecurityEvent)('rate_limit_exceeded', { userId, count: stats.count });
         }
         return;
     }
     return next();
 });
 // ─── Хелпер: только для администраторов ──────────────────────────────────────
-function adminOnly(ctx, next) {
+async function adminOnly(ctx, next) {
     const userId = ctx.from?.id;
     if (!ADMIN_IDS.includes(userId)) {
-        (0, security_log_1.logSecurityEvent)('unauthorized_access', {
+        await (0, security_log_1.logSecurityEvent)('unauthorized_access', {
             userId,
             command: ctx.message?.text ?? ctx.callbackQuery?.data,
         });
@@ -96,6 +97,44 @@ const MENU_BUTTONS = new Set([
 // ─── Обработка сообщений от клиентов ─────────────────────────────────────────
 // Регистрируется ДО admin-middleware, чтобы клиенты не получали «⛔ Доступ запрещён»
 (0, telegram_1.setupClientHandlers)(bot);
+// ─── Публичные обработчики (до admin-middleware) ───────────────────────────────
+const WEBAPP_URL = process.env.WEBAPP_URL;
+// /start с payload shop или startapp=shop — открыть Mini App
+bot.start(async (ctx, next) => {
+    if (!WEBAPP_URL)
+        return next();
+    const payload = ctx.startPayload ?? '';
+    if (payload === 'shop' || payload === 'startapp=shop') {
+        await ctx.reply('🛍 Открыть магазин Bender Shop', telegraf_1.Markup.inlineKeyboard([[telegraf_1.Markup.button.webApp('🛍 Открыть магазин', WEBAPP_URL)]]));
+        return;
+    }
+    return next();
+});
+// /shop — ответить кнопкой Mini App (любой пользователь)
+bot.command('shop', async (ctx) => {
+    if (!WEBAPP_URL)
+        return;
+    await ctx.reply('🛍 Магазин Bender Shop', telegraf_1.Markup.inlineKeyboard([[telegraf_1.Markup.button.webApp('🛍 Открыть магазин', WEBAPP_URL)]]));
+});
+// Новый участник группы — приветствие в личку с кнопкой Mini App
+bot.on((0, filters_1.message)('new_chat_members'), async (ctx) => {
+    if (!WEBAPP_URL)
+        return;
+    for (const member of ctx.message.new_chat_members) {
+        if (member.is_bot)
+            continue;
+        try {
+            await bot.telegram.sendMessage(member.id, 'Привет! Я бот магазина Bender Shop 👋\n\nЗдесь ты найдёшь технику по лучшим ценам — iPhone, MacBook, PlayStation, Dyson и многое другое.\n\nОткрой каталог и выбирай 👇\nПо любым вопросам просто напиши мне — отвечу быстро 😊', {
+                reply_markup: {
+                    inline_keyboard: [[{ text: '🛍 Открыть магазин', web_app: { url: WEBAPP_URL } }]],
+                },
+            });
+        }
+        catch {
+            // Пользователь мог не начать диалог с ботом — игнорируем
+        }
+    }
+});
 // ─── Middleware: только для администраторов ────────────────────────────────────
 bot.use((ctx, next) => {
     const userId = ctx.from?.id;
@@ -363,6 +402,20 @@ bot.action('back:main', async (ctx) => {
     ai_settings_1.apiKeysState.delete(userId);
     await ctx.reply('🏠 Главное меню', adminKeyboard);
 });
+// ─── /pin — закрепить сообщение с кнопкой Mini App (только для администраторов) ─
+bot.command('pin', async (ctx) => {
+    if (!WEBAPP_URL) {
+        await ctx.reply('⚠️ WEBAPP_URL не задан.');
+        return;
+    }
+    const sent = await ctx.reply('🛍 Магазин Bender Shop\n\nТехника по лучшим ценам — iPhone, MacBook, PlayStation, Dyson и многое другое.', telegraf_1.Markup.inlineKeyboard([[telegraf_1.Markup.button.webApp('🛍 Открыть магазин', WEBAPP_URL)]]));
+    try {
+        await ctx.pinChatMessage(sent.message_id);
+    }
+    catch {
+        await ctx.reply('⚠️ Не удалось закрепить сообщение (нет прав администратора в чате).');
+    }
+});
 // ─── 📦 Товароучёт ────────────────────────────────────────────────────────────
 (0, inventory_1.setupInventoryHandlers)(bot);
 bot.hears('📦 Товароучёт', async (ctx) => {
@@ -398,9 +451,23 @@ bot.hears('🔑 API Ключи', async (ctx) => {
 });
 // ─── Запуск ───────────────────────────────────────────────────────────────────
 bot.launch({
-    allowedUpdates: ['message', 'callback_query'],
+    allowedUpdates: ['message', 'callback_query', 'chat_member'],
+    ...(process.env.WEBHOOK_URL ? {
+        webhook: {
+            domain: process.env.WEBHOOK_URL,
+            secretToken: process.env.WEBHOOK_SECRET,
+        },
+    } : {}),
 });
 console.log('Бот запущен');
+// Кнопка-меню Mini App в личных чатах
+if (WEBAPP_URL) {
+    bot.telegram
+        .setChatMenuButton({
+        menuButton: { type: 'web_app', text: '🛍 Магазин', web_app: { url: WEBAPP_URL } },
+    })
+        .catch((e) => console.error('setChatMenuButton error:', e));
+}
 (0, scheduler_1.startScheduler)(bot);
 (0, server_1.startApiServer)();
 (async () => {
@@ -532,7 +599,8 @@ async function ensureSalesTopic() {
         console.error('ensureSalesTopic error:', err);
     }
 }
-ensureSalesTopic();
+;
+(async () => { await ensureSalesTopic(); })();
 process.once('SIGINT', () => bot.stop('SIGINT'));
 process.once('SIGTERM', () => bot.stop('SIGTERM'));
 //# sourceMappingURL=index.js.map

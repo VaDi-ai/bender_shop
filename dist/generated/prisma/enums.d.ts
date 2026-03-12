@@ -29,4 +29,25 @@ export declare const ReservationStatus: {
     readonly completed: "completed";
 };
 export type ReservationStatus = (typeof ReservationStatus)[keyof typeof ReservationStatus];
+export declare const StockMovementType: {
+    readonly in: "in";
+    readonly out: "out";
+    readonly reserve: "reserve";
+    readonly sale: "sale";
+};
+export type StockMovementType = (typeof StockMovementType)[keyof typeof StockMovementType];
+export declare const OrderStatus: {
+    readonly new: "new";
+    readonly processing: "processing";
+    readonly completed: "completed";
+    readonly cancelled: "cancelled";
+};
+export type OrderStatus = (typeof OrderStatus)[keyof typeof OrderStatus];
+export declare const OrderPayment: {
+    readonly cash: "cash";
+    readonly card: "card";
+    readonly transfer: "transfer";
+    readonly crm: "crm";
+};
+export type OrderPayment = (typeof OrderPayment)[keyof typeof OrderPayment];
 //# sourceMappingURL=enums.d.ts.map
