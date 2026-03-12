@@ -612,7 +612,7 @@ if (process.env.NODE_ENV === 'production') {
     allowedUpdates: ['message', 'callback_query', 'chat_member'],
   }).catch(err => { console.error('Launch error:', err); process.exit(1) })
 } else {
-  bot.launch()
+  bot.launch().catch((err) => { console.error('Bot launch failed:', err); process.exit(1) })
 }
 
 console.log('Бот запущен')
@@ -664,7 +664,7 @@ const DEFAULT_REGIONS = [
     })
   }
   console.log('Регионы инициализированы')
-})().catch((e) => console.error('Seed regions error:', e))
+})().catch((err) => console.error('Region seeder failed:', err))
 
 // ─── DB keepalive: предотвращает разрыв соединения на db.prisma.io ────────────
 
@@ -776,7 +776,7 @@ async function ensureSalesTopic(): Promise<void> {
   }
 }
 
-;(async () => { await ensureSalesTopic() })()
+;(async () => { await ensureSalesTopic() })().catch((err) => console.error('ensureSalesTopic failed:', err))
 
 process.once('SIGINT', () => bot.stop('SIGINT'))
 process.once('SIGTERM', () => bot.stop('SIGTERM'))

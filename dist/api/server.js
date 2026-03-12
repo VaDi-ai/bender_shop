@@ -62,7 +62,7 @@ const security_log_1 = require("../lib/security-log");
 if (!process.env.BOT_TOKEN)
     throw new Error('BOT_TOKEN is required');
 const BOT_TOKEN = process.env.BOT_TOKEN;
-const PORT = Number(process.env.API_PORT ?? 3000);
+const PORT = Number(process.env.PORT || process.env.API_PORT || 3000);
 const WEBAPP_FILE = path_1.default.join(__dirname, '../webapp/index.html');
 // ─── Хелпер: форматируем цену ─────────────────────────────────────────────────
 function fmtPrice(amount) {
@@ -122,8 +122,13 @@ function requireTelegramAuth(req, res, next) {
     next();
 }
 // ─── Запуск сервера ───────────────────────────────────────────────────────────
-function startApiServer() {
+function startApiServer(bot) {
     const app = (0, express_1.default)();
+    app.set('trust proxy', 1);
+    // ── Telegram webhook (production, before body parsers) ─────────────────────
+    if (bot) {
+        app.post('/webhook/telegram', bot.webhookCallback('/webhook/telegram', { secretToken: process.env.WEBHOOK_SECRET }));
+    }
     // ── Helmet (безопасные заголовки) ──────────────────────────────────────────
     app.use((0, helmet_1.default)({
         contentSecurityPolicy: {
@@ -143,7 +148,7 @@ function startApiServer() {
                 'https://webz.telegram.org',
                 process.env.WEBAPP_URL,
             ].filter(Boolean);
-            if (origin && allowed.some((o) => origin.startsWith(o))) {
+            if (origin && allowed.some((o) => origin === o)) {
                 callback(null, true);
             }
             else {
@@ -344,8 +349,9 @@ function startApiServer() {
     // ── GET /api/banner/:fileId ────────────────────────────────────────────────
     app.get('/api/banner/:fileId', async (req, res) => {
         const { fileId } = req.params;
-        if (!fileId) {
-            res.status(400).send('Missing file id');
+        const FILE_ID_RE = /^[A-Za-z0-9_\-]{10,200}$/;
+        if (!fileId || !FILE_ID_RE.test(fileId)) {
+            res.status(400).send('Invalid file id');
             return;
         }
         const banner = await prisma_1.prisma.heroBanner.findFirst({ where: { imageFile: fileId } });
@@ -610,8 +616,9 @@ function startApiServer() {
         console.error('[API] Ошибка:', err);
         res.status(500).json({ error: 'Internal server error' });
     });
-    app.listen(PORT, () => {
+    const server = app.listen(PORT, () => {
         console.log(`[API] Сервер запущен: http://localhost:${PORT}/shop`);
     });
+    server.on('error', (err) => { console.error('Listen failed:', err); process.exit(1); });
 }
 //# sourceMappingURL=server.js.map

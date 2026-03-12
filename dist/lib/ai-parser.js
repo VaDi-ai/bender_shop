@@ -53,7 +53,10 @@ ${text}
         });
         const content = response.choices[0]?.message?.content ?? '[]';
         const clean = content.replace(/```json|```/g, '').trim();
-        return JSON.parse(clean);
+        const result = JSON.parse(clean);
+        if (!Array.isArray(result))
+            throw new Error('AI parser: expected array, got ' + typeof result);
+        return result;
     }
     catch (err) {
         (0, notify_admins_1.notifyAdminsAboutApiError)(err, 'Парсинг прайса поставщика').catch(() => { });
@@ -91,7 +94,10 @@ ${text}
         });
         const content = response.choices[0]?.message?.content ?? '[]';
         const clean = content.replace(/```json|```/g, '').trim();
-        return JSON.parse(clean);
+        const result = JSON.parse(clean);
+        if (!Array.isArray(result))
+            throw new Error('AI parser: expected array, got ' + typeof result);
+        return result;
     }
     catch (err) {
         (0, notify_admins_1.notifyAdminsAboutApiError)(err, 'Парсинг курсов валют').catch(() => { });

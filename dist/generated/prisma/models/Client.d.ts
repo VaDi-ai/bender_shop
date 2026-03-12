@@ -750,10 +750,12 @@ export type ClientCreateNestedOneWithoutReservationsInput = {
     connectOrCreate?: Prisma.ClientCreateOrConnectWithoutReservationsInput;
     connect?: Prisma.ClientWhereUniqueInput;
 };
-export type ClientUpdateOneRequiredWithoutReservationsNestedInput = {
+export type ClientUpdateOneWithoutReservationsNestedInput = {
     create?: Prisma.XOR<Prisma.ClientCreateWithoutReservationsInput, Prisma.ClientUncheckedCreateWithoutReservationsInput>;
     connectOrCreate?: Prisma.ClientCreateOrConnectWithoutReservationsInput;
     upsert?: Prisma.ClientUpsertWithoutReservationsInput;
+    disconnect?: Prisma.ClientWhereInput | boolean;
+    delete?: Prisma.ClientWhereInput | boolean;
     connect?: Prisma.ClientWhereUniqueInput;
     update?: Prisma.XOR<Prisma.XOR<Prisma.ClientUpdateToOneWithWhereWithoutReservationsInput, Prisma.ClientUpdateWithoutReservationsInput>, Prisma.ClientUncheckedUpdateWithoutReservationsInput>;
 };

@@ -16,6 +16,8 @@ import { prisma } from '../lib/prisma'
 
 const INTERVAL_MS = 10 * 60 * 1000 // 10 минут
 
+let isRunning = false
+
 type RemindPayload = {
   text?: string
   [key: string]: unknown
@@ -31,6 +33,8 @@ export function startScheduler(bot: Telegraf): void {
 // ─── Один «тик» — проверяем и выполняем задачи ───────────────────────────────
 
 async function runTick(bot: Telegraf): Promise<void> {
+  if (isRunning) return
+  isRunning = true
   try {
     const now = new Date()
 
@@ -57,6 +61,8 @@ async function runTick(bot: Telegraf): Promise<void> {
     }
   } catch (err) {
     console.error('[Scheduler] Ошибка получения задач:', err)
+  } finally {
+    isRunning = false
   }
 }
 

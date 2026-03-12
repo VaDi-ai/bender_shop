@@ -461,7 +461,7 @@ export function setupBroadcastHandlers(bot: Telegraf): void {
     try { await ctx.answerCbQuery() } catch {}
     const segId = parseInt(ctx.match[1], 10)
     const seg = await prisma.segment.findUnique({ where: { id: segId } })
-    if (!seg) return ctx.reply('Сегмент не найден.')
+    if (!seg) return await ctx.reply('Сегмент не найден.')
 
     const count = await prisma.client.count({
       where: { source: 'telegram', externalId: { not: null }, segmentId: segId },
@@ -481,7 +481,7 @@ export function setupBroadcastHandlers(bot: Telegraf): void {
     const userId = ctx.from!.id
     const segId = parseInt(ctx.match[1], 10)
     const seg = await prisma.segment.findUnique({ where: { id: segId } })
-    if (!seg) return ctx.reply('Сегмент не найден.')
+    if (!seg) return await ctx.reply('Сегмент не найден.')
 
     const count = await prisma.client.count({
       where: { source: 'telegram', externalId: { not: null }, segmentId: segId },
@@ -510,7 +510,7 @@ export function setupBroadcastHandlers(bot: Telegraf): void {
     const segId = parseInt(ctx.match[1], 10)
     const tagName = ctx.match[2]
     const seg = await prisma.segment.findUnique({ where: { id: segId } })
-    if (!seg) return ctx.reply('Сегмент не найден.')
+    if (!seg) return await ctx.reply('Сегмент не найден.')
 
     const count = await prisma.client.count({
       where: {
@@ -555,7 +555,7 @@ export function setupBroadcastHandlers(bot: Telegraf): void {
     const userId = ctx.from!.id
     const state = broadcastsState.get(userId)
     if (!state || state.flow !== 'preview') {
-      return ctx.reply('Сессия истекла. Начните рассылку заново.')
+      return await ctx.reply('Сессия истекла. Начните рассылку заново.')
     }
     broadcastsState.delete(userId)
     await executeBroadcast(ctx, userId, state)

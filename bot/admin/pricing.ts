@@ -556,11 +556,18 @@ async function downloadTelegramFile(ctx: Context, fileId: string): Promise<Buffe
   const url = `https://api.telegram.org/file/bot${process.env.BOT_TOKEN}/${file.file_path}`
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = []
+    const safeUrl = url.replace(process.env.BOT_TOKEN ?? '', '[REDACTED]')
     https.get(url, (res) => {
       res.on('data', (c) => chunks.push(c))
       res.on('end', () => resolve(Buffer.concat(chunks)))
-      res.on('error', reject)
-    }).on('error', reject)
+      res.on('error', (err) => {
+        console.error('[pricing] downloadTelegramFile res error:', safeUrl, err.message)
+        reject(err)
+      })
+    }).on('error', (err) => {
+      console.error('[pricing] downloadTelegramFile error:', safeUrl, err.message)
+      reject(err)
+    })
   })
 }
 
@@ -1243,7 +1250,7 @@ export function setupPricingHandlers(bot: Telegraf): void {
       where: { id: variantId },
       include: { product: true },
     })
-    if (!variant) return ctx.reply('Вариант не найден.')
+    if (!variant) return await ctx.reply('Вариант не найден.')
     const attrs = Object.values(variant.attributes as Record<string, string>).join(', ')
     pricingState.set(userId, {
       flow: 'manual_price_input',
@@ -1264,7 +1271,7 @@ export function setupPricingHandlers(bot: Telegraf): void {
     const userId = ctx.from!.id
     const productId = parseInt(ctx.match[1], 10)
     const product = await prisma.product.findUnique({ where: { id: productId } })
-    if (!product) return ctx.reply('Товар не найден.')
+    if (!product) return await ctx.reply('Товар не найден.')
     pricingState.set(userId, {
       flow: 'manual_all_price',
       productId: product.id,
@@ -1305,7 +1312,7 @@ export function setupPricingHandlers(bot: Telegraf): void {
       orderBy: { name: 'asc' },
       include: { _count: { select: { products: true } } },
     })
-    if (!cats.length) return ctx.reply('Категории не найдены.')
+    if (!cats.length) return await ctx.reply('Категории не найдены.')
     const rows = cats.map((c) => [
       Markup.button.callback(`${c.name} (${c._count.products})`, `pricing:bulk_cat:${c.id}`),
     ])
@@ -1316,7 +1323,7 @@ export function setupPricingHandlers(bot: Telegraf): void {
   bot.action(/^pricing:bulk_cat:(\d+)$/, async (ctx) => {
     try { await ctx.answerCbQuery() } catch {}
     const cat = await prisma.category.findUnique({ where: { id: parseInt(ctx.match[1], 10) } })
-    if (!cat) return ctx.reply('Категория не найдена.')
+    if (!cat) return await ctx.reply('Категория не найдена.')
     pricingState.set(ctx.from!.id, {
       flow: 'bulk_pct',
       filterType: 'category',

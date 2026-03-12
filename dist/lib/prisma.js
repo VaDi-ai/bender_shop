@@ -36,9 +36,7 @@ pool.on('error', (err) => {
 const adapter = new adapter_pg_1.PrismaPg(pool);
 const globalForPrisma = globalThis;
 exports.prisma = globalForPrisma.prisma ?? new client_1.PrismaClient({ adapter });
-if (process.env.NODE_ENV !== 'production') {
-    globalForPrisma.prisma = exports.prisma;
-}
+globalForPrisma.prisma = exports.prisma;
 // A3: graceful shutdown on SIGTERM
 process.on('SIGTERM', async () => {
     try {

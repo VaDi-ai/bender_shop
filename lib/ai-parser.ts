@@ -67,7 +67,9 @@ ${text}
 
     const content = response.choices[0]?.message?.content ?? '[]'
     const clean = content.replace(/```json|```/g, '').trim()
-    return JSON.parse(clean) as AIParsedProduct[]
+    const result = JSON.parse(clean)
+    if (!Array.isArray(result)) throw new Error('AI parser: expected array, got ' + typeof result)
+    return result as AIParsedProduct[]
   } catch (err) {
     notifyAdminsAboutApiError(err, 'Парсинг прайса поставщика').catch(() => {})
     throw err
@@ -107,7 +109,9 @@ ${text}
 
     const content = response.choices[0]?.message?.content ?? '[]'
     const clean = content.replace(/```json|```/g, '').trim()
-    return JSON.parse(clean) as AIParsedRate[]
+    const result = JSON.parse(clean)
+    if (!Array.isArray(result)) throw new Error('AI parser: expected array, got ' + typeof result)
+    return result as AIParsedRate[]
   } catch (err) {
     notifyAdminsAboutApiError(err, 'Парсинг курсов валют').catch(() => {})
     throw err

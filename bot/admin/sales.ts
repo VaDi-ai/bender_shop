@@ -102,7 +102,7 @@ export function setupSalesHandlers(bot: Telegraf): void {
     const categories = await prisma.category.findMany({ orderBy: { name: 'asc' } })
     if (categories.length === 0) {
       salesState.delete(userId)
-      return ctx.reply('Нет категорий товаров.')
+      return await ctx.reply('Нет категорий товаров.')
     }
     salesState.set(userId, { flow: 'sale', step: 'category', clientId })
     await ctx.reply(
@@ -122,7 +122,7 @@ export function setupSalesHandlers(bot: Telegraf): void {
     const categories = await prisma.category.findMany({ orderBy: { name: 'asc' } })
     if (categories.length === 0) {
       salesState.delete(userId)
-      return ctx.reply('Нет категорий товаров.')
+      return await ctx.reply('Нет категорий товаров.')
     }
     salesState.set(userId, { flow: 'reserve', step: 'category', clientId })
     await ctx.reply(
@@ -163,7 +163,7 @@ export function setupSalesHandlers(bot: Telegraf): void {
       orderBy: { name: 'asc' },
     })
     if (products.length === 0) {
-      return ctx.reply('Нет доступных товаров в этой категории.')
+      return await ctx.reply('Нет доступных товаров в этой категории.')
     }
     salesState.set(userId, { flow: 'sale', step: 'product_pick', clientId, categoryId })
     await ctx.reply(
@@ -192,7 +192,7 @@ export function setupSalesHandlers(bot: Telegraf): void {
       orderBy: { name: 'asc' },
     })
     if (products.length === 0) {
-      return ctx.reply('Нет доступных товаров в этой категории.')
+      return await ctx.reply('Нет доступных товаров в этой категории.')
     }
     salesState.set(userId, { flow: 'reserve', step: 'product_pick', clientId, categoryId })
     await ctx.reply(
@@ -217,7 +217,7 @@ export function setupSalesHandlers(bot: Telegraf): void {
     const productId = parseInt(ctx.match[2], 10)
     const userId = ctx.from!.id
     const product = await prisma.product.findUnique({ where: { id: productId } })
-    if (!product) return ctx.reply('Товар не найден.')
+    if (!product) return await ctx.reply('Товар не найден.')
     salesState.set(userId, { flow: 'sale', step: 'qty', clientId, productId, productName: product.name, price: Number(product.price) })
     const available = product.quantity - product.reserved
     await ctx.reply(`📦 ${product.name}\nДоступно: ${available} шт.\n\nВведите количество:`)
@@ -230,7 +230,7 @@ export function setupSalesHandlers(bot: Telegraf): void {
     const productId = parseInt(ctx.match[2], 10)
     const userId = ctx.from!.id
     const product = await prisma.product.findUnique({ where: { id: productId } })
-    if (!product) return ctx.reply('Товар не найден.')
+    if (!product) return await ctx.reply('Товар не найден.')
     salesState.set(userId, { flow: 'reserve', step: 'qty', clientId, productId, productName: product.name, price: Number(product.price) })
     const available = product.quantity - product.reserved
     await ctx.reply(`📦 ${product.name}\nДоступно: ${available} шт.\n\nВведите количество:`)
@@ -249,7 +249,7 @@ export function setupSalesHandlers(bot: Telegraf): void {
 
     try {
       const client = await prisma.client.findUnique({ where: { id: clientId } })
-      if (!client) return ctx.reply('Клиент не найден.')
+      if (!client) return await ctx.reply('Клиент не найден.')
 
       // Создаём Order
       await prisma.order.create({
@@ -337,7 +337,7 @@ export function setupSalesHandlers(bot: Telegraf): void {
 
     try {
       const client = await prisma.client.findUnique({ where: { id: clientId } })
-      if (!client) return ctx.reply('Клиент не найден.')
+      if (!client) return await ctx.reply('Клиент не найден.')
 
       // Создаём резерв
       const reservation = await prisma.reservation.create({
@@ -410,7 +410,7 @@ export function setupSalesHandlers(bot: Telegraf): void {
     const categories = await prisma.category.findMany({ orderBy: { name: 'asc' } })
     if (categories.length === 0) {
       salesState.delete(userId)
-      return ctx.reply('Нет категорий товаров.')
+      return await ctx.reply('Нет категорий товаров.')
     }
     salesState.set(userId, { flow: 'sale_nc', step: 'category', clientName })
     await ctx.reply(
@@ -431,7 +431,7 @@ export function setupSalesHandlers(bot: Telegraf): void {
     const categories = await prisma.category.findMany({ orderBy: { name: 'asc' } })
     if (categories.length === 0) {
       salesState.delete(userId)
-      return ctx.reply('Нет категорий товаров.')
+      return await ctx.reply('Нет категорий товаров.')
     }
     salesState.set(userId, { flow: 'reserve_nc', step: 'category', clientName })
     await ctx.reply(
@@ -515,7 +515,7 @@ export function setupSalesHandlers(bot: Telegraf): void {
     const clientName = (state as Extract<SaleNoClientStep, { step: 'product_pick' }>).clientName
     const productId = parseInt(ctx.match[1], 10)
     const product = await prisma.product.findUnique({ where: { id: productId } })
-    if (!product) return ctx.reply('Товар не найден.')
+    if (!product) return await ctx.reply('Товар не найден.')
     salesState.set(userId, { flow: 'sale_nc', step: 'qty', clientName, productId, productName: product.name, price: Number(product.price) })
     const available = product.quantity - product.reserved
     await ctx.reply(`📦 ${product.name}\nДоступно: ${available} шт.\n\nВведите количество:`)
@@ -529,7 +529,7 @@ export function setupSalesHandlers(bot: Telegraf): void {
     const clientName = (state as Extract<ReserveNoClientStep, { step: 'product_pick' }>).clientName
     const productId = parseInt(ctx.match[1], 10)
     const product = await prisma.product.findUnique({ where: { id: productId } })
-    if (!product) return ctx.reply('Товар не найден.')
+    if (!product) return await ctx.reply('Товар не найден.')
     salesState.set(userId, { flow: 'reserve_nc', step: 'qty', clientName, productId, productName: product.name, price: Number(product.price) })
     const available = product.quantity - product.reserved
     await ctx.reply(`📦 ${product.name}\nДоступно: ${available} шт.\n\nВведите количество:`)

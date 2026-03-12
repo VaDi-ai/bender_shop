@@ -85,7 +85,14 @@ function roundPrice(price) {
  * Возвращает массив изменений по каждой валюте.
  */
 async function updateCurrencyRates() {
-    const allRates = await fetchCurrencyRates();
+    let allRates;
+    try {
+        allRates = await fetchCurrencyRates();
+    }
+    catch (err) {
+        console.error('[currency] fetchCurrencyRates failed:', err);
+        return [];
+    }
     const currencies = await getActiveCurrencies();
     const changes = [];
     for (const currency of currencies) {

@@ -84,7 +84,7 @@ export function setupSegmentHandlers(bot: Telegraf): void {
     const userId = ctx.from!.id
     const segmentId = parseInt(ctx.match[1], 10)
     const seg = await prisma.segment.findUnique({ where: { id: segmentId } })
-    if (!seg) return ctx.reply('Сегмент не найден.')
+    if (!seg) return await ctx.reply('Сегмент не найден.')
 
     segmentsState.set(userId, { flow: 'rename', segmentId })
     await ctx.reply(`Введите новое название для "${seg.color} ${seg.name}":`)
@@ -103,10 +103,10 @@ export function setupSegmentHandlers(bot: Telegraf): void {
       prisma.segment.findFirst({ where: { isDefault: true } }),
     ])
 
-    if (!seg) return ctx.reply('Сегмент не найден.')
+    if (!seg) return await ctx.reply('Сегмент не найден.')
 
     if (seg.isDefault) {
-      return ctx.reply('❌ Нельзя удалить дефолтный сегмент.')
+      return await ctx.reply('❌ Нельзя удалить дефолтный сегмент.')
     }
 
     const count = seg._count.clients
@@ -133,8 +133,8 @@ export function setupSegmentHandlers(bot: Telegraf): void {
     const segmentId = parseInt(ctx.match[1], 10)
 
     const seg = await prisma.segment.findUnique({ where: { id: segmentId } })
-    if (!seg) return ctx.reply('Сегмент не найден.')
-    if (seg.isDefault) return ctx.reply('❌ Нельзя удалить дефолтный сегмент.')
+    if (!seg) return await ctx.reply('Сегмент не найден.')
+    if (seg.isDefault) return await ctx.reply('❌ Нельзя удалить дефолтный сегмент.')
 
     const defaultSeg = await prisma.segment.findFirst({ where: { isDefault: true } })
 
@@ -164,7 +164,7 @@ export function setupSegmentHandlers(bot: Telegraf): void {
     const state = segmentsState.get(userId)
 
     if (!state || state.flow !== 'add_color') {
-      return ctx.reply('Сессия истекла. Начните заново через меню Сегменты.')
+      return await ctx.reply('Сессия истекла. Начните заново через меню Сегменты.')
     }
 
     const color = ctx.match[1]

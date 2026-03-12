@@ -99,6 +99,9 @@ const MENU_BUTTONS = new Set([
 (0, telegram_1.setupClientHandlers)(bot);
 // ─── Публичные обработчики (до admin-middleware) ───────────────────────────────
 const WEBAPP_URL = process.env.WEBAPP_URL;
+if (process.env.NODE_ENV === 'production' && !process.env.WEBHOOK_SECRET) {
+    throw new Error('WEBHOOK_SECRET is required when WEBHOOK_URL is set');
+}
 // /start с payload shop или startapp=shop — открыть Mini App
 bot.start(async (ctx, next) => {
     if (!WEBAPP_URL)
@@ -450,15 +453,19 @@ bot.hears('🔑 API Ключи', async (ctx) => {
     await (0, ai_settings_1.showApiKeysMenu)(ctx);
 });
 // ─── Запуск ───────────────────────────────────────────────────────────────────
-bot.launch({
-    allowedUpdates: ['message', 'callback_query', 'chat_member'],
-    ...(process.env.WEBHOOK_URL ? {
+if (process.env.NODE_ENV === 'production') {
+    bot.launch({
         webhook: {
-            domain: process.env.WEBHOOK_URL,
+            domain: process.env.WEBAPP_URL || 'https://bendershop.store',
+            path: '/webhook/telegram',
             secretToken: process.env.WEBHOOK_SECRET,
         },
-    } : {}),
-});
+        allowedUpdates: ['message', 'callback_query', 'chat_member'],
+    }).catch(err => { console.error('Launch error:', err); process.exit(1); });
+}
+else {
+    bot.launch().catch((err) => { console.error('Bot launch failed:', err); process.exit(1); });
+}
 console.log('Бот запущен');
 // Кнопка-меню Mini App в личных чатах
 if (WEBAPP_URL) {
@@ -469,7 +476,7 @@ if (WEBAPP_URL) {
         .catch((e) => console.error('setChatMenuButton error:', e));
 }
 (0, scheduler_1.startScheduler)(bot);
-(0, server_1.startApiServer)();
+(0, server_1.startApiServer)(process.env.NODE_ENV === 'production' ? bot : undefined);
 (async () => {
     try {
         const savedKey = await prisma_1.prisma.apiKey.findFirst({ where: { service: 'openrouter_key' } });
@@ -501,7 +508,7 @@ const DEFAULT_REGIONS = [
         });
     }
     console.log('Регионы инициализированы');
-})().catch((e) => console.error('Seed regions error:', e));
+})().catch((err) => console.error('Region seeder failed:', err));
 // ─── DB keepalive: предотвращает разрыв соединения на db.prisma.io ────────────
 setInterval(async () => {
     try {
@@ -600,7 +607,7 @@ async function ensureSalesTopic() {
     }
 }
 ;
-(async () => { await ensureSalesTopic(); })();
+(async () => { await ensureSalesTopic(); })().catch((err) => console.error('ensureSalesTopic failed:', err));
 process.once('SIGINT', () => bot.stop('SIGINT'));
 process.once('SIGTERM', () => bot.stop('SIGTERM'));
 //# sourceMappingURL=index.js.map

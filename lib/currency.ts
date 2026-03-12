@@ -86,7 +86,13 @@ export type CurrencyChange = {
  * Возвращает массив изменений по каждой валюте.
  */
 export async function updateCurrencyRates(): Promise<CurrencyChange[]> {
-  const allRates = await fetchCurrencyRates()
+  let allRates: Record<string, number>
+  try {
+    allRates = await fetchCurrencyRates()
+  } catch (err) {
+    console.error('[currency] fetchCurrencyRates failed:', err)
+    return []
+  }
   const currencies = await getActiveCurrencies()
   const changes: CurrencyChange[] = []
 

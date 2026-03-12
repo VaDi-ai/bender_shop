@@ -57,7 +57,7 @@ function setupSalesHandlers(bot) {
         const categories = await prisma_1.prisma.category.findMany({ orderBy: { name: 'asc' } });
         if (categories.length === 0) {
             exports.salesState.delete(userId);
-            return ctx.reply('Нет категорий товаров.');
+            return await ctx.reply('Нет категорий товаров.');
         }
         exports.salesState.set(userId, { flow: 'sale', step: 'category', clientId });
         await ctx.reply('📂 Выберите категорию:', telegraf_1.Markup.inlineKeyboard([
@@ -76,7 +76,7 @@ function setupSalesHandlers(bot) {
         const categories = await prisma_1.prisma.category.findMany({ orderBy: { name: 'asc' } });
         if (categories.length === 0) {
             exports.salesState.delete(userId);
-            return ctx.reply('Нет категорий товаров.');
+            return await ctx.reply('Нет категорий товаров.');
         }
         exports.salesState.set(userId, { flow: 'reserve', step: 'category', clientId });
         await ctx.reply('📂 Выберите категорию:', telegraf_1.Markup.inlineKeyboard([
@@ -120,7 +120,7 @@ function setupSalesHandlers(bot) {
             orderBy: { name: 'asc' },
         });
         if (products.length === 0) {
-            return ctx.reply('Нет доступных товаров в этой категории.');
+            return await ctx.reply('Нет доступных товаров в этой категории.');
         }
         exports.salesState.set(userId, { flow: 'sale', step: 'product_pick', clientId, categoryId });
         await ctx.reply('📦 Выберите товар:', telegraf_1.Markup.inlineKeyboard([
@@ -145,7 +145,7 @@ function setupSalesHandlers(bot) {
             orderBy: { name: 'asc' },
         });
         if (products.length === 0) {
-            return ctx.reply('Нет доступных товаров в этой категории.');
+            return await ctx.reply('Нет доступных товаров в этой категории.');
         }
         exports.salesState.set(userId, { flow: 'reserve', step: 'product_pick', clientId, categoryId });
         await ctx.reply('📦 Выберите товар:', telegraf_1.Markup.inlineKeyboard([
@@ -167,7 +167,7 @@ function setupSalesHandlers(bot) {
         const userId = ctx.from.id;
         const product = await prisma_1.prisma.product.findUnique({ where: { id: productId } });
         if (!product)
-            return ctx.reply('Товар не найден.');
+            return await ctx.reply('Товар не найден.');
         exports.salesState.set(userId, { flow: 'sale', step: 'qty', clientId, productId, productName: product.name, price: Number(product.price) });
         const available = product.quantity - product.reserved;
         await ctx.reply(`📦 ${product.name}\nДоступно: ${available} шт.\n\nВведите количество:`);
@@ -183,7 +183,7 @@ function setupSalesHandlers(bot) {
         const userId = ctx.from.id;
         const product = await prisma_1.prisma.product.findUnique({ where: { id: productId } });
         if (!product)
-            return ctx.reply('Товар не найден.');
+            return await ctx.reply('Товар не найден.');
         exports.salesState.set(userId, { flow: 'reserve', step: 'qty', clientId, productId, productName: product.name, price: Number(product.price) });
         const available = product.quantity - product.reserved;
         await ctx.reply(`📦 ${product.name}\nДоступно: ${available} шт.\n\nВведите количество:`);
@@ -204,7 +204,7 @@ function setupSalesHandlers(bot) {
         try {
             const client = await prisma_1.prisma.client.findUnique({ where: { id: clientId } });
             if (!client)
-                return ctx.reply('Клиент не найден.');
+                return await ctx.reply('Клиент не найден.');
             // Создаём Order
             await prisma_1.prisma.order.create({
                 data: {
@@ -291,7 +291,7 @@ function setupSalesHandlers(bot) {
         try {
             const client = await prisma_1.prisma.client.findUnique({ where: { id: clientId } });
             if (!client)
-                return ctx.reply('Клиент не найден.');
+                return await ctx.reply('Клиент не найден.');
             // Создаём резерв
             const reservation = await prisma_1.prisma.reservation.create({
                 data: { clientId, productId, quantity: qty, comment, status: 'active' },
@@ -368,7 +368,7 @@ function setupSalesHandlers(bot) {
         const categories = await prisma_1.prisma.category.findMany({ orderBy: { name: 'asc' } });
         if (categories.length === 0) {
             exports.salesState.delete(userId);
-            return ctx.reply('Нет категорий товаров.');
+            return await ctx.reply('Нет категорий товаров.');
         }
         exports.salesState.set(userId, { flow: 'sale_nc', step: 'category', clientName });
         await ctx.reply('📂 Выберите категорию:', telegraf_1.Markup.inlineKeyboard([
@@ -389,7 +389,7 @@ function setupSalesHandlers(bot) {
         const categories = await prisma_1.prisma.category.findMany({ orderBy: { name: 'asc' } });
         if (categories.length === 0) {
             exports.salesState.delete(userId);
-            return ctx.reply('Нет категорий товаров.');
+            return await ctx.reply('Нет категорий товаров.');
         }
         exports.salesState.set(userId, { flow: 'reserve_nc', step: 'category', clientName });
         await ctx.reply('📂 Выберите категорию:', telegraf_1.Markup.inlineKeyboard([
@@ -480,7 +480,7 @@ function setupSalesHandlers(bot) {
         const productId = parseInt(ctx.match[1], 10);
         const product = await prisma_1.prisma.product.findUnique({ where: { id: productId } });
         if (!product)
-            return ctx.reply('Товар не найден.');
+            return await ctx.reply('Товар не найден.');
         exports.salesState.set(userId, { flow: 'sale_nc', step: 'qty', clientName, productId, productName: product.name, price: Number(product.price) });
         const available = product.quantity - product.reserved;
         await ctx.reply(`📦 ${product.name}\nДоступно: ${available} шт.\n\nВведите количество:`);
@@ -498,7 +498,7 @@ function setupSalesHandlers(bot) {
         const productId = parseInt(ctx.match[1], 10);
         const product = await prisma_1.prisma.product.findUnique({ where: { id: productId } });
         if (!product)
-            return ctx.reply('Товар не найден.');
+            return await ctx.reply('Товар не найден.');
         exports.salesState.set(userId, { flow: 'reserve_nc', step: 'qty', clientName, productId, productName: product.name, price: Number(product.price) });
         const available = product.quantity - product.reserved;
         await ctx.reply(`📦 ${product.name}\nДоступно: ${available} шт.\n\nВведите количество:`);
@@ -566,42 +566,31 @@ function setupSalesHandlers(bot) {
         const { clientName, productId, productName, qty } = state;
         const comment = state.comment;
         try {
-            // Без clientId — безымянный резерв
-            let reservationId = null;
-            await prisma_1.prisma.reservation.create({
+            const reservation = await prisma_1.prisma.reservation.create({
                 data: {
-                    clientId: 0, // заглушка — нет привязки к клиенту в БД
+                    clientId: null,
                     productId,
                     quantity: qty,
                     comment: `${clientName}${comment ? ': ' + comment : ''}`,
                     status: 'active',
                 },
-            }).then((r) => { reservationId = r.id; }).catch(() => {
-                // если FK нарушен (clientId=0) — создаём без clientId через rawQuery не нужно,
-                // просто логируем и продолжаем
-                console.warn('res_nc: clientId=0 not in DB, reservation not saved');
             });
             await prisma_1.prisma.product.update({
                 where: { id: productId },
                 data: { reserved: { increment: qty } },
             });
             const msg = `🔖 Резерв: ${productName} × ${qty} для ${clientName} до отдельного уведомления${comment ? '\n📝 ' + comment : ''}`;
-            if (reservationId !== null) {
-                await ctx.reply(msg, telegraf_1.Markup.inlineKeyboard([
-                    [
-                        telegraf_1.Markup.button.callback('✅ Выдан', `res:do_complete:${reservationId}`),
-                        telegraf_1.Markup.button.callback('❌ Отменить', `res:do_cancel:${reservationId}`),
-                    ],
-                ]));
-            }
-            else {
-                await ctx.reply(msg);
-            }
+            await ctx.reply(msg, telegraf_1.Markup.inlineKeyboard([
+                [
+                    telegraf_1.Markup.button.callback('✅ Выдан', `res:do_complete:${reservation.id}`),
+                    telegraf_1.Markup.button.callback('❌ Отменить', `res:do_cancel:${reservation.id}`),
+                ],
+            ]));
             await notifyToSalesTopic(ctx, msg, clientName);
         }
         catch (err) {
             console.error('res_nc:confirm error:', err);
-            await ctx.reply('Ошибка при оформлении резерва.');
+            await ctx.reply(`⚠️ Ошибка при оформлении резерва: ${err instanceof Error ? err.message : String(err)}`);
         }
     });
     // ── Завершить резерв (выдан) ───────────────────────────────────────────────

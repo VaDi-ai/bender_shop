@@ -37,11 +37,20 @@ export async function findVariantsByFilter(
 
   if (filterType === 'attribute') {
     const [key, val] = filterValue.split(':').map((s) => s.trim())
-    const all = await prisma.productVariant.findMany({ include: { product: true } })
-    return all.filter((v) => {
-      const attrs = v.attributes as Record<string, string>
-      return attrs[key] === val
-    })
+    try {
+      const results = await prisma.productVariant.findMany({
+        where: { attributes: { path: [key], equals: val } },
+        include: { product: true },
+      })
+      if (results.length > 1000) {
+        console.warn(`[promotions] attribute filter "${filterValue}" matched ${results.length} variants, slicing to 1000`)
+        return results.slice(0, 1000)
+      }
+      return results
+    } catch (err) {
+      console.error('[promotions] attribute filter query failed:', err)
+      return []
+    }
   }
 
   if (filterType === 'products') {
@@ -63,38 +72,39 @@ export async function applyPromotion(promotionId: number): Promise<number> {
 
   if (variants.length === 0) return 0
 
-  // Сохраняем оригинальные цены (пропускаем дубли — на случай повторного вызова)
-  await prisma.promotionPrice.createMany({
-    data: variants.map((v) => ({
-      promotionId,
-      variantId: v.id,
-      originalPrice: v.price,
-    })),
-    skipDuplicates: true,
-  })
+  const operations = [
+    // Сохраняем оригинальные цены (пропускаем дубли — на случай повторного вызова)
+    prisma.promotionPrice.createMany({
+      data: variants.map((v) => ({
+        promotionId,
+        variantId: v.id,
+        originalPrice: v.price,
+      })),
+      skipDuplicates: true,
+    }),
+    // Применяем скидку
+    ...variants.map((variant) => {
+      const price = new Decimal(variant.price)
+      const discountValue = new Decimal(promo.discountValue)
+      let newPrice: number
+      if (promo.discountType === 'percent') {
+        newPrice = price.mul(new Decimal(1).sub(discountValue.div(100))).toNumber()
+      } else {
+        newPrice = price.sub(discountValue).toNumber()
+      }
+      newPrice = Math.max(1, roundPrice(newPrice))
+      return prisma.productVariant.update({
+        where: { id: variant.id },
+        data: { price: newPrice },
+      })
+    }),
+    prisma.promotion.update({
+      where: { id: promotionId },
+      data: { isActive: true },
+    }),
+  ]
 
-  // Применяем скидку
-  for (const variant of variants) {
-    const price = new Decimal(variant.price)
-    const discountValue = new Decimal(promo.discountValue)
-    let newPrice: number
-    if (promo.discountType === 'percent') {
-      newPrice = price.mul(new Decimal(1).sub(discountValue.div(100))).toNumber()
-    } else {
-      newPrice = price.sub(discountValue).toNumber()
-    }
-    newPrice = Math.max(1, roundPrice(newPrice))
-    await prisma.productVariant.update({
-      where: { id: variant.id },
-      data: { price: newPrice },
-    })
-  }
-
-  await prisma.promotion.update({
-    where: { id: promotionId },
-    data: { isActive: true },
-  })
-
+  await prisma.$transaction(operations)
   return variants.length
 }
 
@@ -103,19 +113,21 @@ export async function applyPromotion(promotionId: number): Promise<number> {
 export async function cancelPromotion(promotionId: number): Promise<void> {
   const prices = await prisma.promotionPrice.findMany({ where: { promotionId } })
 
-  for (const p of prices) {
-    await prisma.productVariant.update({
-      where: { id: p.variantId },
-      data: { price: p.originalPrice },
-    })
-  }
+  const operations = [
+    ...prices.map((p) =>
+      prisma.productVariant.update({
+        where: { id: p.variantId },
+        data: { price: p.originalPrice },
+      })
+    ),
+    prisma.promotion.update({
+      where: { id: promotionId },
+      data: { isActive: false },
+    }),
+    prisma.promotionPrice.deleteMany({ where: { promotionId } }),
+  ]
 
-  await prisma.promotion.update({
-    where: { id: promotionId },
-    data: { isActive: false },
-  })
-
-  await prisma.promotionPrice.deleteMany({ where: { promotionId } })
+  await prisma.$transaction(operations)
 }
 
 // ─── Строковое описание фильтра ───────────────────────────────────────────────

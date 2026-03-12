@@ -677,7 +677,7 @@ export function setupPromotionsHandlers(bot: Telegraf): void {
     try { await ctx.answerCbQuery() } catch {}
     const promoId = parseInt(ctx.match[1], 10)
     const promo = await prisma.promotion.findUnique({ where: { id: promoId } })
-    if (!promo) return ctx.reply('Акция не найдена.')
+    if (!promo) return await ctx.reply('Акция не найдена.')
 
     const priceCount = await prisma.promotionPrice.count({ where: { promotionId: promoId } })
     const discLabel =
@@ -711,7 +711,7 @@ export function setupPromotionsHandlers(bot: Telegraf): void {
     try { await ctx.answerCbQuery() } catch {}
     const promoId = parseInt(ctx.match[1], 10)
     const promo = await prisma.promotion.findUnique({ where: { id: promoId } })
-    if (!promo) return ctx.reply('Акция не найдена.')
+    if (!promo) return await ctx.reply('Акция не найдена.')
 
     await ctx.reply(
       `Завершить акцию «${promo.name}»?\nЦены будут восстановлены.`,
@@ -729,7 +729,7 @@ export function setupPromotionsHandlers(bot: Telegraf): void {
     try { await ctx.answerCbQuery('Завершаю акцию…') } catch {}
     const promoId = parseInt(ctx.match[1], 10)
     const promo = await prisma.promotion.findUnique({ where: { id: promoId } })
-    if (!promo) return ctx.reply('Акция не найдена.')
+    if (!promo) return await ctx.reply('Акция не найдена.')
 
     await cancelPromotion(promoId)
 

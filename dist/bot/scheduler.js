@@ -15,6 +15,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.startScheduler = startScheduler;
 const prisma_1 = require("../lib/prisma");
 const INTERVAL_MS = 10 * 60 * 1000; // 10 минут
+let isRunning = false;
 // ─── Запуск планировщика ──────────────────────────────────────────────────────
 function startScheduler(bot) {
     console.log('Планировщик запущен (интервал: 10 мин)');
@@ -22,6 +23,9 @@ function startScheduler(bot) {
 }
 // ─── Один «тик» — проверяем и выполняем задачи ───────────────────────────────
 async function runTick(bot) {
+    if (isRunning)
+        return;
+    isRunning = true;
     try {
         const now = new Date();
         const tasks = await prisma_1.prisma.task.findMany({
@@ -47,6 +51,9 @@ async function runTick(bot) {
     }
     catch (err) {
         console.error('[Scheduler] Ошибка получения задач:', err);
+    }
+    finally {
+        isRunning = false;
     }
 }
 // ─── Выполнение одной задачи ──────────────────────────────────────────────────

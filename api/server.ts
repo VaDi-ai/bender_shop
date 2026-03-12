@@ -24,7 +24,7 @@ import { logSecurityEvent } from '../lib/security-log'
 
 if (!process.env.BOT_TOKEN) throw new Error('BOT_TOKEN is required')
 const BOT_TOKEN = process.env.BOT_TOKEN
-const PORT = Number(process.env.API_PORT ?? 3000)
+const PORT = Number(process.env.PORT || process.env.API_PORT || 3000)
 const WEBAPP_FILE = path.join(__dirname, '../webapp/index.html')
 
 // ─── Хелпер: форматируем цену ─────────────────────────────────────────────────
@@ -100,7 +100,7 @@ export function startApiServer(bot?: Telegraf): void {
 
   // ── Telegram webhook (production, before body parsers) ─────────────────────
   if (bot) {
-    app.post('/webhook/telegram', bot.webhookCallback('/webhook/telegram'))
+    app.post('/webhook/telegram', bot.webhookCallback('/webhook/telegram', { secretToken: process.env.WEBHOOK_SECRET }))
   }
 
   // ── Helmet (безопасные заголовки) ──────────────────────────────────────────
@@ -659,7 +659,8 @@ export function startApiServer(bot?: Telegraf): void {
     res.status(500).json({ error: 'Internal server error' })
   })
 
-  app.listen(PORT, () => {
+  const server = app.listen(PORT, () => {
     console.log(`[API] Сервер запущен: http://localhost:${PORT}/shop`)
   })
+  server.on('error', (err) => { console.error('Listen failed:', err); process.exit(1) })
 }

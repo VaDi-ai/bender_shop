@@ -7,6 +7,7 @@
  *   POST /api/orders              — создание заказа в БД (требует Telegram auth)
  */
 import 'dotenv/config';
+import type { Telegraf } from 'telegraf';
 export declare function fmtPrice(amount: number): string;
-export declare function startApiServer(): void;
+export declare function startApiServer(bot?: Telegraf): void;
 //# sourceMappingURL=server.d.ts.map

@@ -384,11 +384,18 @@ async function downloadTelegramFile(ctx, fileId) {
     const url = `https://api.telegram.org/file/bot${process.env.BOT_TOKEN}/${file.file_path}`;
     return new Promise((resolve, reject) => {
         const chunks = [];
+        const safeUrl = url.replace(process.env.BOT_TOKEN ?? '', '[REDACTED]');
         https_1.default.get(url, (res) => {
             res.on('data', (c) => chunks.push(c));
             res.on('end', () => resolve(Buffer.concat(chunks)));
-            res.on('error', reject);
-        }).on('error', reject);
+            res.on('error', (err) => {
+                console.error('[pricing] downloadTelegramFile res error:', safeUrl, err.message);
+                reject(err);
+            });
+        }).on('error', (err) => {
+            console.error('[pricing] downloadTelegramFile error:', safeUrl, err.message);
+            reject(err);
+        });
     });
 }
 // ─── Парсинг загруженного прайс-листа ────────────────────────────────────────
@@ -1060,7 +1067,7 @@ function setupPricingHandlers(bot) {
             include: { product: true },
         });
         if (!variant)
-            return ctx.reply('Вариант не найден.');
+            return await ctx.reply('Вариант не найден.');
         const attrs = Object.values(variant.attributes).join(', ');
         exports.pricingState.set(userId, {
             flow: 'manual_price_input',
@@ -1081,7 +1088,7 @@ function setupPricingHandlers(bot) {
         const productId = parseInt(ctx.match[1], 10);
         const product = await prisma_1.prisma.product.findUnique({ where: { id: productId } });
         if (!product)
-            return ctx.reply('Товар не найден.');
+            return await ctx.reply('Товар не найден.');
         exports.pricingState.set(userId, {
             flow: 'manual_all_price',
             productId: product.id,
@@ -1119,7 +1126,7 @@ function setupPricingHandlers(bot) {
             include: { _count: { select: { products: true } } },
         });
         if (!cats.length)
-            return ctx.reply('Категории не найдены.');
+            return await ctx.reply('Категории не найдены.');
         const rows = cats.map((c) => [
             telegraf_1.Markup.button.callback(`${c.name} (${c._count.products})`, `pricing:bulk_cat:${c.id}`),
         ]);
@@ -1133,7 +1140,7 @@ function setupPricingHandlers(bot) {
         catch { }
         const cat = await prisma_1.prisma.category.findUnique({ where: { id: parseInt(ctx.match[1], 10) } });
         if (!cat)
-            return ctx.reply('Категория не найдена.');
+            return await ctx.reply('Категория не найдена.');
         exports.pricingState.set(ctx.from.id, {
             flow: 'bulk_pct',
             filterType: 'category',

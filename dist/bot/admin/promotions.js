@@ -569,7 +569,7 @@ function setupPromotionsHandlers(bot) {
         const promoId = parseInt(ctx.match[1], 10);
         const promo = await prisma_1.prisma.promotion.findUnique({ where: { id: promoId } });
         if (!promo)
-            return ctx.reply('Акция не найдена.');
+            return await ctx.reply('Акция не найдена.');
         const priceCount = await prisma_1.prisma.promotionPrice.count({ where: { promotionId: promoId } });
         const discLabel = promo.discountType === 'percent'
             ? `${promo.discountValue}%`
@@ -598,7 +598,7 @@ function setupPromotionsHandlers(bot) {
         const promoId = parseInt(ctx.match[1], 10);
         const promo = await prisma_1.prisma.promotion.findUnique({ where: { id: promoId } });
         if (!promo)
-            return ctx.reply('Акция не найдена.');
+            return await ctx.reply('Акция не найдена.');
         await ctx.reply(`Завершить акцию «${promo.name}»?\nЦены будут восстановлены.`, telegraf_1.Markup.inlineKeyboard([
             [
                 telegraf_1.Markup.button.callback('✅ Да, завершить', `promo:do_cancel:${promoId}`),
@@ -615,7 +615,7 @@ function setupPromotionsHandlers(bot) {
         const promoId = parseInt(ctx.match[1], 10);
         const promo = await prisma_1.prisma.promotion.findUnique({ where: { id: promoId } });
         if (!promo)
-            return ctx.reply('Акция не найдена.');
+            return await ctx.reply('Акция не найдена.');
         await (0, promotions_1.cancelPromotion)(promoId);
         await ctx.reply(`✅ Акция «${promo.name}» завершена. Цены восстановлены.`, telegraf_1.Markup.inlineKeyboard([
             [telegraf_1.Markup.button.callback('📋 Активные акции', 'promo:list_active')],

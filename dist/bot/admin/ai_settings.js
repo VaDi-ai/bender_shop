@@ -164,16 +164,17 @@ async function showApiKeysMenu(ctx) {
             statusLine = '❌ Недоступен';
     }
     const mask = (v) => (v ? maskKey(v) : '❌ не задан');
+    const present = (v) => (v ? '✅ Задан' : '❌ Не задан');
     const lines = [
         '🔑 API Ключи',
         '',
         `🤖 OpenRouter: ${statusLine}`,
         key ? maskKey(key) : '',
         '',
-        `BOT_TOKEN:    ${mask(process.env.BOT_TOKEN)}`,
+        `BOT_TOKEN:    ${present(process.env.BOT_TOKEN)}`,
         `CRM_GROUP_ID: ${mask(process.env.CRM_GROUP_ID)}`,
         `ADMIN_IDS:    ${mask(process.env.ADMIN_IDS)}`,
-        `DATABASE_URL: ${mask(process.env.DATABASE_URL)}`,
+        `DATABASE_URL: ${present(process.env.DATABASE_URL)}`,
         `API_PORT:     ${process.env.API_PORT ?? '3000 (default)'}`,
         `WEBAPP_URL:   ${process.env.WEBAPP_URL ?? '❌ не задан'}`,
     ].filter(Boolean);

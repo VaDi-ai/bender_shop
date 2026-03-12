@@ -69,7 +69,7 @@ function setupSegmentHandlers(bot) {
         const segmentId = parseInt(ctx.match[1], 10);
         const seg = await prisma_1.prisma.segment.findUnique({ where: { id: segmentId } });
         if (!seg)
-            return ctx.reply('Сегмент не найден.');
+            return await ctx.reply('Сегмент не найден.');
         exports.segmentsState.set(userId, { flow: 'rename', segmentId });
         await ctx.reply(`Введите новое название для "${seg.color} ${seg.name}":`);
     });
@@ -88,9 +88,9 @@ function setupSegmentHandlers(bot) {
             prisma_1.prisma.segment.findFirst({ where: { isDefault: true } }),
         ]);
         if (!seg)
-            return ctx.reply('Сегмент не найден.');
+            return await ctx.reply('Сегмент не найден.');
         if (seg.isDefault) {
-            return ctx.reply('❌ Нельзя удалить дефолтный сегмент.');
+            return await ctx.reply('❌ Нельзя удалить дефолтный сегмент.');
         }
         const count = seg._count.clients;
         const defLabel = defaultSeg ? `"${defaultSeg.color} ${defaultSeg.name}"` : 'дефолтный';
@@ -113,9 +113,9 @@ function setupSegmentHandlers(bot) {
         const segmentId = parseInt(ctx.match[1], 10);
         const seg = await prisma_1.prisma.segment.findUnique({ where: { id: segmentId } });
         if (!seg)
-            return ctx.reply('Сегмент не найден.');
+            return await ctx.reply('Сегмент не найден.');
         if (seg.isDefault)
-            return ctx.reply('❌ Нельзя удалить дефолтный сегмент.');
+            return await ctx.reply('❌ Нельзя удалить дефолтный сегмент.');
         const defaultSeg = await prisma_1.prisma.segment.findFirst({ where: { isDefault: true } });
         // Клиентов переводим в дефолтный (или null если дефолтного нет)
         await prisma_1.prisma.client.updateMany({
@@ -145,7 +145,7 @@ function setupSegmentHandlers(bot) {
         const userId = ctx.from.id;
         const state = exports.segmentsState.get(userId);
         if (!state || state.flow !== 'add_color') {
-            return ctx.reply('Сессия истекла. Начните заново через меню Сегменты.');
+            return await ctx.reply('Сессия истекла. Начните заново через меню Сегменты.');
         }
         const color = ctx.match[1];
         const { name } = state;
