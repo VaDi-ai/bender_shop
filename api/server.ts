@@ -114,19 +114,20 @@ export function startApiServer(bot?: Telegraf): void {
     },
   }))
 
-  // ── CORS — только Telegram-домены и WEBAPP_URL ─────────────────────────────
+  // ── CORS ─────────────────────────────────────────────────────────────────────
+  const allowedOrigins = [
+    'https://bendershop.store',
+    'https://web.telegram.org',
+  ]
   app.use(
     cors({
       origin: (origin, callback) => {
-        const allowed = [
-          'https://web.telegram.org',
-          'https://webk.telegram.org',
-          'https://webz.telegram.org',
-          process.env.WEBAPP_URL,
-        ].filter(Boolean) as string[]
-        if (origin && allowed.some((o) => origin === o)) {
+        if (!origin || allowedOrigins.includes(origin)) {
+          callback(null, true)
+        } else if (process.env.NODE_ENV !== 'production' && origin.startsWith('http://localhost')) {
           callback(null, true)
         } else {
+          console.warn('[API] CORS blocked:', origin)
           callback(new Error('CORS: недопустимый источник'))
         }
       },
