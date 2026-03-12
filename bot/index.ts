@@ -163,6 +163,54 @@ const MENU_BUTTONS = new Set([
 
 setupClientHandlers(bot)
 
+// ─── Публичные обработчики (до admin-middleware) ───────────────────────────────
+
+const WEBAPP_URL = process.env.WEBAPP_URL
+
+// /start с payload shop или startapp=shop — открыть Mini App
+bot.start(async (ctx, next) => {
+  if (!WEBAPP_URL) return next()
+  const payload = ctx.startPayload ?? ''
+  if (payload === 'shop' || payload === 'startapp=shop') {
+    await ctx.reply(
+      '🛍 Открыть магазин Bender Shop',
+      Markup.inlineKeyboard([[Markup.button.webApp('🛍 Открыть магазин', WEBAPP_URL)]]),
+    )
+    return
+  }
+  return next()
+})
+
+// /shop — ответить кнопкой Mini App (любой пользователь)
+bot.command('shop', async (ctx) => {
+  if (!WEBAPP_URL) return
+  await ctx.reply(
+    '🛍 Магазин Bender Shop',
+    Markup.inlineKeyboard([[Markup.button.webApp('🛍 Открыть магазин', WEBAPP_URL)]]),
+  )
+})
+
+// Новый участник группы — приветствие в личку с кнопкой Mini App
+bot.on(message('new_chat_members'), async (ctx) => {
+  if (!WEBAPP_URL) return
+  for (const member of ctx.message.new_chat_members) {
+    if (member.is_bot) continue
+    try {
+      await bot.telegram.sendMessage(
+        member.id,
+        'Привет! Я бот магазина Bender Shop 👋\n\nЗдесь ты найдёшь технику по лучшим ценам — iPhone, MacBook, PlayStation, Dyson и многое другое.\n\nОткрой каталог и выбирай 👇\nПо любым вопросам просто напиши мне — отвечу быстро 😊',
+        {
+          reply_markup: {
+            inline_keyboard: [[{ text: '🛍 Открыть магазин', web_app: { url: WEBAPP_URL } }]],
+          },
+        },
+      )
+    } catch {
+      // Пользователь мог не начать диалог с ботом — игнорируем
+    }
+  }
+})
+
 // ─── Middleware: только для администраторов ────────────────────────────────────
 
 bot.use((ctx, next) => {
@@ -476,6 +524,24 @@ bot.action('back:main', async (ctx) => {
   await ctx.reply('🏠 Главное меню', adminKeyboard)
 })
 
+// ─── /pin — закрепить сообщение с кнопкой Mini App (только для администраторов) ─
+
+bot.command('pin', async (ctx) => {
+  if (!WEBAPP_URL) {
+    await ctx.reply('⚠️ WEBAPP_URL не задан.')
+    return
+  }
+  const sent = await ctx.reply(
+    '🛍 Магазин Bender Shop\n\nТехника по лучшим ценам — iPhone, MacBook, PlayStation, Dyson и многое другое.',
+    Markup.inlineKeyboard([[Markup.button.webApp('🛍 Открыть магазин', WEBAPP_URL)]]),
+  )
+  try {
+    await ctx.pinChatMessage(sent.message_id)
+  } catch {
+    await ctx.reply('⚠️ Не удалось закрепить сообщение (нет прав администратора в чате).')
+  }
+})
+
 // ─── 📦 Товароучёт ────────────────────────────────────────────────────────────
 
 setupInventoryHandlers(bot)
@@ -532,10 +598,19 @@ bot.hears('🔑 API Ключи', async (ctx) => {
 // ─── Запуск ───────────────────────────────────────────────────────────────────
 
 bot.launch({
-  allowedUpdates: ['message', 'callback_query'],
+  allowedUpdates: ['message', 'callback_query', 'chat_member'],
 })
 
 console.log('Бот запущен')
+
+// Кнопка-меню Mini App в личных чатах
+if (WEBAPP_URL) {
+  bot.telegram
+    .setChatMenuButton({
+      menuButton: { type: 'web_app', text: '🛍 Магазин', web_app: { url: WEBAPP_URL } },
+    })
+    .catch((e) => console.error('setChatMenuButton error:', e))
+}
 
 startScheduler(bot)
 startApiServer()
