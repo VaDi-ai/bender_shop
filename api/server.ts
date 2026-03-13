@@ -110,6 +110,7 @@ export function startApiServer(bot?: Telegraf): void {
       directives: {
         defaultSrc: ["'self'"],
         scriptSrc: ["'self'", "https://telegram.org", "'unsafe-inline'"],
+        scriptSrcAttr: ["'unsafe-hashes'", "'unsafe-inline'"],
         styleSrc: ["'self'", "'unsafe-inline'"],
         fontSrc: ["'self'", "data:"],
         frameSrc: ["'self'", "https://telegram.org"],
@@ -361,7 +362,7 @@ export function startApiServer(bot?: Telegraf): void {
   })
 
   // ── GET /api/banner/:fileId ────────────────────────────────────────────────
-  app.get('/api/banner/:fileId', requireTelegramAuth, async (req, res) => {
+  app.get('/api/banner/:fileId', async (req, res) => {
     const fileId = String(req.params.fileId ?? '')
     const FILE_ID_RE = /^[A-Za-z0-9_\-]{10,200}$/
     if (!fileId || !FILE_ID_RE.test(fileId)) {
