@@ -21,6 +21,7 @@ import type { Telegraf } from 'telegraf'
 import { prisma } from '../lib/prisma'
 import { stockOut } from '../lib/stock'
 import { logSecurityEvent } from '../lib/security-log'
+import { getApiKeyValue } from '../lib/api-key-store'
 
 if (!process.env.BOT_TOKEN) throw new Error('BOT_TOKEN is required')
 const BOT_TOKEN = process.env.BOT_TOKEN
@@ -313,18 +314,18 @@ export function startApiServer(bot?: Telegraf): void {
       res.status(400).json({ error: 'Missing key param' })
       return
     }
-    const record = await prisma.apiKey.findUnique({ where: { service: 'setting_' + key } })
+    const value = await getApiKeyValue('setting_' + key)
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate')
     res.setHeader('Pragma', 'no-cache')
-    res.json({ value: record?.value ?? '' })
+    res.json({ value: value ?? '' })
   })
 
   // ── GET /api/cache-version ─────────────────────────────────────────────────
   app.get('/api/cache-version', async (_req, res) => {
-    const record = await prisma.apiKey.findUnique({ where: { service: 'cache_version' } })
+    const cacheVersion = await getApiKeyValue('cache_version')
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate')
     res.setHeader('Pragma', 'no-cache')
-    res.json({ version: record?.value ?? '0' })
+    res.json({ version: cacheVersion ?? '0' })
   })
 
   // ── GET /api/hero-banners ──────────────────────────────────────────────────

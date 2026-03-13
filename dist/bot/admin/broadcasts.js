@@ -213,6 +213,38 @@ async function showPreview(ctx, state) {
         await ctx.reply(`📋 Предпросмотр — ${audience}:\n\n${state.messageText}`, previewButtons);
     }
 }
+// ─── Отправка с экспоненциальным откатом при 429 ─────────────────────────────
+function isRateLimitError(err) {
+    if (!err || typeof err !== 'object')
+        return false;
+    const e = err;
+    return e.code === 429 || e.response?.error_code === 429;
+}
+function getRetryAfterMs(err) {
+    if (!err || typeof err !== 'object')
+        return undefined;
+    const e = err;
+    const secs = e.response?.parameters?.retry_after;
+    return typeof secs === 'number' ? secs * 1000 : undefined;
+}
+/** Выполняет send(), при 429 повторяет с экспоненциальным откатом. */
+async function sendWithBackoff(send, maxRetries = 4) {
+    let delay = 1000;
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        try {
+            await send();
+            return 'sent';
+        }
+        catch (err) {
+            if (!isRateLimitError(err) || attempt === maxRetries)
+                return 'failed';
+            const wait = getRetryAfterMs(err) ?? delay;
+            await new Promise((r) => setTimeout(r, wait));
+            delay = Math.min(delay * 2, 30000);
+        }
+    }
+    return 'failed';
+}
 // ─── Выполнение рассылки ───────────────────────────────────────────────────────
 async function executeBroadcast(ctx, userId, state) {
     const recipients = await getRecipients(state.type, state.target, state.tagFilter);
@@ -228,19 +260,21 @@ async function executeBroadcast(ctx, userId, state) {
     let failed = 0;
     for (let i = 0; i < recipients.length; i++) {
         const tgId = recipients[i].externalId;
-        try {
+        const result = await sendWithBackoff(() => {
             if (state.mediaType === 'photo' && state.mediaFileId) {
-                await ctx.telegram.sendPhoto(tgId, state.mediaFileId, { caption: state.caption });
+                return ctx.telegram.sendPhoto(tgId, state.mediaFileId, { caption: state.caption });
             }
             else if (state.mediaType === 'video' && state.mediaFileId) {
-                await ctx.telegram.sendVideo(tgId, state.mediaFileId, { caption: state.caption });
+                return ctx.telegram.sendVideo(tgId, state.mediaFileId, { caption: state.caption });
             }
             else {
-                await ctx.telegram.sendMessage(tgId, state.messageText);
+                return ctx.telegram.sendMessage(tgId, state.messageText);
             }
+        });
+        if (result === 'sent') {
             sent++;
         }
-        catch {
+        else {
             failed++;
         }
         // Обновляем прогресс каждые 10 сообщений
@@ -252,8 +286,6 @@ async function executeBroadcast(ctx, userId, state) {
                 // ignore edit errors
             }
         }
-        // Задержка против flood-лимитов Telegram
-        await new Promise((r) => setTimeout(r, 50));
     }
     // Сохраняем лог
     await prisma_1.prisma.broadcastLog.create({

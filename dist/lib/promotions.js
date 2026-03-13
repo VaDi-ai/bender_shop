@@ -57,22 +57,29 @@ async function findVariantsByFilter(filterType, filterValue) {
 }
 // ─── Применение акции ─────────────────────────────────────────────────────────
 async function applyPromotion(promotionId) {
+    // Read promotion and take updatedAt snapshot BEFORE the transaction
     const promo = await prisma_1.prisma.promotion.findUniqueOrThrow({ where: { id: promotionId } });
+    const snapshotUpdatedAt = promo.updatedAt;
     const variants = await findVariantsByFilter(promo.filterType, promo.filterValue);
     if (variants.length === 0)
         return 0;
-    const operations = [
-        // Сохраняем оригинальные цены (пропускаем дубли — на случай повторного вызова)
-        prisma_1.prisma.promotionPrice.createMany({
+    await prisma_1.prisma.$transaction(async (tx) => {
+        // Optimistic lock: verify nobody modified the promotion concurrently
+        const current = await tx.promotion.findUniqueOrThrow({ where: { id: promotionId } });
+        if (current.updatedAt.getTime() !== snapshotUpdatedAt.getTime()) {
+            throw new Error('Акция была изменена параллельно — повторите операцию');
+        }
+        // Сохраняем оригинальные цены (skipDuplicates — защита от повторного вызова)
+        await tx.promotionPrice.createMany({
             data: variants.map((v) => ({
                 promotionId,
                 variantId: v.id,
                 originalPrice: v.price,
             })),
             skipDuplicates: true,
-        }),
-        // Применяем скидку
-        ...variants.map((variant) => {
+        });
+        // Применяем скидку к каждому варианту
+        for (const variant of variants) {
             const price = new client_1.Decimal(variant.price);
             const discountValue = new client_1.Decimal(promo.discountValue);
             let newPrice;
@@ -83,34 +90,37 @@ async function applyPromotion(promotionId) {
                 newPrice = price.sub(discountValue).toNumber();
             }
             newPrice = Math.max(1, (0, currency_1.roundPrice)(newPrice));
-            return prisma_1.prisma.productVariant.update({
+            await tx.productVariant.update({
                 where: { id: variant.id },
                 data: { price: newPrice },
             });
-        }),
-        prisma_1.prisma.promotion.update({
+        }
+        await tx.promotion.update({
             where: { id: promotionId },
             data: { isActive: true },
-        }),
-    ];
-    await prisma_1.prisma.$transaction(operations);
+        });
+    });
     return variants.length;
 }
 // ─── Отмена акции ─────────────────────────────────────────────────────────────
 async function cancelPromotion(promotionId) {
     const prices = await prisma_1.prisma.promotionPrice.findMany({ where: { promotionId } });
-    const operations = [
-        ...prices.map((p) => prisma_1.prisma.productVariant.update({
-            where: { id: p.variantId },
-            data: { price: p.originalPrice },
-        })),
-        prisma_1.prisma.promotion.update({
+    await prisma_1.prisma.$transaction(async (tx) => {
+        // Delete snapshot rows FIRST — ensures no partial state where prices are restored
+        // but snapshots still reference the (now-gone) discount prices
+        await tx.promotionPrice.deleteMany({ where: { promotionId } });
+        // Restore original prices
+        for (const p of prices) {
+            await tx.productVariant.update({
+                where: { id: p.variantId },
+                data: { price: p.originalPrice },
+            });
+        }
+        await tx.promotion.update({
             where: { id: promotionId },
             data: { isActive: false },
-        }),
-        prisma_1.prisma.promotionPrice.deleteMany({ where: { promotionId } }),
-    ];
-    await prisma_1.prisma.$transaction(operations);
+        });
+    });
 }
 // ─── Строковое описание фильтра ───────────────────────────────────────────────
 function filterLabel(filterType, filterValue) {

@@ -13,7 +13,8 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.apiKeysState = void 0;
+exports.securityState = exports.apiKeysState = void 0;
+exports.handleSecurityMessage = handleSecurityMessage;
 exports.maskKey = maskKey;
 exports.showAISettings = showAISettings;
 exports.showSecurityLog = showSecurityLog;
@@ -25,6 +26,7 @@ const openai_1 = __importDefault(require("openai"));
 const telegraf_1 = require("telegraf");
 const prisma_1 = require("../../lib/prisma");
 const api_errors_1 = require("../../lib/api-errors");
+const api_key_store_1 = require("../../lib/api-key-store");
 const agent_1 = require("../ai/agent");
 const ai_parser_1 = require("../../lib/ai-parser");
 // ─── Лейблы режимов ───────────────────────────────────────────────────────────
@@ -41,6 +43,27 @@ const MODE_DESCRIPTIONS = {
     auto: 'AI отвечает клиенту автоматически без участия менеджера',
 };
 exports.apiKeysState = new Map();
+// ─── Состояние подтверждения очистки лога безопасности ───────────────────────
+exports.securityState = new Map();
+async function handleSecurityMessage(ctx, userId, text) {
+    const state = exports.securityState.get(userId);
+    if (!state)
+        return false;
+    if (state.flow === 'awaiting_sec_clear_confirm') {
+        exports.securityState.delete(userId);
+        if (text.trim() === 'CONFIRM') {
+            const { count } = await prisma_1.prisma.securityLog.deleteMany();
+            console.log(`[security] Log cleared by admin ${userId} — ${count} record(s) deleted`);
+            await ctx.reply('🗑️ Лог безопасности очищен.');
+            await showSecurityLog(ctx);
+        }
+        else {
+            await ctx.reply('❌ Очистка отменена. Текст не совпал с CONFIRM.');
+        }
+        return true;
+    }
+    return false;
+}
 // ─── Маскировка ключей ────────────────────────────────────────────────────────
 function maskKey(key) {
     if (!key || key.length < 8)
@@ -209,11 +232,7 @@ async function handleApiKeysMessage(ctx, userId, text) {
             return true;
         }
         // Сохраняем и переинициализируем клиентов
-        await prisma_1.prisma.apiKey.upsert({
-            where: { service: 'openrouter_key' },
-            create: { service: 'openrouter_key', value: text },
-            update: { value: text },
-        });
+        await (0, api_key_store_1.setApiKeyValue)('openrouter_key', text);
         process.env.OPENROUTER_API_KEY = text;
         (0, agent_1.reinitClient)(text);
         (0, ai_parser_1.reinitClient)(text);
@@ -278,9 +297,9 @@ function setupApiKeysHandlers(bot) {
             await ctx.answerCbQuery();
         }
         catch { }
-        await prisma_1.prisma.securityLog.deleteMany();
-        await ctx.reply('🗑️ Лог безопасности очищен.');
-        await showSecurityLog(ctx);
+        const userId = ctx.from.id;
+        exports.securityState.set(userId, { flow: 'awaiting_sec_clear_confirm' });
+        await ctx.reply('⚠️ Удалить весь лог безопасности? Напиши CONFIRM для подтверждения');
     });
     bot.action('sec:back', async (ctx) => {
         try {

@@ -59,6 +59,7 @@ const exceljs_1 = __importDefault(require("exceljs"));
 const prisma_1 = require("../lib/prisma");
 const stock_1 = require("../lib/stock");
 const security_log_1 = require("../lib/security-log");
+const api_key_store_1 = require("../lib/api-key-store");
 if (!process.env.BOT_TOKEN)
     throw new Error('BOT_TOKEN is required');
 const BOT_TOKEN = process.env.BOT_TOKEN;
@@ -139,19 +140,21 @@ function startApiServer(bot) {
             },
         },
     }));
-    // ── CORS — только Telegram-домены и WEBAPP_URL ─────────────────────────────
+    // ── CORS ─────────────────────────────────────────────────────────────────────
+    const allowedOrigins = [
+        'https://bendershop.store',
+        'https://web.telegram.org',
+    ];
     app.use((0, cors_1.default)({
         origin: (origin, callback) => {
-            const allowed = [
-                'https://web.telegram.org',
-                'https://webk.telegram.org',
-                'https://webz.telegram.org',
-                process.env.WEBAPP_URL,
-            ].filter(Boolean);
-            if (origin && allowed.some((o) => origin === o)) {
+            if (!origin || allowedOrigins.includes(origin)) {
+                callback(null, true);
+            }
+            else if (process.env.NODE_ENV !== 'production' && origin.startsWith('http://localhost')) {
                 callback(null, true);
             }
             else {
+                console.warn('[API] CORS blocked:', origin);
                 callback(new Error('CORS: недопустимый источник'));
             }
         },
@@ -319,17 +322,17 @@ function startApiServer(bot) {
             res.status(400).json({ error: 'Missing key param' });
             return;
         }
-        const record = await prisma_1.prisma.apiKey.findUnique({ where: { service: 'setting_' + key } });
+        const value = await (0, api_key_store_1.getApiKeyValue)('setting_' + key);
         res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
         res.setHeader('Pragma', 'no-cache');
-        res.json({ value: record?.value ?? '' });
+        res.json({ value: value ?? '' });
     });
     // ── GET /api/cache-version ─────────────────────────────────────────────────
     app.get('/api/cache-version', async (_req, res) => {
-        const record = await prisma_1.prisma.apiKey.findUnique({ where: { service: 'cache_version' } });
+        const cacheVersion = await (0, api_key_store_1.getApiKeyValue)('cache_version');
         res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
         res.setHeader('Pragma', 'no-cache');
-        res.json({ version: record?.value ?? '0' });
+        res.json({ version: cacheVersion ?? '0' });
     });
     // ── GET /api/hero-banners ──────────────────────────────────────────────────
     app.get('/api/hero-banners', async (_req, res) => {

@@ -16,6 +16,7 @@
 import { Context, Markup, Telegraf } from 'telegraf'
 import { prisma } from '../../lib/prisma'
 import { stockOut } from '../../lib/stock'
+import { getApiKeyValue } from '../../lib/api-key-store'
 
 const CRM_GROUP_ID = Number(process.env.CRM_GROUP_ID)
 
@@ -930,9 +931,9 @@ export function registerSkipCommentHandlers(bot: Telegraf): void {
 
 async function notifyToSalesTopic(ctx: Context, text: string, clientName: string): Promise<void> {
   try {
-    const topicRecord = await prisma.apiKey.findUnique({ where: { service: 'sales_topic' } })
-    if (!topicRecord) return
-    const threadId = parseInt(topicRecord.value, 10)
+    const topicValue = await getApiKeyValue('sales_topic')
+    if (!topicValue) return
+    const threadId = parseInt(topicValue, 10)
     if (isNaN(threadId)) return
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await (ctx.telegram.sendMessage as any)(CRM_GROUP_ID, text, { message_thread_id: threadId })

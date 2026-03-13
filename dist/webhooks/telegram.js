@@ -755,6 +755,20 @@ async function handleClientMessage(telegram, from, text) {
     }
 }
 // ─── AI: обработка входящего сообщения ────────────────────────────────────────
+/** Обрезает ответ AI до 2000 символов и удаляет признаки утечки системного промпта */
+function sanitizeAIResponse(text) {
+    const leakPatterns = [
+        /system prompt/gi,
+        /you are an ai/gi,
+        /instructions:/gi,
+        /\[system\]/gi,
+    ];
+    const lines = text.split('\n').filter((line) => {
+        return !leakPatterns.some((re) => re.test(line));
+    });
+    const cleaned = lines.join('\n').trim();
+    return cleaned.length > 2000 ? cleaned.slice(0, 2000) : cleaned;
+}
 async function handleAIResponse(telegram, clientId, userMessage, threadId) {
     const mode = await (0, agent_1.getAIMode)();
     if (mode === 'off')
@@ -769,17 +783,19 @@ async function handleAIResponse(telegram, clientId, userMessage, threadId) {
         return;
     }
     if (mode === 'auto') {
+        // Санитизируем ответ перед отправкой клиенту
+        const safeAiText = sanitizeAIResponse(aiText);
         // Отправляем клиенту автоматически
         const client = await prisma_1.prisma.client.findUnique({ where: { id: clientId } });
         if (client?.source === 'telegram' && client.externalId) {
-            await telegram.sendMessage(client.externalId, aiText);
+            await telegram.sendMessage(client.externalId, safeAiText);
         }
         await prisma_1.prisma.message.create({
-            data: { clientId, direction: 'out', text: aiText, source: 'telegram' },
+            data: { clientId, direction: 'out', text: safeAiText, source: 'telegram' },
         });
         (0, agent_1.incrementStat)('approved');
         // Уведомляем менеджера в топике
-        await sendToTopic(telegram, CRM_GROUP_ID, threadId, `🤖 AI ответил: ${aiText}`);
+        await sendToTopic(telegram, CRM_GROUP_ID, threadId, `🤖 AI ответил: ${safeAiText}`);
         return;
     }
     if (mode === 'semi') {

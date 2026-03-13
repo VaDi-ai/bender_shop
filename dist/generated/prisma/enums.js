@@ -23,7 +23,8 @@ exports.MessageDirection = {
 exports.TaskStatus = {
     pending: 'pending',
     done: 'done',
-    cancelled: 'cancelled'
+    cancelled: 'cancelled',
+    failed: 'failed'
 };
 exports.TemplateType = {
     followup: 'followup',

@@ -45,7 +45,21 @@ async function runTick(bot) {
             }
             catch (err) {
                 console.error(`[Scheduler] Задача #${task.id} завершилась с ошибкой:`, err);
-                // Не меняем статус — задача останется pending до следующего тика
+                const newAttemptCount = task.attemptCount + 1;
+                const MAX_ATTEMPTS = 5;
+                if (newAttemptCount >= MAX_ATTEMPTS) {
+                    console.error(`[Scheduler] Задача #${task.id} превысила лимит попыток (${MAX_ATTEMPTS}), помечаем как failed`);
+                    await prisma_1.prisma.task.update({
+                        where: { id: task.id },
+                        data: { status: 'failed', attemptCount: newAttemptCount },
+                    });
+                }
+                else {
+                    await prisma_1.prisma.task.update({
+                        where: { id: task.id },
+                        data: { attemptCount: newAttemptCount },
+                    });
+                }
             }
         }
     }

@@ -182,6 +182,7 @@ exports.TaskScalarFieldEnum = {
     payload: 'payload',
     scheduledAt: 'scheduledAt',
     status: 'status',
+    attemptCount: 'attemptCount',
     createdAt: 'createdAt'
 };
 exports.TemplateScalarFieldEnum = {
@@ -310,6 +311,7 @@ exports.PromotionScalarFieldEnum = {
     startsAt: 'startsAt',
     endsAt: 'endsAt',
     createdAt: 'createdAt',
+    updatedAt: 'updatedAt',
     notificationSent: 'notificationSent'
 };
 exports.PromotionPriceScalarFieldEnum = {

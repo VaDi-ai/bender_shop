@@ -12,6 +12,7 @@
 
 import { Context, Markup, Telegraf } from 'telegraf'
 import { prisma } from '../../lib/prisma'
+import { getApiKeyValue, setApiKeyValue } from '../../lib/api-key-store'
 
 // ─── Типы состояния ───────────────────────────────────────────────────────────
 
@@ -31,8 +32,8 @@ export const storefrontState = new Map<number, StorefrontFlowState>()
 
 export async function showStorefront(ctx: Context): Promise<void> {
   const bannerCount = await prisma.heroBanner.count({ where: { isActive: true } })
-  const marquee = await prisma.apiKey.findUnique({ where: { service: 'setting_marquee' } })
-  const marqueeText = marquee?.value ? `«${marquee.value.slice(0, 40)}${marquee.value.length > 40 ? '…' : ''}»` : '—'
+  const marqueeValue = await getApiKeyValue('setting_marquee')
+  const marqueeText = marqueeValue ? `«${marqueeValue.slice(0, 40)}${marqueeValue.length > 40 ? '…' : ''}»` : '—'
 
   await ctx.reply(
     [
@@ -53,8 +54,7 @@ export async function showStorefront(ctx: Context): Promise<void> {
 // ─── Экран бегущей строки ─────────────────────────────────────────────────────
 
 async function showMarquee(ctx: Context): Promise<void> {
-  const record = await prisma.apiKey.findUnique({ where: { service: 'setting_marquee' } })
-  const current = record?.value ?? '—'
+  const current = (await getApiKeyValue('setting_marquee')) ?? '—'
 
   await ctx.reply(
     `📢 Бегущая строка\n\nТекущий текст:\n${current}`,
@@ -134,11 +134,7 @@ export function setupStorefrontHandlers(bot: Telegraf): void {
   bot.action('sf:cache_reset', async (ctx) => {
     try { await ctx.answerCbQuery() } catch {}
     const version = Date.now().toString()
-    await prisma.apiKey.upsert({
-      where: { service: 'cache_version' },
-      create: { service: 'cache_version', value: version },
-      update: { value: version },
-    })
+    await setApiKeyValue('cache_version', version)
     await ctx.reply(`✅ Кэш сайта сброшен. Сайт обновится в течение 30 секунд.`)
     await showStorefront(ctx)
   })
@@ -211,11 +207,7 @@ export async function handleStorefrontMessage(
   // ── Бегущая строка ────────────────────────────────────────────────────────
   if (state.flow === 'marquee' && state.step === 'text') {
     storefrontState.delete(userId)
-    await prisma.apiKey.upsert({
-      where: { service: 'setting_marquee' },
-      create: { service: 'setting_marquee', value: text },
-      update: { value: text },
-    })
+    await setApiKeyValue('setting_marquee', text)
     await ctx.reply('✅ Бегущая строка обновлена.', Markup.removeKeyboard())
     await showMarquee(ctx)
     return true

@@ -16,10 +16,12 @@ export type AggregateTask = {
 export type TaskAvgAggregateOutputType = {
     id: number | null;
     clientId: number | null;
+    attemptCount: number | null;
 };
 export type TaskSumAggregateOutputType = {
     id: number | null;
     clientId: number | null;
+    attemptCount: number | null;
 };
 export type TaskMinAggregateOutputType = {
     id: number | null;
@@ -27,6 +29,7 @@ export type TaskMinAggregateOutputType = {
     action: string | null;
     scheduledAt: Date | null;
     status: $Enums.TaskStatus | null;
+    attemptCount: number | null;
     createdAt: Date | null;
 };
 export type TaskMaxAggregateOutputType = {
@@ -35,6 +38,7 @@ export type TaskMaxAggregateOutputType = {
     action: string | null;
     scheduledAt: Date | null;
     status: $Enums.TaskStatus | null;
+    attemptCount: number | null;
     createdAt: Date | null;
 };
 export type TaskCountAggregateOutputType = {
@@ -44,16 +48,19 @@ export type TaskCountAggregateOutputType = {
     payload: number;
     scheduledAt: number;
     status: number;
+    attemptCount: number;
     createdAt: number;
     _all: number;
 };
 export type TaskAvgAggregateInputType = {
     id?: true;
     clientId?: true;
+    attemptCount?: true;
 };
 export type TaskSumAggregateInputType = {
     id?: true;
     clientId?: true;
+    attemptCount?: true;
 };
 export type TaskMinAggregateInputType = {
     id?: true;
@@ -61,6 +68,7 @@ export type TaskMinAggregateInputType = {
     action?: true;
     scheduledAt?: true;
     status?: true;
+    attemptCount?: true;
     createdAt?: true;
 };
 export type TaskMaxAggregateInputType = {
@@ -69,6 +77,7 @@ export type TaskMaxAggregateInputType = {
     action?: true;
     scheduledAt?: true;
     status?: true;
+    attemptCount?: true;
     createdAt?: true;
 };
 export type TaskCountAggregateInputType = {
@@ -78,6 +87,7 @@ export type TaskCountAggregateInputType = {
     payload?: true;
     scheduledAt?: true;
     status?: true;
+    attemptCount?: true;
     createdAt?: true;
     _all?: true;
 };
@@ -164,6 +174,7 @@ export type TaskGroupByOutputType = {
     payload: runtime.JsonValue;
     scheduledAt: Date;
     status: $Enums.TaskStatus;
+    attemptCount: number;
     createdAt: Date;
     _count: TaskCountAggregateOutputType | null;
     _avg: TaskAvgAggregateOutputType | null;
@@ -184,6 +195,7 @@ export type TaskWhereInput = {
     payload?: Prisma.JsonFilter<"Task">;
     scheduledAt?: Prisma.DateTimeFilter<"Task"> | Date | string;
     status?: Prisma.EnumTaskStatusFilter<"Task"> | $Enums.TaskStatus;
+    attemptCount?: Prisma.IntFilter<"Task"> | number;
     createdAt?: Prisma.DateTimeFilter<"Task"> | Date | string;
     client?: Prisma.XOR<Prisma.ClientScalarRelationFilter, Prisma.ClientWhereInput>;
 };
@@ -194,6 +206,7 @@ export type TaskOrderByWithRelationInput = {
     payload?: Prisma.SortOrder;
     scheduledAt?: Prisma.SortOrder;
     status?: Prisma.SortOrder;
+    attemptCount?: Prisma.SortOrder;
     createdAt?: Prisma.SortOrder;
     client?: Prisma.ClientOrderByWithRelationInput;
 };
@@ -207,6 +220,7 @@ export type TaskWhereUniqueInput = Prisma.AtLeast<{
     payload?: Prisma.JsonFilter<"Task">;
     scheduledAt?: Prisma.DateTimeFilter<"Task"> | Date | string;
     status?: Prisma.EnumTaskStatusFilter<"Task"> | $Enums.TaskStatus;
+    attemptCount?: Prisma.IntFilter<"Task"> | number;
     createdAt?: Prisma.DateTimeFilter<"Task"> | Date | string;
     client?: Prisma.XOR<Prisma.ClientScalarRelationFilter, Prisma.ClientWhereInput>;
 }, "id">;
@@ -217,6 +231,7 @@ export type TaskOrderByWithAggregationInput = {
     payload?: Prisma.SortOrder;
     scheduledAt?: Prisma.SortOrder;
     status?: Prisma.SortOrder;
+    attemptCount?: Prisma.SortOrder;
     createdAt?: Prisma.SortOrder;
     _count?: Prisma.TaskCountOrderByAggregateInput;
     _avg?: Prisma.TaskAvgOrderByAggregateInput;
@@ -234,6 +249,7 @@ export type TaskScalarWhereWithAggregatesInput = {
     payload?: Prisma.JsonWithAggregatesFilter<"Task">;
     scheduledAt?: Prisma.DateTimeWithAggregatesFilter<"Task"> | Date | string;
     status?: Prisma.EnumTaskStatusWithAggregatesFilter<"Task"> | $Enums.TaskStatus;
+    attemptCount?: Prisma.IntWithAggregatesFilter<"Task"> | number;
     createdAt?: Prisma.DateTimeWithAggregatesFilter<"Task"> | Date | string;
 };
 export type TaskCreateInput = {
@@ -241,6 +257,7 @@ export type TaskCreateInput = {
     payload: Prisma.JsonNullValueInput | runtime.InputJsonValue;
     scheduledAt: Date | string;
     status?: $Enums.TaskStatus;
+    attemptCount?: number;
     createdAt?: Date | string;
     client: Prisma.ClientCreateNestedOneWithoutTasksInput;
 };
@@ -251,6 +268,7 @@ export type TaskUncheckedCreateInput = {
     payload: Prisma.JsonNullValueInput | runtime.InputJsonValue;
     scheduledAt: Date | string;
     status?: $Enums.TaskStatus;
+    attemptCount?: number;
     createdAt?: Date | string;
 };
 export type TaskUpdateInput = {
@@ -258,6 +276,7 @@ export type TaskUpdateInput = {
     payload?: Prisma.JsonNullValueInput | runtime.InputJsonValue;
     scheduledAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
     status?: Prisma.EnumTaskStatusFieldUpdateOperationsInput | $Enums.TaskStatus;
+    attemptCount?: Prisma.IntFieldUpdateOperationsInput | number;
     createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
     client?: Prisma.ClientUpdateOneRequiredWithoutTasksNestedInput;
 };
@@ -268,6 +287,7 @@ export type TaskUncheckedUpdateInput = {
     payload?: Prisma.JsonNullValueInput | runtime.InputJsonValue;
     scheduledAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
     status?: Prisma.EnumTaskStatusFieldUpdateOperationsInput | $Enums.TaskStatus;
+    attemptCount?: Prisma.IntFieldUpdateOperationsInput | number;
     createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
 };
 export type TaskCreateManyInput = {
@@ -277,6 +297,7 @@ export type TaskCreateManyInput = {
     payload: Prisma.JsonNullValueInput | runtime.InputJsonValue;
     scheduledAt: Date | string;
     status?: $Enums.TaskStatus;
+    attemptCount?: number;
     createdAt?: Date | string;
 };
 export type TaskUpdateManyMutationInput = {
@@ -284,6 +305,7 @@ export type TaskUpdateManyMutationInput = {
     payload?: Prisma.JsonNullValueInput | runtime.InputJsonValue;
     scheduledAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
     status?: Prisma.EnumTaskStatusFieldUpdateOperationsInput | $Enums.TaskStatus;
+    attemptCount?: Prisma.IntFieldUpdateOperationsInput | number;
     createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
 };
 export type TaskUncheckedUpdateManyInput = {
@@ -293,6 +315,7 @@ export type TaskUncheckedUpdateManyInput = {
     payload?: Prisma.JsonNullValueInput | runtime.InputJsonValue;
     scheduledAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
     status?: Prisma.EnumTaskStatusFieldUpdateOperationsInput | $Enums.TaskStatus;
+    attemptCount?: Prisma.IntFieldUpdateOperationsInput | number;
     createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
 };
 export type TaskListRelationFilter = {
@@ -310,11 +333,13 @@ export type TaskCountOrderByAggregateInput = {
     payload?: Prisma.SortOrder;
     scheduledAt?: Prisma.SortOrder;
     status?: Prisma.SortOrder;
+    attemptCount?: Prisma.SortOrder;
     createdAt?: Prisma.SortOrder;
 };
 export type TaskAvgOrderByAggregateInput = {
     id?: Prisma.SortOrder;
     clientId?: Prisma.SortOrder;
+    attemptCount?: Prisma.SortOrder;
 };
 export type TaskMaxOrderByAggregateInput = {
     id?: Prisma.SortOrder;
@@ -322,6 +347,7 @@ export type TaskMaxOrderByAggregateInput = {
     action?: Prisma.SortOrder;
     scheduledAt?: Prisma.SortOrder;
     status?: Prisma.SortOrder;
+    attemptCount?: Prisma.SortOrder;
     createdAt?: Prisma.SortOrder;
 };
 export type TaskMinOrderByAggregateInput = {
@@ -330,11 +356,13 @@ export type TaskMinOrderByAggregateInput = {
     action?: Prisma.SortOrder;
     scheduledAt?: Prisma.SortOrder;
     status?: Prisma.SortOrder;
+    attemptCount?: Prisma.SortOrder;
     createdAt?: Prisma.SortOrder;
 };
 export type TaskSumOrderByAggregateInput = {
     id?: Prisma.SortOrder;
     clientId?: Prisma.SortOrder;
+    attemptCount?: Prisma.SortOrder;
 };
 export type TaskCreateNestedManyWithoutClientInput = {
     create?: Prisma.XOR<Prisma.TaskCreateWithoutClientInput, Prisma.TaskUncheckedCreateWithoutClientInput> | Prisma.TaskCreateWithoutClientInput[] | Prisma.TaskUncheckedCreateWithoutClientInput[];
@@ -382,6 +410,7 @@ export type TaskCreateWithoutClientInput = {
     payload: Prisma.JsonNullValueInput | runtime.InputJsonValue;
     scheduledAt: Date | string;
     status?: $Enums.TaskStatus;
+    attemptCount?: number;
     createdAt?: Date | string;
 };
 export type TaskUncheckedCreateWithoutClientInput = {
@@ -390,6 +419,7 @@ export type TaskUncheckedCreateWithoutClientInput = {
     payload: Prisma.JsonNullValueInput | runtime.InputJsonValue;
     scheduledAt: Date | string;
     status?: $Enums.TaskStatus;
+    attemptCount?: number;
     createdAt?: Date | string;
 };
 export type TaskCreateOrConnectWithoutClientInput = {
@@ -423,6 +453,7 @@ export type TaskScalarWhereInput = {
     payload?: Prisma.JsonFilter<"Task">;
     scheduledAt?: Prisma.DateTimeFilter<"Task"> | Date | string;
     status?: Prisma.EnumTaskStatusFilter<"Task"> | $Enums.TaskStatus;
+    attemptCount?: Prisma.IntFilter<"Task"> | number;
     createdAt?: Prisma.DateTimeFilter<"Task"> | Date | string;
 };
 export type TaskCreateManyClientInput = {
@@ -431,6 +462,7 @@ export type TaskCreateManyClientInput = {
     payload: Prisma.JsonNullValueInput | runtime.InputJsonValue;
     scheduledAt: Date | string;
     status?: $Enums.TaskStatus;
+    attemptCount?: number;
     createdAt?: Date | string;
 };
 export type TaskUpdateWithoutClientInput = {
@@ -438,6 +470,7 @@ export type TaskUpdateWithoutClientInput = {
     payload?: Prisma.JsonNullValueInput | runtime.InputJsonValue;
     scheduledAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
     status?: Prisma.EnumTaskStatusFieldUpdateOperationsInput | $Enums.TaskStatus;
+    attemptCount?: Prisma.IntFieldUpdateOperationsInput | number;
     createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
 };
 export type TaskUncheckedUpdateWithoutClientInput = {
@@ -446,6 +479,7 @@ export type TaskUncheckedUpdateWithoutClientInput = {
     payload?: Prisma.JsonNullValueInput | runtime.InputJsonValue;
     scheduledAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
     status?: Prisma.EnumTaskStatusFieldUpdateOperationsInput | $Enums.TaskStatus;
+    attemptCount?: Prisma.IntFieldUpdateOperationsInput | number;
     createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
 };
 export type TaskUncheckedUpdateManyWithoutClientInput = {
@@ -454,6 +488,7 @@ export type TaskUncheckedUpdateManyWithoutClientInput = {
     payload?: Prisma.JsonNullValueInput | runtime.InputJsonValue;
     scheduledAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
     status?: Prisma.EnumTaskStatusFieldUpdateOperationsInput | $Enums.TaskStatus;
+    attemptCount?: Prisma.IntFieldUpdateOperationsInput | number;
     createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
 };
 export type TaskSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
@@ -463,6 +498,7 @@ export type TaskSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = r
     payload?: boolean;
     scheduledAt?: boolean;
     status?: boolean;
+    attemptCount?: boolean;
     createdAt?: boolean;
     client?: boolean | Prisma.ClientDefaultArgs<ExtArgs>;
 }, ExtArgs["result"]["task"]>;
@@ -473,6 +509,7 @@ export type TaskSelectCreateManyAndReturn<ExtArgs extends runtime.Types.Extensio
     payload?: boolean;
     scheduledAt?: boolean;
     status?: boolean;
+    attemptCount?: boolean;
     createdAt?: boolean;
     client?: boolean | Prisma.ClientDefaultArgs<ExtArgs>;
 }, ExtArgs["result"]["task"]>;
@@ -483,6 +520,7 @@ export type TaskSelectUpdateManyAndReturn<ExtArgs extends runtime.Types.Extensio
     payload?: boolean;
     scheduledAt?: boolean;
     status?: boolean;
+    attemptCount?: boolean;
     createdAt?: boolean;
     client?: boolean | Prisma.ClientDefaultArgs<ExtArgs>;
 }, ExtArgs["result"]["task"]>;
@@ -493,9 +531,10 @@ export type TaskSelectScalar = {
     payload?: boolean;
     scheduledAt?: boolean;
     status?: boolean;
+    attemptCount?: boolean;
     createdAt?: boolean;
 };
-export type TaskOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "clientId" | "action" | "payload" | "scheduledAt" | "status" | "createdAt", ExtArgs["result"]["task"]>;
+export type TaskOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "clientId" | "action" | "payload" | "scheduledAt" | "status" | "attemptCount" | "createdAt", ExtArgs["result"]["task"]>;
 export type TaskInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
     client?: boolean | Prisma.ClientDefaultArgs<ExtArgs>;
 };
@@ -517,6 +556,7 @@ export type $TaskPayload<ExtArgs extends runtime.Types.Extensions.InternalArgs =
         payload: runtime.JsonValue;
         scheduledAt: Date;
         status: $Enums.TaskStatus;
+        attemptCount: number;
         createdAt: Date;
     }, ExtArgs["result"]["task"]>;
     composites: {};
@@ -879,6 +919,7 @@ export interface TaskFieldRefs {
     readonly payload: Prisma.FieldRef<"Task", 'Json'>;
     readonly scheduledAt: Prisma.FieldRef<"Task", 'DateTime'>;
     readonly status: Prisma.FieldRef<"Task", 'TaskStatus'>;
+    readonly attemptCount: Prisma.FieldRef<"Task", 'Int'>;
     readonly createdAt: Prisma.FieldRef<"Task", 'DateTime'>;
 }
 /**

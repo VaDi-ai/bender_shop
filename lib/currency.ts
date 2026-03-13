@@ -2,7 +2,6 @@
  * lib/currency.ts — Курсы валют и привязка регион → валюта
  */
 
-import https from 'https'
 import { prisma } from './prisma'
 
 /** Статические флаги для UI (дополняются данными из БД) */
@@ -41,26 +40,23 @@ export async function getRegionCurrencyMap(): Promise<Record<string, string>> {
 
 /** Курсы валют с ЦБ РФ. Ключ — ISO-код, значение — рублей за 1 единицу. */
 export async function fetchCurrencyRates(): Promise<Record<string, number>> {
-  return new Promise((resolve, reject) => {
-    https.get('https://www.cbr-xml-daily.ru/daily_json.js', (res) => {
-      let body = ''
-      res.on('data', (chunk) => { body += chunk })
-      res.on('end', () => {
-        try {
-          const data = JSON.parse(body)
-          const rates: Record<string, number> = { RUB: 1 }
-          const valute = data.Valute as Record<string, { Value: number; Nominal: number }>
-          for (const [code, info] of Object.entries(valute)) {
-            rates[code] = info.Value / info.Nominal
-          }
-          resolve(rates)
-        } catch (e) {
-          reject(e)
-        }
-      })
-      res.on('error', reject)
-    }).on('error', reject)
-  })
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), 10_000)
+
+  try {
+    const res = await fetch('https://www.cbr-xml-daily.ru/daily_json.js', {
+      signal: controller.signal,
+    })
+    if (!res.ok) throw new Error(`CBR HTTP ${res.status}`)
+    const data = (await res.json()) as { Valute: Record<string, { Value: number; Nominal: number }> }
+    const rates: Record<string, number> = { RUB: 1 }
+    for (const [code, info] of Object.entries(data.Valute)) {
+      rates[code] = info.Value / info.Nominal
+    }
+    return rates
+  } finally {
+    clearTimeout(timer)
+  }
 }
 
 /** Округление цены вверх до ближайшего круглого числа */

@@ -305,6 +305,38 @@ async function showPreview(
   }
 }
 
+// ─── Отправка с экспоненциальным откатом при 429 ─────────────────────────────
+
+function isRateLimitError(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false
+  const e = err as { code?: number; response?: { error_code?: number } }
+  return e.code === 429 || e.response?.error_code === 429
+}
+
+function getRetryAfterMs(err: unknown): number | undefined {
+  if (!err || typeof err !== 'object') return undefined
+  const e = err as { response?: { parameters?: { retry_after?: number } } }
+  const secs = e.response?.parameters?.retry_after
+  return typeof secs === 'number' ? secs * 1000 : undefined
+}
+
+/** Выполняет send(), при 429 повторяет с экспоненциальным откатом. */
+async function sendWithBackoff(send: () => Promise<unknown>, maxRetries = 4): Promise<'sent' | 'failed'> {
+  let delay = 1000
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      await send()
+      return 'sent'
+    } catch (err: unknown) {
+      if (!isRateLimitError(err) || attempt === maxRetries) return 'failed'
+      const wait = getRetryAfterMs(err) ?? delay
+      await new Promise((r) => setTimeout(r, wait))
+      delay = Math.min(delay * 2, 30_000)
+    }
+  }
+  return 'failed'
+}
+
 // ─── Выполнение рассылки ───────────────────────────────────────────────────────
 
 async function executeBroadcast(
@@ -332,18 +364,16 @@ async function executeBroadcast(
 
   for (let i = 0; i < recipients.length; i++) {
     const tgId = recipients[i].externalId!
-    try {
+    const result = await sendWithBackoff(() => {
       if (state.mediaType === 'photo' && state.mediaFileId) {
-        await ctx.telegram.sendPhoto(tgId, state.mediaFileId, { caption: state.caption })
+        return ctx.telegram.sendPhoto(tgId, state.mediaFileId, { caption: state.caption })
       } else if (state.mediaType === 'video' && state.mediaFileId) {
-        await ctx.telegram.sendVideo(tgId, state.mediaFileId, { caption: state.caption })
+        return ctx.telegram.sendVideo(tgId, state.mediaFileId, { caption: state.caption })
       } else {
-        await ctx.telegram.sendMessage(tgId, state.messageText!)
+        return ctx.telegram.sendMessage(tgId, state.messageText!)
       }
-      sent++
-    } catch {
-      failed++
-    }
+    })
+    if (result === 'sent') { sent++ } else { failed++ }
 
     // Обновляем прогресс каждые 10 сообщений
     if ((i + 1) % 10 === 0 || i === recipients.length - 1) {
@@ -358,9 +388,6 @@ async function executeBroadcast(
         // ignore edit errors
       }
     }
-
-    // Задержка против flood-лимитов Telegram
-    await new Promise((r) => setTimeout(r, 50))
   }
 
   // Сохраняем лог

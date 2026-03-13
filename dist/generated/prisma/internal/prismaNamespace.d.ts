@@ -1908,6 +1908,7 @@ export declare const TaskScalarFieldEnum: {
     readonly payload: "payload";
     readonly scheduledAt: "scheduledAt";
     readonly status: "status";
+    readonly attemptCount: "attemptCount";
     readonly createdAt: "createdAt";
 };
 export type TaskScalarFieldEnum = (typeof TaskScalarFieldEnum)[keyof typeof TaskScalarFieldEnum];
@@ -2048,6 +2049,7 @@ export declare const PromotionScalarFieldEnum: {
     readonly startsAt: "startsAt";
     readonly endsAt: "endsAt";
     readonly createdAt: "createdAt";
+    readonly updatedAt: "updatedAt";
     readonly notificationSent: "notificationSent";
 };
 export type PromotionScalarFieldEnum = (typeof PromotionScalarFieldEnum)[keyof typeof PromotionScalarFieldEnum];

@@ -13,6 +13,10 @@ type ApiKeysFlow = {
     flow: 'awaiting_openrouter_key';
 };
 export declare const apiKeysState: Map<number, ApiKeysFlow>;
+export declare const securityState: Map<number, {
+    flow: "awaiting_sec_clear_confirm";
+}>;
+export declare function handleSecurityMessage(ctx: Context, userId: number, text: string): Promise<boolean>;
 export declare function maskKey(key: string): string;
 export declare function showAISettings(ctx: Context): Promise<void>;
 export declare function showSecurityLog(ctx: Context): Promise<void>;

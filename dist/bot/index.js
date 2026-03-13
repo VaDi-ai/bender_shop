@@ -15,6 +15,7 @@ const sales_1 = require("./admin/sales");
 const analytics_1 = require("./admin/analytics");
 const ai_settings_1 = require("./admin/ai_settings");
 const notify_admins_1 = require("../lib/notify-admins");
+const api_key_store_1 = require("../lib/api-key-store");
 const agent_1 = require("./ai/agent");
 const ai_parser_1 = require("../lib/ai-parser");
 const storefront_1 = require("./admin/storefront");
@@ -164,6 +165,7 @@ bot.on((0, filters_1.message)('text'), async (ctx, next) => {
         promotions_1.promotionsState.delete(userId);
         pricing_1.pricingState.delete(userId);
         ai_settings_1.apiKeysState.delete(userId);
+        ai_settings_1.securityState.delete(userId);
         return next();
     }
     // Флоу рассылки
@@ -217,6 +219,12 @@ bot.on((0, filters_1.message)('text'), async (ctx, next) => {
     // Флоу API ключей
     if (ai_settings_1.apiKeysState.has(userId)) {
         const handled = await (0, ai_settings_1.handleApiKeysMessage)(ctx, userId, text);
+        if (handled)
+            return;
+    }
+    // Подтверждение очистки лога безопасности
+    if (ai_settings_1.securityState.has(userId)) {
+        const handled = await (0, ai_settings_1.handleSecurityMessage)(ctx, userId, text);
         if (handled)
             return;
     }
@@ -479,11 +487,11 @@ if (WEBAPP_URL) {
 (0, server_1.startApiServer)(process.env.NODE_ENV === 'production' ? bot : undefined);
 (async () => {
     try {
-        const savedKey = await prisma_1.prisma.apiKey.findFirst({ where: { service: 'openrouter_key' } });
-        if (savedKey?.value) {
-            process.env.OPENROUTER_API_KEY = savedKey.value;
-            (0, agent_1.reinitClient)(savedKey.value);
-            (0, ai_parser_1.reinitClient)(savedKey.value);
+        const savedKey = await (0, api_key_store_1.getApiKeyValue)('openrouter_key');
+        if (savedKey) {
+            process.env.OPENROUTER_API_KEY = savedKey;
+            (0, agent_1.reinitClient)(savedKey);
+            (0, ai_parser_1.reinitClient)(savedKey);
             console.log('OpenRouter ключ загружен из БД');
         }
     }
@@ -548,15 +556,11 @@ setInterval(async () => {
         if (now.getHours() !== 10)
             return;
         const todayStr = now.toISOString().slice(0, 10);
-        const notifyKey = await prisma_1.prisma.apiKey.findUnique({ where: { service: 'currency_notify_date' } });
-        if (notifyKey?.value === todayStr)
+        const notifyDateValue = await (0, api_key_store_1.getApiKeyValue)('currency_notify_date');
+        if (notifyDateValue === todayStr)
             return; // уже отправляли сегодня
         // Отмечаем как отправленное
-        await prisma_1.prisma.apiKey.upsert({
-            where: { service: 'currency_notify_date' },
-            create: { service: 'currency_notify_date', value: todayStr },
-            update: { value: todayStr },
-        });
+        await (0, api_key_store_1.setApiKeyValue)('currency_notify_date', todayStr);
         for (const adminId of ADMIN_IDS) {
             try {
                 const result = await (0, pricing_1.sendDailyCurrencyRates)(async (text, keyboard) => {
@@ -579,14 +583,14 @@ async function ensureSalesTopic() {
         const CRM_GROUP_ID = Number(process.env.CRM_GROUP_ID);
         if (!CRM_GROUP_ID)
             return;
-        const existing = await prisma_1.prisma.apiKey.findUnique({ where: { service: 'sales_topic' } });
-        if (existing) {
-            console.log(`Топик продаж: threadId=${existing.value}`);
+        const existingTopic = await (0, api_key_store_1.getApiKeyValue)('sales_topic');
+        if (existingTopic) {
+            console.log(`Топик продаж: threadId=${existingTopic}`);
             return;
         }
         const topic = await bot.telegram.createForumTopic(CRM_GROUP_ID, '📦 Продажи и резервы');
         const threadId = topic.message_thread_id;
-        await prisma_1.prisma.apiKey.create({ data: { service: 'sales_topic', value: String(threadId) } });
+        await (0, api_key_store_1.setApiKeyValue)('sales_topic', String(threadId));
         console.log(`Топик «📦 Продажи и резервы» создан: threadId=${threadId}`);
         // Отправляем панель управления в топик
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -608,6 +612,11 @@ async function ensureSalesTopic() {
 }
 ;
 (async () => { await ensureSalesTopic(); })().catch((err) => console.error('ensureSalesTopic failed:', err));
-process.once('SIGINT', () => bot.stop('SIGINT'));
 process.once('SIGTERM', () => bot.stop('SIGTERM'));
+process.on('SIGINT', async () => {
+    bot.stop('SIGINT');
+    await prisma_1.prisma.$disconnect();
+    await prisma_1.pool.end();
+    process.exit(0);
+});
 //# sourceMappingURL=index.js.map

@@ -28,6 +28,7 @@ enum TaskStatus {
   pending
   done
   cancelled
+  failed
 }
 
 enum TemplateType {
@@ -90,6 +91,9 @@ model Client {
   pinnedMessageId Int?          // ID закреплённого сообщения с панелью управления
 
   // Расширенные контактные данные
+  // TODO: encrypt phone/email/birthDate at the application layer for GDPR/compliance.
+  //       Use the same AES-256-GCM approach from lib/crypto.ts. Requires a migration
+  //       similar to scripts/encrypt-api-keys.ts before enabling.
   phone           String?
   fullName        String?
   email           String?
@@ -110,6 +114,9 @@ model Client {
 
   @@unique([source, externalId]) // один клиент per платформа
   @@index([segmentId])
+  @@index([phone])
+  @@index([email])
+  @@index([telegramTopicId])
 }
 
 model Message {
@@ -140,13 +147,14 @@ model Tag {
 }
 
 model Task {
-  id          Int        @id @default(autoincrement())
-  clientId    Int
-  action      String     // "send_message", "change_segment", "notify_manager" и т.д.
-  payload     Json       // произвольные параметры действия
-  scheduledAt DateTime
-  status      TaskStatus @default(pending)
-  createdAt   DateTime   @default(now())
+  id           Int        @id @default(autoincrement())
+  clientId     Int
+  action       String     // "send_message", "change_segment", "notify_manager" и т.д.
+  payload      Json       // произвольные параметры действия
+  scheduledAt  DateTime
+  status       TaskStatus @default(pending)
+  attemptCount Int        @default(0)
+  createdAt    DateTime   @default(now())
 
   client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
 
@@ -241,6 +249,7 @@ model StockMovement {
 
   @@index([variantId])
   @@index([createdAt])
+  @@index([variantId, createdAt])
   @@index([type])             // A8
 }
 
@@ -263,6 +272,7 @@ model Order {
   @@index([telegramId])
   @@index([status])
   @@index([clientId])
+  @@index([createdAt])
 }
 
 model Reservation {
@@ -343,6 +353,7 @@ model Promotion {
   startsAt         DateTime?
   endsAt           DateTime?
   createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
   notificationSent Boolean          @default(false)
 
   prices PromotionPrice[]

@@ -34,7 +34,9 @@
       "Bash(grep -rn \"order.*status\\\\|status.*order\\\\|Order.*status\\\\|'new'\\\\|'processing'\\\\|'shipped'\" D:/va/projects/bender-shop/ --include=\"*.ts\" 2>/dev/null | grep -v \"node_modules\\\\|/dist/\\\\|generated/\\\\|\\\\.d\\\\.ts\\\\|TaskStatus\\\\|Reservation\\\\|task\\\\.status\\\\|type\\\\s*=\\\\s*'new'\" | head -20)",
       "Bash(grep -rn \"ProductVariant.*reserved\\\\|variant.*reserved\\\\|reserved.*variant\\\\|variantId.*reserved\\\\|reserved.*variantId\" D:/va/projects/bender-shop/ --include=\"*.ts\" 2>/dev/null | grep -v \"node_modules\\\\|/dist/\\\\|generated/\\\\|schema\\\\|Product\\\\.reserved\\\\|product\\\\.reserved\\\\|productId\" | head -20)",
       "Bash(grep -rn \"OrderPayment\\\\|OrderStatus\\\\|StockMovementType\\\\|from.*generated.*prisma\" D:/va/projects/bender-shop/bot/ D:/va/projects/bender-shop/api/ D:/va/projects/bender-shop/lib/ --include=\"*.ts\" 2>/dev/null | grep -v \"node_modules\\\\|/dist/\" | head -15)",
-      "Bash(find D:/va/projects/bender-shop/generated -name \"enums*\" 2>/dev/null | head -5)"
+      "Bash(find D:/va/projects/bender-shop/generated -name \"enums*\" 2>/dev/null | head -5)",
+      "Bash(find /d/va/projects/bender-shop -name \"*.ts\" -not -path \"*/node_modules/*\" -not -path \"*/dist/*\" | xargs grep -l \"perplexity\\\\|sonar\\\\|web.*search\\\\|searchTech\" 2>/dev/null)",
+      "Bash(grep -r \"OPENROUTER\\\\|ai_mode\\\\|ai_parser\\\\|claude\\\\|perplexity\" --include=\"*.env*\" --include=\"*.ts\" --include=\"*.prisma\" /d/va/projects/bender-shop 2>/dev/null | grep -v node_modules | grep -v dist | head -50)"
     ]
   }
 }

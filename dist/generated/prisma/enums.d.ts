@@ -14,6 +14,7 @@ export declare const TaskStatus: {
     readonly pending: "pending";
     readonly done: "done";
     readonly cancelled: "cancelled";
+    readonly failed: "failed";
 };
 export type TaskStatus = (typeof TaskStatus)[keyof typeof TaskStatus];
 export declare const TemplateType: {

@@ -2,9 +2,6 @@
 /**
  * lib/currency.ts — Курсы валют и привязка регион → валюта
  */
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.CURRENCY_FLAGS = void 0;
 exports.getActiveCurrencies = getActiveCurrencies;
@@ -13,7 +10,6 @@ exports.fetchCurrencyRates = fetchCurrencyRates;
 exports.roundPrice = roundPrice;
 exports.updateCurrencyRates = updateCurrencyRates;
 exports.getSavedRates = getSavedRates;
-const https_1 = __importDefault(require("https"));
 const prisma_1 = require("./prisma");
 /** Статические флаги для UI (дополняются данными из БД) */
 exports.CURRENCY_FLAGS = {
@@ -49,27 +45,24 @@ async function getRegionCurrencyMap() {
 }
 /** Курсы валют с ЦБ РФ. Ключ — ISO-код, значение — рублей за 1 единицу. */
 async function fetchCurrencyRates() {
-    return new Promise((resolve, reject) => {
-        https_1.default.get('https://www.cbr-xml-daily.ru/daily_json.js', (res) => {
-            let body = '';
-            res.on('data', (chunk) => { body += chunk; });
-            res.on('end', () => {
-                try {
-                    const data = JSON.parse(body);
-                    const rates = { RUB: 1 };
-                    const valute = data.Valute;
-                    for (const [code, info] of Object.entries(valute)) {
-                        rates[code] = info.Value / info.Nominal;
-                    }
-                    resolve(rates);
-                }
-                catch (e) {
-                    reject(e);
-                }
-            });
-            res.on('error', reject);
-        }).on('error', reject);
-    });
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 10000);
+    try {
+        const res = await fetch('https://www.cbr-xml-daily.ru/daily_json.js', {
+            signal: controller.signal,
+        });
+        if (!res.ok)
+            throw new Error(`CBR HTTP ${res.status}`);
+        const data = (await res.json());
+        const rates = { RUB: 1 };
+        for (const [code, info] of Object.entries(data.Valute)) {
+            rates[code] = info.Value / info.Nominal;
+        }
+        return rates;
+    }
+    finally {
+        clearTimeout(timer);
+    }
 }
 /** Округление цены вверх до ближайшего круглого числа */
 function roundPrice(price) {

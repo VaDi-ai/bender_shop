@@ -13,6 +13,7 @@ import OpenAI from 'openai'
 import { Context, Markup, Telegraf } from 'telegraf'
 import { prisma } from '../../lib/prisma'
 import { humanizeApiError } from '../../lib/api-errors'
+import { setApiKeyValue } from '../../lib/api-key-store'
 import { getAIMode, setAIMode, getAIStats, reinitClient as reinitAgentClient, type AIMode } from '../ai/agent'
 import { reinitClient as reinitParserClient } from '../../lib/ai-parser'
 import type { SecurityEvent } from '../../lib/security-log'
@@ -38,6 +39,34 @@ const MODE_DESCRIPTIONS: Record<AIMode, string> = {
 type ApiKeysFlow = { flow: 'awaiting_openrouter_key' }
 
 export const apiKeysState = new Map<number, ApiKeysFlow>()
+
+// ─── Состояние подтверждения очистки лога безопасности ───────────────────────
+
+export const securityState = new Map<number, { flow: 'awaiting_sec_clear_confirm' }>()
+
+export async function handleSecurityMessage(
+  ctx: Context,
+  userId: number,
+  text: string,
+): Promise<boolean> {
+  const state = securityState.get(userId)
+  if (!state) return false
+
+  if (state.flow === 'awaiting_sec_clear_confirm') {
+    securityState.delete(userId)
+    if (text.trim() === 'CONFIRM') {
+      const { count } = await prisma.securityLog.deleteMany()
+      console.log(`[security] Log cleared by admin ${userId} — ${count} record(s) deleted`)
+      await ctx.reply('🗑️ Лог безопасности очищен.')
+      await showSecurityLog(ctx)
+    } else {
+      await ctx.reply('❌ Очистка отменена. Текст не совпал с CONFIRM.')
+    }
+    return true
+  }
+
+  return false
+}
 
 // ─── Маскировка ключей ────────────────────────────────────────────────────────
 
@@ -240,11 +269,7 @@ export async function handleApiKeysMessage(
     }
 
     // Сохраняем и переинициализируем клиентов
-    await prisma.apiKey.upsert({
-      where: { service: 'openrouter_key' },
-      create: { service: 'openrouter_key', value: text },
-      update: { value: text },
-    })
+    await setApiKeyValue('openrouter_key', text)
     process.env.OPENROUTER_API_KEY = text
     reinitAgentClient(text)
     reinitParserClient(text)
@@ -306,9 +331,9 @@ export function setupApiKeysHandlers(bot: Telegraf): void {
 
   bot.action('sec:clear', async (ctx) => {
     try { await ctx.answerCbQuery() } catch {}
-    await prisma.securityLog.deleteMany()
-    await ctx.reply('🗑️ Лог безопасности очищен.')
-    await showSecurityLog(ctx)
+    const userId = ctx.from!.id
+    securityState.set(userId, { flow: 'awaiting_sec_clear_confirm' })
+    await ctx.reply('⚠️ Удалить весь лог безопасности? Напиши CONFIRM для подтверждения')
   })
 
   bot.action('sec:back', async (ctx) => {

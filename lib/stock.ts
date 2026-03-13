@@ -25,20 +25,21 @@ export async function stockOut(
   comment: string,
   userId: string
 ): Promise<void> {
-  const updated = await prisma.productVariant.updateMany({
-    where: { id: variantId, quantity: { gte: qty } },
-    data: { quantity: { decrement: qty }, inStock: true },
-  })
-  if (updated.count === 0) throw new Error('Недостаточно товара')
+  await prisma.$transaction(async (tx) => {
+    const variant = await tx.productVariant.findUnique({ where: { id: variantId } })
+    if (!variant || variant.quantity < qty) throw new Error('Недостаточно товара')
 
-  // Mark out-of-stock atomically after decrement
-  await prisma.productVariant.updateMany({
-    where: { id: variantId, quantity: { lte: 0 } },
-    data: { inStock: false },
-  })
+    await tx.productVariant.update({
+      where: { id: variantId },
+      data: {
+        quantity: { decrement: qty },
+        inStock: variant.quantity - qty > 0,
+      },
+    })
 
-  await prisma.stockMovement.create({
-    data: { variantId, type: 'out', quantity: qty, comment, createdBy: userId },
+    await tx.stockMovement.create({
+      data: { variantId, type: 'out', quantity: qty, comment, createdBy: userId },
+    })
   })
 }
 

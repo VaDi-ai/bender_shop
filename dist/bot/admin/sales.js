@@ -23,6 +23,7 @@ exports.registerSkipCommentHandlers = registerSkipCommentHandlers;
 const telegraf_1 = require("telegraf");
 const prisma_1 = require("../../lib/prisma");
 const stock_1 = require("../../lib/stock");
+const api_key_store_1 = require("../../lib/api-key-store");
 const CRM_GROUP_ID = Number(process.env.CRM_GROUP_ID);
 exports.salesState = new Map();
 // ─── Экспортируемые хелперы для запуска флоу из карточки клиента ─────────────
@@ -858,10 +859,10 @@ function registerSkipCommentHandlers(bot) {
 // ─── Хелпер: дублировать в топик продаж ──────────────────────────────────────
 async function notifyToSalesTopic(ctx, text, clientName) {
     try {
-        const topicRecord = await prisma_1.prisma.apiKey.findUnique({ where: { service: 'sales_topic' } });
-        if (!topicRecord)
+        const topicValue = await (0, api_key_store_1.getApiKeyValue)('sales_topic');
+        if (!topicValue)
             return;
-        const threadId = parseInt(topicRecord.value, 10);
+        const threadId = parseInt(topicValue, 10);
         if (isNaN(threadId))
             return;
         // eslint-disable-next-line @typescript-eslint/no-explicit-any

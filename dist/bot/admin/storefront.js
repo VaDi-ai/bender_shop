@@ -18,12 +18,13 @@ exports.handleStorefrontMessage = handleStorefrontMessage;
 exports.handleStorefrontPhoto = handleStorefrontPhoto;
 const telegraf_1 = require("telegraf");
 const prisma_1 = require("../../lib/prisma");
+const api_key_store_1 = require("../../lib/api-key-store");
 exports.storefrontState = new Map();
 // ─── Главный экран Витрины ────────────────────────────────────────────────────
 async function showStorefront(ctx) {
     const bannerCount = await prisma_1.prisma.heroBanner.count({ where: { isActive: true } });
-    const marquee = await prisma_1.prisma.apiKey.findUnique({ where: { service: 'setting_marquee' } });
-    const marqueeText = marquee?.value ? `«${marquee.value.slice(0, 40)}${marquee.value.length > 40 ? '…' : ''}»` : '—';
+    const marqueeValue = await (0, api_key_store_1.getApiKeyValue)('setting_marquee');
+    const marqueeText = marqueeValue ? `«${marqueeValue.slice(0, 40)}${marqueeValue.length > 40 ? '…' : ''}»` : '—';
     await ctx.reply([
         '🖼️ Витрина',
         '',
@@ -38,8 +39,7 @@ async function showStorefront(ctx) {
 }
 // ─── Экран бегущей строки ─────────────────────────────────────────────────────
 async function showMarquee(ctx) {
-    const record = await prisma_1.prisma.apiKey.findUnique({ where: { service: 'setting_marquee' } });
-    const current = record?.value ?? '—';
+    const current = (await (0, api_key_store_1.getApiKeyValue)('setting_marquee')) ?? '—';
     await ctx.reply(`📢 Бегущая строка\n\nТекущий текст:\n${current}`, telegraf_1.Markup.inlineKeyboard([
         [telegraf_1.Markup.button.callback('✏️ Изменить', 'sf:marquee_edit')],
         [telegraf_1.Markup.button.callback('← Назад', 'sf:back')],
@@ -107,11 +107,7 @@ function setupStorefrontHandlers(bot) {
         }
         catch { }
         const version = Date.now().toString();
-        await prisma_1.prisma.apiKey.upsert({
-            where: { service: 'cache_version' },
-            create: { service: 'cache_version', value: version },
-            update: { value: version },
-        });
+        await (0, api_key_store_1.setApiKeyValue)('cache_version', version);
         await ctx.reply(`✅ Кэш сайта сброшен. Сайт обновится в течение 30 секунд.`);
         await showStorefront(ctx);
     });
@@ -184,11 +180,7 @@ async function handleStorefrontMessage(ctx, userId, text) {
     // ── Бегущая строка ────────────────────────────────────────────────────────
     if (state.flow === 'marquee' && state.step === 'text') {
         exports.storefrontState.delete(userId);
-        await prisma_1.prisma.apiKey.upsert({
-            where: { service: 'setting_marquee' },
-            create: { service: 'setting_marquee', value: text },
-            update: { value: text },
-        });
+        await (0, api_key_store_1.setApiKeyValue)('setting_marquee', text);
         await ctx.reply('✅ Бегущая строка обновлена.', telegraf_1.Markup.removeKeyboard());
         await showMarquee(ctx);
         return true;

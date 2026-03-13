@@ -4,7 +4,7 @@ import { message } from 'telegraf/filters'
 import { setupClientHandlers } from '../webhooks/telegram'
 import { startScheduler } from './scheduler'
 import { startApiServer } from '../api/server'
-import { prisma, initPrismaAlerts } from '../lib/prisma'
+import { prisma, pool, initPrismaAlerts } from '../lib/prisma'
 import {
   inventoryState,
   setupInventoryHandlers,
@@ -34,8 +34,10 @@ import {
 import {
   showAISettings, setupAISettingsHandlers,
   showApiKeysMenu, setupApiKeysHandlers, handleApiKeysMessage, apiKeysState,
+  securityState, handleSecurityMessage,
 } from './admin/ai_settings'
 import { initAdminNotifications } from '../lib/notify-admins'
+import { getApiKeyValue, setApiKeyValue } from '../lib/api-key-store'
 import { reinitClient as reinitAgentClient } from './ai/agent'
 import { reinitClient as reinitParserClient } from '../lib/ai-parser'
 import {
@@ -246,6 +248,7 @@ bot.on(message('text'), async (ctx, next) => {
     promotionsState.delete(userId)
     pricingState.delete(userId)
     apiKeysState.delete(userId)
+    securityState.delete(userId)
     return next()
   }
 
@@ -300,6 +303,12 @@ bot.on(message('text'), async (ctx, next) => {
   // Флоу API ключей
   if (apiKeysState.has(userId)) {
     const handled = await handleApiKeysMessage(ctx, userId, text)
+    if (handled) return
+  }
+
+  // Подтверждение очистки лога безопасности
+  if (securityState.has(userId)) {
+    const handled = await handleSecurityMessage(ctx, userId, text)
     if (handled) return
   }
 
@@ -633,11 +642,11 @@ startApiServer(process.env.NODE_ENV === 'production' ? bot : undefined)
 
 ;(async () => {
   try {
-    const savedKey = await prisma.apiKey.findFirst({ where: { service: 'openrouter_key' } })
-    if (savedKey?.value) {
-      process.env.OPENROUTER_API_KEY = savedKey.value
-      reinitAgentClient(savedKey.value)
-      reinitParserClient(savedKey.value)
+    const savedKey = await getApiKeyValue('openrouter_key')
+    if (savedKey) {
+      process.env.OPENROUTER_API_KEY = savedKey
+      reinitAgentClient(savedKey)
+      reinitParserClient(savedKey)
       console.log('OpenRouter ключ загружен из БД')
     }
   } catch (e) {
@@ -710,15 +719,11 @@ setInterval(async () => {
     if (now.getHours() !== 10) return
 
     const todayStr = now.toISOString().slice(0, 10)
-    const notifyKey = await prisma.apiKey.findUnique({ where: { service: 'currency_notify_date' } })
-    if (notifyKey?.value === todayStr) return // уже отправляли сегодня
+    const notifyDateValue = await getApiKeyValue('currency_notify_date')
+    if (notifyDateValue === todayStr) return // уже отправляли сегодня
 
     // Отмечаем как отправленное
-    await prisma.apiKey.upsert({
-      where: { service: 'currency_notify_date' },
-      create: { service: 'currency_notify_date', value: todayStr },
-      update: { value: todayStr },
-    })
+    await setApiKeyValue('currency_notify_date', todayStr)
 
     for (const adminId of ADMIN_IDS) {
       try {
@@ -742,16 +747,16 @@ async function ensureSalesTopic(): Promise<void> {
     const CRM_GROUP_ID = Number(process.env.CRM_GROUP_ID)
     if (!CRM_GROUP_ID) return
 
-    const existing = await prisma.apiKey.findUnique({ where: { service: 'sales_topic' } })
-    if (existing) {
-      console.log(`Топик продаж: threadId=${existing.value}`)
+    const existingTopic = await getApiKeyValue('sales_topic')
+    if (existingTopic) {
+      console.log(`Топик продаж: threadId=${existingTopic}`)
       return
     }
 
     const topic = await bot.telegram.createForumTopic(CRM_GROUP_ID, '📦 Продажи и резервы')
     const threadId = topic.message_thread_id
 
-    await prisma.apiKey.create({ data: { service: 'sales_topic', value: String(threadId) } })
+    await setApiKeyValue('sales_topic', String(threadId))
     console.log(`Топик «📦 Продажи и резервы» создан: threadId=${threadId}`)
 
     // Отправляем панель управления в топик
@@ -778,5 +783,10 @@ async function ensureSalesTopic(): Promise<void> {
 
 ;(async () => { await ensureSalesTopic() })().catch((err) => console.error('ensureSalesTopic failed:', err))
 
-process.once('SIGINT', () => bot.stop('SIGINT'))
 process.once('SIGTERM', () => bot.stop('SIGTERM'))
+process.on('SIGINT', async () => {
+  bot.stop('SIGINT')
+  await prisma.$disconnect()
+  await pool.end()
+  process.exit(0)
+})
