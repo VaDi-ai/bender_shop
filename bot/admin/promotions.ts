@@ -16,7 +16,7 @@
 
 import { Context, Markup, Telegraf } from 'telegraf'
 import { prisma } from '../../lib/prisma'
-import { FilterType } from '../../generated/prisma/client'
+import { DiscountType, FilterType } from '../../generated/prisma/client'
 import { applyPromotion, cancelPromotion, findVariantsByFilter, filterLabel } from '../../lib/promotions'
 
 // ─── Типы состояния ───────────────────────────────────────────────────────────
@@ -24,15 +24,15 @@ import { applyPromotion, cancelPromotion, findVariantsByFilter, filterLabel } fr
 type PromoFlow =
   | { step: 'name' }
   | { step: 'discount_type'; name: string }
-  | { step: 'discount_value'; name: string; discountType: 'percent' | 'fixed' }
-  | { step: 'filter_type'; name: string; discountType: 'percent' | 'fixed'; discountValue: number }
-  | { step: 'filter_category'; name: string; discountType: 'percent' | 'fixed'; discountValue: number }
-  | { step: 'filter_brand'; name: string; discountType: 'percent' | 'fixed'; discountValue: number }
-  | { step: 'filter_attribute'; name: string; discountType: 'percent' | 'fixed'; discountValue: number }
-  | { step: 'filter_products'; name: string; discountType: 'percent' | 'fixed'; discountValue: number; selectedProductIds: number[] }
-  | { step: 'dates'; name: string; discountType: 'percent' | 'fixed'; discountValue: number; filterType: string; filterValue: string }
-  | { step: 'dates_input'; name: string; discountType: 'percent' | 'fixed'; discountValue: number; filterType: string; filterValue: string }
-  | { step: 'preview'; name: string; discountType: 'percent' | 'fixed'; discountValue: number; filterType: string; filterValue: string; startsAt?: Date; endsAt?: Date }
+  | { step: 'discount_value'; name: string; discountType: DiscountType }
+  | { step: 'filter_type'; name: string; discountType: DiscountType; discountValue: number }
+  | { step: 'filter_category'; name: string; discountType: DiscountType; discountValue: number }
+  | { step: 'filter_brand'; name: string; discountType: DiscountType; discountValue: number }
+  | { step: 'filter_attribute'; name: string; discountType: DiscountType; discountValue: number }
+  | { step: 'filter_products'; name: string; discountType: DiscountType; discountValue: number; selectedProductIds: number[] }
+  | { step: 'dates'; name: string; discountType: DiscountType; discountValue: number; filterType: string; filterValue: string }
+  | { step: 'dates_input'; name: string; discountType: DiscountType; discountValue: number; filterType: string; filterValue: string }
+  | { step: 'preview'; name: string; discountType: DiscountType; discountValue: number; filterType: string; filterValue: string; startsAt?: Date; endsAt?: Date }
 
 export const promotionsState = new Map<number, PromoFlow>()
 
@@ -102,11 +102,11 @@ async function askDiscountValue(
   ctx: Context,
   userId: number,
   name: string,
-  discountType: 'percent' | 'fixed',
+  discountType: DiscountType,
 ): Promise<void> {
   promotionsState.set(userId, { step: 'discount_value', name, discountType })
   const hint =
-    discountType === 'percent'
+    discountType === DiscountType.percent
       ? 'Введите процент скидки (1–90):'
       : 'Введите сумму скидки в рублях:'
   await ctx.reply(
@@ -121,12 +121,12 @@ async function askFilterType(
   ctx: Context,
   userId: number,
   name: string,
-  discountType: 'percent' | 'fixed',
+  discountType: DiscountType,
   discountValue: number,
 ): Promise<void> {
   promotionsState.set(userId, { step: 'filter_type', name, discountType, discountValue })
   const discLabel =
-    discountType === 'percent' ? `${discountValue}%` : fmtPrice(discountValue)
+    discountType === DiscountType.percent ? `${discountValue}%` : fmtPrice(discountValue)
   await ctx.reply(
     `Акция: ${name}\nСкидка: ${discLabel}\n\nНа что применяется:`,
     Markup.inlineKeyboard([
@@ -239,7 +239,7 @@ async function showProductPicker(ctx: Context, selectedIds: number[]): Promise<v
 async function askDates(
   ctx: Context,
   userId: number,
-  base: { name: string; discountType: 'percent' | 'fixed'; discountValue: number; filterType: string; filterValue: string },
+  base: { name: string; discountType: DiscountType; discountValue: number; filterType: string; filterValue: string },
 ): Promise<void> {
   promotionsState.set(userId, { step: 'dates', ...base })
   await ctx.reply(
@@ -262,7 +262,7 @@ async function showPreview(ctx: Context, userId: number): Promise<void> {
   const count = variants.length
 
   const discLabel =
-    state.discountType === 'percent'
+    state.discountType === DiscountType.percent
       ? `${state.discountValue}%`
       : fmtPrice(state.discountValue)
 
@@ -276,7 +276,7 @@ async function showPreview(ctx: Context, userId: number): Promise<void> {
     const attrStr = Object.values(attrs).join(' ')
     const orig = Number(v.price)
     let newP: number
-    if (state.discountType === 'percent') {
+    if (state.discountType === DiscountType.percent) {
       newP = Math.max(1, Math.round(orig * (1 - state.discountValue / 100)))
     } else {
       newP = Math.max(1, Math.round(orig - state.discountValue))
@@ -354,7 +354,7 @@ async function launchPromotion(ctx: Context, userId: number, withNotification: b
   }
 
   const discLabel =
-    state.discountType === 'percent' ? `${state.discountValue}%` : fmtPrice(state.discountValue)
+    state.discountType === DiscountType.percent ? `${state.discountValue}%` : fmtPrice(state.discountValue)
 
   await ctx.reply(
     [
@@ -379,7 +379,7 @@ async function sendPromoNotification(
   state: Extract<PromoFlow, { step: 'preview' }>,
 ): Promise<void> {
   const discLabel =
-    state.discountType === 'percent' ? `${state.discountValue}%` : fmtPrice(state.discountValue)
+    state.discountType === DiscountType.percent ? `${state.discountValue}%` : fmtPrice(state.discountValue)
   const filter = filterLabel(state.filterType, state.filterValue)
   const webappUrl = process.env.WEBAPP_URL ?? ''
 
@@ -453,7 +453,7 @@ async function showActiveList(ctx: Context): Promise<void> {
 
   for (const p of promos) {
     const discLabel =
-      p.discountType === 'percent'
+      p.discountType === DiscountType.percent
         ? `${p.discountValue}%`
         : fmtPrice(Number(p.discountValue))
     const until = p.endsAt ? ` — до ${fmtDate(p.endsAt)}` : ''
@@ -485,7 +485,7 @@ async function showDoneList(ctx: Context): Promise<void> {
 
   const lines = promos.map((p) => {
     const discLabel =
-      p.discountType === 'percent'
+      p.discountType === DiscountType.percent
         ? `${p.discountValue}%`
         : fmtPrice(Number(p.discountValue))
     return `✓ ${p.name} — ${discLabel} — ${filterLabel(p.filterType, p.filterValue)}`
@@ -518,7 +518,7 @@ export function setupPromotionsHandlers(bot: Telegraf): void {
     const userId = ctx.from!.id
     const state = promotionsState.get(userId)
     if (!state || state.step !== 'discount_type') return
-    const discountType = ctx.match[1] as 'percent' | 'fixed'
+    const discountType = ctx.match[1] as DiscountType
     await askDiscountValue(ctx, userId, state.name, discountType)
   })
 
@@ -682,7 +682,7 @@ export function setupPromotionsHandlers(bot: Telegraf): void {
 
     const priceCount = await prisma.promotionPrice.count({ where: { promotionId: promoId } })
     const discLabel =
-      promo.discountType === 'percent'
+      promo.discountType === DiscountType.percent
         ? `${promo.discountValue}%`
         : fmtPrice(Number(promo.discountValue))
 
@@ -771,7 +771,7 @@ export async function handlePromotionsMessage(
       await ctx.reply('Введите положительное число.')
       return true
     }
-    if (state.discountType === 'percent' && (val < 1 || val > 90)) {
+    if (state.discountType === DiscountType.percent && (val < 1 || val > 90)) {
       await ctx.reply('Процент должен быть от 1 до 90.')
       return true
     }

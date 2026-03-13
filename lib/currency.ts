@@ -89,41 +89,57 @@ export async function updateCurrencyRates(): Promise<CurrencyChange[]> {
     console.error('[currency] fetchCurrencyRates failed:', err)
     return []
   }
+
   const currencies = await getActiveCurrencies()
+  const activeCurrencies = currencies.filter((c) => c !== 'RUB')
+
+  // Pre-fetch all existing rates in one query — O(1) lookup
+  const existingRates = await prisma.currencyRate.findMany({
+    where: { currency: { in: activeCurrencies } },
+  })
+  const existingMap = new Map(existingRates.map((r) => [r.currency, r]))
+
   const changes: CurrencyChange[] = []
 
-  for (const currency of currencies) {
-    if (currency === 'RUB') continue
-    const newRate = allRates[currency]
-    if (!newRate) continue
+  // Execute all upserts in a single transaction
+  await prisma.$transaction(async (tx) => {
+    const ops: Promise<unknown>[] = []
 
-    const existing = await prisma.currencyRate.findUnique({ where: { currency } })
-    const previousRate = existing ? Number(existing.rate) : newRate
+    for (const currency of activeCurrencies) {
+      const newRate = allRates[currency]
+      if (!newRate) continue
 
-    await prisma.currencyRate.upsert({
-      where: { currency },
-      create: { currency, rate: newRate, previousRate: null },
-      update: { previousRate: previousRate, rate: newRate },
-    })
+      const existing = existingMap.get(currency)
+      const previousRate = existing ? Number(existing.rate) : newRate
 
-    const diff = newRate - previousRate
-    const changePercent = previousRate !== 0
-      ? ((diff / previousRate) * 100).toFixed(2)
-      : '0.00'
+      ops.push(
+        tx.currencyRate.upsert({
+          where: { currency },
+          create: { currency, rate: newRate, previousRate: null },
+          update: { previousRate: previousRate, rate: newRate },
+        }),
+      )
 
-    const direction: 'up' | 'down' | 'same' =
-      diff > 0.001 ? 'up' : diff < -0.001 ? 'down' : 'same'
+      const diff = newRate - previousRate
+      const changePercent = previousRate !== 0
+        ? ((diff / previousRate) * 100).toFixed(2)
+        : '0.00'
+      const direction: 'up' | 'down' | 'same' =
+        diff > 0.001 ? 'up' : diff < -0.001 ? 'down' : 'same'
 
-    changes.push({
-      currency,
-      flag: CURRENCY_FLAGS[currency] ?? '',
-      name: CURRENCY_NAMES[currency] ?? currency,
-      previousRate,
-      newRate,
-      changePercent,
-      direction,
-    })
-  }
+      changes.push({
+        currency,
+        flag: CURRENCY_FLAGS[currency] ?? '',
+        name: CURRENCY_NAMES[currency] ?? currency,
+        previousRate,
+        newRate,
+        changePercent,
+        direction,
+      })
+    }
+
+    await Promise.all(ops)
+  })
 
   return changes
 }

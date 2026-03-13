@@ -933,8 +933,8 @@ async function handleClientMessage(
 
 // ─── AI: обработка входящего сообщения ────────────────────────────────────────
 
-/** Обрезает ответ AI до 2000 символов и удаляет признаки утечки системного промпта */
-function sanitizeAIResponse(text: string): string {
+/** Модерирует вывод AI: обрезает до 2000 символов, фильтрует утечки промпта, редактирует PII */
+function moderateAIOutput(text: string): string {
   const leakPatterns = [
     /system prompt/gi,
     /you are an ai/gi,
@@ -944,7 +944,15 @@ function sanitizeAIResponse(text: string): string {
   const lines = text.split('\n').filter((line) => {
     return !leakPatterns.some((re) => re.test(line))
   })
-  const cleaned = lines.join('\n').trim()
+  let cleaned = lines.join('\n').trim()
+
+  // Redact phone numbers
+  cleaned = cleaned.replace(/(\+?[\d][\d\s\-()\u00d7]{6,14}[\d])/g, '[телефон]')
+  // Redact emails
+  cleaned = cleaned.replace(/[\w.+\-]+@[\w\-]+\.[\w.]+/g, '[email]')
+  // Redact URLs
+  cleaned = cleaned.replace(/https?:\/\/[^\s]+/g, '[ссылка]')
+
   return cleaned.length > 2000 ? cleaned.slice(0, 2000) : cleaned
 }
 
@@ -967,8 +975,8 @@ async function handleAIResponse(
   }
 
   if (mode === 'auto') {
-    // Санитизируем ответ перед отправкой клиенту
-    const safeAiText = sanitizeAIResponse(aiText)
+    // Модерируем ответ перед отправкой клиенту
+    const safeAiText = moderateAIOutput(aiText)
     // Отправляем клиенту автоматически
     const client = await prisma.client.findUnique({ where: { id: clientId } })
     if (client?.source === 'telegram' && client.externalId) {
@@ -984,10 +992,11 @@ async function handleAIResponse(
   }
 
   if (mode === 'semi') {
+    const safeAiText = moderateAIOutput(aiText)
     // Сохраняем предложение и показываем менеджеру с кнопками
-    const suggestionId = storeSuggestion(clientId, aiText, threadId)
+    const suggestionId = storeSuggestion(clientId, safeAiText, threadId)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await (telegram.sendMessage as any)(CRM_GROUP_ID, `🤖 Предложение AI:\n\n${aiText}`, {
+    await (telegram.sendMessage as any)(CRM_GROUP_ID, `🤖 Предложение AI:\n\n${safeAiText}`, {
       message_thread_id: threadId,
       reply_markup: Markup.inlineKeyboard([
         [
@@ -1002,7 +1011,7 @@ async function handleAIResponse(
 
   if (mode === 'manual') {
     // Только подсказка менеджеру
-    await sendToTopic(telegram, CRM_GROUP_ID, threadId, `💡 AI подсказка: ${aiText}`)
+    await sendToTopic(telegram, CRM_GROUP_ID, threadId, `💡 AI подсказка: ${moderateAIOutput(aiText)}`)
     return
   }
 }

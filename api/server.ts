@@ -182,16 +182,25 @@ export function startApiServer(bot?: Telegraf): void {
 
   // ── GET /health ────────────────────────────────────────────────────────────
   app.get('/health', async (_req, res) => {
+    let dbOk = false
     try {
       await prisma.$queryRaw`SELECT 1`
-      res.json({
-        status: 'ok',
-        uptime: Math.floor(process.uptime()),
-        timestamp: new Date().toISOString(),
-      })
-    } catch {
-      res.status(503).json({ status: 'error', message: 'База данных недоступна' })
-    }
+      dbOk = true
+    } catch {}
+
+    const botOk = bot !== undefined
+
+    const status = dbOk && botOk ? 'ok' : 'error'
+    const code = status === 'ok' ? 200 : 503
+
+    res.status(code).json({
+      status,
+      db: dbOk ? 'ok' : 'error',
+      bot: botOk ? 'ok' : 'error',
+      uptime: Math.floor(process.uptime()),
+      version: process.env.npm_package_version ?? '0.0.0',
+      timestamp: new Date().toISOString(),
+    })
   })
 
   // ── GET /api/products ──────────────────────────────────────────────────────
@@ -345,8 +354,8 @@ export function startApiServer(bot?: Telegraf): void {
   })
 
   // ── GET /api/banner/:fileId ────────────────────────────────────────────────
-  app.get('/api/banner/:fileId', async (req, res) => {
-    const { fileId } = req.params
+  app.get('/api/banner/:fileId', requireTelegramAuth, async (req, res) => {
+    const fileId = String(req.params.fileId ?? '')
     const FILE_ID_RE = /^[A-Za-z0-9_\-]{10,200}$/
     if (!fileId || !FILE_ID_RE.test(fileId)) {
       res.status(400).send('Invalid file id')

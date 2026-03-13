@@ -67,9 +67,13 @@ function formatSecurityAlert(event: SecurityEvent, details: Record<string, any>)
 
 export async function logSecurityEvent(
   event: SecurityEvent,
-  details: Record<string, any>
+  details: Record<string, any>,
+  adminTelegramId?: string | number,
 ): Promise<void> {
-  const safe = sanitizeDetails(details)
+  const allDetails = adminTelegramId !== undefined
+    ? { ...details, adminTelegramId }
+    : details
+  const safe = sanitizeDetails(allDetails)
   console.warn(`[SECURITY] ${event}:`, safe)
 
   try {
@@ -82,11 +86,22 @@ export async function logSecurityEvent(
     })
   } catch {}
 
+  const text = formatSecurityAlert(event, safe)
+
   if (CRITICAL_EVENTS.includes(event) && _bot && _adminIds.length > 0) {
-    const text = formatSecurityAlert(event, safe)
     for (const adminId of _adminIds) {
       try {
         await _bot.telegram.sendMessage(adminId, text)
+      } catch {}
+    }
+  }
+
+  // Also alert the specific adminTelegramId if provided and not already in _adminIds
+  if (adminTelegramId !== undefined && _bot) {
+    const id = Number(adminTelegramId)
+    if (!isNaN(id) && !_adminIds.includes(id)) {
+      try {
+        await _bot.telegram.sendMessage(id, text)
       } catch {}
     }
   }

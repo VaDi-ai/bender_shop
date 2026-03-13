@@ -72,6 +72,7 @@ import {
 } from './admin/pricing'
 import { cancelPromotion } from '../lib/promotions'
 import { logSecurityEvent, initSecurityAlerts } from '../lib/security-log'
+import { aiSuggestions, storeSuggestion } from './ai/agent'
 
 const BOT_TOKEN = process.env.BOT_TOKEN
 const ADMIN_IDS = (process.env.ADMIN_IDS ?? '').split(',').map((id) => Number(id.trim()))
@@ -654,6 +655,26 @@ startApiServer(process.env.NODE_ENV === 'production' ? bot : undefined)
   }
 })()
 
+// ─── Восстановление pending AI-подсказок из БД ───────────────────────────────
+
+;(async () => {
+  try {
+    const pendingTasks = await prisma.task.findMany({
+      where: { action: 'ai_suggestion', status: 'pending' },
+    })
+    for (const task of pendingTasks) {
+      const payload = task.payload as { suggestionId: number; text: string; threadId: number }
+      storeSuggestion(task.clientId, payload.text, payload.threadId)
+      await prisma.task.update({ where: { id: task.id }, data: { status: 'done' } })
+    }
+    if (pendingTasks.length > 0) {
+      console.log(`[ai] Reloaded ${pendingTasks.length} pending suggestions from DB`)
+    }
+  } catch (e) {
+    console.error('[ai] Failed to reload suggestions:', e)
+  }
+})()
+
 // ─── Инициализация дефолтных регионов ────────────────────────────────────────
 
 const DEFAULT_REGIONS = [
@@ -783,10 +804,35 @@ async function ensureSalesTopic(): Promise<void> {
 
 ;(async () => { await ensureSalesTopic() })().catch((err) => console.error('ensureSalesTopic failed:', err))
 
-process.once('SIGTERM', () => bot.stop('SIGTERM'))
-process.on('SIGINT', async () => {
-  bot.stop('SIGINT')
+async function serializeAISuggestions(): Promise<void> {
+  if (aiSuggestions.size === 0) return
+  try {
+    const ops = [...aiSuggestions.entries()].map(([id, suggestion]) =>
+      prisma.task.create({
+        data: {
+          clientId: suggestion.clientId,
+          action: 'ai_suggestion',
+          payload: { suggestionId: id, text: suggestion.text, threadId: suggestion.threadId },
+          scheduledAt: new Date(),
+          status: 'pending',
+        },
+      }),
+    )
+    await Promise.all(ops)
+    console.log(`[ai] Serialized ${aiSuggestions.size} pending suggestions to DB`)
+  } catch (e) {
+    console.error('[ai] Failed to serialize suggestions:', e)
+  }
+}
+
+async function gracefulShutdown(signal: string): Promise<void> {
+  console.log(`[shutdown] ${signal} received`)
+  await serializeAISuggestions()
+  bot.stop(signal)
   await prisma.$disconnect()
   await pool.end()
   process.exit(0)
-})
+}
+
+process.once('SIGTERM', () => gracefulShutdown('SIGTERM'))
+process.on('SIGINT', () => gracefulShutdown('SIGINT'))

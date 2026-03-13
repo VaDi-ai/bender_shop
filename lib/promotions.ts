@@ -10,6 +10,7 @@
 import { Decimal } from '@prisma/client/runtime/client'
 import { prisma } from './prisma'
 import { roundPrice } from './currency'
+import { DiscountType, FilterType } from '../generated/prisma/client'
 import type { ProductVariantModel } from '../generated/prisma/models'
 import type { ProductModel } from '../generated/prisma/models'
 
@@ -18,24 +19,24 @@ import type { ProductModel } from '../generated/prisma/models'
 type VariantWithProduct = ProductVariantModel & { product: ProductModel }
 
 export async function findVariantsByFilter(
-  filterType: string,
+  filterType: FilterType | string,
   filterValue: string,
 ): Promise<VariantWithProduct[]> {
-  if (filterType === 'category') {
+  if (filterType === FilterType.category) {
     return prisma.productVariant.findMany({
       where: { product: { category: { name: filterValue } } },
       include: { product: true },
     })
   }
 
-  if (filterType === 'brand') {
+  if (filterType === FilterType.brand) {
     return prisma.productVariant.findMany({
       where: { product: { brand: filterValue } },
       include: { product: true },
     })
   }
 
-  if (filterType === 'attribute') {
+  if (filterType === FilterType.attribute) {
     const [key, val] = filterValue.split(':').map((s) => s.trim())
     try {
       const results = await prisma.productVariant.findMany({
@@ -53,7 +54,7 @@ export async function findVariantsByFilter(
     }
   }
 
-  if (filterType === 'products') {
+  if (filterType === FilterType.products) {
     const ids = filterValue.split(',').map(Number).filter(Boolean)
     return prisma.productVariant.findMany({
       where: { productId: { in: ids } },
@@ -96,7 +97,7 @@ export async function applyPromotion(promotionId: number): Promise<number> {
       const price = new Decimal(variant.price)
       const discountValue = new Decimal(promo.discountValue)
       let newPrice: number
-      if (promo.discountType === 'percent') {
+      if (promo.discountType === DiscountType.percent) {
         newPrice = price.mul(new Decimal(1).sub(discountValue.div(100))).toNumber()
       } else {
         newPrice = price.sub(discountValue).toNumber()
@@ -144,11 +145,11 @@ export async function cancelPromotion(promotionId: number): Promise<void> {
 
 // ─── Строковое описание фильтра ───────────────────────────────────────────────
 
-export function filterLabel(filterType: string, filterValue: string): string {
-  if (filterType === 'category') return `категория ${filterValue}`
-  if (filterType === 'brand') return `бренд ${filterValue}`
-  if (filterType === 'attribute') return `атрибут ${filterValue}`
-  if (filterType === 'products') {
+export function filterLabel(filterType: FilterType | string, filterValue: string): string {
+  if (filterType === FilterType.category) return `категория ${filterValue}`
+  if (filterType === FilterType.brand) return `бренд ${filterValue}`
+  if (filterType === FilterType.attribute) return `атрибут ${filterValue}`
+  if (filterType === FilterType.products) {
     const ids = filterValue.split(',').filter(Boolean)
     return `${ids.length} товар(ов)`
   }

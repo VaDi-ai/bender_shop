@@ -3,6 +3,7 @@
  */
 
 import OpenAI from 'openai'
+import { z } from 'zod'
 import { notifyAdminsAboutApiError } from './notify-admins'
 
 let client = new OpenAI({
@@ -29,6 +30,26 @@ export type AIParsedRate = {
   rate: number
   rawLine: string
 }
+
+const AIParsedProductSchema = z.array(
+  z.object({
+    model: z.string(),
+    storage: z.string().nullable(),
+    color: z.string().nullable(),
+    region: z.string().nullable(),
+    simType: z.string().nullable(),
+    price: z.number(),
+    rawLine: z.string(),
+  }),
+)
+
+const AIParsedRateSchema = z.array(
+  z.object({
+    currency: z.string(),
+    rate: z.number(),
+    rawLine: z.string(),
+  }),
+)
 
 // ─── Парсинг сообщения поставщика ─────────────────────────────────────────────
 
@@ -68,11 +89,16 @@ ${text}
     const content = response.choices[0]?.message?.content ?? '[]'
     const clean = content.replace(/```json|```/g, '').trim()
     const result = JSON.parse(clean)
-    if (!Array.isArray(result)) throw new Error('AI parser: expected array, got ' + typeof result)
-    return result as AIParsedProduct[]
+    const parsed = AIParsedProductSchema.safeParse(result)
+    if (!parsed.success) {
+      console.error('AI parser: schema validation failed (products):', parsed.error.message)
+      return []
+    }
+    return parsed.data
   } catch (err) {
+    console.error('AI parser: parseSupplierMessage error:', err)
     notifyAdminsAboutApiError(err, 'Парсинг прайса поставщика').catch(() => {})
-    throw err
+    return []
   }
 }
 
@@ -110,10 +136,15 @@ ${text}
     const content = response.choices[0]?.message?.content ?? '[]'
     const clean = content.replace(/```json|```/g, '').trim()
     const result = JSON.parse(clean)
-    if (!Array.isArray(result)) throw new Error('AI parser: expected array, got ' + typeof result)
-    return result as AIParsedRate[]
+    const parsed = AIParsedRateSchema.safeParse(result)
+    if (!parsed.success) {
+      console.error('AI parser: schema validation failed (rates):', parsed.error.message)
+      return []
+    }
+    return parsed.data
   } catch (err) {
+    console.error('AI parser: parseCurrencyRates error:', err)
     notifyAdminsAboutApiError(err, 'Парсинг курсов валют').catch(() => {})
-    throw err
+    return []
   }
 }
