@@ -109,8 +109,11 @@ export function startApiServer(bot?: Telegraf): void {
     contentSecurityPolicy: {
       directives: {
         defaultSrc: ["'self'"],
-        scriptSrc: ["'self'", 'https://telegram.org'],
-        frameSrc: ["'self'", 'https://telegram.org'],
+        scriptSrc: ["'self'", "https://telegram.org", "'unsafe-inline'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        fontSrc: ["'self'", "data:"],
+        frameSrc: ["'self'", "https://telegram.org"],
+        imgSrc: ["'self'", "data:", "https:"],
       },
     },
   }))
