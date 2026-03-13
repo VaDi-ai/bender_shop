@@ -21,9 +21,7 @@ const IV_BYTES = 12
 const TAG_BYTES = 16
 
 function getKeys(): { version: number; key: Buffer }[] {
-  console.log('[crypto] ENV keys present:',
-    Object.keys(process.env).filter(k => k.includes('ENCRYPTION')))
-  const keys: Record<number, Buffer> = {}
+const keys: Record<number, Buffer> = {}
 
   // Support ENCRYPTION_KEY_V1, ENCRYPTION_KEY_V2, etc.
   for (let v = 1; v <= 10; v++) {
