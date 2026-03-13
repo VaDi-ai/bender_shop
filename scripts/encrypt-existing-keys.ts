@@ -12,7 +12,7 @@
 
 import 'dotenv/config'
 import { prisma } from '../lib/prisma'
-import { encrypt, decrypt } from '../lib/crypto'
+import { encrypt, isEncrypted } from '../lib/crypto'
 
 async function main(): Promise<void> {
   const records = await prisma.apiKey.findMany()
@@ -24,27 +24,23 @@ async function main(): Promise<void> {
 
   for (const record of records) {
     try {
-      decrypt(record.value)
-      // Decrypt succeeded — already encrypted
-      console.log(`  SKIP  [${record.service}] — already encrypted`)
-      skipped++
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : String(err)
-
-      if (message === 'Invalid encrypted value format') {
+      if (isEncrypted(record.value)) {
+        console.log(`  SKIP  [${record.service}] — already encrypted`)
+        skipped++
+      } else {
         // Plaintext — encrypt and update
         const encValue = encrypt(record.value)
+        console.log(`  ENC   [${record.service}] — format: ${encValue.slice(0, encValue.indexOf(':', 3) + 1)}...`)
         await prisma.apiKey.update({
           where: { id: record.id },
           data: { value: encValue },
         })
-        console.log(`  ENC   [${record.service}]`)
         encrypted++
-      } else {
-        // Wrong auth tag or other crypto error — value may be corrupted
-        console.error(`  ERROR [${record.service}] — ${message}`)
-        errors++
       }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err)
+      console.error(`  ERROR [${record.service}] — ${message}`)
+      errors++
     }
   }
 
