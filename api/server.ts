@@ -324,7 +324,7 @@ export function startApiServer(bot?: Telegraf): void {
   })
 
   // ── GET /api/settings ──────────────────────────────────────────────────────
-  app.get('/api/settings', requireTelegramAuth, async (req, res) => {
+  app.get('/api/settings', async (req, res) => {
     const key = req.query.key as string
     if (!key) {
       res.status(400).json({ error: 'Missing key param' })
