@@ -252,12 +252,21 @@ export function setupSalesHandlers(bot: Telegraf): void {
       const client = await prisma.client.findUnique({ where: { id: clientId } })
       if (!client) return await ctx.reply('Клиент не найден.')
 
+      // Выбираем вариант для OrderItem
+      const saleVariants = await prisma.productVariant.findMany({
+        where: { productId },
+        orderBy: { quantity: 'desc' },
+      })
+      const saleVariant = saleVariants.find((v) => v.quantity >= qty) ?? saleVariants[0]
+
       // Создаём Order
       await prisma.order.create({
         data: {
           clientId,
           telegramId: client.externalId ?? String(clientId),
-          items: [{ productId, name: productName, price: Number(price), qty }],
+          items: saleVariant
+            ? { create: [{ variantId: saleVariant.id, quantity: qty, priceAtPurchase: Number(price), productName }] }
+            : undefined,
           totalAmount: total,
           payment: 'crm',
           status: 'completed',
@@ -272,11 +281,6 @@ export function setupSalesHandlers(bot: Telegraf): void {
           stock: { decrement: qty },
         },
       })
-      const saleVariants = await prisma.productVariant.findMany({
-        where: { productId },
-        orderBy: { quantity: 'desc' },
-      })
-      const saleVariant = saleVariants.find((v) => v.quantity >= qty) ?? saleVariants[0]
       if (saleVariant) {
         try {
           await stockOut(saleVariant.id, qty, `Продажа клиенту`, String(userId))
@@ -548,10 +552,18 @@ export function setupSalesHandlers(bot: Telegraf): void {
     const total = Number(price) * qty
 
     try {
+      const ncVariants = await prisma.productVariant.findMany({
+        where: { productId },
+        orderBy: { quantity: 'desc' },
+      })
+      const ncVariant = ncVariants.find((v) => v.quantity >= qty) ?? ncVariants[0]
+
       await prisma.order.create({
         data: {
           telegramId: 'crm_manual',
-          items: [{ productId, name: productName, price: Number(price), qty }],
+          items: ncVariant
+            ? { create: [{ variantId: ncVariant.id, quantity: qty, priceAtPurchase: Number(price), productName }] }
+            : undefined,
           totalAmount: total,
           payment: 'crm',
           status: 'completed',
@@ -561,11 +573,6 @@ export function setupSalesHandlers(bot: Telegraf): void {
         where: { id: productId },
         data: { quantity: { decrement: qty }, stock: { decrement: qty } },
       })
-      const ncVariants = await prisma.productVariant.findMany({
-        where: { productId },
-        orderBy: { quantity: 'desc' },
-      })
-      const ncVariant = ncVariants.find((v) => v.quantity >= qty) ?? ncVariants[0]
       if (ncVariant) {
         try {
           await stockOut(ncVariant.id, qty, `Продажа клиенту ${clientName}`, String(userId))

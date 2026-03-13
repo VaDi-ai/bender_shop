@@ -16,6 +16,7 @@
 
 import { Context, Markup, Telegraf } from 'telegraf'
 import { prisma } from '../../lib/prisma'
+import { FilterType } from '../../generated/prisma/client'
 import { applyPromotion, cancelPromotion, findVariantsByFilter, filterLabel } from '../../lib/promotions'
 
 // ─── Типы состояния ───────────────────────────────────────────────────────────
@@ -334,7 +335,7 @@ async function launchPromotion(ctx: Context, userId: number, withNotification: b
       name: state.name,
       discountType: state.discountType,
       discountValue: state.discountValue,
-      filterType: state.filterType,
+      filterType: state.filterType as FilterType,
       filterValue: state.filterValue,
       startsAt: state.startsAt ?? null,
       endsAt: state.endsAt ?? null,

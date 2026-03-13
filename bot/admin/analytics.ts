@@ -170,20 +170,17 @@ async function buildMainReport(from: Date, to: Date, label: string): Promise<str
 async function buildTopProducts(from: Date, to: Date, label: string): Promise<string> {
   const orders = await prisma.order.findMany({
     where: { createdAt: { gte: from, lte: to } },
-    select: { items: true },
+    include: { items: true },
   })
 
-  type OrderItem = { productId?: number; name: string; price: number; qty: number }
   const productMap = new Map<string, { name: string; count: number; revenue: number }>()
 
   for (const order of orders) {
-    const items = order.items as OrderItem[]
-    if (!Array.isArray(items)) continue
-    for (const item of items) {
-      const key = String(item.productId ?? item.name)
-      const existing = productMap.get(key) ?? { name: item.name, count: 0, revenue: 0 }
-      existing.count += item.qty ?? 1
-      existing.revenue += Number(item.price) * (item.qty ?? 1)
+    for (const item of order.items) {
+      const key = String(item.variantId ?? item.productName)
+      const existing = productMap.get(key) ?? { name: item.productName, count: 0, revenue: 0 }
+      existing.count += item.quantity
+      existing.revenue += Number(item.priceAtPurchase) * item.quantity
       productMap.set(key, existing)
     }
   }
@@ -244,7 +241,7 @@ async function sendClientReport(ctx: Context, clientId: number): Promise<void> {
     include: {
       segment: true,
       tags: true,
-      orders: { orderBy: { createdAt: 'desc' }, take: 10 },
+      orders: { orderBy: { createdAt: 'desc' }, take: 10, include: { items: true } },
     },
   })
 
@@ -253,11 +250,9 @@ async function sendClientReport(ctx: Context, clientId: number): Promise<void> {
     return
   }
 
-  type OrderItem = { name: string; price: number; qty: number }
-
   const orderLines = client.orders.map((o) => {
-    const items = (o.items as OrderItem[])
-      .map((i) => `${i.name} x${i.qty ?? 1}`)
+    const items = o.items
+      .map((i) => `${i.productName} x${i.quantity}`)
       .join(', ')
     return `- ${formatDate(o.createdAt)} — ${items} — ${fmt(o.totalAmount)} ₽`
   })

@@ -637,7 +637,7 @@ export function startApiServer(bot?: Telegraf): void {
       data: {
         clientId,
         telegramId,
-        items: enrichedItems,
+        items: { create: enrichedItems.map(i => ({ variantId: i.variantId, quantity: i.quantity, priceAtPurchase: i.price, productName: i.name })) },
         totalAmount: totalAmount.toString(),
         payment: paymentMethod,
         customerName: customerName.trim(),

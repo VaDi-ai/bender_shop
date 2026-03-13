@@ -1126,14 +1126,14 @@ async function handleWebAppOrder(
     return
   }
 
-  const dbOrder = await prisma.order.findUnique({ where: { id: orderId } })
+  const dbOrder = await prisma.order.findUnique({ where: { id: orderId }, include: { items: true } })
   if (!dbOrder) {
     console.warn('[handleWebAppOrder] orderId not found in DB:', orderId, 'user:', from.id)
     return
   }
 
-  const verifiedItems = (dbOrder.items as Array<{ variantId: number; name: string; price: string; quantity: number }>)
-    .map((i) => ({ name: i.name, price: i.price, qty: i.quantity }))
+  const verifiedItems = dbOrder.items
+    .map((i) => ({ name: i.productName, price: String(i.priceAtPurchase), qty: i.quantity }))
   const verifiedTotal = Number(dbOrder.totalAmount)
 
   const PAYMENT_LABEL: Record<string, string> = {
