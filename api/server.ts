@@ -26,7 +26,7 @@ import { getApiKeyValue } from '../lib/api-key-store'
 if (!process.env.BOT_TOKEN) throw new Error('BOT_TOKEN is required')
 const BOT_TOKEN = process.env.BOT_TOKEN
 const PORT = Number(process.env.PORT || process.env.API_PORT || 3000)
-const WEBAPP_FILE = path.join(__dirname, '../webapp/index.html')
+const WEBAPP_PATH = path.join(__dirname, '../../webapp/index.html')
 
 // ─── Хелпер: форматируем цену ─────────────────────────────────────────────────
 
@@ -179,7 +179,7 @@ export function startApiServer(bot?: Telegraf): void {
   })
 
   app.get('/shop', (_req, res) => {
-    const html = fs.readFileSync(WEBAPP_FILE)
+    const html = fs.readFileSync(WEBAPP_PATH)
     res.setHeader('Content-Type', 'text/html; charset=utf-8')
     res.send(html)
   })
