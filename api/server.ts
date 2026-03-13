@@ -174,7 +174,11 @@ export function startApiServer(bot?: Telegraf): void {
   app.use(express.json({ limit: '1mb' }))
 
   // ── GET / и /shop — Mini App ───────────────────────────────────────────────
-  app.get(['/', '/shop'], (_req, res) => {
+  app.get('/', (_req, res) => {
+    res.redirect('/shop')
+  })
+
+  app.get('/shop', (_req, res) => {
     const html = fs.readFileSync(WEBAPP_FILE)
     res.setHeader('Content-Type', 'text/html; charset=utf-8')
     res.send(html)
