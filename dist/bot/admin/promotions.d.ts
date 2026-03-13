@@ -14,6 +14,7 @@
  *   handlePromotionsMessage(ctx, uid, txt) → boolean
  */
 import { Context, Telegraf } from 'telegraf';
+import { DiscountType } from '../../generated/prisma/client';
 type PromoFlow = {
     step: 'name';
 } | {
@@ -22,51 +23,51 @@ type PromoFlow = {
 } | {
     step: 'discount_value';
     name: string;
-    discountType: 'percent' | 'fixed';
+    discountType: DiscountType;
 } | {
     step: 'filter_type';
     name: string;
-    discountType: 'percent' | 'fixed';
+    discountType: DiscountType;
     discountValue: number;
 } | {
     step: 'filter_category';
     name: string;
-    discountType: 'percent' | 'fixed';
+    discountType: DiscountType;
     discountValue: number;
 } | {
     step: 'filter_brand';
     name: string;
-    discountType: 'percent' | 'fixed';
+    discountType: DiscountType;
     discountValue: number;
 } | {
     step: 'filter_attribute';
     name: string;
-    discountType: 'percent' | 'fixed';
+    discountType: DiscountType;
     discountValue: number;
 } | {
     step: 'filter_products';
     name: string;
-    discountType: 'percent' | 'fixed';
+    discountType: DiscountType;
     discountValue: number;
     selectedProductIds: number[];
 } | {
     step: 'dates';
     name: string;
-    discountType: 'percent' | 'fixed';
+    discountType: DiscountType;
     discountValue: number;
     filterType: string;
     filterValue: string;
 } | {
     step: 'dates_input';
     name: string;
-    discountType: 'percent' | 'fixed';
+    discountType: DiscountType;
     discountValue: number;
     filterType: string;
     filterValue: string;
 } | {
     step: 'preview';
     name: string;
-    discountType: 'percent' | 'fixed';
+    discountType: DiscountType;
     discountValue: number;
     filterType: string;
     filterValue: string;

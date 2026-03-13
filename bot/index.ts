@@ -113,7 +113,7 @@ bot.use(async (ctx, next) => {
   if (stats.count > 30) {
     if (stats.count === 31) {
       await ctx.reply('⚠️ Слишком много запросов. Подождите минуту.')
-      await logSecurityEvent('rate_limit_exceeded', { userId, count: stats.count })
+      await logSecurityEvent('rate_limit_exceeded', { userId, count: stats.count }, userId)
     }
     return
   }
@@ -129,7 +129,7 @@ export async function adminOnly(ctx: any, next: any) {
     await logSecurityEvent('unauthorized_access', {
       userId,
       command: ctx.message?.text ?? ctx.callbackQuery?.data,
-    })
+    }, userId)
     return ctx.reply('⛔ Нет доступа.')
   }
   return next()

@@ -24,6 +24,7 @@ const promotions_1 = require("./admin/promotions");
 const pricing_1 = require("./admin/pricing");
 const promotions_2 = require("../lib/promotions");
 const security_log_1 = require("../lib/security-log");
+const agent_2 = require("./ai/agent");
 const BOT_TOKEN = process.env.BOT_TOKEN;
 const ADMIN_IDS = (process.env.ADMIN_IDS ?? '').split(',').map((id) => Number(id.trim()));
 if (!BOT_TOKEN) {
@@ -53,7 +54,7 @@ bot.use(async (ctx, next) => {
     if (stats.count > 30) {
         if (stats.count === 31) {
             await ctx.reply('⚠️ Слишком много запросов. Подождите минуту.');
-            await (0, security_log_1.logSecurityEvent)('rate_limit_exceeded', { userId, count: stats.count });
+            await (0, security_log_1.logSecurityEvent)('rate_limit_exceeded', { userId, count: stats.count }, userId);
         }
         return;
     }
@@ -66,7 +67,7 @@ async function adminOnly(ctx, next) {
         await (0, security_log_1.logSecurityEvent)('unauthorized_access', {
             userId,
             command: ctx.message?.text ?? ctx.callbackQuery?.data,
-        });
+        }, userId);
         return ctx.reply('⛔ Нет доступа.');
     }
     return next();
@@ -499,6 +500,24 @@ if (WEBAPP_URL) {
         console.error('Load OpenRouter key error:', e);
     }
 })();
+(async () => {
+    try {
+        const pendingTasks = await prisma_1.prisma.task.findMany({
+            where: { action: 'ai_suggestion', status: 'pending' },
+        });
+        for (const task of pendingTasks) {
+            const payload = task.payload;
+            (0, agent_2.storeSuggestion)(task.clientId, payload.text, payload.threadId);
+            await prisma_1.prisma.task.update({ where: { id: task.id }, data: { status: 'done' } });
+        }
+        if (pendingTasks.length > 0) {
+            console.log(`[ai] Reloaded ${pendingTasks.length} pending suggestions from DB`);
+        }
+    }
+    catch (e) {
+        console.error('[ai] Failed to reload suggestions:', e);
+    }
+})();
 // ─── Инициализация дефолтных регионов ────────────────────────────────────────
 const DEFAULT_REGIONS = [
     { code: 'HK', name: 'Гонконг', flag: '🇭🇰', currency: 'HKD' },
@@ -612,11 +631,34 @@ async function ensureSalesTopic() {
 }
 ;
 (async () => { await ensureSalesTopic(); })().catch((err) => console.error('ensureSalesTopic failed:', err));
-process.once('SIGTERM', () => bot.stop('SIGTERM'));
-process.on('SIGINT', async () => {
-    bot.stop('SIGINT');
+async function serializeAISuggestions() {
+    if (agent_2.aiSuggestions.size === 0)
+        return;
+    try {
+        const ops = [...agent_2.aiSuggestions.entries()].map(([id, suggestion]) => prisma_1.prisma.task.create({
+            data: {
+                clientId: suggestion.clientId,
+                action: 'ai_suggestion',
+                payload: { suggestionId: id, text: suggestion.text, threadId: suggestion.threadId },
+                scheduledAt: new Date(),
+                status: 'pending',
+            },
+        }));
+        await Promise.all(ops);
+        console.log(`[ai] Serialized ${agent_2.aiSuggestions.size} pending suggestions to DB`);
+    }
+    catch (e) {
+        console.error('[ai] Failed to serialize suggestions:', e);
+    }
+}
+async function gracefulShutdown(signal) {
+    console.log(`[shutdown] ${signal} received`);
+    await serializeAISuggestions();
+    bot.stop(signal);
     await prisma_1.prisma.$disconnect();
     await prisma_1.pool.end();
     process.exit(0);
-});
+}
+process.once('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 //# sourceMappingURL=index.js.map

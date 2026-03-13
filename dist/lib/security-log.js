@@ -53,8 +53,11 @@ function formatSecurityAlert(event, details) {
     return `⚠️ СОБЫТИЕ БЕЗОПАСНОСТИ\n\n${desc}\nВремя: ${time}\n\n${detailsStr}`;
 }
 // ─── Основная функция логирования ─────────────────────────────────────────────
-async function logSecurityEvent(event, details) {
-    const safe = sanitizeDetails(details);
+async function logSecurityEvent(event, details, adminTelegramId) {
+    const allDetails = adminTelegramId !== undefined
+        ? { ...details, adminTelegramId }
+        : details;
+    const safe = sanitizeDetails(allDetails);
     console.warn(`[SECURITY] ${event}:`, safe);
     try {
         await prisma_1.prisma.securityLog.create({
@@ -66,11 +69,21 @@ async function logSecurityEvent(event, details) {
         });
     }
     catch { }
+    const text = formatSecurityAlert(event, safe);
     if (CRITICAL_EVENTS.includes(event) && _bot && _adminIds.length > 0) {
-        const text = formatSecurityAlert(event, safe);
         for (const adminId of _adminIds) {
             try {
                 await _bot.telegram.sendMessage(adminId, text);
+            }
+            catch { }
+        }
+    }
+    // Also alert the specific adminTelegramId if provided and not already in _adminIds
+    if (adminTelegramId !== undefined && _bot) {
+        const id = Number(adminTelegramId);
+        if (!isNaN(id) && !_adminIds.includes(id)) {
+            try {
+                await _bot.telegram.sendMessage(id, text);
             }
             catch { }
         }

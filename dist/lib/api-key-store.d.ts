@@ -13,6 +13,7 @@ export declare function getApiKeyValue(service: string): Promise<string | null>;
 /**
  * Write an ApiKey value, encrypting it first.
  * Creates the record if it doesn't exist; updates it otherwise.
+ * Persists the key version used so migrations can detect stale records.
  */
 export declare function setApiKeyValue(service: string, value: string): Promise<void>;
 //# sourceMappingURL=api-key-store.d.ts.map

@@ -562,7 +562,7 @@ export function startApiServer(bot?: Telegraf): void {
 
     // ── Валидация входящих данных ──────────────────────────────────────────
     if (!Array.isArray(items) || items.length === 0) {
-      await logSecurityEvent('invalid_order_data', { ip: req.ip, reason: 'empty items', telegramId })
+      await logSecurityEvent('invalid_order_data', { ip: req.ip, reason: 'empty items', telegramId }, telegramId)
       res.status(400).json({ error: 'Корзина пуста' })
       return
     }
@@ -594,7 +594,7 @@ export function startApiServer(bot?: Telegraf): void {
 
     for (const item of items) {
       if (!Number.isInteger(item.variantId) || item.variantId <= 0) {
-        await logSecurityEvent('invalid_order_data', { ip: req.ip, reason: 'invalid variantId', item, telegramId })
+        await logSecurityEvent('invalid_order_data', { ip: req.ip, reason: 'invalid variantId', item, telegramId }, telegramId)
         res.status(400).json({ error: 'Неверный ID товара' })
         return
       }
@@ -629,7 +629,7 @@ export function startApiServer(bot?: Telegraf): void {
           variantId: item.variantId,
           submittedPrice: item.price,
           actualPrice,
-        })
+        }, telegramId)
       }
       totalAmount += actualPrice * item.quantity
 

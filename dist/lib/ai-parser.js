@@ -10,6 +10,7 @@ exports.reinitClient = reinitClient;
 exports.parseSupplierMessage = parseSupplierMessage;
 exports.parseCurrencyRates = parseCurrencyRates;
 const openai_1 = __importDefault(require("openai"));
+const zod_1 = require("zod");
 const notify_admins_1 = require("./notify-admins");
 let client = new openai_1.default({
     baseURL: 'https://openrouter.ai/api/v1',
@@ -18,6 +19,20 @@ let client = new openai_1.default({
 function reinitClient(newKey) {
     client = new openai_1.default({ baseURL: 'https://openrouter.ai/api/v1', apiKey: newKey });
 }
+const AIParsedProductSchema = zod_1.z.array(zod_1.z.object({
+    model: zod_1.z.string(),
+    storage: zod_1.z.string().nullable(),
+    color: zod_1.z.string().nullable(),
+    region: zod_1.z.string().nullable(),
+    simType: zod_1.z.string().nullable(),
+    price: zod_1.z.number(),
+    rawLine: zod_1.z.string(),
+}));
+const AIParsedRateSchema = zod_1.z.array(zod_1.z.object({
+    currency: zod_1.z.string(),
+    rate: zod_1.z.number(),
+    rawLine: zod_1.z.string(),
+}));
 // ─── Парсинг сообщения поставщика ─────────────────────────────────────────────
 async function parseSupplierMessage(text) {
     try {
@@ -54,13 +69,17 @@ ${text}
         const content = response.choices[0]?.message?.content ?? '[]';
         const clean = content.replace(/```json|```/g, '').trim();
         const result = JSON.parse(clean);
-        if (!Array.isArray(result))
-            throw new Error('AI parser: expected array, got ' + typeof result);
-        return result;
+        const parsed = AIParsedProductSchema.safeParse(result);
+        if (!parsed.success) {
+            console.error('AI parser: schema validation failed (products):', parsed.error.message);
+            return [];
+        }
+        return parsed.data;
     }
     catch (err) {
+        console.error('AI parser: parseSupplierMessage error:', err);
         (0, notify_admins_1.notifyAdminsAboutApiError)(err, 'Парсинг прайса поставщика').catch(() => { });
-        throw err;
+        return [];
     }
 }
 // ─── Парсинг курсов валют из произвольного текста ─────────────────────────────
@@ -95,13 +114,17 @@ ${text}
         const content = response.choices[0]?.message?.content ?? '[]';
         const clean = content.replace(/```json|```/g, '').trim();
         const result = JSON.parse(clean);
-        if (!Array.isArray(result))
-            throw new Error('AI parser: expected array, got ' + typeof result);
-        return result;
+        const parsed = AIParsedRateSchema.safeParse(result);
+        if (!parsed.success) {
+            console.error('AI parser: schema validation failed (rates):', parsed.error.message);
+            return [];
+        }
+        return parsed.data;
     }
     catch (err) {
+        console.error('AI parser: parseCurrencyRates error:', err);
         (0, notify_admins_1.notifyAdminsAboutApiError)(err, 'Парсинг курсов валют').catch(() => { });
-        throw err;
+        return [];
     }
 }
 //# sourceMappingURL=ai-parser.js.map

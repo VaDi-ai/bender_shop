@@ -15,20 +15,21 @@ exports.filterLabel = filterLabel;
 const client_1 = require("@prisma/client/runtime/client");
 const prisma_1 = require("./prisma");
 const currency_1 = require("./currency");
+const client_2 = require("../generated/prisma/client");
 async function findVariantsByFilter(filterType, filterValue) {
-    if (filterType === 'category') {
+    if (filterType === client_2.FilterType.category) {
         return prisma_1.prisma.productVariant.findMany({
             where: { product: { category: { name: filterValue } } },
             include: { product: true },
         });
     }
-    if (filterType === 'brand') {
+    if (filterType === client_2.FilterType.brand) {
         return prisma_1.prisma.productVariant.findMany({
             where: { product: { brand: filterValue } },
             include: { product: true },
         });
     }
-    if (filterType === 'attribute') {
+    if (filterType === client_2.FilterType.attribute) {
         const [key, val] = filterValue.split(':').map((s) => s.trim());
         try {
             const results = await prisma_1.prisma.productVariant.findMany({
@@ -46,7 +47,7 @@ async function findVariantsByFilter(filterType, filterValue) {
             return [];
         }
     }
-    if (filterType === 'products') {
+    if (filterType === client_2.FilterType.products) {
         const ids = filterValue.split(',').map(Number).filter(Boolean);
         return prisma_1.prisma.productVariant.findMany({
             where: { productId: { in: ids } },
@@ -83,7 +84,7 @@ async function applyPromotion(promotionId) {
             const price = new client_1.Decimal(variant.price);
             const discountValue = new client_1.Decimal(promo.discountValue);
             let newPrice;
-            if (promo.discountType === 'percent') {
+            if (promo.discountType === client_2.DiscountType.percent) {
                 newPrice = price.mul(new client_1.Decimal(1).sub(discountValue.div(100))).toNumber();
             }
             else {
@@ -124,13 +125,13 @@ async function cancelPromotion(promotionId) {
 }
 // ─── Строковое описание фильтра ───────────────────────────────────────────────
 function filterLabel(filterType, filterValue) {
-    if (filterType === 'category')
+    if (filterType === client_2.FilterType.category)
         return `категория ${filterValue}`;
-    if (filterType === 'brand')
+    if (filterType === client_2.FilterType.brand)
         return `бренд ${filterValue}`;
-    if (filterType === 'attribute')
+    if (filterType === client_2.FilterType.attribute)
         return `атрибут ${filterValue}`;
-    if (filterType === 'products') {
+    if (filterType === client_2.FilterType.products) {
         const ids = filterValue.split(',').filter(Boolean);
         return `${ids.length} товар(ов)`;
     }

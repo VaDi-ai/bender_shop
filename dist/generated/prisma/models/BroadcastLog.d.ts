@@ -16,11 +16,13 @@ export type BroadcastLogAvgAggregateOutputType = {
     id: number | null;
     totalSent: number | null;
     totalFailed: number | null;
+    adminTelegramId: number | null;
 };
 export type BroadcastLogSumAggregateOutputType = {
     id: number | null;
     totalSent: number | null;
     totalFailed: number | null;
+    adminTelegramId: bigint | null;
 };
 export type BroadcastLogMinAggregateOutputType = {
     id: number | null;
@@ -33,6 +35,7 @@ export type BroadcastLogMinAggregateOutputType = {
     totalFailed: number | null;
     createdAt: Date | null;
     createdBy: string | null;
+    adminTelegramId: bigint | null;
 };
 export type BroadcastLogMaxAggregateOutputType = {
     id: number | null;
@@ -45,6 +48,7 @@ export type BroadcastLogMaxAggregateOutputType = {
     totalFailed: number | null;
     createdAt: Date | null;
     createdBy: string | null;
+    adminTelegramId: bigint | null;
 };
 export type BroadcastLogCountAggregateOutputType = {
     id: number;
@@ -57,17 +61,20 @@ export type BroadcastLogCountAggregateOutputType = {
     totalFailed: number;
     createdAt: number;
     createdBy: number;
+    adminTelegramId: number;
     _all: number;
 };
 export type BroadcastLogAvgAggregateInputType = {
     id?: true;
     totalSent?: true;
     totalFailed?: true;
+    adminTelegramId?: true;
 };
 export type BroadcastLogSumAggregateInputType = {
     id?: true;
     totalSent?: true;
     totalFailed?: true;
+    adminTelegramId?: true;
 };
 export type BroadcastLogMinAggregateInputType = {
     id?: true;
@@ -80,6 +87,7 @@ export type BroadcastLogMinAggregateInputType = {
     totalFailed?: true;
     createdAt?: true;
     createdBy?: true;
+    adminTelegramId?: true;
 };
 export type BroadcastLogMaxAggregateInputType = {
     id?: true;
@@ -92,6 +100,7 @@ export type BroadcastLogMaxAggregateInputType = {
     totalFailed?: true;
     createdAt?: true;
     createdBy?: true;
+    adminTelegramId?: true;
 };
 export type BroadcastLogCountAggregateInputType = {
     id?: true;
@@ -104,6 +113,7 @@ export type BroadcastLogCountAggregateInputType = {
     totalFailed?: true;
     createdAt?: true;
     createdBy?: true;
+    adminTelegramId?: true;
     _all?: true;
 };
 export type BroadcastLogAggregateArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
@@ -193,6 +203,7 @@ export type BroadcastLogGroupByOutputType = {
     totalFailed: number;
     createdAt: Date;
     createdBy: string;
+    adminTelegramId: bigint | null;
     _count: BroadcastLogCountAggregateOutputType | null;
     _avg: BroadcastLogAvgAggregateOutputType | null;
     _sum: BroadcastLogSumAggregateOutputType | null;
@@ -216,6 +227,7 @@ export type BroadcastLogWhereInput = {
     totalFailed?: Prisma.IntFilter<"BroadcastLog"> | number;
     createdAt?: Prisma.DateTimeFilter<"BroadcastLog"> | Date | string;
     createdBy?: Prisma.StringFilter<"BroadcastLog"> | string;
+    adminTelegramId?: Prisma.BigIntNullableFilter<"BroadcastLog"> | bigint | number | null;
 };
 export type BroadcastLogOrderByWithRelationInput = {
     id?: Prisma.SortOrder;
@@ -228,6 +240,7 @@ export type BroadcastLogOrderByWithRelationInput = {
     totalFailed?: Prisma.SortOrder;
     createdAt?: Prisma.SortOrder;
     createdBy?: Prisma.SortOrder;
+    adminTelegramId?: Prisma.SortOrderInput | Prisma.SortOrder;
 };
 export type BroadcastLogWhereUniqueInput = Prisma.AtLeast<{
     id?: number;
@@ -243,6 +256,7 @@ export type BroadcastLogWhereUniqueInput = Prisma.AtLeast<{
     totalFailed?: Prisma.IntFilter<"BroadcastLog"> | number;
     createdAt?: Prisma.DateTimeFilter<"BroadcastLog"> | Date | string;
     createdBy?: Prisma.StringFilter<"BroadcastLog"> | string;
+    adminTelegramId?: Prisma.BigIntNullableFilter<"BroadcastLog"> | bigint | number | null;
 }, "id">;
 export type BroadcastLogOrderByWithAggregationInput = {
     id?: Prisma.SortOrder;
@@ -255,6 +269,7 @@ export type BroadcastLogOrderByWithAggregationInput = {
     totalFailed?: Prisma.SortOrder;
     createdAt?: Prisma.SortOrder;
     createdBy?: Prisma.SortOrder;
+    adminTelegramId?: Prisma.SortOrderInput | Prisma.SortOrder;
     _count?: Prisma.BroadcastLogCountOrderByAggregateInput;
     _avg?: Prisma.BroadcastLogAvgOrderByAggregateInput;
     _max?: Prisma.BroadcastLogMaxOrderByAggregateInput;
@@ -275,6 +290,7 @@ export type BroadcastLogScalarWhereWithAggregatesInput = {
     totalFailed?: Prisma.IntWithAggregatesFilter<"BroadcastLog"> | number;
     createdAt?: Prisma.DateTimeWithAggregatesFilter<"BroadcastLog"> | Date | string;
     createdBy?: Prisma.StringWithAggregatesFilter<"BroadcastLog"> | string;
+    adminTelegramId?: Prisma.BigIntNullableWithAggregatesFilter<"BroadcastLog"> | bigint | number | null;
 };
 export type BroadcastLogCreateInput = {
     type: string;
@@ -286,6 +302,7 @@ export type BroadcastLogCreateInput = {
     totalFailed: number;
     createdAt?: Date | string;
     createdBy: string;
+    adminTelegramId?: bigint | number | null;
 };
 export type BroadcastLogUncheckedCreateInput = {
     id?: number;
@@ -298,6 +315,7 @@ export type BroadcastLogUncheckedCreateInput = {
     totalFailed: number;
     createdAt?: Date | string;
     createdBy: string;
+    adminTelegramId?: bigint | number | null;
 };
 export type BroadcastLogUpdateInput = {
     type?: Prisma.StringFieldUpdateOperationsInput | string;
@@ -309,6 +327,7 @@ export type BroadcastLogUpdateInput = {
     totalFailed?: Prisma.IntFieldUpdateOperationsInput | number;
     createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
     createdBy?: Prisma.StringFieldUpdateOperationsInput | string;
+    adminTelegramId?: Prisma.NullableBigIntFieldUpdateOperationsInput | bigint | number | null;
 };
 export type BroadcastLogUncheckedUpdateInput = {
     id?: Prisma.IntFieldUpdateOperationsInput | number;
@@ -321,6 +340,7 @@ export type BroadcastLogUncheckedUpdateInput = {
     totalFailed?: Prisma.IntFieldUpdateOperationsInput | number;
     createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
     createdBy?: Prisma.StringFieldUpdateOperationsInput | string;
+    adminTelegramId?: Prisma.NullableBigIntFieldUpdateOperationsInput | bigint | number | null;
 };
 export type BroadcastLogCreateManyInput = {
     id?: number;
@@ -333,6 +353,7 @@ export type BroadcastLogCreateManyInput = {
     totalFailed: number;
     createdAt?: Date | string;
     createdBy: string;
+    adminTelegramId?: bigint | number | null;
 };
 export type BroadcastLogUpdateManyMutationInput = {
     type?: Prisma.StringFieldUpdateOperationsInput | string;
@@ -344,6 +365,7 @@ export type BroadcastLogUpdateManyMutationInput = {
     totalFailed?: Prisma.IntFieldUpdateOperationsInput | number;
     createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
     createdBy?: Prisma.StringFieldUpdateOperationsInput | string;
+    adminTelegramId?: Prisma.NullableBigIntFieldUpdateOperationsInput | bigint | number | null;
 };
 export type BroadcastLogUncheckedUpdateManyInput = {
     id?: Prisma.IntFieldUpdateOperationsInput | number;
@@ -356,6 +378,7 @@ export type BroadcastLogUncheckedUpdateManyInput = {
     totalFailed?: Prisma.IntFieldUpdateOperationsInput | number;
     createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
     createdBy?: Prisma.StringFieldUpdateOperationsInput | string;
+    adminTelegramId?: Prisma.NullableBigIntFieldUpdateOperationsInput | bigint | number | null;
 };
 export type BroadcastLogCountOrderByAggregateInput = {
     id?: Prisma.SortOrder;
@@ -368,11 +391,13 @@ export type BroadcastLogCountOrderByAggregateInput = {
     totalFailed?: Prisma.SortOrder;
     createdAt?: Prisma.SortOrder;
     createdBy?: Prisma.SortOrder;
+    adminTelegramId?: Prisma.SortOrder;
 };
 export type BroadcastLogAvgOrderByAggregateInput = {
     id?: Prisma.SortOrder;
     totalSent?: Prisma.SortOrder;
     totalFailed?: Prisma.SortOrder;
+    adminTelegramId?: Prisma.SortOrder;
 };
 export type BroadcastLogMaxOrderByAggregateInput = {
     id?: Prisma.SortOrder;
@@ -385,6 +410,7 @@ export type BroadcastLogMaxOrderByAggregateInput = {
     totalFailed?: Prisma.SortOrder;
     createdAt?: Prisma.SortOrder;
     createdBy?: Prisma.SortOrder;
+    adminTelegramId?: Prisma.SortOrder;
 };
 export type BroadcastLogMinOrderByAggregateInput = {
     id?: Prisma.SortOrder;
@@ -397,11 +423,20 @@ export type BroadcastLogMinOrderByAggregateInput = {
     totalFailed?: Prisma.SortOrder;
     createdAt?: Prisma.SortOrder;
     createdBy?: Prisma.SortOrder;
+    adminTelegramId?: Prisma.SortOrder;
 };
 export type BroadcastLogSumOrderByAggregateInput = {
     id?: Prisma.SortOrder;
     totalSent?: Prisma.SortOrder;
     totalFailed?: Prisma.SortOrder;
+    adminTelegramId?: Prisma.SortOrder;
+};
+export type NullableBigIntFieldUpdateOperationsInput = {
+    set?: bigint | number | null;
+    increment?: bigint | number;
+    decrement?: bigint | number;
+    multiply?: bigint | number;
+    divide?: bigint | number;
 };
 export type BroadcastLogSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
     id?: boolean;
@@ -414,6 +449,7 @@ export type BroadcastLogSelect<ExtArgs extends runtime.Types.Extensions.Internal
     totalFailed?: boolean;
     createdAt?: boolean;
     createdBy?: boolean;
+    adminTelegramId?: boolean;
 }, ExtArgs["result"]["broadcastLog"]>;
 export type BroadcastLogSelectCreateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
     id?: boolean;
@@ -426,6 +462,7 @@ export type BroadcastLogSelectCreateManyAndReturn<ExtArgs extends runtime.Types.
     totalFailed?: boolean;
     createdAt?: boolean;
     createdBy?: boolean;
+    adminTelegramId?: boolean;
 }, ExtArgs["result"]["broadcastLog"]>;
 export type BroadcastLogSelectUpdateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
     id?: boolean;
@@ -438,6 +475,7 @@ export type BroadcastLogSelectUpdateManyAndReturn<ExtArgs extends runtime.Types.
     totalFailed?: boolean;
     createdAt?: boolean;
     createdBy?: boolean;
+    adminTelegramId?: boolean;
 }, ExtArgs["result"]["broadcastLog"]>;
 export type BroadcastLogSelectScalar = {
     id?: boolean;
@@ -450,8 +488,9 @@ export type BroadcastLogSelectScalar = {
     totalFailed?: boolean;
     createdAt?: boolean;
     createdBy?: boolean;
+    adminTelegramId?: boolean;
 };
-export type BroadcastLogOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "type" | "target" | "messageText" | "mediaFileId" | "mediaType" | "totalSent" | "totalFailed" | "createdAt" | "createdBy", ExtArgs["result"]["broadcastLog"]>;
+export type BroadcastLogOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "type" | "target" | "messageText" | "mediaFileId" | "mediaType" | "totalSent" | "totalFailed" | "createdAt" | "createdBy" | "adminTelegramId", ExtArgs["result"]["broadcastLog"]>;
 export type $BroadcastLogPayload<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
     name: "BroadcastLog";
     objects: {};
@@ -466,6 +505,7 @@ export type $BroadcastLogPayload<ExtArgs extends runtime.Types.Extensions.Intern
         totalFailed: number;
         createdAt: Date;
         createdBy: string;
+        adminTelegramId: bigint | null;
     }, ExtArgs["result"]["broadcastLog"]>;
     composites: {};
 };
@@ -830,6 +870,7 @@ export interface BroadcastLogFieldRefs {
     readonly totalFailed: Prisma.FieldRef<"BroadcastLog", 'Int'>;
     readonly createdAt: Prisma.FieldRef<"BroadcastLog", 'DateTime'>;
     readonly createdBy: Prisma.FieldRef<"BroadcastLog", 'String'>;
+    readonly adminTelegramId: Prisma.FieldRef<"BroadcastLog", 'BigInt'>;
 }
 /**
  * BroadcastLog findUnique

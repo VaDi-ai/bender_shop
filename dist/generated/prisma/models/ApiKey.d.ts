@@ -14,14 +14,17 @@ export type AggregateApiKey = {
 };
 export type ApiKeyAvgAggregateOutputType = {
     id: number | null;
+    keyVersion: number | null;
 };
 export type ApiKeySumAggregateOutputType = {
     id: number | null;
+    keyVersion: number | null;
 };
 export type ApiKeyMinAggregateOutputType = {
     id: number | null;
     service: string | null;
     value: string | null;
+    keyVersion: number | null;
     createdAt: Date | null;
     updatedAt: Date | null;
 };
@@ -29,6 +32,7 @@ export type ApiKeyMaxAggregateOutputType = {
     id: number | null;
     service: string | null;
     value: string | null;
+    keyVersion: number | null;
     createdAt: Date | null;
     updatedAt: Date | null;
 };
@@ -36,20 +40,24 @@ export type ApiKeyCountAggregateOutputType = {
     id: number;
     service: number;
     value: number;
+    keyVersion: number;
     createdAt: number;
     updatedAt: number;
     _all: number;
 };
 export type ApiKeyAvgAggregateInputType = {
     id?: true;
+    keyVersion?: true;
 };
 export type ApiKeySumAggregateInputType = {
     id?: true;
+    keyVersion?: true;
 };
 export type ApiKeyMinAggregateInputType = {
     id?: true;
     service?: true;
     value?: true;
+    keyVersion?: true;
     createdAt?: true;
     updatedAt?: true;
 };
@@ -57,6 +65,7 @@ export type ApiKeyMaxAggregateInputType = {
     id?: true;
     service?: true;
     value?: true;
+    keyVersion?: true;
     createdAt?: true;
     updatedAt?: true;
 };
@@ -64,6 +73,7 @@ export type ApiKeyCountAggregateInputType = {
     id?: true;
     service?: true;
     value?: true;
+    keyVersion?: true;
     createdAt?: true;
     updatedAt?: true;
     _all?: true;
@@ -148,6 +158,7 @@ export type ApiKeyGroupByOutputType = {
     id: number;
     service: string;
     value: string;
+    keyVersion: number;
     createdAt: Date;
     updatedAt: Date;
     _count: ApiKeyCountAggregateOutputType | null;
@@ -166,6 +177,7 @@ export type ApiKeyWhereInput = {
     id?: Prisma.IntFilter<"ApiKey"> | number;
     service?: Prisma.StringFilter<"ApiKey"> | string;
     value?: Prisma.StringFilter<"ApiKey"> | string;
+    keyVersion?: Prisma.IntFilter<"ApiKey"> | number;
     createdAt?: Prisma.DateTimeFilter<"ApiKey"> | Date | string;
     updatedAt?: Prisma.DateTimeFilter<"ApiKey"> | Date | string;
 };
@@ -173,6 +185,7 @@ export type ApiKeyOrderByWithRelationInput = {
     id?: Prisma.SortOrder;
     service?: Prisma.SortOrder;
     value?: Prisma.SortOrder;
+    keyVersion?: Prisma.SortOrder;
     createdAt?: Prisma.SortOrder;
     updatedAt?: Prisma.SortOrder;
 };
@@ -183,6 +196,7 @@ export type ApiKeyWhereUniqueInput = Prisma.AtLeast<{
     OR?: Prisma.ApiKeyWhereInput[];
     NOT?: Prisma.ApiKeyWhereInput | Prisma.ApiKeyWhereInput[];
     value?: Prisma.StringFilter<"ApiKey"> | string;
+    keyVersion?: Prisma.IntFilter<"ApiKey"> | number;
     createdAt?: Prisma.DateTimeFilter<"ApiKey"> | Date | string;
     updatedAt?: Prisma.DateTimeFilter<"ApiKey"> | Date | string;
 }, "id" | "service">;
@@ -190,6 +204,7 @@ export type ApiKeyOrderByWithAggregationInput = {
     id?: Prisma.SortOrder;
     service?: Prisma.SortOrder;
     value?: Prisma.SortOrder;
+    keyVersion?: Prisma.SortOrder;
     createdAt?: Prisma.SortOrder;
     updatedAt?: Prisma.SortOrder;
     _count?: Prisma.ApiKeyCountOrderByAggregateInput;
@@ -205,12 +220,14 @@ export type ApiKeyScalarWhereWithAggregatesInput = {
     id?: Prisma.IntWithAggregatesFilter<"ApiKey"> | number;
     service?: Prisma.StringWithAggregatesFilter<"ApiKey"> | string;
     value?: Prisma.StringWithAggregatesFilter<"ApiKey"> | string;
+    keyVersion?: Prisma.IntWithAggregatesFilter<"ApiKey"> | number;
     createdAt?: Prisma.DateTimeWithAggregatesFilter<"ApiKey"> | Date | string;
     updatedAt?: Prisma.DateTimeWithAggregatesFilter<"ApiKey"> | Date | string;
 };
 export type ApiKeyCreateInput = {
     service: string;
     value: string;
+    keyVersion?: number;
     createdAt?: Date | string;
     updatedAt?: Date | string;
 };
@@ -218,12 +235,14 @@ export type ApiKeyUncheckedCreateInput = {
     id?: number;
     service: string;
     value: string;
+    keyVersion?: number;
     createdAt?: Date | string;
     updatedAt?: Date | string;
 };
 export type ApiKeyUpdateInput = {
     service?: Prisma.StringFieldUpdateOperationsInput | string;
     value?: Prisma.StringFieldUpdateOperationsInput | string;
+    keyVersion?: Prisma.IntFieldUpdateOperationsInput | number;
     createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
     updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
 };
@@ -231,6 +250,7 @@ export type ApiKeyUncheckedUpdateInput = {
     id?: Prisma.IntFieldUpdateOperationsInput | number;
     service?: Prisma.StringFieldUpdateOperationsInput | string;
     value?: Prisma.StringFieldUpdateOperationsInput | string;
+    keyVersion?: Prisma.IntFieldUpdateOperationsInput | number;
     createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
     updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
 };
@@ -238,12 +258,14 @@ export type ApiKeyCreateManyInput = {
     id?: number;
     service: string;
     value: string;
+    keyVersion?: number;
     createdAt?: Date | string;
     updatedAt?: Date | string;
 };
 export type ApiKeyUpdateManyMutationInput = {
     service?: Prisma.StringFieldUpdateOperationsInput | string;
     value?: Prisma.StringFieldUpdateOperationsInput | string;
+    keyVersion?: Prisma.IntFieldUpdateOperationsInput | number;
     createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
     updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
 };
@@ -251,6 +273,7 @@ export type ApiKeyUncheckedUpdateManyInput = {
     id?: Prisma.IntFieldUpdateOperationsInput | number;
     service?: Prisma.StringFieldUpdateOperationsInput | string;
     value?: Prisma.StringFieldUpdateOperationsInput | string;
+    keyVersion?: Prisma.IntFieldUpdateOperationsInput | number;
     createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
     updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
 };
@@ -258,16 +281,19 @@ export type ApiKeyCountOrderByAggregateInput = {
     id?: Prisma.SortOrder;
     service?: Prisma.SortOrder;
     value?: Prisma.SortOrder;
+    keyVersion?: Prisma.SortOrder;
     createdAt?: Prisma.SortOrder;
     updatedAt?: Prisma.SortOrder;
 };
 export type ApiKeyAvgOrderByAggregateInput = {
     id?: Prisma.SortOrder;
+    keyVersion?: Prisma.SortOrder;
 };
 export type ApiKeyMaxOrderByAggregateInput = {
     id?: Prisma.SortOrder;
     service?: Prisma.SortOrder;
     value?: Prisma.SortOrder;
+    keyVersion?: Prisma.SortOrder;
     createdAt?: Prisma.SortOrder;
     updatedAt?: Prisma.SortOrder;
 };
@@ -275,16 +301,19 @@ export type ApiKeyMinOrderByAggregateInput = {
     id?: Prisma.SortOrder;
     service?: Prisma.SortOrder;
     value?: Prisma.SortOrder;
+    keyVersion?: Prisma.SortOrder;
     createdAt?: Prisma.SortOrder;
     updatedAt?: Prisma.SortOrder;
 };
 export type ApiKeySumOrderByAggregateInput = {
     id?: Prisma.SortOrder;
+    keyVersion?: Prisma.SortOrder;
 };
 export type ApiKeySelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
     id?: boolean;
     service?: boolean;
     value?: boolean;
+    keyVersion?: boolean;
     createdAt?: boolean;
     updatedAt?: boolean;
 }, ExtArgs["result"]["apiKey"]>;
@@ -292,6 +321,7 @@ export type ApiKeySelectCreateManyAndReturn<ExtArgs extends runtime.Types.Extens
     id?: boolean;
     service?: boolean;
     value?: boolean;
+    keyVersion?: boolean;
     createdAt?: boolean;
     updatedAt?: boolean;
 }, ExtArgs["result"]["apiKey"]>;
@@ -299,6 +329,7 @@ export type ApiKeySelectUpdateManyAndReturn<ExtArgs extends runtime.Types.Extens
     id?: boolean;
     service?: boolean;
     value?: boolean;
+    keyVersion?: boolean;
     createdAt?: boolean;
     updatedAt?: boolean;
 }, ExtArgs["result"]["apiKey"]>;
@@ -306,10 +337,11 @@ export type ApiKeySelectScalar = {
     id?: boolean;
     service?: boolean;
     value?: boolean;
+    keyVersion?: boolean;
     createdAt?: boolean;
     updatedAt?: boolean;
 };
-export type ApiKeyOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "service" | "value" | "createdAt" | "updatedAt", ExtArgs["result"]["apiKey"]>;
+export type ApiKeyOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "service" | "value" | "keyVersion" | "createdAt" | "updatedAt", ExtArgs["result"]["apiKey"]>;
 export type $ApiKeyPayload<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
     name: "ApiKey";
     objects: {};
@@ -317,6 +349,7 @@ export type $ApiKeyPayload<ExtArgs extends runtime.Types.Extensions.InternalArgs
         id: number;
         service: string;
         value: string;
+        keyVersion: number;
         createdAt: Date;
         updatedAt: Date;
     }, ExtArgs["result"]["apiKey"]>;
@@ -676,6 +709,7 @@ export interface ApiKeyFieldRefs {
     readonly id: Prisma.FieldRef<"ApiKey", 'Int'>;
     readonly service: Prisma.FieldRef<"ApiKey", 'String'>;
     readonly value: Prisma.FieldRef<"ApiKey", 'String'>;
+    readonly keyVersion: Prisma.FieldRef<"ApiKey", 'Int'>;
     readonly createdAt: Prisma.FieldRef<"ApiKey", 'DateTime'>;
     readonly updatedAt: Prisma.FieldRef<"ApiKey", 'DateTime'>;
 }

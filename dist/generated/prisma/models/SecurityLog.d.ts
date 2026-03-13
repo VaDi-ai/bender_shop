@@ -23,6 +23,7 @@ export type SecurityLogMinAggregateOutputType = {
     event: string | null;
     details: string | null;
     ip: string | null;
+    adminTelegramId: string | null;
     createdAt: Date | null;
 };
 export type SecurityLogMaxAggregateOutputType = {
@@ -30,6 +31,7 @@ export type SecurityLogMaxAggregateOutputType = {
     event: string | null;
     details: string | null;
     ip: string | null;
+    adminTelegramId: string | null;
     createdAt: Date | null;
 };
 export type SecurityLogCountAggregateOutputType = {
@@ -37,6 +39,7 @@ export type SecurityLogCountAggregateOutputType = {
     event: number;
     details: number;
     ip: number;
+    adminTelegramId: number;
     createdAt: number;
     _all: number;
 };
@@ -51,6 +54,7 @@ export type SecurityLogMinAggregateInputType = {
     event?: true;
     details?: true;
     ip?: true;
+    adminTelegramId?: true;
     createdAt?: true;
 };
 export type SecurityLogMaxAggregateInputType = {
@@ -58,6 +62,7 @@ export type SecurityLogMaxAggregateInputType = {
     event?: true;
     details?: true;
     ip?: true;
+    adminTelegramId?: true;
     createdAt?: true;
 };
 export type SecurityLogCountAggregateInputType = {
@@ -65,6 +70,7 @@ export type SecurityLogCountAggregateInputType = {
     event?: true;
     details?: true;
     ip?: true;
+    adminTelegramId?: true;
     createdAt?: true;
     _all?: true;
 };
@@ -149,6 +155,7 @@ export type SecurityLogGroupByOutputType = {
     event: string;
     details: string;
     ip: string | null;
+    adminTelegramId: string | null;
     createdAt: Date;
     _count: SecurityLogCountAggregateOutputType | null;
     _avg: SecurityLogAvgAggregateOutputType | null;
@@ -167,6 +174,7 @@ export type SecurityLogWhereInput = {
     event?: Prisma.StringFilter<"SecurityLog"> | string;
     details?: Prisma.StringFilter<"SecurityLog"> | string;
     ip?: Prisma.StringNullableFilter<"SecurityLog"> | string | null;
+    adminTelegramId?: Prisma.StringNullableFilter<"SecurityLog"> | string | null;
     createdAt?: Prisma.DateTimeFilter<"SecurityLog"> | Date | string;
 };
 export type SecurityLogOrderByWithRelationInput = {
@@ -174,6 +182,7 @@ export type SecurityLogOrderByWithRelationInput = {
     event?: Prisma.SortOrder;
     details?: Prisma.SortOrder;
     ip?: Prisma.SortOrderInput | Prisma.SortOrder;
+    adminTelegramId?: Prisma.SortOrderInput | Prisma.SortOrder;
     createdAt?: Prisma.SortOrder;
 };
 export type SecurityLogWhereUniqueInput = Prisma.AtLeast<{
@@ -184,6 +193,7 @@ export type SecurityLogWhereUniqueInput = Prisma.AtLeast<{
     event?: Prisma.StringFilter<"SecurityLog"> | string;
     details?: Prisma.StringFilter<"SecurityLog"> | string;
     ip?: Prisma.StringNullableFilter<"SecurityLog"> | string | null;
+    adminTelegramId?: Prisma.StringNullableFilter<"SecurityLog"> | string | null;
     createdAt?: Prisma.DateTimeFilter<"SecurityLog"> | Date | string;
 }, "id">;
 export type SecurityLogOrderByWithAggregationInput = {
@@ -191,6 +201,7 @@ export type SecurityLogOrderByWithAggregationInput = {
     event?: Prisma.SortOrder;
     details?: Prisma.SortOrder;
     ip?: Prisma.SortOrderInput | Prisma.SortOrder;
+    adminTelegramId?: Prisma.SortOrderInput | Prisma.SortOrder;
     createdAt?: Prisma.SortOrder;
     _count?: Prisma.SecurityLogCountOrderByAggregateInput;
     _avg?: Prisma.SecurityLogAvgOrderByAggregateInput;
@@ -206,12 +217,14 @@ export type SecurityLogScalarWhereWithAggregatesInput = {
     event?: Prisma.StringWithAggregatesFilter<"SecurityLog"> | string;
     details?: Prisma.StringWithAggregatesFilter<"SecurityLog"> | string;
     ip?: Prisma.StringNullableWithAggregatesFilter<"SecurityLog"> | string | null;
+    adminTelegramId?: Prisma.StringNullableWithAggregatesFilter<"SecurityLog"> | string | null;
     createdAt?: Prisma.DateTimeWithAggregatesFilter<"SecurityLog"> | Date | string;
 };
 export type SecurityLogCreateInput = {
     event: string;
     details: string;
     ip?: string | null;
+    adminTelegramId?: string | null;
     createdAt?: Date | string;
 };
 export type SecurityLogUncheckedCreateInput = {
@@ -219,12 +232,14 @@ export type SecurityLogUncheckedCreateInput = {
     event: string;
     details: string;
     ip?: string | null;
+    adminTelegramId?: string | null;
     createdAt?: Date | string;
 };
 export type SecurityLogUpdateInput = {
     event?: Prisma.StringFieldUpdateOperationsInput | string;
     details?: Prisma.StringFieldUpdateOperationsInput | string;
     ip?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+    adminTelegramId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
     createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
 };
 export type SecurityLogUncheckedUpdateInput = {
@@ -232,6 +247,7 @@ export type SecurityLogUncheckedUpdateInput = {
     event?: Prisma.StringFieldUpdateOperationsInput | string;
     details?: Prisma.StringFieldUpdateOperationsInput | string;
     ip?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+    adminTelegramId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
     createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
 };
 export type SecurityLogCreateManyInput = {
@@ -239,12 +255,14 @@ export type SecurityLogCreateManyInput = {
     event: string;
     details: string;
     ip?: string | null;
+    adminTelegramId?: string | null;
     createdAt?: Date | string;
 };
 export type SecurityLogUpdateManyMutationInput = {
     event?: Prisma.StringFieldUpdateOperationsInput | string;
     details?: Prisma.StringFieldUpdateOperationsInput | string;
     ip?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+    adminTelegramId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
     createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
 };
 export type SecurityLogUncheckedUpdateManyInput = {
@@ -252,6 +270,7 @@ export type SecurityLogUncheckedUpdateManyInput = {
     event?: Prisma.StringFieldUpdateOperationsInput | string;
     details?: Prisma.StringFieldUpdateOperationsInput | string;
     ip?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+    adminTelegramId?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
     createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
 };
 export type SecurityLogCountOrderByAggregateInput = {
@@ -259,6 +278,7 @@ export type SecurityLogCountOrderByAggregateInput = {
     event?: Prisma.SortOrder;
     details?: Prisma.SortOrder;
     ip?: Prisma.SortOrder;
+    adminTelegramId?: Prisma.SortOrder;
     createdAt?: Prisma.SortOrder;
 };
 export type SecurityLogAvgOrderByAggregateInput = {
@@ -269,6 +289,7 @@ export type SecurityLogMaxOrderByAggregateInput = {
     event?: Prisma.SortOrder;
     details?: Prisma.SortOrder;
     ip?: Prisma.SortOrder;
+    adminTelegramId?: Prisma.SortOrder;
     createdAt?: Prisma.SortOrder;
 };
 export type SecurityLogMinOrderByAggregateInput = {
@@ -276,6 +297,7 @@ export type SecurityLogMinOrderByAggregateInput = {
     event?: Prisma.SortOrder;
     details?: Prisma.SortOrder;
     ip?: Prisma.SortOrder;
+    adminTelegramId?: Prisma.SortOrder;
     createdAt?: Prisma.SortOrder;
 };
 export type SecurityLogSumOrderByAggregateInput = {
@@ -286,6 +308,7 @@ export type SecurityLogSelect<ExtArgs extends runtime.Types.Extensions.InternalA
     event?: boolean;
     details?: boolean;
     ip?: boolean;
+    adminTelegramId?: boolean;
     createdAt?: boolean;
 }, ExtArgs["result"]["securityLog"]>;
 export type SecurityLogSelectCreateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
@@ -293,6 +316,7 @@ export type SecurityLogSelectCreateManyAndReturn<ExtArgs extends runtime.Types.E
     event?: boolean;
     details?: boolean;
     ip?: boolean;
+    adminTelegramId?: boolean;
     createdAt?: boolean;
 }, ExtArgs["result"]["securityLog"]>;
 export type SecurityLogSelectUpdateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
@@ -300,6 +324,7 @@ export type SecurityLogSelectUpdateManyAndReturn<ExtArgs extends runtime.Types.E
     event?: boolean;
     details?: boolean;
     ip?: boolean;
+    adminTelegramId?: boolean;
     createdAt?: boolean;
 }, ExtArgs["result"]["securityLog"]>;
 export type SecurityLogSelectScalar = {
@@ -307,9 +332,10 @@ export type SecurityLogSelectScalar = {
     event?: boolean;
     details?: boolean;
     ip?: boolean;
+    adminTelegramId?: boolean;
     createdAt?: boolean;
 };
-export type SecurityLogOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "event" | "details" | "ip" | "createdAt", ExtArgs["result"]["securityLog"]>;
+export type SecurityLogOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "event" | "details" | "ip" | "adminTelegramId" | "createdAt", ExtArgs["result"]["securityLog"]>;
 export type $SecurityLogPayload<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
     name: "SecurityLog";
     objects: {};
@@ -318,6 +344,7 @@ export type $SecurityLogPayload<ExtArgs extends runtime.Types.Extensions.Interna
         event: string;
         details: string;
         ip: string | null;
+        adminTelegramId: string | null;
         createdAt: Date;
     }, ExtArgs["result"]["securityLog"]>;
     composites: {};
@@ -677,6 +704,7 @@ export interface SecurityLogFieldRefs {
     readonly event: Prisma.FieldRef<"SecurityLog", 'String'>;
     readonly details: Prisma.FieldRef<"SecurityLog", 'String'>;
     readonly ip: Prisma.FieldRef<"SecurityLog", 'String'>;
+    readonly adminTelegramId: Prisma.FieldRef<"SecurityLog", 'String'>;
     readonly createdAt: Prisma.FieldRef<"SecurityLog", 'DateTime'>;
 }
 /**

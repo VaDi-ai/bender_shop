@@ -24,13 +24,17 @@ async function getApiKeyValue(service) {
 /**
  * Write an ApiKey value, encrypting it first.
  * Creates the record if it doesn't exist; updates it otherwise.
+ * Persists the key version used so migrations can detect stale records.
  */
 async function setApiKeyValue(service, value) {
     const encValue = (0, crypto_1.encrypt)(value);
+    const keyVersion = encValue.startsWith('v')
+        ? parseInt(encValue.slice(1, encValue.indexOf(':')), 10)
+        : 1;
     await prisma_1.prisma.apiKey.upsert({
         where: { service },
-        create: { service, value: encValue },
-        update: { value: encValue },
+        create: { service, value: encValue, keyVersion },
+        update: { value: encValue, keyVersion },
     });
 }
 //# sourceMappingURL=api-key-store.js.map

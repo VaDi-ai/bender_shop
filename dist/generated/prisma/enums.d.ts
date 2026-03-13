@@ -51,4 +51,16 @@ export declare const OrderPayment: {
     readonly crm: "crm";
 };
 export type OrderPayment = (typeof OrderPayment)[keyof typeof OrderPayment];
+export declare const DiscountType: {
+    readonly percent: "percent";
+    readonly fixed: "fixed";
+};
+export type DiscountType = (typeof DiscountType)[keyof typeof DiscountType];
+export declare const FilterType: {
+    readonly category: "category";
+    readonly brand: "brand";
+    readonly attribute: "attribute";
+    readonly products: "products";
+};
+export type FilterType = (typeof FilterType)[keyof typeof FilterType];
 //# sourceMappingURL=enums.d.ts.map

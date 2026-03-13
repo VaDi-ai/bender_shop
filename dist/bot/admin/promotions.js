@@ -21,6 +21,7 @@ exports.setupPromotionsHandlers = setupPromotionsHandlers;
 exports.handlePromotionsMessage = handlePromotionsMessage;
 const telegraf_1 = require("telegraf");
 const prisma_1 = require("../../lib/prisma");
+const client_1 = require("../../generated/prisma/client");
 const promotions_1 = require("../../lib/promotions");
 exports.promotionsState = new Map();
 // ─── Вспомогательные утилиты ──────────────────────────────────────────────────
@@ -69,7 +70,7 @@ async function askDiscountType(ctx, userId, name) {
 // ─── Шаг 3: Размер скидки ────────────────────────────────────────────────────
 async function askDiscountValue(ctx, userId, name, discountType) {
     exports.promotionsState.set(userId, { step: 'discount_value', name, discountType });
-    const hint = discountType === 'percent'
+    const hint = discountType === client_1.DiscountType.percent
         ? 'Введите процент скидки (1–90):'
         : 'Введите сумму скидки в рублях:';
     await ctx.reply(hint, telegraf_1.Markup.inlineKeyboard([[telegraf_1.Markup.button.callback('❌ Отмена', 'promo:cancel')]]));
@@ -77,7 +78,7 @@ async function askDiscountValue(ctx, userId, name, discountType) {
 // ─── Шаг 4: Тип фильтра ──────────────────────────────────────────────────────
 async function askFilterType(ctx, userId, name, discountType, discountValue) {
     exports.promotionsState.set(userId, { step: 'filter_type', name, discountType, discountValue });
-    const discLabel = discountType === 'percent' ? `${discountValue}%` : fmtPrice(discountValue);
+    const discLabel = discountType === client_1.DiscountType.percent ? `${discountValue}%` : fmtPrice(discountValue);
     await ctx.reply(`Акция: ${name}\nСкидка: ${discLabel}\n\nНа что применяется:`, telegraf_1.Markup.inlineKeyboard([
         [
             telegraf_1.Markup.button.callback('🗂️ По категории', 'promo:ftype:category'),
@@ -166,7 +167,7 @@ async function showPreview(ctx, userId) {
         return;
     const variants = await (0, promotions_1.findVariantsByFilter)(state.filterType, state.filterValue);
     const count = variants.length;
-    const discLabel = state.discountType === 'percent'
+    const discLabel = state.discountType === client_1.DiscountType.percent
         ? `${state.discountValue}%`
         : fmtPrice(state.discountValue);
     const period = state.startsAt && state.endsAt
@@ -178,7 +179,7 @@ async function showPreview(ctx, userId) {
         const attrStr = Object.values(attrs).join(' ');
         const orig = Number(v.price);
         let newP;
-        if (state.discountType === 'percent') {
+        if (state.discountType === client_1.DiscountType.percent) {
             newP = Math.max(1, Math.round(orig * (1 - state.discountValue / 100)));
         }
         else {
@@ -241,7 +242,7 @@ async function launchPromotion(ctx, userId, withNotification) {
             data: { notificationSent: true },
         });
     }
-    const discLabel = state.discountType === 'percent' ? `${state.discountValue}%` : fmtPrice(state.discountValue);
+    const discLabel = state.discountType === client_1.DiscountType.percent ? `${state.discountValue}%` : fmtPrice(state.discountValue);
     await ctx.reply([
         `✅ Акция «${state.name}» запущена!`,
         `Скидка ${discLabel} применена к ${varCount} вариантам.`,
@@ -255,7 +256,7 @@ async function launchPromotion(ctx, userId, withNotification) {
 }
 // ─── Рассылка уведомления об акции ───────────────────────────────────────────
 async function sendPromoNotification(ctx, _promoId, state) {
-    const discLabel = state.discountType === 'percent' ? `${state.discountValue}%` : fmtPrice(state.discountValue);
+    const discLabel = state.discountType === client_1.DiscountType.percent ? `${state.discountValue}%` : fmtPrice(state.discountValue);
     const filter = (0, promotions_1.filterLabel)(state.filterType, state.filterValue);
     const webappUrl = process.env.WEBAPP_URL ?? '';
     const text = [
@@ -315,7 +316,7 @@ async function showActiveList(ctx) {
     const rows = [];
     const lines = ['📋 Активные акции:\n'];
     for (const p of promos) {
-        const discLabel = p.discountType === 'percent'
+        const discLabel = p.discountType === client_1.DiscountType.percent
             ? `${p.discountValue}%`
             : fmtPrice(Number(p.discountValue));
         const until = p.endsAt ? ` — до ${fmtDate(p.endsAt)}` : '';
@@ -339,7 +340,7 @@ async function showDoneList(ctx) {
         return;
     }
     const lines = promos.map((p) => {
-        const discLabel = p.discountType === 'percent'
+        const discLabel = p.discountType === client_1.DiscountType.percent
             ? `${p.discountValue}%`
             : fmtPrice(Number(p.discountValue));
         return `✓ ${p.name} — ${discLabel} — ${(0, promotions_1.filterLabel)(p.filterType, p.filterValue)}`;
@@ -571,7 +572,7 @@ function setupPromotionsHandlers(bot) {
         if (!promo)
             return await ctx.reply('Акция не найдена.');
         const priceCount = await prisma_1.prisma.promotionPrice.count({ where: { promotionId: promoId } });
-        const discLabel = promo.discountType === 'percent'
+        const discLabel = promo.discountType === client_1.DiscountType.percent
             ? `${promo.discountValue}%`
             : fmtPrice(Number(promo.discountValue));
         const period = promo.startsAt && promo.endsAt
@@ -644,7 +645,7 @@ async function handlePromotionsMessage(ctx, userId, text) {
             await ctx.reply('Введите положительное число.');
             return true;
         }
-        if (state.discountType === 'percent' && (val < 1 || val > 90)) {
+        if (state.discountType === client_1.DiscountType.percent && (val < 1 || val > 90)) {
             await ctx.reply('Процент должен быть от 1 до 90.');
             return true;
         }

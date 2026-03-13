@@ -209,6 +209,7 @@ export type ProductVariantWhereInput = {
     promotionPrices?: Prisma.PromotionPriceListRelationFilter;
     priceChanges?: Prisma.PriceChangeListRelationFilter;
     reservations?: Prisma.ReservationListRelationFilter;
+    orderItems?: Prisma.OrderItemListRelationFilter;
 };
 export type ProductVariantOrderByWithRelationInput = {
     id?: Prisma.SortOrder;
@@ -225,6 +226,7 @@ export type ProductVariantOrderByWithRelationInput = {
     promotionPrices?: Prisma.PromotionPriceOrderByRelationAggregateInput;
     priceChanges?: Prisma.PriceChangeOrderByRelationAggregateInput;
     reservations?: Prisma.ReservationOrderByRelationAggregateInput;
+    orderItems?: Prisma.OrderItemOrderByRelationAggregateInput;
 };
 export type ProductVariantWhereUniqueInput = Prisma.AtLeast<{
     id?: number;
@@ -244,6 +246,7 @@ export type ProductVariantWhereUniqueInput = Prisma.AtLeast<{
     promotionPrices?: Prisma.PromotionPriceListRelationFilter;
     priceChanges?: Prisma.PriceChangeListRelationFilter;
     reservations?: Prisma.ReservationListRelationFilter;
+    orderItems?: Prisma.OrderItemListRelationFilter;
 }, "id" | "sku">;
 export type ProductVariantOrderByWithAggregationInput = {
     id?: Prisma.SortOrder;
@@ -288,6 +291,7 @@ export type ProductVariantCreateInput = {
     promotionPrices?: Prisma.PromotionPriceCreateNestedManyWithoutVariantInput;
     priceChanges?: Prisma.PriceChangeCreateNestedManyWithoutVariantInput;
     reservations?: Prisma.ReservationCreateNestedManyWithoutVariantInput;
+    orderItems?: Prisma.OrderItemCreateNestedManyWithoutVariantInput;
 };
 export type ProductVariantUncheckedCreateInput = {
     id?: number;
@@ -303,6 +307,7 @@ export type ProductVariantUncheckedCreateInput = {
     promotionPrices?: Prisma.PromotionPriceUncheckedCreateNestedManyWithoutVariantInput;
     priceChanges?: Prisma.PriceChangeUncheckedCreateNestedManyWithoutVariantInput;
     reservations?: Prisma.ReservationUncheckedCreateNestedManyWithoutVariantInput;
+    orderItems?: Prisma.OrderItemUncheckedCreateNestedManyWithoutVariantInput;
 };
 export type ProductVariantUpdateInput = {
     sku?: Prisma.StringFieldUpdateOperationsInput | string;
@@ -317,6 +322,7 @@ export type ProductVariantUpdateInput = {
     promotionPrices?: Prisma.PromotionPriceUpdateManyWithoutVariantNestedInput;
     priceChanges?: Prisma.PriceChangeUpdateManyWithoutVariantNestedInput;
     reservations?: Prisma.ReservationUpdateManyWithoutVariantNestedInput;
+    orderItems?: Prisma.OrderItemUpdateManyWithoutVariantNestedInput;
 };
 export type ProductVariantUncheckedUpdateInput = {
     id?: Prisma.IntFieldUpdateOperationsInput | number;
@@ -332,6 +338,7 @@ export type ProductVariantUncheckedUpdateInput = {
     promotionPrices?: Prisma.PromotionPriceUncheckedUpdateManyWithoutVariantNestedInput;
     priceChanges?: Prisma.PriceChangeUncheckedUpdateManyWithoutVariantNestedInput;
     reservations?: Prisma.ReservationUncheckedUpdateManyWithoutVariantNestedInput;
+    orderItems?: Prisma.OrderItemUncheckedUpdateManyWithoutVariantNestedInput;
 };
 export type ProductVariantCreateManyInput = {
     id?: number;
@@ -478,6 +485,18 @@ export type ProductVariantUpdateOneRequiredWithoutMovementsNestedInput = {
     connect?: Prisma.ProductVariantWhereUniqueInput;
     update?: Prisma.XOR<Prisma.XOR<Prisma.ProductVariantUpdateToOneWithWhereWithoutMovementsInput, Prisma.ProductVariantUpdateWithoutMovementsInput>, Prisma.ProductVariantUncheckedUpdateWithoutMovementsInput>;
 };
+export type ProductVariantCreateNestedOneWithoutOrderItemsInput = {
+    create?: Prisma.XOR<Prisma.ProductVariantCreateWithoutOrderItemsInput, Prisma.ProductVariantUncheckedCreateWithoutOrderItemsInput>;
+    connectOrCreate?: Prisma.ProductVariantCreateOrConnectWithoutOrderItemsInput;
+    connect?: Prisma.ProductVariantWhereUniqueInput;
+};
+export type ProductVariantUpdateOneRequiredWithoutOrderItemsNestedInput = {
+    create?: Prisma.XOR<Prisma.ProductVariantCreateWithoutOrderItemsInput, Prisma.ProductVariantUncheckedCreateWithoutOrderItemsInput>;
+    connectOrCreate?: Prisma.ProductVariantCreateOrConnectWithoutOrderItemsInput;
+    upsert?: Prisma.ProductVariantUpsertWithoutOrderItemsInput;
+    connect?: Prisma.ProductVariantWhereUniqueInput;
+    update?: Prisma.XOR<Prisma.XOR<Prisma.ProductVariantUpdateToOneWithWhereWithoutOrderItemsInput, Prisma.ProductVariantUpdateWithoutOrderItemsInput>, Prisma.ProductVariantUncheckedUpdateWithoutOrderItemsInput>;
+};
 export type ProductVariantCreateNestedOneWithoutReservationsInput = {
     create?: Prisma.XOR<Prisma.ProductVariantCreateWithoutReservationsInput, Prisma.ProductVariantUncheckedCreateWithoutReservationsInput>;
     connectOrCreate?: Prisma.ProductVariantCreateOrConnectWithoutReservationsInput;
@@ -528,6 +547,7 @@ export type ProductVariantCreateWithoutProductInput = {
     promotionPrices?: Prisma.PromotionPriceCreateNestedManyWithoutVariantInput;
     priceChanges?: Prisma.PriceChangeCreateNestedManyWithoutVariantInput;
     reservations?: Prisma.ReservationCreateNestedManyWithoutVariantInput;
+    orderItems?: Prisma.OrderItemCreateNestedManyWithoutVariantInput;
 };
 export type ProductVariantUncheckedCreateWithoutProductInput = {
     id?: number;
@@ -542,6 +562,7 @@ export type ProductVariantUncheckedCreateWithoutProductInput = {
     promotionPrices?: Prisma.PromotionPriceUncheckedCreateNestedManyWithoutVariantInput;
     priceChanges?: Prisma.PriceChangeUncheckedCreateNestedManyWithoutVariantInput;
     reservations?: Prisma.ReservationUncheckedCreateNestedManyWithoutVariantInput;
+    orderItems?: Prisma.OrderItemUncheckedCreateNestedManyWithoutVariantInput;
 };
 export type ProductVariantCreateOrConnectWithoutProductInput = {
     where: Prisma.ProductVariantWhereUniqueInput;
@@ -590,6 +611,7 @@ export type ProductVariantCreateWithoutMovementsInput = {
     promotionPrices?: Prisma.PromotionPriceCreateNestedManyWithoutVariantInput;
     priceChanges?: Prisma.PriceChangeCreateNestedManyWithoutVariantInput;
     reservations?: Prisma.ReservationCreateNestedManyWithoutVariantInput;
+    orderItems?: Prisma.OrderItemCreateNestedManyWithoutVariantInput;
 };
 export type ProductVariantUncheckedCreateWithoutMovementsInput = {
     id?: number;
@@ -604,6 +626,7 @@ export type ProductVariantUncheckedCreateWithoutMovementsInput = {
     promotionPrices?: Prisma.PromotionPriceUncheckedCreateNestedManyWithoutVariantInput;
     priceChanges?: Prisma.PriceChangeUncheckedCreateNestedManyWithoutVariantInput;
     reservations?: Prisma.ReservationUncheckedCreateNestedManyWithoutVariantInput;
+    orderItems?: Prisma.OrderItemUncheckedCreateNestedManyWithoutVariantInput;
 };
 export type ProductVariantCreateOrConnectWithoutMovementsInput = {
     where: Prisma.ProductVariantWhereUniqueInput;
@@ -630,6 +653,7 @@ export type ProductVariantUpdateWithoutMovementsInput = {
     promotionPrices?: Prisma.PromotionPriceUpdateManyWithoutVariantNestedInput;
     priceChanges?: Prisma.PriceChangeUpdateManyWithoutVariantNestedInput;
     reservations?: Prisma.ReservationUpdateManyWithoutVariantNestedInput;
+    orderItems?: Prisma.OrderItemUpdateManyWithoutVariantNestedInput;
 };
 export type ProductVariantUncheckedUpdateWithoutMovementsInput = {
     id?: Prisma.IntFieldUpdateOperationsInput | number;
@@ -641,6 +665,78 @@ export type ProductVariantUncheckedUpdateWithoutMovementsInput = {
     attributes?: Prisma.JsonNullValueInput | runtime.InputJsonValue;
     photos?: Prisma.ProductVariantUpdatephotosInput | string[];
     createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
+    promotionPrices?: Prisma.PromotionPriceUncheckedUpdateManyWithoutVariantNestedInput;
+    priceChanges?: Prisma.PriceChangeUncheckedUpdateManyWithoutVariantNestedInput;
+    reservations?: Prisma.ReservationUncheckedUpdateManyWithoutVariantNestedInput;
+    orderItems?: Prisma.OrderItemUncheckedUpdateManyWithoutVariantNestedInput;
+};
+export type ProductVariantCreateWithoutOrderItemsInput = {
+    sku: string;
+    price: runtime.Decimal | runtime.DecimalJsLike | number | string;
+    quantity?: number;
+    inStock?: boolean;
+    attributes: Prisma.JsonNullValueInput | runtime.InputJsonValue;
+    photos?: Prisma.ProductVariantCreatephotosInput | string[];
+    createdAt?: Date | string;
+    product: Prisma.ProductCreateNestedOneWithoutVariantsInput;
+    movements?: Prisma.StockMovementCreateNestedManyWithoutVariantInput;
+    promotionPrices?: Prisma.PromotionPriceCreateNestedManyWithoutVariantInput;
+    priceChanges?: Prisma.PriceChangeCreateNestedManyWithoutVariantInput;
+    reservations?: Prisma.ReservationCreateNestedManyWithoutVariantInput;
+};
+export type ProductVariantUncheckedCreateWithoutOrderItemsInput = {
+    id?: number;
+    productId: number;
+    sku: string;
+    price: runtime.Decimal | runtime.DecimalJsLike | number | string;
+    quantity?: number;
+    inStock?: boolean;
+    attributes: Prisma.JsonNullValueInput | runtime.InputJsonValue;
+    photos?: Prisma.ProductVariantCreatephotosInput | string[];
+    createdAt?: Date | string;
+    movements?: Prisma.StockMovementUncheckedCreateNestedManyWithoutVariantInput;
+    promotionPrices?: Prisma.PromotionPriceUncheckedCreateNestedManyWithoutVariantInput;
+    priceChanges?: Prisma.PriceChangeUncheckedCreateNestedManyWithoutVariantInput;
+    reservations?: Prisma.ReservationUncheckedCreateNestedManyWithoutVariantInput;
+};
+export type ProductVariantCreateOrConnectWithoutOrderItemsInput = {
+    where: Prisma.ProductVariantWhereUniqueInput;
+    create: Prisma.XOR<Prisma.ProductVariantCreateWithoutOrderItemsInput, Prisma.ProductVariantUncheckedCreateWithoutOrderItemsInput>;
+};
+export type ProductVariantUpsertWithoutOrderItemsInput = {
+    update: Prisma.XOR<Prisma.ProductVariantUpdateWithoutOrderItemsInput, Prisma.ProductVariantUncheckedUpdateWithoutOrderItemsInput>;
+    create: Prisma.XOR<Prisma.ProductVariantCreateWithoutOrderItemsInput, Prisma.ProductVariantUncheckedCreateWithoutOrderItemsInput>;
+    where?: Prisma.ProductVariantWhereInput;
+};
+export type ProductVariantUpdateToOneWithWhereWithoutOrderItemsInput = {
+    where?: Prisma.ProductVariantWhereInput;
+    data: Prisma.XOR<Prisma.ProductVariantUpdateWithoutOrderItemsInput, Prisma.ProductVariantUncheckedUpdateWithoutOrderItemsInput>;
+};
+export type ProductVariantUpdateWithoutOrderItemsInput = {
+    sku?: Prisma.StringFieldUpdateOperationsInput | string;
+    price?: Prisma.DecimalFieldUpdateOperationsInput | runtime.Decimal | runtime.DecimalJsLike | number | string;
+    quantity?: Prisma.IntFieldUpdateOperationsInput | number;
+    inStock?: Prisma.BoolFieldUpdateOperationsInput | boolean;
+    attributes?: Prisma.JsonNullValueInput | runtime.InputJsonValue;
+    photos?: Prisma.ProductVariantUpdatephotosInput | string[];
+    createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
+    product?: Prisma.ProductUpdateOneRequiredWithoutVariantsNestedInput;
+    movements?: Prisma.StockMovementUpdateManyWithoutVariantNestedInput;
+    promotionPrices?: Prisma.PromotionPriceUpdateManyWithoutVariantNestedInput;
+    priceChanges?: Prisma.PriceChangeUpdateManyWithoutVariantNestedInput;
+    reservations?: Prisma.ReservationUpdateManyWithoutVariantNestedInput;
+};
+export type ProductVariantUncheckedUpdateWithoutOrderItemsInput = {
+    id?: Prisma.IntFieldUpdateOperationsInput | number;
+    productId?: Prisma.IntFieldUpdateOperationsInput | number;
+    sku?: Prisma.StringFieldUpdateOperationsInput | string;
+    price?: Prisma.DecimalFieldUpdateOperationsInput | runtime.Decimal | runtime.DecimalJsLike | number | string;
+    quantity?: Prisma.IntFieldUpdateOperationsInput | number;
+    inStock?: Prisma.BoolFieldUpdateOperationsInput | boolean;
+    attributes?: Prisma.JsonNullValueInput | runtime.InputJsonValue;
+    photos?: Prisma.ProductVariantUpdatephotosInput | string[];
+    createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
+    movements?: Prisma.StockMovementUncheckedUpdateManyWithoutVariantNestedInput;
     promotionPrices?: Prisma.PromotionPriceUncheckedUpdateManyWithoutVariantNestedInput;
     priceChanges?: Prisma.PriceChangeUncheckedUpdateManyWithoutVariantNestedInput;
     reservations?: Prisma.ReservationUncheckedUpdateManyWithoutVariantNestedInput;
@@ -657,6 +753,7 @@ export type ProductVariantCreateWithoutReservationsInput = {
     movements?: Prisma.StockMovementCreateNestedManyWithoutVariantInput;
     promotionPrices?: Prisma.PromotionPriceCreateNestedManyWithoutVariantInput;
     priceChanges?: Prisma.PriceChangeCreateNestedManyWithoutVariantInput;
+    orderItems?: Prisma.OrderItemCreateNestedManyWithoutVariantInput;
 };
 export type ProductVariantUncheckedCreateWithoutReservationsInput = {
     id?: number;
@@ -671,6 +768,7 @@ export type ProductVariantUncheckedCreateWithoutReservationsInput = {
     movements?: Prisma.StockMovementUncheckedCreateNestedManyWithoutVariantInput;
     promotionPrices?: Prisma.PromotionPriceUncheckedCreateNestedManyWithoutVariantInput;
     priceChanges?: Prisma.PriceChangeUncheckedCreateNestedManyWithoutVariantInput;
+    orderItems?: Prisma.OrderItemUncheckedCreateNestedManyWithoutVariantInput;
 };
 export type ProductVariantCreateOrConnectWithoutReservationsInput = {
     where: Prisma.ProductVariantWhereUniqueInput;
@@ -697,6 +795,7 @@ export type ProductVariantUpdateWithoutReservationsInput = {
     movements?: Prisma.StockMovementUpdateManyWithoutVariantNestedInput;
     promotionPrices?: Prisma.PromotionPriceUpdateManyWithoutVariantNestedInput;
     priceChanges?: Prisma.PriceChangeUpdateManyWithoutVariantNestedInput;
+    orderItems?: Prisma.OrderItemUpdateManyWithoutVariantNestedInput;
 };
 export type ProductVariantUncheckedUpdateWithoutReservationsInput = {
     id?: Prisma.IntFieldUpdateOperationsInput | number;
@@ -711,6 +810,7 @@ export type ProductVariantUncheckedUpdateWithoutReservationsInput = {
     movements?: Prisma.StockMovementUncheckedUpdateManyWithoutVariantNestedInput;
     promotionPrices?: Prisma.PromotionPriceUncheckedUpdateManyWithoutVariantNestedInput;
     priceChanges?: Prisma.PriceChangeUncheckedUpdateManyWithoutVariantNestedInput;
+    orderItems?: Prisma.OrderItemUncheckedUpdateManyWithoutVariantNestedInput;
 };
 export type ProductVariantCreateWithoutPromotionPricesInput = {
     sku: string;
@@ -724,6 +824,7 @@ export type ProductVariantCreateWithoutPromotionPricesInput = {
     movements?: Prisma.StockMovementCreateNestedManyWithoutVariantInput;
     priceChanges?: Prisma.PriceChangeCreateNestedManyWithoutVariantInput;
     reservations?: Prisma.ReservationCreateNestedManyWithoutVariantInput;
+    orderItems?: Prisma.OrderItemCreateNestedManyWithoutVariantInput;
 };
 export type ProductVariantUncheckedCreateWithoutPromotionPricesInput = {
     id?: number;
@@ -738,6 +839,7 @@ export type ProductVariantUncheckedCreateWithoutPromotionPricesInput = {
     movements?: Prisma.StockMovementUncheckedCreateNestedManyWithoutVariantInput;
     priceChanges?: Prisma.PriceChangeUncheckedCreateNestedManyWithoutVariantInput;
     reservations?: Prisma.ReservationUncheckedCreateNestedManyWithoutVariantInput;
+    orderItems?: Prisma.OrderItemUncheckedCreateNestedManyWithoutVariantInput;
 };
 export type ProductVariantCreateOrConnectWithoutPromotionPricesInput = {
     where: Prisma.ProductVariantWhereUniqueInput;
@@ -764,6 +866,7 @@ export type ProductVariantUpdateWithoutPromotionPricesInput = {
     movements?: Prisma.StockMovementUpdateManyWithoutVariantNestedInput;
     priceChanges?: Prisma.PriceChangeUpdateManyWithoutVariantNestedInput;
     reservations?: Prisma.ReservationUpdateManyWithoutVariantNestedInput;
+    orderItems?: Prisma.OrderItemUpdateManyWithoutVariantNestedInput;
 };
 export type ProductVariantUncheckedUpdateWithoutPromotionPricesInput = {
     id?: Prisma.IntFieldUpdateOperationsInput | number;
@@ -778,6 +881,7 @@ export type ProductVariantUncheckedUpdateWithoutPromotionPricesInput = {
     movements?: Prisma.StockMovementUncheckedUpdateManyWithoutVariantNestedInput;
     priceChanges?: Prisma.PriceChangeUncheckedUpdateManyWithoutVariantNestedInput;
     reservations?: Prisma.ReservationUncheckedUpdateManyWithoutVariantNestedInput;
+    orderItems?: Prisma.OrderItemUncheckedUpdateManyWithoutVariantNestedInput;
 };
 export type ProductVariantCreateWithoutPriceChangesInput = {
     sku: string;
@@ -791,6 +895,7 @@ export type ProductVariantCreateWithoutPriceChangesInput = {
     movements?: Prisma.StockMovementCreateNestedManyWithoutVariantInput;
     promotionPrices?: Prisma.PromotionPriceCreateNestedManyWithoutVariantInput;
     reservations?: Prisma.ReservationCreateNestedManyWithoutVariantInput;
+    orderItems?: Prisma.OrderItemCreateNestedManyWithoutVariantInput;
 };
 export type ProductVariantUncheckedCreateWithoutPriceChangesInput = {
     id?: number;
@@ -805,6 +910,7 @@ export type ProductVariantUncheckedCreateWithoutPriceChangesInput = {
     movements?: Prisma.StockMovementUncheckedCreateNestedManyWithoutVariantInput;
     promotionPrices?: Prisma.PromotionPriceUncheckedCreateNestedManyWithoutVariantInput;
     reservations?: Prisma.ReservationUncheckedCreateNestedManyWithoutVariantInput;
+    orderItems?: Prisma.OrderItemUncheckedCreateNestedManyWithoutVariantInput;
 };
 export type ProductVariantCreateOrConnectWithoutPriceChangesInput = {
     where: Prisma.ProductVariantWhereUniqueInput;
@@ -831,6 +937,7 @@ export type ProductVariantUpdateWithoutPriceChangesInput = {
     movements?: Prisma.StockMovementUpdateManyWithoutVariantNestedInput;
     promotionPrices?: Prisma.PromotionPriceUpdateManyWithoutVariantNestedInput;
     reservations?: Prisma.ReservationUpdateManyWithoutVariantNestedInput;
+    orderItems?: Prisma.OrderItemUpdateManyWithoutVariantNestedInput;
 };
 export type ProductVariantUncheckedUpdateWithoutPriceChangesInput = {
     id?: Prisma.IntFieldUpdateOperationsInput | number;
@@ -845,6 +952,7 @@ export type ProductVariantUncheckedUpdateWithoutPriceChangesInput = {
     movements?: Prisma.StockMovementUncheckedUpdateManyWithoutVariantNestedInput;
     promotionPrices?: Prisma.PromotionPriceUncheckedUpdateManyWithoutVariantNestedInput;
     reservations?: Prisma.ReservationUncheckedUpdateManyWithoutVariantNestedInput;
+    orderItems?: Prisma.OrderItemUncheckedUpdateManyWithoutVariantNestedInput;
 };
 export type ProductVariantCreateManyProductInput = {
     id?: number;
@@ -868,6 +976,7 @@ export type ProductVariantUpdateWithoutProductInput = {
     promotionPrices?: Prisma.PromotionPriceUpdateManyWithoutVariantNestedInput;
     priceChanges?: Prisma.PriceChangeUpdateManyWithoutVariantNestedInput;
     reservations?: Prisma.ReservationUpdateManyWithoutVariantNestedInput;
+    orderItems?: Prisma.OrderItemUpdateManyWithoutVariantNestedInput;
 };
 export type ProductVariantUncheckedUpdateWithoutProductInput = {
     id?: Prisma.IntFieldUpdateOperationsInput | number;
@@ -882,6 +991,7 @@ export type ProductVariantUncheckedUpdateWithoutProductInput = {
     promotionPrices?: Prisma.PromotionPriceUncheckedUpdateManyWithoutVariantNestedInput;
     priceChanges?: Prisma.PriceChangeUncheckedUpdateManyWithoutVariantNestedInput;
     reservations?: Prisma.ReservationUncheckedUpdateManyWithoutVariantNestedInput;
+    orderItems?: Prisma.OrderItemUncheckedUpdateManyWithoutVariantNestedInput;
 };
 export type ProductVariantUncheckedUpdateManyWithoutProductInput = {
     id?: Prisma.IntFieldUpdateOperationsInput | number;
@@ -901,12 +1011,14 @@ export type ProductVariantCountOutputType = {
     promotionPrices: number;
     priceChanges: number;
     reservations: number;
+    orderItems: number;
 };
 export type ProductVariantCountOutputTypeSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
     movements?: boolean | ProductVariantCountOutputTypeCountMovementsArgs;
     promotionPrices?: boolean | ProductVariantCountOutputTypeCountPromotionPricesArgs;
     priceChanges?: boolean | ProductVariantCountOutputTypeCountPriceChangesArgs;
     reservations?: boolean | ProductVariantCountOutputTypeCountReservationsArgs;
+    orderItems?: boolean | ProductVariantCountOutputTypeCountOrderItemsArgs;
 };
 /**
  * ProductVariantCountOutputType without action
@@ -941,6 +1053,12 @@ export type ProductVariantCountOutputTypeCountPriceChangesArgs<ExtArgs extends r
 export type ProductVariantCountOutputTypeCountReservationsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
     where?: Prisma.ReservationWhereInput;
 };
+/**
+ * ProductVariantCountOutputType without action
+ */
+export type ProductVariantCountOutputTypeCountOrderItemsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+    where?: Prisma.OrderItemWhereInput;
+};
 export type ProductVariantSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
     id?: boolean;
     productId?: boolean;
@@ -956,6 +1074,7 @@ export type ProductVariantSelect<ExtArgs extends runtime.Types.Extensions.Intern
     promotionPrices?: boolean | Prisma.ProductVariant$promotionPricesArgs<ExtArgs>;
     priceChanges?: boolean | Prisma.ProductVariant$priceChangesArgs<ExtArgs>;
     reservations?: boolean | Prisma.ProductVariant$reservationsArgs<ExtArgs>;
+    orderItems?: boolean | Prisma.ProductVariant$orderItemsArgs<ExtArgs>;
     _count?: boolean | Prisma.ProductVariantCountOutputTypeDefaultArgs<ExtArgs>;
 }, ExtArgs["result"]["productVariant"]>;
 export type ProductVariantSelectCreateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
@@ -1000,6 +1119,7 @@ export type ProductVariantInclude<ExtArgs extends runtime.Types.Extensions.Inter
     promotionPrices?: boolean | Prisma.ProductVariant$promotionPricesArgs<ExtArgs>;
     priceChanges?: boolean | Prisma.ProductVariant$priceChangesArgs<ExtArgs>;
     reservations?: boolean | Prisma.ProductVariant$reservationsArgs<ExtArgs>;
+    orderItems?: boolean | Prisma.ProductVariant$orderItemsArgs<ExtArgs>;
     _count?: boolean | Prisma.ProductVariantCountOutputTypeDefaultArgs<ExtArgs>;
 };
 export type ProductVariantIncludeCreateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
@@ -1016,6 +1136,7 @@ export type $ProductVariantPayload<ExtArgs extends runtime.Types.Extensions.Inte
         promotionPrices: Prisma.$PromotionPricePayload<ExtArgs>[];
         priceChanges: Prisma.$PriceChangePayload<ExtArgs>[];
         reservations: Prisma.$ReservationPayload<ExtArgs>[];
+        orderItems: Prisma.$OrderItemPayload<ExtArgs>[];
     };
     scalars: runtime.Types.Extensions.GetPayloadResult<{
         id: number;
@@ -1361,6 +1482,7 @@ export interface Prisma__ProductVariantClient<T, Null = never, ExtArgs extends r
     promotionPrices<T extends Prisma.ProductVariant$promotionPricesArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.ProductVariant$promotionPricesArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$PromotionPricePayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>;
     priceChanges<T extends Prisma.ProductVariant$priceChangesArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.ProductVariant$priceChangesArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$PriceChangePayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>;
     reservations<T extends Prisma.ProductVariant$reservationsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.ProductVariant$reservationsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$ReservationPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>;
+    orderItems<T extends Prisma.ProductVariant$orderItemsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.ProductVariant$orderItemsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$OrderItemPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>;
     /**
      * Attaches callbacks for the resolution and/or rejection of the Promise.
      * @param onfulfilled The callback to execute when the Promise is resolved.
@@ -1864,6 +1986,29 @@ export type ProductVariant$reservationsArgs<ExtArgs extends runtime.Types.Extens
     take?: number;
     skip?: number;
     distinct?: Prisma.ReservationScalarFieldEnum | Prisma.ReservationScalarFieldEnum[];
+};
+/**
+ * ProductVariant.orderItems
+ */
+export type ProductVariant$orderItemsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the OrderItem
+     */
+    select?: Prisma.OrderItemSelect<ExtArgs> | null;
+    /**
+     * Omit specific fields from the OrderItem
+     */
+    omit?: Prisma.OrderItemOmit<ExtArgs> | null;
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: Prisma.OrderItemInclude<ExtArgs> | null;
+    where?: Prisma.OrderItemWhereInput;
+    orderBy?: Prisma.OrderItemOrderByWithRelationInput | Prisma.OrderItemOrderByWithRelationInput[];
+    cursor?: Prisma.OrderItemWhereUniqueInput;
+    take?: number;
+    skip?: number;
+    distinct?: Prisma.OrderItemScalarFieldEnum | Prisma.OrderItemScalarFieldEnum[];
 };
 /**
  * ProductVariant without action

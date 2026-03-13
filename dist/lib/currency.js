@@ -87,35 +87,44 @@ async function updateCurrencyRates() {
         return [];
     }
     const currencies = await getActiveCurrencies();
+    const activeCurrencies = currencies.filter((c) => c !== 'RUB');
+    // Pre-fetch all existing rates in one query — O(1) lookup
+    const existingRates = await prisma_1.prisma.currencyRate.findMany({
+        where: { currency: { in: activeCurrencies } },
+    });
+    const existingMap = new Map(existingRates.map((r) => [r.currency, r]));
     const changes = [];
-    for (const currency of currencies) {
-        if (currency === 'RUB')
-            continue;
-        const newRate = allRates[currency];
-        if (!newRate)
-            continue;
-        const existing = await prisma_1.prisma.currencyRate.findUnique({ where: { currency } });
-        const previousRate = existing ? Number(existing.rate) : newRate;
-        await prisma_1.prisma.currencyRate.upsert({
-            where: { currency },
-            create: { currency, rate: newRate, previousRate: null },
-            update: { previousRate: previousRate, rate: newRate },
-        });
-        const diff = newRate - previousRate;
-        const changePercent = previousRate !== 0
-            ? ((diff / previousRate) * 100).toFixed(2)
-            : '0.00';
-        const direction = diff > 0.001 ? 'up' : diff < -0.001 ? 'down' : 'same';
-        changes.push({
-            currency,
-            flag: exports.CURRENCY_FLAGS[currency] ?? '',
-            name: CURRENCY_NAMES[currency] ?? currency,
-            previousRate,
-            newRate,
-            changePercent,
-            direction,
-        });
-    }
+    // Execute all upserts in a single transaction
+    await prisma_1.prisma.$transaction(async (tx) => {
+        const ops = [];
+        for (const currency of activeCurrencies) {
+            const newRate = allRates[currency];
+            if (!newRate)
+                continue;
+            const existing = existingMap.get(currency);
+            const previousRate = existing ? Number(existing.rate) : newRate;
+            ops.push(tx.currencyRate.upsert({
+                where: { currency },
+                create: { currency, rate: newRate, previousRate: null },
+                update: { previousRate: previousRate, rate: newRate },
+            }));
+            const diff = newRate - previousRate;
+            const changePercent = previousRate !== 0
+                ? ((diff / previousRate) * 100).toFixed(2)
+                : '0.00';
+            const direction = diff > 0.001 ? 'up' : diff < -0.001 ? 'down' : 'same';
+            changes.push({
+                currency,
+                flag: exports.CURRENCY_FLAGS[currency] ?? '',
+                name: CURRENCY_NAMES[currency] ?? currency,
+                previousRate,
+                newRate,
+                changePercent,
+                direction,
+            });
+        }
+        await Promise.all(ops);
+    });
     return changes;
 }
 /** Загружает сохранённые курсы из БД */

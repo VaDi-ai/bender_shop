@@ -242,6 +242,7 @@ export declare const ModelName: {
     readonly ProductVariant: "ProductVariant";
     readonly StockMovement: "StockMovement";
     readonly Order: "Order";
+    readonly OrderItem: "OrderItem";
     readonly Reservation: "Reservation";
     readonly ApiKey: "ApiKey";
     readonly Region: "Region";
@@ -264,7 +265,7 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
         omit: GlobalOmitOptions;
     };
     meta: {
-        modelProps: "segment" | "client" | "message" | "tag" | "task" | "template" | "category" | "product" | "productVariant" | "stockMovement" | "order" | "reservation" | "apiKey" | "region" | "heroBanner" | "broadcastLog" | "promotion" | "promotionPrice" | "priceChange" | "currencyRate" | "securityLog";
+        modelProps: "segment" | "client" | "message" | "tag" | "task" | "template" | "category" | "product" | "productVariant" | "stockMovement" | "order" | "orderItem" | "reservation" | "apiKey" | "region" | "heroBanner" | "broadcastLog" | "promotion" | "promotionPrice" | "priceChange" | "currencyRate" | "securityLog";
         txIsolationLevel: TransactionIsolationLevel;
     };
     model: {
@@ -1079,6 +1080,80 @@ export type TypeMap<ExtArgs extends runtime.Types.Extensions.InternalArgs = runt
                 count: {
                     args: Prisma.OrderCountArgs<ExtArgs>;
                     result: runtime.Types.Utils.Optional<Prisma.OrderCountAggregateOutputType> | number;
+                };
+            };
+        };
+        OrderItem: {
+            payload: Prisma.$OrderItemPayload<ExtArgs>;
+            fields: Prisma.OrderItemFieldRefs;
+            operations: {
+                findUnique: {
+                    args: Prisma.OrderItemFindUniqueArgs<ExtArgs>;
+                    result: runtime.Types.Utils.PayloadToResult<Prisma.$OrderItemPayload> | null;
+                };
+                findUniqueOrThrow: {
+                    args: Prisma.OrderItemFindUniqueOrThrowArgs<ExtArgs>;
+                    result: runtime.Types.Utils.PayloadToResult<Prisma.$OrderItemPayload>;
+                };
+                findFirst: {
+                    args: Prisma.OrderItemFindFirstArgs<ExtArgs>;
+                    result: runtime.Types.Utils.PayloadToResult<Prisma.$OrderItemPayload> | null;
+                };
+                findFirstOrThrow: {
+                    args: Prisma.OrderItemFindFirstOrThrowArgs<ExtArgs>;
+                    result: runtime.Types.Utils.PayloadToResult<Prisma.$OrderItemPayload>;
+                };
+                findMany: {
+                    args: Prisma.OrderItemFindManyArgs<ExtArgs>;
+                    result: runtime.Types.Utils.PayloadToResult<Prisma.$OrderItemPayload>[];
+                };
+                create: {
+                    args: Prisma.OrderItemCreateArgs<ExtArgs>;
+                    result: runtime.Types.Utils.PayloadToResult<Prisma.$OrderItemPayload>;
+                };
+                createMany: {
+                    args: Prisma.OrderItemCreateManyArgs<ExtArgs>;
+                    result: BatchPayload;
+                };
+                createManyAndReturn: {
+                    args: Prisma.OrderItemCreateManyAndReturnArgs<ExtArgs>;
+                    result: runtime.Types.Utils.PayloadToResult<Prisma.$OrderItemPayload>[];
+                };
+                delete: {
+                    args: Prisma.OrderItemDeleteArgs<ExtArgs>;
+                    result: runtime.Types.Utils.PayloadToResult<Prisma.$OrderItemPayload>;
+                };
+                update: {
+                    args: Prisma.OrderItemUpdateArgs<ExtArgs>;
+                    result: runtime.Types.Utils.PayloadToResult<Prisma.$OrderItemPayload>;
+                };
+                deleteMany: {
+                    args: Prisma.OrderItemDeleteManyArgs<ExtArgs>;
+                    result: BatchPayload;
+                };
+                updateMany: {
+                    args: Prisma.OrderItemUpdateManyArgs<ExtArgs>;
+                    result: BatchPayload;
+                };
+                updateManyAndReturn: {
+                    args: Prisma.OrderItemUpdateManyAndReturnArgs<ExtArgs>;
+                    result: runtime.Types.Utils.PayloadToResult<Prisma.$OrderItemPayload>[];
+                };
+                upsert: {
+                    args: Prisma.OrderItemUpsertArgs<ExtArgs>;
+                    result: runtime.Types.Utils.PayloadToResult<Prisma.$OrderItemPayload>;
+                };
+                aggregate: {
+                    args: Prisma.OrderItemAggregateArgs<ExtArgs>;
+                    result: runtime.Types.Utils.Optional<Prisma.AggregateOrderItem>;
+                };
+                groupBy: {
+                    args: Prisma.OrderItemGroupByArgs<ExtArgs>;
+                    result: runtime.Types.Utils.Optional<Prisma.OrderItemGroupByOutputType>[];
+                };
+                count: {
+                    args: Prisma.OrderItemCountArgs<ExtArgs>;
+                    result: runtime.Types.Utils.Optional<Prisma.OrderItemCountAggregateOutputType> | number;
                 };
             };
         };
@@ -1974,7 +2049,7 @@ export declare const OrderScalarFieldEnum: {
     readonly id: "id";
     readonly clientId: "clientId";
     readonly telegramId: "telegramId";
-    readonly items: "items";
+    readonly itemsJson: "itemsJson";
     readonly totalAmount: "totalAmount";
     readonly payment: "payment";
     readonly status: "status";
@@ -1985,6 +2060,15 @@ export declare const OrderScalarFieldEnum: {
     readonly createdAt: "createdAt";
 };
 export type OrderScalarFieldEnum = (typeof OrderScalarFieldEnum)[keyof typeof OrderScalarFieldEnum];
+export declare const OrderItemScalarFieldEnum: {
+    readonly id: "id";
+    readonly orderId: "orderId";
+    readonly variantId: "variantId";
+    readonly quantity: "quantity";
+    readonly priceAtPurchase: "priceAtPurchase";
+    readonly productName: "productName";
+};
+export type OrderItemScalarFieldEnum = (typeof OrderItemScalarFieldEnum)[keyof typeof OrderItemScalarFieldEnum];
 export declare const ReservationScalarFieldEnum: {
     readonly id: "id";
     readonly clientId: "clientId";
@@ -2001,6 +2085,7 @@ export declare const ApiKeyScalarFieldEnum: {
     readonly id: "id";
     readonly service: "service";
     readonly value: "value";
+    readonly keyVersion: "keyVersion";
     readonly createdAt: "createdAt";
     readonly updatedAt: "updatedAt";
 };
@@ -2036,6 +2121,7 @@ export declare const BroadcastLogScalarFieldEnum: {
     readonly totalFailed: "totalFailed";
     readonly createdAt: "createdAt";
     readonly createdBy: "createdBy";
+    readonly adminTelegramId: "adminTelegramId";
 };
 export type BroadcastLogScalarFieldEnum = (typeof BroadcastLogScalarFieldEnum)[keyof typeof BroadcastLogScalarFieldEnum];
 export declare const PromotionScalarFieldEnum: {
@@ -2085,6 +2171,7 @@ export declare const SecurityLogScalarFieldEnum: {
     readonly event: "event";
     readonly details: "details";
     readonly ip: "ip";
+    readonly adminTelegramId: "adminTelegramId";
     readonly createdAt: "createdAt";
 };
 export type SecurityLogScalarFieldEnum = (typeof SecurityLogScalarFieldEnum)[keyof typeof SecurityLogScalarFieldEnum];
@@ -2230,6 +2317,30 @@ export type EnumReservationStatusFieldRefInput<$PrismaModel> = FieldRefInputType
  */
 export type ListEnumReservationStatusFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'ReservationStatus[]'>;
 /**
+ * Reference to a field of type 'BigInt'
+ */
+export type BigIntFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'BigInt'>;
+/**
+ * Reference to a field of type 'BigInt[]'
+ */
+export type ListBigIntFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'BigInt[]'>;
+/**
+ * Reference to a field of type 'DiscountType'
+ */
+export type EnumDiscountTypeFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'DiscountType'>;
+/**
+ * Reference to a field of type 'DiscountType[]'
+ */
+export type ListEnumDiscountTypeFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'DiscountType[]'>;
+/**
+ * Reference to a field of type 'FilterType'
+ */
+export type EnumFilterTypeFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'FilterType'>;
+/**
+ * Reference to a field of type 'FilterType[]'
+ */
+export type ListEnumFilterTypeFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'FilterType[]'>;
+/**
  * Reference to a field of type 'Float'
  */
 export type FloatFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'Float'>;
@@ -2342,6 +2453,7 @@ export type GlobalOmitConfig = {
     productVariant?: Prisma.ProductVariantOmit;
     stockMovement?: Prisma.StockMovementOmit;
     order?: Prisma.OrderOmit;
+    orderItem?: Prisma.OrderItemOmit;
     reservation?: Prisma.ReservationOmit;
     apiKey?: Prisma.ApiKeyOmit;
     region?: Prisma.RegionOmit;

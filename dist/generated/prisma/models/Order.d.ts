@@ -53,7 +53,7 @@ export type OrderCountAggregateOutputType = {
     id: number;
     clientId: number;
     telegramId: number;
-    items: number;
+    itemsJson: number;
     totalAmount: number;
     payment: number;
     status: number;
@@ -104,7 +104,7 @@ export type OrderCountAggregateInputType = {
     id?: true;
     clientId?: true;
     telegramId?: true;
-    items?: true;
+    itemsJson?: true;
     totalAmount?: true;
     payment?: true;
     status?: true;
@@ -195,7 +195,7 @@ export type OrderGroupByOutputType = {
     id: number;
     clientId: number | null;
     telegramId: string;
-    items: runtime.JsonValue;
+    itemsJson: runtime.JsonValue | null;
     totalAmount: runtime.Decimal;
     payment: $Enums.OrderPayment;
     status: $Enums.OrderStatus;
@@ -220,7 +220,7 @@ export type OrderWhereInput = {
     id?: Prisma.IntFilter<"Order"> | number;
     clientId?: Prisma.IntNullableFilter<"Order"> | number | null;
     telegramId?: Prisma.StringFilter<"Order"> | string;
-    items?: Prisma.JsonFilter<"Order">;
+    itemsJson?: Prisma.JsonNullableFilter<"Order">;
     totalAmount?: Prisma.DecimalFilter<"Order"> | runtime.Decimal | runtime.DecimalJsLike | number | string;
     payment?: Prisma.EnumOrderPaymentFilter<"Order"> | $Enums.OrderPayment;
     status?: Prisma.EnumOrderStatusFilter<"Order"> | $Enums.OrderStatus;
@@ -230,12 +230,13 @@ export type OrderWhereInput = {
     deliveryAddress?: Prisma.StringNullableFilter<"Order"> | string | null;
     createdAt?: Prisma.DateTimeFilter<"Order"> | Date | string;
     client?: Prisma.XOR<Prisma.ClientNullableScalarRelationFilter, Prisma.ClientWhereInput> | null;
+    items?: Prisma.OrderItemListRelationFilter;
 };
 export type OrderOrderByWithRelationInput = {
     id?: Prisma.SortOrder;
     clientId?: Prisma.SortOrderInput | Prisma.SortOrder;
     telegramId?: Prisma.SortOrder;
-    items?: Prisma.SortOrder;
+    itemsJson?: Prisma.SortOrderInput | Prisma.SortOrder;
     totalAmount?: Prisma.SortOrder;
     payment?: Prisma.SortOrder;
     status?: Prisma.SortOrder;
@@ -245,6 +246,7 @@ export type OrderOrderByWithRelationInput = {
     deliveryAddress?: Prisma.SortOrderInput | Prisma.SortOrder;
     createdAt?: Prisma.SortOrder;
     client?: Prisma.ClientOrderByWithRelationInput;
+    items?: Prisma.OrderItemOrderByRelationAggregateInput;
 };
 export type OrderWhereUniqueInput = Prisma.AtLeast<{
     id?: number;
@@ -253,7 +255,7 @@ export type OrderWhereUniqueInput = Prisma.AtLeast<{
     NOT?: Prisma.OrderWhereInput | Prisma.OrderWhereInput[];
     clientId?: Prisma.IntNullableFilter<"Order"> | number | null;
     telegramId?: Prisma.StringFilter<"Order"> | string;
-    items?: Prisma.JsonFilter<"Order">;
+    itemsJson?: Prisma.JsonNullableFilter<"Order">;
     totalAmount?: Prisma.DecimalFilter<"Order"> | runtime.Decimal | runtime.DecimalJsLike | number | string;
     payment?: Prisma.EnumOrderPaymentFilter<"Order"> | $Enums.OrderPayment;
     status?: Prisma.EnumOrderStatusFilter<"Order"> | $Enums.OrderStatus;
@@ -263,12 +265,13 @@ export type OrderWhereUniqueInput = Prisma.AtLeast<{
     deliveryAddress?: Prisma.StringNullableFilter<"Order"> | string | null;
     createdAt?: Prisma.DateTimeFilter<"Order"> | Date | string;
     client?: Prisma.XOR<Prisma.ClientNullableScalarRelationFilter, Prisma.ClientWhereInput> | null;
+    items?: Prisma.OrderItemListRelationFilter;
 }, "id">;
 export type OrderOrderByWithAggregationInput = {
     id?: Prisma.SortOrder;
     clientId?: Prisma.SortOrderInput | Prisma.SortOrder;
     telegramId?: Prisma.SortOrder;
-    items?: Prisma.SortOrder;
+    itemsJson?: Prisma.SortOrderInput | Prisma.SortOrder;
     totalAmount?: Prisma.SortOrder;
     payment?: Prisma.SortOrder;
     status?: Prisma.SortOrder;
@@ -290,7 +293,7 @@ export type OrderScalarWhereWithAggregatesInput = {
     id?: Prisma.IntWithAggregatesFilter<"Order"> | number;
     clientId?: Prisma.IntNullableWithAggregatesFilter<"Order"> | number | null;
     telegramId?: Prisma.StringWithAggregatesFilter<"Order"> | string;
-    items?: Prisma.JsonWithAggregatesFilter<"Order">;
+    itemsJson?: Prisma.JsonNullableWithAggregatesFilter<"Order">;
     totalAmount?: Prisma.DecimalWithAggregatesFilter<"Order"> | runtime.Decimal | runtime.DecimalJsLike | number | string;
     payment?: Prisma.EnumOrderPaymentWithAggregatesFilter<"Order"> | $Enums.OrderPayment;
     status?: Prisma.EnumOrderStatusWithAggregatesFilter<"Order"> | $Enums.OrderStatus;
@@ -302,7 +305,7 @@ export type OrderScalarWhereWithAggregatesInput = {
 };
 export type OrderCreateInput = {
     telegramId: string;
-    items: Prisma.JsonNullValueInput | runtime.InputJsonValue;
+    itemsJson?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue;
     totalAmount: runtime.Decimal | runtime.DecimalJsLike | number | string;
     payment: $Enums.OrderPayment;
     status?: $Enums.OrderStatus;
@@ -312,12 +315,13 @@ export type OrderCreateInput = {
     deliveryAddress?: string | null;
     createdAt?: Date | string;
     client?: Prisma.ClientCreateNestedOneWithoutOrdersInput;
+    items?: Prisma.OrderItemCreateNestedManyWithoutOrderInput;
 };
 export type OrderUncheckedCreateInput = {
     id?: number;
     clientId?: number | null;
     telegramId: string;
-    items: Prisma.JsonNullValueInput | runtime.InputJsonValue;
+    itemsJson?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue;
     totalAmount: runtime.Decimal | runtime.DecimalJsLike | number | string;
     payment: $Enums.OrderPayment;
     status?: $Enums.OrderStatus;
@@ -326,10 +330,11 @@ export type OrderUncheckedCreateInput = {
     deliveryType?: string | null;
     deliveryAddress?: string | null;
     createdAt?: Date | string;
+    items?: Prisma.OrderItemUncheckedCreateNestedManyWithoutOrderInput;
 };
 export type OrderUpdateInput = {
     telegramId?: Prisma.StringFieldUpdateOperationsInput | string;
-    items?: Prisma.JsonNullValueInput | runtime.InputJsonValue;
+    itemsJson?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue;
     totalAmount?: Prisma.DecimalFieldUpdateOperationsInput | runtime.Decimal | runtime.DecimalJsLike | number | string;
     payment?: Prisma.EnumOrderPaymentFieldUpdateOperationsInput | $Enums.OrderPayment;
     status?: Prisma.EnumOrderStatusFieldUpdateOperationsInput | $Enums.OrderStatus;
@@ -339,12 +344,13 @@ export type OrderUpdateInput = {
     deliveryAddress?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
     createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
     client?: Prisma.ClientUpdateOneWithoutOrdersNestedInput;
+    items?: Prisma.OrderItemUpdateManyWithoutOrderNestedInput;
 };
 export type OrderUncheckedUpdateInput = {
     id?: Prisma.IntFieldUpdateOperationsInput | number;
     clientId?: Prisma.NullableIntFieldUpdateOperationsInput | number | null;
     telegramId?: Prisma.StringFieldUpdateOperationsInput | string;
-    items?: Prisma.JsonNullValueInput | runtime.InputJsonValue;
+    itemsJson?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue;
     totalAmount?: Prisma.DecimalFieldUpdateOperationsInput | runtime.Decimal | runtime.DecimalJsLike | number | string;
     payment?: Prisma.EnumOrderPaymentFieldUpdateOperationsInput | $Enums.OrderPayment;
     status?: Prisma.EnumOrderStatusFieldUpdateOperationsInput | $Enums.OrderStatus;
@@ -353,12 +359,13 @@ export type OrderUncheckedUpdateInput = {
     deliveryType?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
     deliveryAddress?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
     createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
+    items?: Prisma.OrderItemUncheckedUpdateManyWithoutOrderNestedInput;
 };
 export type OrderCreateManyInput = {
     id?: number;
     clientId?: number | null;
     telegramId: string;
-    items: Prisma.JsonNullValueInput | runtime.InputJsonValue;
+    itemsJson?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue;
     totalAmount: runtime.Decimal | runtime.DecimalJsLike | number | string;
     payment: $Enums.OrderPayment;
     status?: $Enums.OrderStatus;
@@ -370,7 +377,7 @@ export type OrderCreateManyInput = {
 };
 export type OrderUpdateManyMutationInput = {
     telegramId?: Prisma.StringFieldUpdateOperationsInput | string;
-    items?: Prisma.JsonNullValueInput | runtime.InputJsonValue;
+    itemsJson?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue;
     totalAmount?: Prisma.DecimalFieldUpdateOperationsInput | runtime.Decimal | runtime.DecimalJsLike | number | string;
     payment?: Prisma.EnumOrderPaymentFieldUpdateOperationsInput | $Enums.OrderPayment;
     status?: Prisma.EnumOrderStatusFieldUpdateOperationsInput | $Enums.OrderStatus;
@@ -384,7 +391,7 @@ export type OrderUncheckedUpdateManyInput = {
     id?: Prisma.IntFieldUpdateOperationsInput | number;
     clientId?: Prisma.NullableIntFieldUpdateOperationsInput | number | null;
     telegramId?: Prisma.StringFieldUpdateOperationsInput | string;
-    items?: Prisma.JsonNullValueInput | runtime.InputJsonValue;
+    itemsJson?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue;
     totalAmount?: Prisma.DecimalFieldUpdateOperationsInput | runtime.Decimal | runtime.DecimalJsLike | number | string;
     payment?: Prisma.EnumOrderPaymentFieldUpdateOperationsInput | $Enums.OrderPayment;
     status?: Prisma.EnumOrderStatusFieldUpdateOperationsInput | $Enums.OrderStatus;
@@ -406,7 +413,7 @@ export type OrderCountOrderByAggregateInput = {
     id?: Prisma.SortOrder;
     clientId?: Prisma.SortOrder;
     telegramId?: Prisma.SortOrder;
-    items?: Prisma.SortOrder;
+    itemsJson?: Prisma.SortOrder;
     totalAmount?: Prisma.SortOrder;
     payment?: Prisma.SortOrder;
     status?: Prisma.SortOrder;
@@ -452,6 +459,10 @@ export type OrderSumOrderByAggregateInput = {
     clientId?: Prisma.SortOrder;
     totalAmount?: Prisma.SortOrder;
 };
+export type OrderScalarRelationFilter = {
+    is?: Prisma.OrderWhereInput;
+    isNot?: Prisma.OrderWhereInput;
+};
 export type OrderCreateNestedManyWithoutClientInput = {
     create?: Prisma.XOR<Prisma.OrderCreateWithoutClientInput, Prisma.OrderUncheckedCreateWithoutClientInput> | Prisma.OrderCreateWithoutClientInput[] | Prisma.OrderUncheckedCreateWithoutClientInput[];
     connectOrCreate?: Prisma.OrderCreateOrConnectWithoutClientInput | Prisma.OrderCreateOrConnectWithoutClientInput[];
@@ -496,9 +507,21 @@ export type EnumOrderPaymentFieldUpdateOperationsInput = {
 export type EnumOrderStatusFieldUpdateOperationsInput = {
     set?: $Enums.OrderStatus;
 };
+export type OrderCreateNestedOneWithoutItemsInput = {
+    create?: Prisma.XOR<Prisma.OrderCreateWithoutItemsInput, Prisma.OrderUncheckedCreateWithoutItemsInput>;
+    connectOrCreate?: Prisma.OrderCreateOrConnectWithoutItemsInput;
+    connect?: Prisma.OrderWhereUniqueInput;
+};
+export type OrderUpdateOneRequiredWithoutItemsNestedInput = {
+    create?: Prisma.XOR<Prisma.OrderCreateWithoutItemsInput, Prisma.OrderUncheckedCreateWithoutItemsInput>;
+    connectOrCreate?: Prisma.OrderCreateOrConnectWithoutItemsInput;
+    upsert?: Prisma.OrderUpsertWithoutItemsInput;
+    connect?: Prisma.OrderWhereUniqueInput;
+    update?: Prisma.XOR<Prisma.XOR<Prisma.OrderUpdateToOneWithWhereWithoutItemsInput, Prisma.OrderUpdateWithoutItemsInput>, Prisma.OrderUncheckedUpdateWithoutItemsInput>;
+};
 export type OrderCreateWithoutClientInput = {
     telegramId: string;
-    items: Prisma.JsonNullValueInput | runtime.InputJsonValue;
+    itemsJson?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue;
     totalAmount: runtime.Decimal | runtime.DecimalJsLike | number | string;
     payment: $Enums.OrderPayment;
     status?: $Enums.OrderStatus;
@@ -507,11 +530,12 @@ export type OrderCreateWithoutClientInput = {
     deliveryType?: string | null;
     deliveryAddress?: string | null;
     createdAt?: Date | string;
+    items?: Prisma.OrderItemCreateNestedManyWithoutOrderInput;
 };
 export type OrderUncheckedCreateWithoutClientInput = {
     id?: number;
     telegramId: string;
-    items: Prisma.JsonNullValueInput | runtime.InputJsonValue;
+    itemsJson?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue;
     totalAmount: runtime.Decimal | runtime.DecimalJsLike | number | string;
     payment: $Enums.OrderPayment;
     status?: $Enums.OrderStatus;
@@ -520,6 +544,7 @@ export type OrderUncheckedCreateWithoutClientInput = {
     deliveryType?: string | null;
     deliveryAddress?: string | null;
     createdAt?: Date | string;
+    items?: Prisma.OrderItemUncheckedCreateNestedManyWithoutOrderInput;
 };
 export type OrderCreateOrConnectWithoutClientInput = {
     where: Prisma.OrderWhereUniqueInput;
@@ -549,7 +574,7 @@ export type OrderScalarWhereInput = {
     id?: Prisma.IntFilter<"Order"> | number;
     clientId?: Prisma.IntNullableFilter<"Order"> | number | null;
     telegramId?: Prisma.StringFilter<"Order"> | string;
-    items?: Prisma.JsonFilter<"Order">;
+    itemsJson?: Prisma.JsonNullableFilter<"Order">;
     totalAmount?: Prisma.DecimalFilter<"Order"> | runtime.Decimal | runtime.DecimalJsLike | number | string;
     payment?: Prisma.EnumOrderPaymentFilter<"Order"> | $Enums.OrderPayment;
     status?: Prisma.EnumOrderStatusFilter<"Order"> | $Enums.OrderStatus;
@@ -559,10 +584,77 @@ export type OrderScalarWhereInput = {
     deliveryAddress?: Prisma.StringNullableFilter<"Order"> | string | null;
     createdAt?: Prisma.DateTimeFilter<"Order"> | Date | string;
 };
+export type OrderCreateWithoutItemsInput = {
+    telegramId: string;
+    itemsJson?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue;
+    totalAmount: runtime.Decimal | runtime.DecimalJsLike | number | string;
+    payment: $Enums.OrderPayment;
+    status?: $Enums.OrderStatus;
+    customerName?: string | null;
+    customerPhone?: string | null;
+    deliveryType?: string | null;
+    deliveryAddress?: string | null;
+    createdAt?: Date | string;
+    client?: Prisma.ClientCreateNestedOneWithoutOrdersInput;
+};
+export type OrderUncheckedCreateWithoutItemsInput = {
+    id?: number;
+    clientId?: number | null;
+    telegramId: string;
+    itemsJson?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue;
+    totalAmount: runtime.Decimal | runtime.DecimalJsLike | number | string;
+    payment: $Enums.OrderPayment;
+    status?: $Enums.OrderStatus;
+    customerName?: string | null;
+    customerPhone?: string | null;
+    deliveryType?: string | null;
+    deliveryAddress?: string | null;
+    createdAt?: Date | string;
+};
+export type OrderCreateOrConnectWithoutItemsInput = {
+    where: Prisma.OrderWhereUniqueInput;
+    create: Prisma.XOR<Prisma.OrderCreateWithoutItemsInput, Prisma.OrderUncheckedCreateWithoutItemsInput>;
+};
+export type OrderUpsertWithoutItemsInput = {
+    update: Prisma.XOR<Prisma.OrderUpdateWithoutItemsInput, Prisma.OrderUncheckedUpdateWithoutItemsInput>;
+    create: Prisma.XOR<Prisma.OrderCreateWithoutItemsInput, Prisma.OrderUncheckedCreateWithoutItemsInput>;
+    where?: Prisma.OrderWhereInput;
+};
+export type OrderUpdateToOneWithWhereWithoutItemsInput = {
+    where?: Prisma.OrderWhereInput;
+    data: Prisma.XOR<Prisma.OrderUpdateWithoutItemsInput, Prisma.OrderUncheckedUpdateWithoutItemsInput>;
+};
+export type OrderUpdateWithoutItemsInput = {
+    telegramId?: Prisma.StringFieldUpdateOperationsInput | string;
+    itemsJson?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue;
+    totalAmount?: Prisma.DecimalFieldUpdateOperationsInput | runtime.Decimal | runtime.DecimalJsLike | number | string;
+    payment?: Prisma.EnumOrderPaymentFieldUpdateOperationsInput | $Enums.OrderPayment;
+    status?: Prisma.EnumOrderStatusFieldUpdateOperationsInput | $Enums.OrderStatus;
+    customerName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+    customerPhone?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+    deliveryType?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+    deliveryAddress?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+    createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
+    client?: Prisma.ClientUpdateOneWithoutOrdersNestedInput;
+};
+export type OrderUncheckedUpdateWithoutItemsInput = {
+    id?: Prisma.IntFieldUpdateOperationsInput | number;
+    clientId?: Prisma.NullableIntFieldUpdateOperationsInput | number | null;
+    telegramId?: Prisma.StringFieldUpdateOperationsInput | string;
+    itemsJson?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue;
+    totalAmount?: Prisma.DecimalFieldUpdateOperationsInput | runtime.Decimal | runtime.DecimalJsLike | number | string;
+    payment?: Prisma.EnumOrderPaymentFieldUpdateOperationsInput | $Enums.OrderPayment;
+    status?: Prisma.EnumOrderStatusFieldUpdateOperationsInput | $Enums.OrderStatus;
+    customerName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+    customerPhone?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+    deliveryType?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+    deliveryAddress?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+    createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
+};
 export type OrderCreateManyClientInput = {
     id?: number;
     telegramId: string;
-    items: Prisma.JsonNullValueInput | runtime.InputJsonValue;
+    itemsJson?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue;
     totalAmount: runtime.Decimal | runtime.DecimalJsLike | number | string;
     payment: $Enums.OrderPayment;
     status?: $Enums.OrderStatus;
@@ -574,7 +666,7 @@ export type OrderCreateManyClientInput = {
 };
 export type OrderUpdateWithoutClientInput = {
     telegramId?: Prisma.StringFieldUpdateOperationsInput | string;
-    items?: Prisma.JsonNullValueInput | runtime.InputJsonValue;
+    itemsJson?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue;
     totalAmount?: Prisma.DecimalFieldUpdateOperationsInput | runtime.Decimal | runtime.DecimalJsLike | number | string;
     payment?: Prisma.EnumOrderPaymentFieldUpdateOperationsInput | $Enums.OrderPayment;
     status?: Prisma.EnumOrderStatusFieldUpdateOperationsInput | $Enums.OrderStatus;
@@ -583,11 +675,26 @@ export type OrderUpdateWithoutClientInput = {
     deliveryType?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
     deliveryAddress?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
     createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
+    items?: Prisma.OrderItemUpdateManyWithoutOrderNestedInput;
 };
 export type OrderUncheckedUpdateWithoutClientInput = {
     id?: Prisma.IntFieldUpdateOperationsInput | number;
     telegramId?: Prisma.StringFieldUpdateOperationsInput | string;
-    items?: Prisma.JsonNullValueInput | runtime.InputJsonValue;
+    itemsJson?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue;
+    totalAmount?: Prisma.DecimalFieldUpdateOperationsInput | runtime.Decimal | runtime.DecimalJsLike | number | string;
+    payment?: Prisma.EnumOrderPaymentFieldUpdateOperationsInput | $Enums.OrderPayment;
+    status?: Prisma.EnumOrderStatusFieldUpdateOperationsInput | $Enums.OrderStatus;
+    customerName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+    customerPhone?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+    deliveryType?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+    deliveryAddress?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
+    createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
+    items?: Prisma.OrderItemUncheckedUpdateManyWithoutOrderNestedInput;
+};
+export type OrderUncheckedUpdateManyWithoutClientInput = {
+    id?: Prisma.IntFieldUpdateOperationsInput | number;
+    telegramId?: Prisma.StringFieldUpdateOperationsInput | string;
+    itemsJson?: Prisma.NullableJsonNullValueInput | runtime.InputJsonValue;
     totalAmount?: Prisma.DecimalFieldUpdateOperationsInput | runtime.Decimal | runtime.DecimalJsLike | number | string;
     payment?: Prisma.EnumOrderPaymentFieldUpdateOperationsInput | $Enums.OrderPayment;
     status?: Prisma.EnumOrderStatusFieldUpdateOperationsInput | $Enums.OrderStatus;
@@ -597,24 +704,35 @@ export type OrderUncheckedUpdateWithoutClientInput = {
     deliveryAddress?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
     createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
 };
-export type OrderUncheckedUpdateManyWithoutClientInput = {
-    id?: Prisma.IntFieldUpdateOperationsInput | number;
-    telegramId?: Prisma.StringFieldUpdateOperationsInput | string;
-    items?: Prisma.JsonNullValueInput | runtime.InputJsonValue;
-    totalAmount?: Prisma.DecimalFieldUpdateOperationsInput | runtime.Decimal | runtime.DecimalJsLike | number | string;
-    payment?: Prisma.EnumOrderPaymentFieldUpdateOperationsInput | $Enums.OrderPayment;
-    status?: Prisma.EnumOrderStatusFieldUpdateOperationsInput | $Enums.OrderStatus;
-    customerName?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
-    customerPhone?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
-    deliveryType?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
-    deliveryAddress?: Prisma.NullableStringFieldUpdateOperationsInput | string | null;
-    createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string;
+/**
+ * Count Type OrderCountOutputType
+ */
+export type OrderCountOutputType = {
+    items: number;
+};
+export type OrderCountOutputTypeSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+    items?: boolean | OrderCountOutputTypeCountItemsArgs;
+};
+/**
+ * OrderCountOutputType without action
+ */
+export type OrderCountOutputTypeDefaultArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the OrderCountOutputType
+     */
+    select?: Prisma.OrderCountOutputTypeSelect<ExtArgs> | null;
+};
+/**
+ * OrderCountOutputType without action
+ */
+export type OrderCountOutputTypeCountItemsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+    where?: Prisma.OrderItemWhereInput;
 };
 export type OrderSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
     id?: boolean;
     clientId?: boolean;
     telegramId?: boolean;
-    items?: boolean;
+    itemsJson?: boolean;
     totalAmount?: boolean;
     payment?: boolean;
     status?: boolean;
@@ -624,12 +742,14 @@ export type OrderSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = 
     deliveryAddress?: boolean;
     createdAt?: boolean;
     client?: boolean | Prisma.Order$clientArgs<ExtArgs>;
+    items?: boolean | Prisma.Order$itemsArgs<ExtArgs>;
+    _count?: boolean | Prisma.OrderCountOutputTypeDefaultArgs<ExtArgs>;
 }, ExtArgs["result"]["order"]>;
 export type OrderSelectCreateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
     id?: boolean;
     clientId?: boolean;
     telegramId?: boolean;
-    items?: boolean;
+    itemsJson?: boolean;
     totalAmount?: boolean;
     payment?: boolean;
     status?: boolean;
@@ -644,7 +764,7 @@ export type OrderSelectUpdateManyAndReturn<ExtArgs extends runtime.Types.Extensi
     id?: boolean;
     clientId?: boolean;
     telegramId?: boolean;
-    items?: boolean;
+    itemsJson?: boolean;
     totalAmount?: boolean;
     payment?: boolean;
     status?: boolean;
@@ -659,7 +779,7 @@ export type OrderSelectScalar = {
     id?: boolean;
     clientId?: boolean;
     telegramId?: boolean;
-    items?: boolean;
+    itemsJson?: boolean;
     totalAmount?: boolean;
     payment?: boolean;
     status?: boolean;
@@ -669,9 +789,11 @@ export type OrderSelectScalar = {
     deliveryAddress?: boolean;
     createdAt?: boolean;
 };
-export type OrderOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "clientId" | "telegramId" | "items" | "totalAmount" | "payment" | "status" | "customerName" | "customerPhone" | "deliveryType" | "deliveryAddress" | "createdAt", ExtArgs["result"]["order"]>;
+export type OrderOmit<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetOmit<"id" | "clientId" | "telegramId" | "itemsJson" | "totalAmount" | "payment" | "status" | "customerName" | "customerPhone" | "deliveryType" | "deliveryAddress" | "createdAt", ExtArgs["result"]["order"]>;
 export type OrderInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
     client?: boolean | Prisma.Order$clientArgs<ExtArgs>;
+    items?: boolean | Prisma.Order$itemsArgs<ExtArgs>;
+    _count?: boolean | Prisma.OrderCountOutputTypeDefaultArgs<ExtArgs>;
 };
 export type OrderIncludeCreateManyAndReturn<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
     client?: boolean | Prisma.Order$clientArgs<ExtArgs>;
@@ -683,12 +805,13 @@ export type $OrderPayload<ExtArgs extends runtime.Types.Extensions.InternalArgs 
     name: "Order";
     objects: {
         client: Prisma.$ClientPayload<ExtArgs> | null;
+        items: Prisma.$OrderItemPayload<ExtArgs>[];
     };
     scalars: runtime.Types.Extensions.GetPayloadResult<{
         id: number;
         clientId: number | null;
         telegramId: string;
-        items: runtime.JsonValue;
+        itemsJson: runtime.JsonValue | null;
         totalAmount: runtime.Decimal;
         payment: $Enums.OrderPayment;
         status: $Enums.OrderStatus;
@@ -1027,6 +1150,7 @@ export interface OrderDelegate<ExtArgs extends runtime.Types.Extensions.Internal
 export interface Prisma__OrderClient<T, Null = never, ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs, GlobalOmitOptions = {}> extends Prisma.PrismaPromise<T> {
     readonly [Symbol.toStringTag]: "PrismaPromise";
     client<T extends Prisma.Order$clientArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Order$clientArgs<ExtArgs>>): Prisma.Prisma__ClientClient<runtime.Types.Result.GetResult<Prisma.$ClientPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | null, null, ExtArgs, GlobalOmitOptions>;
+    items<T extends Prisma.Order$itemsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.Order$itemsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$OrderItemPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>;
     /**
      * Attaches callbacks for the resolution and/or rejection of the Promise.
      * @param onfulfilled The callback to execute when the Promise is resolved.
@@ -1055,7 +1179,7 @@ export interface OrderFieldRefs {
     readonly id: Prisma.FieldRef<"Order", 'Int'>;
     readonly clientId: Prisma.FieldRef<"Order", 'Int'>;
     readonly telegramId: Prisma.FieldRef<"Order", 'String'>;
-    readonly items: Prisma.FieldRef<"Order", 'Json'>;
+    readonly itemsJson: Prisma.FieldRef<"Order", 'Json'>;
     readonly totalAmount: Prisma.FieldRef<"Order", 'Decimal'>;
     readonly payment: Prisma.FieldRef<"Order", 'OrderPayment'>;
     readonly status: Prisma.FieldRef<"Order", 'OrderStatus'>;
@@ -1459,6 +1583,29 @@ export type Order$clientArgs<ExtArgs extends runtime.Types.Extensions.InternalAr
      */
     include?: Prisma.ClientInclude<ExtArgs> | null;
     where?: Prisma.ClientWhereInput;
+};
+/**
+ * Order.items
+ */
+export type Order$itemsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the OrderItem
+     */
+    select?: Prisma.OrderItemSelect<ExtArgs> | null;
+    /**
+     * Omit specific fields from the OrderItem
+     */
+    omit?: Prisma.OrderItemOmit<ExtArgs> | null;
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: Prisma.OrderItemInclude<ExtArgs> | null;
+    where?: Prisma.OrderItemWhereInput;
+    orderBy?: Prisma.OrderItemOrderByWithRelationInput | Prisma.OrderItemOrderByWithRelationInput[];
+    cursor?: Prisma.OrderItemWhereUniqueInput;
+    take?: number;
+    skip?: number;
+    distinct?: Prisma.OrderItemScalarFieldEnum | Prisma.OrderItemScalarFieldEnum[];
 };
 /**
  * Order without action

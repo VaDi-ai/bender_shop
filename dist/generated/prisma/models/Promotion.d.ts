@@ -1,4 +1,5 @@
 import type * as runtime from "@prisma/client/runtime/client";
+import type * as $Enums from "../enums";
 import type * as Prisma from "../internal/prismaNamespace";
 /**
  * Model Promotion
@@ -23,9 +24,9 @@ export type PromotionSumAggregateOutputType = {
 export type PromotionMinAggregateOutputType = {
     id: number | null;
     name: string | null;
-    discountType: string | null;
+    discountType: $Enums.DiscountType | null;
     discountValue: runtime.Decimal | null;
-    filterType: string | null;
+    filterType: $Enums.FilterType | null;
     filterValue: string | null;
     isActive: boolean | null;
     startsAt: Date | null;
@@ -37,9 +38,9 @@ export type PromotionMinAggregateOutputType = {
 export type PromotionMaxAggregateOutputType = {
     id: number | null;
     name: string | null;
-    discountType: string | null;
+    discountType: $Enums.DiscountType | null;
     discountValue: runtime.Decimal | null;
-    filterType: string | null;
+    filterType: $Enums.FilterType | null;
     filterValue: string | null;
     isActive: boolean | null;
     startsAt: Date | null;
@@ -193,9 +194,9 @@ export type PromotionGroupByArgs<ExtArgs extends runtime.Types.Extensions.Intern
 export type PromotionGroupByOutputType = {
     id: number;
     name: string;
-    discountType: string;
+    discountType: $Enums.DiscountType;
     discountValue: runtime.Decimal;
-    filterType: string;
+    filterType: $Enums.FilterType;
     filterValue: string;
     isActive: boolean;
     startsAt: Date | null;
@@ -218,9 +219,9 @@ export type PromotionWhereInput = {
     NOT?: Prisma.PromotionWhereInput | Prisma.PromotionWhereInput[];
     id?: Prisma.IntFilter<"Promotion"> | number;
     name?: Prisma.StringFilter<"Promotion"> | string;
-    discountType?: Prisma.StringFilter<"Promotion"> | string;
+    discountType?: Prisma.EnumDiscountTypeFilter<"Promotion"> | $Enums.DiscountType;
     discountValue?: Prisma.DecimalFilter<"Promotion"> | runtime.Decimal | runtime.DecimalJsLike | number | string;
-    filterType?: Prisma.StringFilter<"Promotion"> | string;
+    filterType?: Prisma.EnumFilterTypeFilter<"Promotion"> | $Enums.FilterType;
     filterValue?: Prisma.StringFilter<"Promotion"> | string;
     isActive?: Prisma.BoolFilter<"Promotion"> | boolean;
     startsAt?: Prisma.DateTimeNullableFilter<"Promotion"> | Date | string | null;
@@ -251,9 +252,9 @@ export type PromotionWhereUniqueInput = Prisma.AtLeast<{
     OR?: Prisma.PromotionWhereInput[];
     NOT?: Prisma.PromotionWhereInput | Prisma.PromotionWhereInput[];
     name?: Prisma.StringFilter<"Promotion"> | string;
-    discountType?: Prisma.StringFilter<"Promotion"> | string;
+    discountType?: Prisma.EnumDiscountTypeFilter<"Promotion"> | $Enums.DiscountType;
     discountValue?: Prisma.DecimalFilter<"Promotion"> | runtime.Decimal | runtime.DecimalJsLike | number | string;
-    filterType?: Prisma.StringFilter<"Promotion"> | string;
+    filterType?: Prisma.EnumFilterTypeFilter<"Promotion"> | $Enums.FilterType;
     filterValue?: Prisma.StringFilter<"Promotion"> | string;
     isActive?: Prisma.BoolFilter<"Promotion"> | boolean;
     startsAt?: Prisma.DateTimeNullableFilter<"Promotion"> | Date | string | null;
@@ -288,9 +289,9 @@ export type PromotionScalarWhereWithAggregatesInput = {
     NOT?: Prisma.PromotionScalarWhereWithAggregatesInput | Prisma.PromotionScalarWhereWithAggregatesInput[];
     id?: Prisma.IntWithAggregatesFilter<"Promotion"> | number;
     name?: Prisma.StringWithAggregatesFilter<"Promotion"> | string;
-    discountType?: Prisma.StringWithAggregatesFilter<"Promotion"> | string;
+    discountType?: Prisma.EnumDiscountTypeWithAggregatesFilter<"Promotion"> | $Enums.DiscountType;
     discountValue?: Prisma.DecimalWithAggregatesFilter<"Promotion"> | runtime.Decimal | runtime.DecimalJsLike | number | string;
-    filterType?: Prisma.StringWithAggregatesFilter<"Promotion"> | string;
+    filterType?: Prisma.EnumFilterTypeWithAggregatesFilter<"Promotion"> | $Enums.FilterType;
     filterValue?: Prisma.StringWithAggregatesFilter<"Promotion"> | string;
     isActive?: Prisma.BoolWithAggregatesFilter<"Promotion"> | boolean;
     startsAt?: Prisma.DateTimeNullableWithAggregatesFilter<"Promotion"> | Date | string | null;
@@ -301,9 +302,9 @@ export type PromotionScalarWhereWithAggregatesInput = {
 };
 export type PromotionCreateInput = {
     name: string;
-    discountType: string;
+    discountType: $Enums.DiscountType;
     discountValue: runtime.Decimal | runtime.DecimalJsLike | number | string;
-    filterType: string;
+    filterType: $Enums.FilterType;
     filterValue: string;
     isActive?: boolean;
     startsAt?: Date | string | null;
@@ -316,9 +317,9 @@ export type PromotionCreateInput = {
 export type PromotionUncheckedCreateInput = {
     id?: number;
     name: string;
-    discountType: string;
+    discountType: $Enums.DiscountType;
     discountValue: runtime.Decimal | runtime.DecimalJsLike | number | string;
-    filterType: string;
+    filterType: $Enums.FilterType;
     filterValue: string;
     isActive?: boolean;
     startsAt?: Date | string | null;
@@ -330,9 +331,9 @@ export type PromotionUncheckedCreateInput = {
 };
 export type PromotionUpdateInput = {
     name?: Prisma.StringFieldUpdateOperationsInput | string;
-    discountType?: Prisma.StringFieldUpdateOperationsInput | string;
+    discountType?: Prisma.EnumDiscountTypeFieldUpdateOperationsInput | $Enums.DiscountType;
     discountValue?: Prisma.DecimalFieldUpdateOperationsInput | runtime.Decimal | runtime.DecimalJsLike | number | string;
-    filterType?: Prisma.StringFieldUpdateOperationsInput | string;
+    filterType?: Prisma.EnumFilterTypeFieldUpdateOperationsInput | $Enums.FilterType;
     filterValue?: Prisma.StringFieldUpdateOperationsInput | string;
     isActive?: Prisma.BoolFieldUpdateOperationsInput | boolean;
     startsAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null;
@@ -345,9 +346,9 @@ export type PromotionUpdateInput = {
 export type PromotionUncheckedUpdateInput = {
     id?: Prisma.IntFieldUpdateOperationsInput | number;
     name?: Prisma.StringFieldUpdateOperationsInput | string;
-    discountType?: Prisma.StringFieldUpdateOperationsInput | string;
+    discountType?: Prisma.EnumDiscountTypeFieldUpdateOperationsInput | $Enums.DiscountType;
     discountValue?: Prisma.DecimalFieldUpdateOperationsInput | runtime.Decimal | runtime.DecimalJsLike | number | string;
-    filterType?: Prisma.StringFieldUpdateOperationsInput | string;
+    filterType?: Prisma.EnumFilterTypeFieldUpdateOperationsInput | $Enums.FilterType;
     filterValue?: Prisma.StringFieldUpdateOperationsInput | string;
     isActive?: Prisma.BoolFieldUpdateOperationsInput | boolean;
     startsAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null;
@@ -360,9 +361,9 @@ export type PromotionUncheckedUpdateInput = {
 export type PromotionCreateManyInput = {
     id?: number;
     name: string;
-    discountType: string;
+    discountType: $Enums.DiscountType;
     discountValue: runtime.Decimal | runtime.DecimalJsLike | number | string;
-    filterType: string;
+    filterType: $Enums.FilterType;
     filterValue: string;
     isActive?: boolean;
     startsAt?: Date | string | null;
@@ -373,9 +374,9 @@ export type PromotionCreateManyInput = {
 };
 export type PromotionUpdateManyMutationInput = {
     name?: Prisma.StringFieldUpdateOperationsInput | string;
-    discountType?: Prisma.StringFieldUpdateOperationsInput | string;
+    discountType?: Prisma.EnumDiscountTypeFieldUpdateOperationsInput | $Enums.DiscountType;
     discountValue?: Prisma.DecimalFieldUpdateOperationsInput | runtime.Decimal | runtime.DecimalJsLike | number | string;
-    filterType?: Prisma.StringFieldUpdateOperationsInput | string;
+    filterType?: Prisma.EnumFilterTypeFieldUpdateOperationsInput | $Enums.FilterType;
     filterValue?: Prisma.StringFieldUpdateOperationsInput | string;
     isActive?: Prisma.BoolFieldUpdateOperationsInput | boolean;
     startsAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null;
@@ -387,9 +388,9 @@ export type PromotionUpdateManyMutationInput = {
 export type PromotionUncheckedUpdateManyInput = {
     id?: Prisma.IntFieldUpdateOperationsInput | number;
     name?: Prisma.StringFieldUpdateOperationsInput | string;
-    discountType?: Prisma.StringFieldUpdateOperationsInput | string;
+    discountType?: Prisma.EnumDiscountTypeFieldUpdateOperationsInput | $Enums.DiscountType;
     discountValue?: Prisma.DecimalFieldUpdateOperationsInput | runtime.Decimal | runtime.DecimalJsLike | number | string;
-    filterType?: Prisma.StringFieldUpdateOperationsInput | string;
+    filterType?: Prisma.EnumFilterTypeFieldUpdateOperationsInput | $Enums.FilterType;
     filterValue?: Prisma.StringFieldUpdateOperationsInput | string;
     isActive?: Prisma.BoolFieldUpdateOperationsInput | boolean;
     startsAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null;
@@ -452,6 +453,12 @@ export type PromotionScalarRelationFilter = {
     is?: Prisma.PromotionWhereInput;
     isNot?: Prisma.PromotionWhereInput;
 };
+export type EnumDiscountTypeFieldUpdateOperationsInput = {
+    set?: $Enums.DiscountType;
+};
+export type EnumFilterTypeFieldUpdateOperationsInput = {
+    set?: $Enums.FilterType;
+};
 export type PromotionCreateNestedOneWithoutPricesInput = {
     create?: Prisma.XOR<Prisma.PromotionCreateWithoutPricesInput, Prisma.PromotionUncheckedCreateWithoutPricesInput>;
     connectOrCreate?: Prisma.PromotionCreateOrConnectWithoutPricesInput;
@@ -466,9 +473,9 @@ export type PromotionUpdateOneRequiredWithoutPricesNestedInput = {
 };
 export type PromotionCreateWithoutPricesInput = {
     name: string;
-    discountType: string;
+    discountType: $Enums.DiscountType;
     discountValue: runtime.Decimal | runtime.DecimalJsLike | number | string;
-    filterType: string;
+    filterType: $Enums.FilterType;
     filterValue: string;
     isActive?: boolean;
     startsAt?: Date | string | null;
@@ -480,9 +487,9 @@ export type PromotionCreateWithoutPricesInput = {
 export type PromotionUncheckedCreateWithoutPricesInput = {
     id?: number;
     name: string;
-    discountType: string;
+    discountType: $Enums.DiscountType;
     discountValue: runtime.Decimal | runtime.DecimalJsLike | number | string;
-    filterType: string;
+    filterType: $Enums.FilterType;
     filterValue: string;
     isActive?: boolean;
     startsAt?: Date | string | null;
@@ -506,9 +513,9 @@ export type PromotionUpdateToOneWithWhereWithoutPricesInput = {
 };
 export type PromotionUpdateWithoutPricesInput = {
     name?: Prisma.StringFieldUpdateOperationsInput | string;
-    discountType?: Prisma.StringFieldUpdateOperationsInput | string;
+    discountType?: Prisma.EnumDiscountTypeFieldUpdateOperationsInput | $Enums.DiscountType;
     discountValue?: Prisma.DecimalFieldUpdateOperationsInput | runtime.Decimal | runtime.DecimalJsLike | number | string;
-    filterType?: Prisma.StringFieldUpdateOperationsInput | string;
+    filterType?: Prisma.EnumFilterTypeFieldUpdateOperationsInput | $Enums.FilterType;
     filterValue?: Prisma.StringFieldUpdateOperationsInput | string;
     isActive?: Prisma.BoolFieldUpdateOperationsInput | boolean;
     startsAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null;
@@ -520,9 +527,9 @@ export type PromotionUpdateWithoutPricesInput = {
 export type PromotionUncheckedUpdateWithoutPricesInput = {
     id?: Prisma.IntFieldUpdateOperationsInput | number;
     name?: Prisma.StringFieldUpdateOperationsInput | string;
-    discountType?: Prisma.StringFieldUpdateOperationsInput | string;
+    discountType?: Prisma.EnumDiscountTypeFieldUpdateOperationsInput | $Enums.DiscountType;
     discountValue?: Prisma.DecimalFieldUpdateOperationsInput | runtime.Decimal | runtime.DecimalJsLike | number | string;
-    filterType?: Prisma.StringFieldUpdateOperationsInput | string;
+    filterType?: Prisma.EnumFilterTypeFieldUpdateOperationsInput | $Enums.FilterType;
     filterValue?: Prisma.StringFieldUpdateOperationsInput | string;
     isActive?: Prisma.BoolFieldUpdateOperationsInput | boolean;
     startsAt?: Prisma.NullableDateTimeFieldUpdateOperationsInput | Date | string | null;
@@ -628,9 +635,9 @@ export type $PromotionPayload<ExtArgs extends runtime.Types.Extensions.InternalA
     scalars: runtime.Types.Extensions.GetPayloadResult<{
         id: number;
         name: string;
-        discountType: string;
+        discountType: $Enums.DiscountType;
         discountValue: runtime.Decimal;
-        filterType: string;
+        filterType: $Enums.FilterType;
         filterValue: string;
         isActive: boolean;
         startsAt: Date | null;
@@ -995,9 +1002,9 @@ export interface Prisma__PromotionClient<T, Null = never, ExtArgs extends runtim
 export interface PromotionFieldRefs {
     readonly id: Prisma.FieldRef<"Promotion", 'Int'>;
     readonly name: Prisma.FieldRef<"Promotion", 'String'>;
-    readonly discountType: Prisma.FieldRef<"Promotion", 'String'>;
+    readonly discountType: Prisma.FieldRef<"Promotion", 'DiscountType'>;
     readonly discountValue: Prisma.FieldRef<"Promotion", 'Decimal'>;
-    readonly filterType: Prisma.FieldRef<"Promotion", 'String'>;
+    readonly filterType: Prisma.FieldRef<"Promotion", 'FilterType'>;
     readonly filterValue: Prisma.FieldRef<"Promotion", 'String'>;
     readonly isActive: Prisma.FieldRef<"Promotion", 'Boolean'>;
     readonly startsAt: Prisma.FieldRef<"Promotion", 'DateTime'>;

@@ -48,7 +48,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.defineExtension = exports.JsonNullValueFilter = exports.NullsOrder = exports.QueryMode = exports.JsonNullValueInput = exports.NullableJsonNullValueInput = exports.SortOrder = exports.SecurityLogScalarFieldEnum = exports.CurrencyRateScalarFieldEnum = exports.PriceChangeScalarFieldEnum = exports.PromotionPriceScalarFieldEnum = exports.PromotionScalarFieldEnum = exports.BroadcastLogScalarFieldEnum = exports.HeroBannerScalarFieldEnum = exports.RegionScalarFieldEnum = exports.ApiKeyScalarFieldEnum = exports.ReservationScalarFieldEnum = exports.OrderScalarFieldEnum = exports.StockMovementScalarFieldEnum = exports.ProductVariantScalarFieldEnum = exports.ProductScalarFieldEnum = exports.CategoryScalarFieldEnum = exports.TemplateScalarFieldEnum = exports.TaskScalarFieldEnum = exports.TagScalarFieldEnum = exports.MessageScalarFieldEnum = exports.ClientScalarFieldEnum = exports.SegmentScalarFieldEnum = exports.TransactionIsolationLevel = exports.ModelName = exports.AnyNull = exports.JsonNull = exports.DbNull = exports.NullTypes = exports.prismaVersion = exports.getExtensionContext = exports.Decimal = exports.Sql = exports.raw = exports.join = exports.empty = exports.sql = exports.PrismaClientValidationError = exports.PrismaClientInitializationError = exports.PrismaClientRustPanicError = exports.PrismaClientUnknownRequestError = exports.PrismaClientKnownRequestError = void 0;
+exports.defineExtension = exports.JsonNullValueFilter = exports.NullsOrder = exports.QueryMode = exports.JsonNullValueInput = exports.NullableJsonNullValueInput = exports.SortOrder = exports.SecurityLogScalarFieldEnum = exports.CurrencyRateScalarFieldEnum = exports.PriceChangeScalarFieldEnum = exports.PromotionPriceScalarFieldEnum = exports.PromotionScalarFieldEnum = exports.BroadcastLogScalarFieldEnum = exports.HeroBannerScalarFieldEnum = exports.RegionScalarFieldEnum = exports.ApiKeyScalarFieldEnum = exports.ReservationScalarFieldEnum = exports.OrderItemScalarFieldEnum = exports.OrderScalarFieldEnum = exports.StockMovementScalarFieldEnum = exports.ProductVariantScalarFieldEnum = exports.ProductScalarFieldEnum = exports.CategoryScalarFieldEnum = exports.TemplateScalarFieldEnum = exports.TaskScalarFieldEnum = exports.TagScalarFieldEnum = exports.MessageScalarFieldEnum = exports.ClientScalarFieldEnum = exports.SegmentScalarFieldEnum = exports.TransactionIsolationLevel = exports.ModelName = exports.AnyNull = exports.JsonNull = exports.DbNull = exports.NullTypes = exports.prismaVersion = exports.getExtensionContext = exports.Decimal = exports.Sql = exports.raw = exports.join = exports.empty = exports.sql = exports.PrismaClientValidationError = exports.PrismaClientInitializationError = exports.PrismaClientRustPanicError = exports.PrismaClientUnknownRequestError = exports.PrismaClientKnownRequestError = void 0;
 const runtime = __importStar(require("@prisma/client/runtime/client"));
 /**
  * Prisma Errors
@@ -114,6 +114,7 @@ exports.ModelName = {
     ProductVariant: 'ProductVariant',
     StockMovement: 'StockMovement',
     Order: 'Order',
+    OrderItem: 'OrderItem',
     Reservation: 'Reservation',
     ApiKey: 'ApiKey',
     Region: 'Region',
@@ -242,7 +243,7 @@ exports.OrderScalarFieldEnum = {
     id: 'id',
     clientId: 'clientId',
     telegramId: 'telegramId',
-    items: 'items',
+    itemsJson: 'itemsJson',
     totalAmount: 'totalAmount',
     payment: 'payment',
     status: 'status',
@@ -251,6 +252,14 @@ exports.OrderScalarFieldEnum = {
     deliveryType: 'deliveryType',
     deliveryAddress: 'deliveryAddress',
     createdAt: 'createdAt'
+};
+exports.OrderItemScalarFieldEnum = {
+    id: 'id',
+    orderId: 'orderId',
+    variantId: 'variantId',
+    quantity: 'quantity',
+    priceAtPurchase: 'priceAtPurchase',
+    productName: 'productName'
 };
 exports.ReservationScalarFieldEnum = {
     id: 'id',
@@ -267,6 +276,7 @@ exports.ApiKeyScalarFieldEnum = {
     id: 'id',
     service: 'service',
     value: 'value',
+    keyVersion: 'keyVersion',
     createdAt: 'createdAt',
     updatedAt: 'updatedAt'
 };
@@ -298,7 +308,8 @@ exports.BroadcastLogScalarFieldEnum = {
     totalSent: 'totalSent',
     totalFailed: 'totalFailed',
     createdAt: 'createdAt',
-    createdBy: 'createdBy'
+    createdBy: 'createdBy',
+    adminTelegramId: 'adminTelegramId'
 };
 exports.PromotionScalarFieldEnum = {
     id: 'id',
@@ -343,6 +354,7 @@ exports.SecurityLogScalarFieldEnum = {
     event: 'event',
     details: 'details',
     ip: 'ip',
+    adminTelegramId: 'adminTelegramId',
     createdAt: 'createdAt'
 };
 exports.SortOrder = {

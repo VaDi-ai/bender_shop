@@ -64,7 +64,7 @@ if (!process.env.BOT_TOKEN)
     throw new Error('BOT_TOKEN is required');
 const BOT_TOKEN = process.env.BOT_TOKEN;
 const PORT = Number(process.env.PORT || process.env.API_PORT || 3000);
-const WEBAPP_FILE = path_1.default.join(__dirname, '../webapp/index.html');
+const WEBAPP_PATH = path_1.default.join(__dirname, '../../webapp/index.html');
 // ─── Хелпер: форматируем цену ─────────────────────────────────────────────────
 function fmtPrice(amount) {
     return amount.toLocaleString('ru-RU');
@@ -135,8 +135,11 @@ function startApiServer(bot) {
         contentSecurityPolicy: {
             directives: {
                 defaultSrc: ["'self'"],
-                scriptSrc: ["'self'", 'https://telegram.org'],
-                frameSrc: ["'self'", 'https://telegram.org'],
+                scriptSrc: ["'self'", "https://telegram.org", "'unsafe-inline'"],
+                styleSrc: ["'self'", "'unsafe-inline'"],
+                fontSrc: ["'self'", "data:"],
+                frameSrc: ["'self'", "https://telegram.org"],
+                imgSrc: ["'self'", "data:", "https:"],
             },
         },
     }));
@@ -192,24 +195,33 @@ function startApiServer(bot) {
     });
     app.use(express_1.default.json({ limit: '1mb' }));
     // ── GET / и /shop — Mini App ───────────────────────────────────────────────
-    app.get(['/', '/shop'], (_req, res) => {
-        const html = fs_1.default.readFileSync(WEBAPP_FILE);
+    app.get('/', (_req, res) => {
+        res.redirect('/shop');
+    });
+    app.get('/shop', (_req, res) => {
+        const html = fs_1.default.readFileSync(WEBAPP_PATH);
         res.setHeader('Content-Type', 'text/html; charset=utf-8');
         res.send(html);
     });
     // ── GET /health ────────────────────────────────────────────────────────────
     app.get('/health', async (_req, res) => {
+        let dbOk = false;
         try {
             await prisma_1.prisma.$queryRaw `SELECT 1`;
-            res.json({
-                status: 'ok',
-                uptime: Math.floor(process.uptime()),
-                timestamp: new Date().toISOString(),
-            });
+            dbOk = true;
         }
-        catch {
-            res.status(503).json({ status: 'error', message: 'База данных недоступна' });
-        }
+        catch { }
+        const botOk = bot !== undefined;
+        const status = dbOk && botOk ? 'ok' : 'error';
+        const code = status === 'ok' ? 200 : 503;
+        res.status(code).json({
+            status,
+            db: dbOk ? 'ok' : 'error',
+            bot: botOk ? 'ok' : 'error',
+            uptime: Math.floor(process.uptime()),
+            version: process.env.npm_package_version ?? '0.0.0',
+            timestamp: new Date().toISOString(),
+        });
     });
     // ── GET /api/products ──────────────────────────────────────────────────────
     app.get('/api/products', async (req, res) => {
@@ -350,8 +362,8 @@ function startApiServer(bot) {
         res.json(payload);
     });
     // ── GET /api/banner/:fileId ────────────────────────────────────────────────
-    app.get('/api/banner/:fileId', async (req, res) => {
-        const { fileId } = req.params;
+    app.get('/api/banner/:fileId', requireTelegramAuth, async (req, res) => {
+        const fileId = String(req.params.fileId ?? '');
         const FILE_ID_RE = /^[A-Za-z0-9_\-]{10,200}$/;
         if (!fileId || !FILE_ID_RE.test(fileId)) {
             res.status(400).send('Invalid file id');
@@ -521,7 +533,7 @@ function startApiServer(bot) {
         const telegramId = String(telegramUserId);
         // ── Валидация входящих данных ──────────────────────────────────────────
         if (!Array.isArray(items) || items.length === 0) {
-            await (0, security_log_1.logSecurityEvent)('invalid_order_data', { ip: req.ip, reason: 'empty items', telegramId });
+            await (0, security_log_1.logSecurityEvent)('invalid_order_data', { ip: req.ip, reason: 'empty items', telegramId }, telegramId);
             res.status(400).json({ error: 'Корзина пуста' });
             return;
         }
@@ -547,7 +559,7 @@ function startApiServer(bot) {
         }
         for (const item of items) {
             if (!Number.isInteger(item.variantId) || item.variantId <= 0) {
-                await (0, security_log_1.logSecurityEvent)('invalid_order_data', { ip: req.ip, reason: 'invalid variantId', item, telegramId });
+                await (0, security_log_1.logSecurityEvent)('invalid_order_data', { ip: req.ip, reason: 'invalid variantId', item, telegramId }, telegramId);
                 res.status(400).json({ error: 'Неверный ID товара' });
                 return;
             }
@@ -578,7 +590,7 @@ function startApiServer(bot) {
                     variantId: item.variantId,
                     submittedPrice: item.price,
                     actualPrice,
-                });
+                }, telegramId);
             }
             totalAmount += actualPrice * item.quantity;
             enrichedItems.push({
@@ -599,7 +611,7 @@ function startApiServer(bot) {
             data: {
                 clientId,
                 telegramId,
-                items: enrichedItems,
+                items: { create: enrichedItems.map(i => ({ variantId: i.variantId, quantity: i.quantity, priceAtPurchase: i.price, productName: i.name })) },
                 totalAmount: totalAmount.toString(),
                 payment: paymentMethod,
                 customerName: customerName.trim(),

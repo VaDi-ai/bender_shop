@@ -755,8 +755,8 @@ async function handleClientMessage(telegram, from, text) {
     }
 }
 // ─── AI: обработка входящего сообщения ────────────────────────────────────────
-/** Обрезает ответ AI до 2000 символов и удаляет признаки утечки системного промпта */
-function sanitizeAIResponse(text) {
+/** Модерирует вывод AI: обрезает до 2000 символов, фильтрует утечки промпта, редактирует PII */
+function moderateAIOutput(text) {
     const leakPatterns = [
         /system prompt/gi,
         /you are an ai/gi,
@@ -766,7 +766,13 @@ function sanitizeAIResponse(text) {
     const lines = text.split('\n').filter((line) => {
         return !leakPatterns.some((re) => re.test(line));
     });
-    const cleaned = lines.join('\n').trim();
+    let cleaned = lines.join('\n').trim();
+    // Redact phone numbers
+    cleaned = cleaned.replace(/(\+?[\d][\d\s\-()\u00d7]{6,14}[\d])/g, '[телефон]');
+    // Redact emails
+    cleaned = cleaned.replace(/[\w.+\-]+@[\w\-]+\.[\w.]+/g, '[email]');
+    // Redact URLs
+    cleaned = cleaned.replace(/https?:\/\/[^\s]+/g, '[ссылка]');
     return cleaned.length > 2000 ? cleaned.slice(0, 2000) : cleaned;
 }
 async function handleAIResponse(telegram, clientId, userMessage, threadId) {
@@ -783,8 +789,8 @@ async function handleAIResponse(telegram, clientId, userMessage, threadId) {
         return;
     }
     if (mode === 'auto') {
-        // Санитизируем ответ перед отправкой клиенту
-        const safeAiText = sanitizeAIResponse(aiText);
+        // Модерируем ответ перед отправкой клиенту
+        const safeAiText = moderateAIOutput(aiText);
         // Отправляем клиенту автоматически
         const client = await prisma_1.prisma.client.findUnique({ where: { id: clientId } });
         if (client?.source === 'telegram' && client.externalId) {
@@ -799,10 +805,11 @@ async function handleAIResponse(telegram, clientId, userMessage, threadId) {
         return;
     }
     if (mode === 'semi') {
+        const safeAiText = moderateAIOutput(aiText);
         // Сохраняем предложение и показываем менеджеру с кнопками
-        const suggestionId = (0, agent_1.storeSuggestion)(clientId, aiText, threadId);
+        const suggestionId = (0, agent_1.storeSuggestion)(clientId, safeAiText, threadId);
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        await telegram.sendMessage(CRM_GROUP_ID, `🤖 Предложение AI:\n\n${aiText}`, {
+        await telegram.sendMessage(CRM_GROUP_ID, `🤖 Предложение AI:\n\n${safeAiText}`, {
             message_thread_id: threadId,
             reply_markup: telegraf_1.Markup.inlineKeyboard([
                 [
@@ -816,7 +823,7 @@ async function handleAIResponse(telegram, clientId, userMessage, threadId) {
     }
     if (mode === 'manual') {
         // Только подсказка менеджеру
-        await sendToTopic(telegram, CRM_GROUP_ID, threadId, `💡 AI подсказка: ${aiText}`);
+        await sendToTopic(telegram, CRM_GROUP_ID, threadId, `💡 AI подсказка: ${moderateAIOutput(aiText)}`);
         return;
     }
 }
@@ -895,13 +902,13 @@ async function handleWebAppOrder(telegram, from, orderData) {
         console.warn('[handleWebAppOrder] Rejected order with missing/zero orderId from user', from.id);
         return;
     }
-    const dbOrder = await prisma_1.prisma.order.findUnique({ where: { id: orderId } });
+    const dbOrder = await prisma_1.prisma.order.findUnique({ where: { id: orderId }, include: { items: true } });
     if (!dbOrder) {
         console.warn('[handleWebAppOrder] orderId not found in DB:', orderId, 'user:', from.id);
         return;
     }
     const verifiedItems = dbOrder.items
-        .map((i) => ({ name: i.name, price: i.price, qty: i.quantity }));
+        .map((i) => ({ name: i.productName, price: String(i.priceAtPurchase), qty: i.quantity }));
     const verifiedTotal = Number(dbOrder.totalAmount);
     const PAYMENT_LABEL = {
         cash: '💵 Наличные',
