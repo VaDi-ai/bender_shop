@@ -12,20 +12,17 @@
 
 import { createCipheriv, createDecipheriv, randomBytes } from 'crypto'
 
-if (!process.env.ENCRYPTION_KEY) {
-  throw new Error('ENCRYPTION_KEY environment variable is required but not set')
-}
-
 const ALGORITHM = 'aes-256-gcm'
 const IV_BYTES = 12
 const TAG_BYTES = 16
 
 function getKey(): Buffer {
-  const hex = process.env.ENCRYPTION_KEY!
-  if (hex.length !== 64) {
+  const key = process.env.ENCRYPTION_KEY
+  if (!key) throw new Error('ENCRYPTION_KEY environment variable is required')
+  if (key.length !== 64) {
     throw new Error('ENCRYPTION_KEY must be a 64-character hex string (32 bytes)')
   }
-  return Buffer.from(hex, 'hex')
+  return Buffer.from(key, 'hex')
 }
 
 /**
