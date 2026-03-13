@@ -21,26 +21,26 @@ const IV_BYTES = 12
 const TAG_BYTES = 16
 
 function getKeys(): { version: number; key: Buffer }[] {
-  const keys: { version: number; key: Buffer }[] = []
+  const keys: Record<number, Buffer> = {}
 
-  // V1: ENCRYPTION_KEY_V1 takes precedence, else ENCRYPTION_KEY (backward compat)
-  const v1 = process.env.ENCRYPTION_KEY_V1 ?? process.env.ENCRYPTION_KEY
-  if (v1) {
-    if (v1.length !== 64) throw new Error('ENCRYPTION_KEY_V1 must be a 64-character hex string (32 bytes)')
-    keys.push({ version: 1, key: Buffer.from(v1, 'hex') })
+  // Support ENCRYPTION_KEY_V1, ENCRYPTION_KEY_V2, etc.
+  for (let v = 1; v <= 10; v++) {
+    const val = process.env[`ENCRYPTION_KEY_V${v}`]
+    if (val) keys[v] = Buffer.from(val, 'hex')
   }
 
-  const v2 = process.env.ENCRYPTION_KEY_V2
-  if (v2) {
-    if (v2.length !== 64) throw new Error('ENCRYPTION_KEY_V2 must be a 64-character hex string (32 bytes)')
-    keys.push({ version: 2, key: Buffer.from(v2, 'hex') })
+  // Fallback: plain ENCRYPTION_KEY treated as V1
+  if (Object.keys(keys).length === 0 && process.env.ENCRYPTION_KEY) {
+    keys[1] = Buffer.from(process.env.ENCRYPTION_KEY, 'hex')
   }
 
-  if (keys.length === 0) {
+  if (Object.keys(keys).length === 0) {
     throw new Error('No encryption key configured. Set ENCRYPTION_KEY or ENCRYPTION_KEY_V1.')
   }
 
-  return keys
+  return Object.entries(keys)
+    .map(([v, key]) => ({ version: parseInt(v, 10), key }))
+    .sort((a, b) => a.version - b.version)
 }
 
 function getLatestKey(): { version: number; key: Buffer } {
