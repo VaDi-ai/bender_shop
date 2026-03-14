@@ -26,12 +26,17 @@ const keys: Record<number, Buffer> = {}
   // Support ENCRYPTION_KEY_V1, ENCRYPTION_KEY_V2, etc.
   for (let v = 1; v <= 10; v++) {
     const val = process.env[`ENCRYPTION_KEY_V${v}`]
-    if (val) keys[v] = Buffer.from(val, 'hex')
+    if (val) {
+      if (!/^[0-9a-fA-F]{64}$/.test(val)) throw new Error(`ENCRYPTION_KEY_V${v} must be 64-char hex`)
+      keys[v] = Buffer.from(val, 'hex')
+    }
   }
 
   // Fallback: plain ENCRYPTION_KEY treated as V1
   if (Object.keys(keys).length === 0 && process.env.ENCRYPTION_KEY) {
-    keys[1] = Buffer.from(process.env.ENCRYPTION_KEY, 'hex')
+    const legacyVal = process.env.ENCRYPTION_KEY
+    if (!/^[0-9a-fA-F]{64}$/.test(legacyVal)) throw new Error('ENCRYPTION_KEY must be 64-char hex')
+    keys[1] = Buffer.from(legacyVal, 'hex')
   }
 
   if (Object.keys(keys).length === 0) {

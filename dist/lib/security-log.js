@@ -31,7 +31,12 @@ function sanitizeDetails(obj, depth = 0) {
         if (SENSITIVE_KEY_PATTERNS.some((p) => lk.includes(p))) {
             result[k] = '***';
         }
-        else if (depth < 2 && v !== null && typeof v === 'object' && !Array.isArray(v)) {
+        else if (depth < 2 && Array.isArray(v)) {
+            result[k] = v.map((el) => el !== null && typeof el === 'object' && !Array.isArray(el)
+                ? sanitizeDetails(el, depth + 1)
+                : typeof el === 'string' ? el.slice(0, 200) : el);
+        }
+        else if (depth < 2 && v !== null && typeof v === 'object') {
             result[k] = sanitizeDetails(v, depth + 1);
         }
         else if (typeof v === 'string') {
@@ -68,14 +73,18 @@ async function logSecurityEvent(event, details, adminTelegramId) {
             },
         });
     }
-    catch { }
+    catch (err) {
+        console.error('[SECURITY] Failed to write security log:', err);
+    }
     const text = formatSecurityAlert(event, safe);
     if (CRITICAL_EVENTS.includes(event) && _bot && _adminIds.length > 0) {
         for (const adminId of _adminIds) {
             try {
                 await _bot.telegram.sendMessage(adminId, text);
             }
-            catch { }
+            catch (err) {
+                console.error('[SECURITY] Failed to send alert to admin', adminId, ':', err);
+            }
         }
     }
     // Also alert the specific adminTelegramId if provided and not already in _adminIds
@@ -85,7 +94,9 @@ async function logSecurityEvent(event, details, adminTelegramId) {
             try {
                 await _bot.telegram.sendMessage(id, text);
             }
-            catch { }
+            catch (err) {
+                console.error('[SECURITY] Failed to send alert to admin', id, ':', err);
+            }
         }
     }
 }

@@ -42,7 +42,13 @@ function sanitizeDetails(obj: Record<string, any>, depth = 0): Record<string, an
     const lk = k.toLowerCase()
     if (SENSITIVE_KEY_PATTERNS.some((p) => lk.includes(p))) {
       result[k] = '***'
-    } else if (depth < 2 && v !== null && typeof v === 'object' && !Array.isArray(v)) {
+    } else if (depth < 2 && Array.isArray(v)) {
+      result[k] = v.map((el) =>
+        el !== null && typeof el === 'object' && !Array.isArray(el)
+          ? sanitizeDetails(el as Record<string, any>, depth + 1)
+          : typeof el === 'string' ? el.slice(0, 200) : el
+      )
+    } else if (depth < 2 && v !== null && typeof v === 'object') {
       result[k] = sanitizeDetails(v as Record<string, any>, depth + 1)
     } else if (typeof v === 'string') {
       result[k] = v.slice(0, 200)
@@ -84,7 +90,9 @@ export async function logSecurityEvent(
         ip: details.ip ?? null,
       },
     })
-  } catch {}
+  } catch (err) {
+    console.error('[SECURITY] Failed to write security log:', err)
+  }
 
   const text = formatSecurityAlert(event, safe)
 
@@ -92,7 +100,9 @@ export async function logSecurityEvent(
     for (const adminId of _adminIds) {
       try {
         await _bot.telegram.sendMessage(adminId, text)
-      } catch {}
+      } catch (err) {
+        console.error('[SECURITY] Failed to send alert to admin', adminId, ':', err)
+      }
     }
   }
 
@@ -102,7 +112,9 @@ export async function logSecurityEvent(
     if (!isNaN(id) && !_adminIds.includes(id)) {
       try {
         await _bot.telegram.sendMessage(id, text)
-      } catch {}
+      } catch (err) {
+        console.error('[SECURITY] Failed to send alert to admin', id, ':', err)
+      }
     }
   }
 }

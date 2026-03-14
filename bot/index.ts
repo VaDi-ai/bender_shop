@@ -224,7 +224,7 @@ bot.on(message('new_chat_members'), async (ctx) => {
 bot.use((ctx, next) => {
   const userId = ctx.from?.id
   if (!userId || !ADMIN_IDS.includes(userId)) {
-    return ctx.reply('⛔ Доступ запрещён.')
+    return // silently ignore non-admin updates
   }
   return next()
 })
@@ -825,7 +825,11 @@ async function serializeAISuggestions(): Promise<void> {
   }
 }
 
+let shuttingDown = false
+
 async function gracefulShutdown(signal: string): Promise<void> {
+  if (shuttingDown) return
+  shuttingDown = true
   console.log(`[shutdown] ${signal} received`)
   await serializeAISuggestions()
   bot.stop(signal)
@@ -835,4 +839,4 @@ async function gracefulShutdown(signal: string): Promise<void> {
 }
 
 process.once('SIGTERM', () => gracefulShutdown('SIGTERM'))
-process.on('SIGINT', () => gracefulShutdown('SIGINT'))
+process.once('SIGINT', () => gracefulShutdown('SIGINT'))

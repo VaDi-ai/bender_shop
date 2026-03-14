@@ -31,6 +31,8 @@ const crypto_1 = __importDefault(require("crypto"));
 const prisma_1 = require("../lib/prisma");
 const CRM_GROUP_ID = Number(process.env.CRM_GROUP_ID);
 const AVITO_SECRET = process.env.AVITO_WEBHOOK_SECRET ?? '';
+if (!process.env.AVITO_WEBHOOK_SECRET)
+    console.warn('AVITO_WEBHOOK_SECRET not set');
 // ─── HMAC-SHA256 verification ─────────────────────────────────────────────────
 class AvitoSignatureError extends Error {
     constructor() { super('Invalid or missing X-Avito-Signature'); }

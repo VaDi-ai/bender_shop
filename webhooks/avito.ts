@@ -28,6 +28,8 @@ import { prisma } from '../lib/prisma'
 const CRM_GROUP_ID = Number(process.env.CRM_GROUP_ID)
 const AVITO_SECRET = process.env.AVITO_WEBHOOK_SECRET ?? ''
 
+if (!process.env.AVITO_WEBHOOK_SECRET) console.warn('AVITO_WEBHOOK_SECRET not set')
+
 // ─── HMAC-SHA256 verification ─────────────────────────────────────────────────
 
 export class AvitoSignatureError extends Error {

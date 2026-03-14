@@ -38,6 +38,8 @@ exports.InstagramSignatureError = void 0;
 exports.handleInstagramWebhook = handleInstagramWebhook;
 const crypto_1 = __importDefault(require("crypto"));
 const INSTAGRAM_SECRET = process.env.INSTAGRAM_APP_SECRET ?? '';
+if (!process.env.INSTAGRAM_APP_SECRET)
+    console.warn('INSTAGRAM_APP_SECRET not set');
 // ─── X-Hub-Signature-256 verification ────────────────────────────────────────
 class InstagramSignatureError extends Error {
     constructor() { super('Invalid or missing X-Hub-Signature-256'); }

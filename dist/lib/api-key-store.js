@@ -28,9 +28,7 @@ async function getApiKeyValue(service) {
  */
 async function setApiKeyValue(service, value) {
     const encValue = (0, crypto_1.encrypt)(value);
-    const keyVersion = encValue.startsWith('v')
-        ? parseInt(encValue.slice(1, encValue.indexOf(':')), 10)
-        : 1;
+    const keyVersion = (0, crypto_1.getEncryptedKeyVersion)(encValue) ?? 1;
     await prisma_1.prisma.apiKey.upsert({
         where: { service },
         create: { service, value: encValue, keyVersion },

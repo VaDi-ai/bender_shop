@@ -7,7 +7,7 @@
  */
 
 import { prisma } from './prisma'
-import { encrypt, decrypt } from './crypto'
+import { encrypt, decrypt, getEncryptedKeyVersion } from './crypto'
 
 /**
  * Read a stored ApiKey value, decrypting it.
@@ -26,9 +26,7 @@ export async function getApiKeyValue(service: string): Promise<string | null> {
  */
 export async function setApiKeyValue(service: string, value: string): Promise<void> {
   const encValue = encrypt(value)
-  const keyVersion = encValue.startsWith('v')
-    ? parseInt(encValue.slice(1, encValue.indexOf(':')), 10)
-    : 1
+  const keyVersion = getEncryptedKeyVersion(encValue) ?? 1
   await prisma.apiKey.upsert({
     where: { service },
     create: { service, value: encValue, keyVersion },

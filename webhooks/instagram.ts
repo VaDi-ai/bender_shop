@@ -35,6 +35,8 @@ import { Telegram } from 'telegraf'
 
 const INSTAGRAM_SECRET = process.env.INSTAGRAM_APP_SECRET ?? ''
 
+if (!process.env.INSTAGRAM_APP_SECRET) console.warn('INSTAGRAM_APP_SECRET not set')
+
 // ─── X-Hub-Signature-256 verification ────────────────────────────────────────
 
 export class InstagramSignatureError extends Error {

@@ -72,8 +72,7 @@ export async function applyPromotion(promotionId: number): Promise<number> {
   const promo = await prisma.promotion.findUniqueOrThrow({ where: { id: promotionId } })
   const snapshotUpdatedAt = promo.updatedAt
 
-  const variants = await findVariantsByFilter(promo.filterType, promo.filterValue)
-  if (variants.length === 0) return 0
+  let variantCount = 0
 
   await prisma.$transaction(async (tx) => {
     // Optimistic lock: verify nobody modified the promotion concurrently
@@ -81,6 +80,9 @@ export async function applyPromotion(promotionId: number): Promise<number> {
     if (current.updatedAt.getTime() !== snapshotUpdatedAt.getTime()) {
       throw new Error('Акция была изменена параллельно — повторите операцию')
     }
+
+    const variants = await findVariantsByFilter(promo.filterType, promo.filterValue)
+    if (variants.length === 0) return
 
     // Сохраняем оригинальные цены (skipDuplicates — защита от повторного вызова)
     await tx.promotionPrice.createMany({
@@ -113,17 +115,19 @@ export async function applyPromotion(promotionId: number): Promise<number> {
       where: { id: promotionId },
       data: { isActive: true },
     })
+
+    variantCount = variants.length
   })
 
-  return variants.length
+  return variantCount
 }
 
 // ─── Отмена акции ─────────────────────────────────────────────────────────────
 
 export async function cancelPromotion(promotionId: number): Promise<void> {
-  const prices = await prisma.promotionPrice.findMany({ where: { promotionId } })
-
   await prisma.$transaction(async (tx) => {
+    const prices = await tx.promotionPrice.findMany({ where: { promotionId } })
+
     // Delete snapshot rows FIRST — ensures no partial state where prices are restored
     // but snapshots still reference the (now-gone) discount prices
     await tx.promotionPrice.deleteMany({ where: { promotionId } })

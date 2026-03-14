@@ -144,7 +144,7 @@ bot.on((0, filters_1.message)('new_chat_members'), async (ctx) => {
 bot.use((ctx, next) => {
     const userId = ctx.from?.id;
     if (!userId || !ADMIN_IDS.includes(userId)) {
-        return ctx.reply('⛔ Доступ запрещён.');
+        return; // silently ignore non-admin updates
     }
     return next();
 });
@@ -651,7 +651,11 @@ async function serializeAISuggestions() {
         console.error('[ai] Failed to serialize suggestions:', e);
     }
 }
+let shuttingDown = false;
 async function gracefulShutdown(signal) {
+    if (shuttingDown)
+        return;
+    shuttingDown = true;
     console.log(`[shutdown] ${signal} received`);
     await serializeAISuggestions();
     bot.stop(signal);
@@ -660,5 +664,5 @@ async function gracefulShutdown(signal) {
     process.exit(0);
 }
 process.once('SIGTERM', () => gracefulShutdown('SIGTERM'));
-process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+process.once('SIGINT', () => gracefulShutdown('SIGINT'));
 //# sourceMappingURL=index.js.map

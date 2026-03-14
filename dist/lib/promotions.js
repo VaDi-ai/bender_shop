@@ -61,15 +61,16 @@ async function applyPromotion(promotionId) {
     // Read promotion and take updatedAt snapshot BEFORE the transaction
     const promo = await prisma_1.prisma.promotion.findUniqueOrThrow({ where: { id: promotionId } });
     const snapshotUpdatedAt = promo.updatedAt;
-    const variants = await findVariantsByFilter(promo.filterType, promo.filterValue);
-    if (variants.length === 0)
-        return 0;
+    let variantCount = 0;
     await prisma_1.prisma.$transaction(async (tx) => {
         // Optimistic lock: verify nobody modified the promotion concurrently
         const current = await tx.promotion.findUniqueOrThrow({ where: { id: promotionId } });
         if (current.updatedAt.getTime() !== snapshotUpdatedAt.getTime()) {
             throw new Error('Акция была изменена параллельно — повторите операцию');
         }
+        const variants = await findVariantsByFilter(promo.filterType, promo.filterValue);
+        if (variants.length === 0)
+            return;
         // Сохраняем оригинальные цены (skipDuplicates — защита от повторного вызова)
         await tx.promotionPrice.createMany({
             data: variants.map((v) => ({
@@ -100,13 +101,14 @@ async function applyPromotion(promotionId) {
             where: { id: promotionId },
             data: { isActive: true },
         });
+        variantCount = variants.length;
     });
-    return variants.length;
+    return variantCount;
 }
 // ─── Отмена акции ─────────────────────────────────────────────────────────────
 async function cancelPromotion(promotionId) {
-    const prices = await prisma_1.prisma.promotionPrice.findMany({ where: { promotionId } });
     await prisma_1.prisma.$transaction(async (tx) => {
+        const prices = await tx.promotionPrice.findMany({ where: { promotionId } });
         // Delete snapshot rows FIRST — ensures no partial state where prices are restored
         // but snapshots still reference the (now-gone) discount prices
         await tx.promotionPrice.deleteMany({ where: { promotionId } });

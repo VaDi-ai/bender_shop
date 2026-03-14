@@ -129,6 +129,7 @@ model Client {
   @@index([phone])
   @@index([email])
   @@index([telegramTopicId])
+  @@index([createdAt])
 }
 
 model Message {
@@ -144,6 +145,7 @@ model Message {
 
   @@index([clientId])
   @@index([isRead])
+  @@index([createdAt])
 }
 
 model Tag {
@@ -172,6 +174,7 @@ model Task {
 
   @@index([status, scheduledAt])
   @@index([clientId])
+  @@index([action, status])
 }
 
 model Template {
@@ -301,6 +304,7 @@ model OrderItem {
   variant ProductVariant @relation(fields: [variantId], references: [id])
 
   @@index([orderId])
+  @@index([variantId])
 }
 
 model Reservation {
@@ -322,6 +326,7 @@ model Reservation {
   @@index([productId])
   @@index([variantId])
   @@index([status])
+  @@index([createdAt])
 }
 
 model ApiKey {
