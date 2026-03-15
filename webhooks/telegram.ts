@@ -32,9 +32,22 @@ import {
   deleteSuggestion,
   incrementStat,
 } from '../bot/ai/agent'
+import { logSecurityEvent } from '../lib/security-log'
 
 const CRM_GROUP_ID = Number(process.env.CRM_GROUP_ID)
 const ADMIN_IDS = (process.env.ADMIN_IDS ?? '').split(',').map((id) => Number(id.trim()))
+
+// ─── Безопасный парсинг числового ID из callback data ──────────────────────────
+
+function parseCallbackId(value: string): number | null {
+  const n = parseInt(value, 10)
+  return Number.isFinite(n) ? n : null
+}
+
+// ─── Rate limit для логирования несанкционированных callback-запросов ──────────
+// Хранит userId → timestamp последнего залогированного события (макс. 1 раз в минуту)
+
+const unauthorizedLogCooldown = new Map<number, number>()
 
 // ─── Типы ─────────────────────────────────────────────────────────────────────
 
@@ -178,6 +191,16 @@ export function setupClientHandlers(bot: Telegraf): void {
     const callerId = ctx.from?.id
     if (ADMIN_ACTION_PREFIXES.some((p) => data.startsWith(p))) {
       if (!callerId || !ADMIN_IDS.includes(callerId)) {
+        // Rate-limited security log: max 1 event per user per minute
+        const now = Date.now()
+        const lastLogged = unauthorizedLogCooldown.get(callerId ?? 0) ?? 0
+        if (now - lastLogged > 60_000) {
+          unauthorizedLogCooldown.set(callerId ?? 0, now)
+          logSecurityEvent('unauthorized_access', {
+            userId: callerId ?? 'unknown',
+            action: data,
+          }).catch(() => {})
+        }
         return ctx.answerCbQuery()
       }
     }
@@ -187,7 +210,8 @@ export function setupClientHandlers(bot: Telegraf): void {
       if (data.startsWith('cp:')) {
         const parts = data.split(':')
         const action = parts[1]
-        const clientId = parseInt(parts[2], 10)
+        const clientId = parseCallbackId(parts[2])
+        if (clientId === null) return ctx.answerCbQuery('Некорректные данные')
         const managerId = ctx.from?.id
 
         const client = await prisma.client.findUnique({
@@ -321,7 +345,8 @@ export function setupClientHandlers(bot: Telegraf): void {
 
       // ── Сегмент: seg:{clientId} — используется в карточке клиента ────────────
       if (data.startsWith('seg:')) {
-        const clientId = parseInt(data.slice(4), 10)
+        const clientId = parseCallbackId(data.slice(4))
+        if (clientId === null) return ctx.answerCbQuery('Некорректные данные')
         const client = await prisma.client.findUnique({
           where: { id: clientId },
           include: { segment: true },
@@ -353,7 +378,8 @@ export function setupClientHandlers(bot: Telegraf): void {
       if (data.startsWith('st:')) {
         const parts = data.split(':')
         const statusType = parts[1]
-        const clientId = parseInt(parts[2], 10)
+        const clientId = parseCallbackId(parts[2])
+        if (clientId === null) return ctx.answerCbQuery('Некорректные данные')
 
         const client = await prisma.client.findUnique({ where: { id: clientId } })
         if (!client) return ctx.answerCbQuery('Клиент не найден')
@@ -404,7 +430,8 @@ export function setupClientHandlers(bot: Telegraf): void {
 
       // ── Заметка: note:{clientId} ────────────────────────────────────────────
       if (data.startsWith('note:') && !data.startsWith('note:save:')) {
-        const clientId = parseInt(data.slice(5), 10)
+        const clientId = parseCallbackId(data.slice(5))
+        if (clientId === null) return ctx.answerCbQuery('Некорректные данные')
         const client = await prisma.client.findUnique({ where: { id: clientId } })
         if (!client || client.telegramTopicId == null) return ctx.answerCbQuery('Клиент не найден')
 
@@ -420,7 +447,8 @@ export function setupClientHandlers(bot: Telegraf): void {
 
       // ── История: hist:{clientId} ────────────────────────────────────────────
       if (data.startsWith('hist:')) {
-        const clientId = parseInt(data.slice(5), 10)
+        const clientId = parseCallbackId(data.slice(5))
+        if (clientId === null) return ctx.answerCbQuery('Некорректные данные')
         const client = await prisma.client.findUnique({ where: { id: clientId } })
         if (!client) return ctx.answerCbQuery('Клиент не найден')
 
@@ -457,7 +485,8 @@ export function setupClientHandlers(bot: Telegraf): void {
 
       // ── Карточка клиента: card:{clientId} ───────────────────────────────────
       if (data.startsWith('card:')) {
-        const clientId = parseInt(data.slice(5), 10)
+        const clientId = parseCallbackId(data.slice(5))
+        if (clientId === null) return ctx.answerCbQuery('Некорректные данные')
         const client = await prisma.client.findUnique({
           where: { id: clientId },
           include: { segment: true },
@@ -481,7 +510,8 @@ export function setupClientHandlers(bot: Telegraf): void {
 
       // ── Редактировать: edit:menu:{clientId} ──────────────────────────────────
       if (data.startsWith('edit:menu:')) {
-        const clientId = parseInt(data.slice(10), 10)
+        const clientId = parseCallbackId(data.slice(10))
+        if (clientId === null) return ctx.answerCbQuery('Некорректные данные')
         await ctx.answerCbQuery()
         return ctx.reply(
           '✏️ Что редактировать?',
@@ -502,7 +532,8 @@ export function setupClientHandlers(bot: Telegraf): void {
       // ── Редактировать: edit:field:{clientId}:{field} ──────────────────────
       if (data.startsWith('edit:field:')) {
         const parts = data.split(':')
-        const clientId = parseInt(parts[2], 10)
+        const clientId = parseCallbackId(parts[2])
+        if (clientId === null) return ctx.answerCbQuery('Некорректные данные')
         const field = parts[3] as EditField
         const userId = ctx.from?.id
         if (!userId) return ctx.answerCbQuery()
@@ -532,14 +563,16 @@ export function setupClientHandlers(bot: Telegraf): void {
 
       // ── Продажа из карточки: crm:sale:{clientId} ─────────────────────────────
       if (data.startsWith('crm:sale:')) {
-        const clientId = parseInt(data.slice(9), 10)
+        const clientId = parseCallbackId(data.slice(9))
+        if (clientId === null) return ctx.answerCbQuery('Некорректные данные')
         await ctx.answerCbQuery()
         return startSaleFlow(ctx as Context, clientId)
       }
 
       // ── Резерв из карточки: crm:res:{clientId} ────────────────────────────────
       if (data.startsWith('crm:res:')) {
-        const clientId = parseInt(data.slice(8), 10)
+        const clientId = parseCallbackId(data.slice(8))
+        if (clientId === null) return ctx.answerCbQuery('Некорректные данные')
         await ctx.answerCbQuery()
         return startReserveFlow(ctx as Context, clientId)
       }
@@ -551,7 +584,8 @@ export function setupClientHandlers(bot: Telegraf): void {
 
       // ── AI: ai:send:{suggestionId} — отправить предложение клиенту ───────────
       if (data.startsWith('ai:send:')) {
-        const suggestionId = parseInt(data.slice(8), 10)
+        const suggestionId = parseCallbackId(data.slice(8))
+        if (suggestionId === null) return ctx.answerCbQuery('Некорректные данные')
         const suggestion = getSuggestion(suggestionId)
         if (!suggestion) return ctx.answerCbQuery('Предложение не найдено или устарело')
 
@@ -583,7 +617,8 @@ export function setupClientHandlers(bot: Telegraf): void {
 
       // ── AI: ai:edit:{suggestionId} — редактировать предложение ──────────────
       if (data.startsWith('ai:edit:')) {
-        const suggestionId = parseInt(data.slice(8), 10)
+        const suggestionId = parseCallbackId(data.slice(8))
+        if (suggestionId === null) return ctx.answerCbQuery('Некорректные данные')
         const suggestion = getSuggestion(suggestionId)
         if (!suggestion) return ctx.answerCbQuery('Предложение не найдено или устарело')
 
@@ -612,7 +647,8 @@ export function setupClientHandlers(bot: Telegraf): void {
 
       // ── AI: ai:skip:{suggestionId} — пропустить предложение ─────────────────
       if (data.startsWith('ai:skip:')) {
-        const suggestionId = parseInt(data.slice(8), 10)
+        const suggestionId = parseCallbackId(data.slice(8))
+        if (suggestionId === null) return ctx.answerCbQuery('Некорректные данные')
         deleteSuggestion(suggestionId)
         incrementStat('rejected')
 

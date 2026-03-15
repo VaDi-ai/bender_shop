@@ -1,1 +1,1 @@
-{"version":3,"file":"telegram.d.ts","sourceRoot":"","sources":["../../webhooks/telegram.ts"],"names":[],"mappings":"AAAA;;;;;;;;;;;;;;;;;;;GAmBG;AAEH,OAAO,EAAE,QAAQ,EAA6B,MAAM,UAAU,CAAA;AAwI9D;;;;GAIG;AACH,wBAAgB,mBAAmB,CAAC,GAAG,EAAE,QAAQ,GAAG,IAAI,CAsjBvD"}
+{"version":3,"file":"telegram.d.ts","sourceRoot":"","sources":["../../webhooks/telegram.ts"],"names":[],"mappings":"AAAA;;;;;;;;;;;;;;;;;;;GAmBG;AAEH,OAAO,EAAE,QAAQ,EAA6B,MAAM,UAAU,CAAA;AAqJ9D;;;;GAIG;AACH,wBAAgB,mBAAmB,CAAC,GAAG,EAAE,QAAQ,GAAG,IAAI,CA6kBvD"}

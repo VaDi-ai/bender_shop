@@ -15,7 +15,7 @@
 
 import { Context, Markup, Telegraf } from 'telegraf'
 import { prisma } from '../../lib/prisma'
-import { stockOut } from '../../lib/stock'
+import { atomicSale } from '../../lib/stock'
 import { getApiKeyValue } from '../../lib/api-key-store'
 
 const CRM_GROUP_ID = Number(process.env.CRM_GROUP_ID)
@@ -252,42 +252,17 @@ export function setupSalesHandlers(bot: Telegraf): void {
       const client = await prisma.client.findUnique({ where: { id: clientId } })
       if (!client) return await ctx.reply('Клиент не найден.')
 
-      // Выбираем вариант для OrderItem
-      const saleVariants = await prisma.productVariant.findMany({
-        where: { productId },
-        orderBy: { quantity: 'desc' },
+      // Атомарно: проверяем остаток, создаём Order, списываем со склада
+      await atomicSale({
+        productId,
+        qty,
+        price: Number(price),
+        productName,
+        clientId,
+        telegramId: client.externalId ?? String(clientId),
+        userId: String(userId),
+        comment: `Продажа клиенту ${client.name}`,
       })
-      const saleVariant = saleVariants.find((v) => v.quantity >= qty) ?? saleVariants[0]
-
-      // Создаём Order
-      await prisma.order.create({
-        data: {
-          clientId,
-          telegramId: client.externalId ?? String(clientId),
-          items: saleVariant
-            ? { create: [{ variantId: saleVariant.id, quantity: qty, priceAtPurchase: Number(price), productName }] }
-            : undefined,
-          totalAmount: total,
-          payment: 'crm',
-          status: 'completed',
-        },
-      })
-
-      // Уменьшаем остаток и записываем движение склада
-      await prisma.product.update({
-        where: { id: productId },
-        data: {
-          quantity: { decrement: qty },
-          stock: { decrement: qty },
-        },
-      })
-      if (saleVariant) {
-        try {
-          await stockOut(saleVariant.id, qty, `Продажа клиенту`, String(userId))
-        } catch {
-          // вариант может не иметь достаточного остатка — движение не критично
-        }
-      }
 
       // Обновляем клиента
       await prisma.client.update({
@@ -552,34 +527,17 @@ export function setupSalesHandlers(bot: Telegraf): void {
     const total = Number(price) * qty
 
     try {
-      const ncVariants = await prisma.productVariant.findMany({
-        where: { productId },
-        orderBy: { quantity: 'desc' },
+      // Атомарно: проверяем остаток, создаём Order, списываем со склада
+      await atomicSale({
+        productId,
+        qty,
+        price: Number(price),
+        productName,
+        clientId: null,
+        telegramId: 'crm_manual',
+        userId: String(userId),
+        comment: `Продажа клиенту ${clientName}`,
       })
-      const ncVariant = ncVariants.find((v) => v.quantity >= qty) ?? ncVariants[0]
-
-      await prisma.order.create({
-        data: {
-          telegramId: 'crm_manual',
-          items: ncVariant
-            ? { create: [{ variantId: ncVariant.id, quantity: qty, priceAtPurchase: Number(price), productName }] }
-            : undefined,
-          totalAmount: total,
-          payment: 'crm',
-          status: 'completed',
-        },
-      })
-      await prisma.product.update({
-        where: { id: productId },
-        data: { quantity: { decrement: qty }, stock: { decrement: qty } },
-      })
-      if (ncVariant) {
-        try {
-          await stockOut(ncVariant.id, qty, `Продажа клиенту ${clientName}`, String(userId))
-        } catch {
-          // игнорируем если у варианта нет достаточного остатка
-        }
-      }
       const msg = `✅ Продажа оформлена: ${productName} × ${qty} — ${fmtPrice(total)} ₽\n👤 Клиент: ${clientName}`
       await ctx.reply(msg)
       await notifyToSalesTopic(ctx, msg, clientName)

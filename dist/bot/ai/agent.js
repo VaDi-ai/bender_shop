@@ -82,13 +82,22 @@ function incrementStat(key) {
     ensureStatsToday();
     stats[key]++;
 }
+const SUGGESTION_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 let nextSuggestionId = 1;
 exports.aiSuggestions = new Map();
 function storeSuggestion(clientId, text, threadId) {
     const id = nextSuggestionId++;
-    exports.aiSuggestions.set(id, { clientId, text, threadId });
+    exports.aiSuggestions.set(id, { clientId, text, threadId, createdAt: Date.now() });
     return id;
 }
+// Cleanup stale suggestions every 10 minutes
+setInterval(() => {
+    const cutoff = Date.now() - SUGGESTION_TTL_MS;
+    for (const [id, suggestion] of exports.aiSuggestions) {
+        if (suggestion.createdAt < cutoff)
+            exports.aiSuggestions.delete(id);
+    }
+}, 10 * 60 * 1000).unref();
 function getSuggestion(id) {
     return exports.aiSuggestions.get(id);
 }

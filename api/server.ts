@@ -300,7 +300,7 @@ export function startApiServer(bot?: Telegraf): void {
 
       res.json(payload)
     } catch (err) {
-      next(err)
+      if (!res.headersSent) next(err)
     }
   })
 
@@ -322,7 +322,7 @@ export function startApiServer(bot?: Telegraf): void {
 
       res.json(payload)
     } catch (err) {
-      next(err)
+      if (!res.headersSent) next(err)
     }
   })
 
@@ -344,7 +344,7 @@ export function startApiServer(bot?: Telegraf): void {
         .sort((a, b) => b.count - a.count)
       res.json(payload)
     } catch (err) {
-      next(err)
+      if (!res.headersSent) next(err)
     }
   })
 
@@ -361,7 +361,7 @@ export function startApiServer(bot?: Telegraf): void {
       res.setHeader('Pragma', 'no-cache')
       res.json({ value: value ?? '' })
     } catch (err) {
-      next(err)
+      if (!res.headersSent) next(err)
     }
   })
 
@@ -373,7 +373,7 @@ export function startApiServer(bot?: Telegraf): void {
       res.setHeader('Pragma', 'no-cache')
       res.json({ version: cacheVersion ?? '0' })
     } catch (err) {
-      next(err)
+      if (!res.headersSent) next(err)
     }
   })
 
@@ -393,7 +393,7 @@ export function startApiServer(bot?: Telegraf): void {
       }))
       res.json(payload)
     } catch (err) {
-      next(err)
+      if (!res.headersSent) next(err)
     }
   })
 
@@ -464,7 +464,7 @@ export function startApiServer(bot?: Telegraf): void {
       res.setHeader('Content-Disposition', `attachment; filename="price-list-${dateStr}.xlsx"`)
       res.send(buffer)
     } catch (err) {
-      next(err)
+      if (!res.headersSent) next(err)
     }
   })
 
@@ -593,7 +593,7 @@ export function startApiServer(bot?: Telegraf): void {
       res.setHeader('Content-Disposition', 'attachment; filename="bender-shop-template.xlsx"')
       res.send(Buffer.from(buffer))
     } catch (err) {
-      next(err)
+      if (!res.headersSent) next(err)
     }
   })
 
@@ -751,20 +751,20 @@ export function startApiServer(bot?: Telegraf): void {
         return order
       })
 
-      res.json({ success: true, orderId: order.id })
+      if (!res.headersSent) res.json({ success: true, orderId: order.id })
     } catch (err: any) {
       if (err.isStockConflict) {
-        res.status(409).json({ error: 'Товар закончился или недоступен' })
+        if (!res.headersSent) res.status(409).json({ error: 'Товар закончился или недоступен' })
         return
       }
-      next(err)
+      if (!res.headersSent) next(err)
     }
   })
 
   // ── Глобальный обработчик ошибок ───────────────────────────────────────────
   app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
     console.error('[API] Ошибка:', err)
-    res.status(500).json({ error: 'Internal server error' })
+    if (!res.headersSent) res.status(500).json({ error: 'Internal server error' })
   })
 
   const server = app.listen(PORT, '0.0.0.0', () => {

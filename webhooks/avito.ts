@@ -30,6 +30,12 @@ const AVITO_SECRET = process.env.AVITO_WEBHOOK_SECRET ?? ''
 
 if (!process.env.AVITO_WEBHOOK_SECRET) console.warn('AVITO_WEBHOOK_SECRET not set')
 
+// Validate CRM_GROUP_ID at module load; if invalid, processing is skipped entirely.
+const CRM_GROUP_ID_VALID = Number.isFinite(CRM_GROUP_ID) && CRM_GROUP_ID !== 0
+if (!CRM_GROUP_ID_VALID) {
+  console.error('avito.ts: CRM_GROUP_ID is missing or invalid — Avito messages will not be processed')
+}
+
 // ─── HMAC-SHA256 verification ─────────────────────────────────────────────────
 
 export class AvitoSignatureError extends Error {
@@ -89,6 +95,10 @@ export async function handleAvitoWebhook(
   signature: string | undefined,
 ): Promise<void> {
   verifyAvitoSignature(rawBody, signature)
+  if (!CRM_GROUP_ID_VALID) {
+    console.error('handleAvitoWebhook: skipping — CRM_GROUP_ID is invalid')
+    return
+  }
   for (const event of body.events) {
     if (event.type !== 'message') continue
     await processAvitoMessage(event.payload, telegram)

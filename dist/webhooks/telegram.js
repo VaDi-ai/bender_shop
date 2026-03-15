@@ -26,8 +26,17 @@ const filters_1 = require("telegraf/filters");
 const prisma_1 = require("../lib/prisma");
 const sales_1 = require("../bot/admin/sales");
 const agent_1 = require("../bot/ai/agent");
+const security_log_1 = require("../lib/security-log");
 const CRM_GROUP_ID = Number(process.env.CRM_GROUP_ID);
 const ADMIN_IDS = (process.env.ADMIN_IDS ?? '').split(',').map((id) => Number(id.trim()));
+// ─── Безопасный парсинг числового ID из callback data ──────────────────────────
+function parseCallbackId(value) {
+    const n = parseInt(value, 10);
+    return Number.isFinite(n) ? n : null;
+}
+// ─── Rate limit для логирования несанкционированных callback-запросов ──────────
+// Хранит userId → timestamp последнего залогированного события (макс. 1 раз в минуту)
+const unauthorizedLogCooldown = new Map();
 // ─── Состояние: режим заметки ──────────────────────────────────────────────────
 // threadId топика → clientId; сбрасывается после сохранения заметки
 const noteMode = new Map();
@@ -140,6 +149,16 @@ function setupClientHandlers(bot) {
         const callerId = ctx.from?.id;
         if (ADMIN_ACTION_PREFIXES.some((p) => data.startsWith(p))) {
             if (!callerId || !ADMIN_IDS.includes(callerId)) {
+                // Rate-limited security log: max 1 event per user per minute
+                const now = Date.now();
+                const lastLogged = unauthorizedLogCooldown.get(callerId ?? 0) ?? 0;
+                if (now - lastLogged > 60000) {
+                    unauthorizedLogCooldown.set(callerId ?? 0, now);
+                    (0, security_log_1.logSecurityEvent)('unauthorized_access', {
+                        userId: callerId ?? 'unknown',
+                        action: data,
+                    }).catch(() => { });
+                }
                 return ctx.answerCbQuery();
             }
         }
@@ -148,7 +167,9 @@ function setupClientHandlers(bot) {
             if (data.startsWith('cp:')) {
                 const parts = data.split(':');
                 const action = parts[1];
-                const clientId = parseInt(parts[2], 10);
+                const clientId = parseCallbackId(parts[2]);
+                if (clientId === null)
+                    return ctx.answerCbQuery('Некорректные данные');
                 const managerId = ctx.from?.id;
                 const client = await prisma_1.prisma.client.findUnique({
                     where: { id: clientId },
@@ -267,7 +288,9 @@ function setupClientHandlers(bot) {
             }
             // ── Сегмент: seg:{clientId} — используется в карточке клиента ────────────
             if (data.startsWith('seg:')) {
-                const clientId = parseInt(data.slice(4), 10);
+                const clientId = parseCallbackId(data.slice(4));
+                if (clientId === null)
+                    return ctx.answerCbQuery('Некорректные данные');
                 const client = await prisma_1.prisma.client.findUnique({
                     where: { id: clientId },
                     include: { segment: true },
@@ -291,7 +314,9 @@ function setupClientHandlers(bot) {
             if (data.startsWith('st:')) {
                 const parts = data.split(':');
                 const statusType = parts[1];
-                const clientId = parseInt(parts[2], 10);
+                const clientId = parseCallbackId(parts[2]);
+                if (clientId === null)
+                    return ctx.answerCbQuery('Некорректные данные');
                 const client = await prisma_1.prisma.client.findUnique({ where: { id: clientId } });
                 if (!client)
                     return ctx.answerCbQuery('Клиент не найден');
@@ -332,7 +357,9 @@ function setupClientHandlers(bot) {
             }
             // ── Заметка: note:{clientId} ────────────────────────────────────────────
             if (data.startsWith('note:') && !data.startsWith('note:save:')) {
-                const clientId = parseInt(data.slice(5), 10);
+                const clientId = parseCallbackId(data.slice(5));
+                if (clientId === null)
+                    return ctx.answerCbQuery('Некорректные данные');
                 const client = await prisma_1.prisma.client.findUnique({ where: { id: clientId } });
                 if (!client || client.telegramTopicId == null)
                     return ctx.answerCbQuery('Клиент не найден');
@@ -342,7 +369,9 @@ function setupClientHandlers(bot) {
             }
             // ── История: hist:{clientId} ────────────────────────────────────────────
             if (data.startsWith('hist:')) {
-                const clientId = parseInt(data.slice(5), 10);
+                const clientId = parseCallbackId(data.slice(5));
+                if (clientId === null)
+                    return ctx.answerCbQuery('Некорректные данные');
                 const client = await prisma_1.prisma.client.findUnique({ where: { id: clientId } });
                 if (!client)
                     return ctx.answerCbQuery('Клиент не найден');
@@ -371,7 +400,9 @@ function setupClientHandlers(bot) {
             }
             // ── Карточка клиента: card:{clientId} ───────────────────────────────────
             if (data.startsWith('card:')) {
-                const clientId = parseInt(data.slice(5), 10);
+                const clientId = parseCallbackId(data.slice(5));
+                if (clientId === null)
+                    return ctx.answerCbQuery('Некорректные данные');
                 const client = await prisma_1.prisma.client.findUnique({
                     where: { id: clientId },
                     include: { segment: true },
@@ -387,7 +418,9 @@ function setupClientHandlers(bot) {
             }
             // ── Редактировать: edit:menu:{clientId} ──────────────────────────────────
             if (data.startsWith('edit:menu:')) {
-                const clientId = parseInt(data.slice(10), 10);
+                const clientId = parseCallbackId(data.slice(10));
+                if (clientId === null)
+                    return ctx.answerCbQuery('Некорректные данные');
                 await ctx.answerCbQuery();
                 return ctx.reply('✏️ Что редактировать?', telegraf_1.Markup.inlineKeyboard([
                     [
@@ -404,7 +437,9 @@ function setupClientHandlers(bot) {
             // ── Редактировать: edit:field:{clientId}:{field} ──────────────────────
             if (data.startsWith('edit:field:')) {
                 const parts = data.split(':');
-                const clientId = parseInt(parts[2], 10);
+                const clientId = parseCallbackId(parts[2]);
+                if (clientId === null)
+                    return ctx.answerCbQuery('Некорректные данные');
                 const field = parts[3];
                 const userId = ctx.from?.id;
                 if (!userId)
@@ -429,13 +464,17 @@ function setupClientHandlers(bot) {
             }
             // ── Продажа из карточки: crm:sale:{clientId} ─────────────────────────────
             if (data.startsWith('crm:sale:')) {
-                const clientId = parseInt(data.slice(9), 10);
+                const clientId = parseCallbackId(data.slice(9));
+                if (clientId === null)
+                    return ctx.answerCbQuery('Некорректные данные');
                 await ctx.answerCbQuery();
                 return (0, sales_1.startSaleFlow)(ctx, clientId);
             }
             // ── Резерв из карточки: crm:res:{clientId} ────────────────────────────────
             if (data.startsWith('crm:res:')) {
-                const clientId = parseInt(data.slice(8), 10);
+                const clientId = parseCallbackId(data.slice(8));
+                if (clientId === null)
+                    return ctx.answerCbQuery('Некорректные данные');
                 await ctx.answerCbQuery();
                 return (0, sales_1.startReserveFlow)(ctx, clientId);
             }
@@ -445,7 +484,9 @@ function setupClientHandlers(bot) {
             }
             // ── AI: ai:send:{suggestionId} — отправить предложение клиенту ───────────
             if (data.startsWith('ai:send:')) {
-                const suggestionId = parseInt(data.slice(8), 10);
+                const suggestionId = parseCallbackId(data.slice(8));
+                if (suggestionId === null)
+                    return ctx.answerCbQuery('Некорректные данные');
                 const suggestion = (0, agent_1.getSuggestion)(suggestionId);
                 if (!suggestion)
                     return ctx.answerCbQuery('Предложение не найдено или устарело');
@@ -474,7 +515,9 @@ function setupClientHandlers(bot) {
             }
             // ── AI: ai:edit:{suggestionId} — редактировать предложение ──────────────
             if (data.startsWith('ai:edit:')) {
-                const suggestionId = parseInt(data.slice(8), 10);
+                const suggestionId = parseCallbackId(data.slice(8));
+                if (suggestionId === null)
+                    return ctx.answerCbQuery('Некорректные данные');
                 const suggestion = (0, agent_1.getSuggestion)(suggestionId);
                 if (!suggestion)
                     return ctx.answerCbQuery('Предложение не найдено или устарело');
@@ -496,7 +539,9 @@ function setupClientHandlers(bot) {
             }
             // ── AI: ai:skip:{suggestionId} — пропустить предложение ─────────────────
             if (data.startsWith('ai:skip:')) {
-                const suggestionId = parseInt(data.slice(8), 10);
+                const suggestionId = parseCallbackId(data.slice(8));
+                if (suggestionId === null)
+                    return ctx.answerCbQuery('Некорректные данные');
                 (0, agent_1.deleteSuggestion)(suggestionId);
                 (0, agent_1.incrementStat)('rejected');
                 if (chatId && messageId) {

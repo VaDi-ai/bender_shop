@@ -96,16 +96,27 @@ type AISuggestion = {
   clientId: number
   text: string
   threadId: number
+  createdAt: number  // Date.now()
 }
+
+const SUGGESTION_TTL_MS = 24 * 60 * 60 * 1000  // 24 hours
 
 let nextSuggestionId = 1
 export const aiSuggestions = new Map<number, AISuggestion>()
 
 export function storeSuggestion(clientId: number, text: string, threadId: number): number {
   const id = nextSuggestionId++
-  aiSuggestions.set(id, { clientId, text, threadId })
+  aiSuggestions.set(id, { clientId, text, threadId, createdAt: Date.now() })
   return id
 }
+
+// Cleanup stale suggestions every 10 minutes
+setInterval(() => {
+  const cutoff = Date.now() - SUGGESTION_TTL_MS
+  for (const [id, suggestion] of aiSuggestions) {
+    if (suggestion.createdAt < cutoff) aiSuggestions.delete(id)
+  }
+}, 10 * 60 * 1000).unref()
 
 export function getSuggestion(id: number): AISuggestion | undefined {
   return aiSuggestions.get(id)

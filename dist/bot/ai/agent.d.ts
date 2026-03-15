@@ -24,6 +24,7 @@ type AISuggestion = {
     clientId: number;
     text: string;
     threadId: number;
+    createdAt: number;
 };
 export declare const aiSuggestions: Map<number, AISuggestion>;
 export declare function storeSuggestion(clientId: number, text: string, threadId: number): number;

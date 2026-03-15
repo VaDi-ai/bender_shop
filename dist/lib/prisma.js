@@ -9,9 +9,14 @@ const pg_1 = require("pg");
 // A2: guard — fail fast if DATABASE_URL is missing
 if (!process.env.DATABASE_URL)
     throw new Error('DATABASE_URL required');
+// DB_POOL_SIZE: configurable pool size, valid range 1–20, default 5
+const _rawPoolSize = parseInt(process.env.DB_POOL_SIZE ?? '5', 10);
+const DB_POOL_SIZE = Number.isFinite(_rawPoolSize) && _rawPoolSize >= 1 && _rawPoolSize <= 20
+    ? _rawPoolSize
+    : 5;
 const pool = new pg_1.Pool({
     connectionString: process.env.DATABASE_URL,
-    max: 5,
+    max: DB_POOL_SIZE,
     idleTimeoutMillis: 10000,
     connectionTimeoutMillis: 10000,
     allowExitOnIdle: false,
@@ -25,9 +30,12 @@ function initPrismaAlerts(bot, adminIds) {
     _poolAlertAdminIds = adminIds;
 }
 pool.on('error', (err) => {
+    // Log full details locally only
     console.error('pg pool error:', err.message);
     if (_poolAlertBot && _poolAlertAdminIds.length > 0) {
-        const text = `🚨 DB pool error\n${err.message}`;
+        // Send only error code + generic description to Telegram (no raw message)
+        const code = err.code ?? 'unknown';
+        const text = `🚨 DB pool error\nCode: ${code}\nПроблема с соединением к базе данных`;
         for (const adminId of _poolAlertAdminIds) {
             _poolAlertBot.telegram.sendMessage(adminId, text).catch(() => { });
         }

@@ -33,6 +33,11 @@ const CRM_GROUP_ID = Number(process.env.CRM_GROUP_ID);
 const AVITO_SECRET = process.env.AVITO_WEBHOOK_SECRET ?? '';
 if (!process.env.AVITO_WEBHOOK_SECRET)
     console.warn('AVITO_WEBHOOK_SECRET not set');
+// Validate CRM_GROUP_ID at module load; if invalid, processing is skipped entirely.
+const CRM_GROUP_ID_VALID = Number.isFinite(CRM_GROUP_ID) && CRM_GROUP_ID !== 0;
+if (!CRM_GROUP_ID_VALID) {
+    console.error('avito.ts: CRM_GROUP_ID is missing or invalid — Avito messages will not be processed');
+}
 // ─── HMAC-SHA256 verification ─────────────────────────────────────────────────
 class AvitoSignatureError extends Error {
     constructor() { super('Invalid or missing X-Avito-Signature'); }
@@ -58,6 +63,10 @@ function verifyAvitoSignature(rawBody, signature) {
  */
 async function handleAvitoWebhook(body, telegram, rawBody, signature) {
     verifyAvitoSignature(rawBody, signature);
+    if (!CRM_GROUP_ID_VALID) {
+        console.error('handleAvitoWebhook: skipping — CRM_GROUP_ID is invalid');
+        return;
+    }
     for (const event of body.events) {
         if (event.type !== 'message')
             continue;

@@ -29,15 +29,12 @@ async function main(): Promise<void> {
         skipped++
       } else {
         // Plaintext — encrypt and update
-        console.log(`  Current value in DB: ${record.value}`)
         const encValue = encrypt(record.value)
-        console.log(`  New encrypted value: ${encValue}`)
         await prisma.apiKey.update({
           where: { id: record.id },
           data: { value: encValue },
         })
-        const refetched = await prisma.apiKey.findUniqueOrThrow({ where: { id: record.id } })
-        console.log(`  Value after save: ${refetched.value}`)
+        console.log(`  OK    [${record.service}] — encrypted`)
         encrypted++
       }
     } catch (err: unknown) {

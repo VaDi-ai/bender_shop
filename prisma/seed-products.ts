@@ -2,6 +2,10 @@ import 'dotenv/config'
 import { Prisma } from '../generated/prisma/client'
 import { prisma } from '../lib/prisma'
 
+if (process.env.NODE_ENV === 'production') {
+  throw new Error('Seed scripts disabled in production')
+}
+
 
 
 // ─── HELPERS ────────────────────────────────────────────────────────────────
@@ -387,7 +391,6 @@ async function main() {
           sku: variantSku,
           price: new Prisma.Decimal(v.price),
           quantity: v.quantity ?? 0,
-          reserved: 0,
           inStock: true,
           attributes: v.attributes,
           photos: [],

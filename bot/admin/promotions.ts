@@ -19,6 +19,37 @@ import { prisma } from '../../lib/prisma'
 import { DiscountType, FilterType } from '../../generated/prisma/client'
 import { applyPromotion, cancelPromotion, findVariantsByFilter, filterLabel } from '../../lib/promotions'
 
+// ─── Отправка с экспоненциальным откатом при 429 (аналогично broadcasts.ts) ───
+
+function isRateLimitError(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false
+  const e = err as { code?: number; response?: { error_code?: number } }
+  return e.code === 429 || e.response?.error_code === 429
+}
+
+function getRetryAfterMs(err: unknown): number | undefined {
+  if (!err || typeof err !== 'object') return undefined
+  const e = err as { response?: { parameters?: { retry_after?: number } } }
+  const secs = e.response?.parameters?.retry_after
+  return typeof secs === 'number' ? secs * 1000 : undefined
+}
+
+async function sendWithBackoff(send: () => Promise<unknown>, maxRetries = 4): Promise<'sent' | 'failed'> {
+  let delay = 1000
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      await send()
+      return 'sent'
+    } catch (err: unknown) {
+      if (!isRateLimitError(err) || attempt === maxRetries) return 'failed'
+      const wait = getRetryAfterMs(err) ?? delay
+      await new Promise((r) => setTimeout(r, wait))
+      delay = Math.min(delay * 2, 30_000)
+    }
+  }
+  return 'failed'
+}
+
 // ─── Типы состояния ───────────────────────────────────────────────────────────
 
 type PromoFlow =
@@ -406,15 +437,11 @@ async function sendPromoNotification(
   let failed = 0
 
   for (const c of clients) {
-    try {
-      await ctx.telegram.sendMessage(c.externalId!, text, {
-        reply_markup: inlineKeyboard,
-      })
-      sent++
-    } catch {
-      failed++
-    }
-    await new Promise((r) => setTimeout(r, 50))
+    const result = await sendWithBackoff(() =>
+      ctx.telegram.sendMessage(c.externalId!, text, { reply_markup: inlineKeyboard }),
+    )
+    if (result === 'sent') sent++
+    else failed++
   }
 
   await prisma.broadcastLog.create({
