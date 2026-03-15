@@ -21,6 +21,7 @@ import type { Telegraf } from 'telegraf'
 import { prisma } from '../lib/prisma'
 import { logSecurityEvent } from '../lib/security-log'
 import { getApiKeyValue } from '../lib/api-key-store'
+import { handleInstagramVerification } from '../webhooks/instagram'
 
 if (!process.env.BOT_TOKEN) throw new Error('BOT_TOKEN is required')
 const BOT_TOKEN = process.env.BOT_TOKEN
@@ -110,6 +111,9 @@ export function startApiServer(bot?: Telegraf): void {
   if (bot) {
     app.post('/webhook/telegram', bot.webhookCallback('/webhook/telegram', { secretToken: process.env.WEBHOOK_SECRET }))
   }
+
+  // ── Instagram webhook verification (GET) ──────────────────────────────────
+  app.get('/webhook/instagram', handleInstagramVerification)
 
   // ── Helmet (безопасные заголовки) ──────────────────────────────────────────
   app.use(helmet({
