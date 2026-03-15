@@ -50,13 +50,3 @@ export const prisma = globalForPrisma.prisma ?? new PrismaClient({ adapter })
 globalForPrisma.prisma = prisma
 
 export { pool }
-
-// A3: graceful shutdown on SIGTERM
-process.on('SIGTERM', async () => {
-  try {
-    await prisma.$disconnect()
-    await pool.end()
-  } finally {
-    process.exit(0)
-  }
-})

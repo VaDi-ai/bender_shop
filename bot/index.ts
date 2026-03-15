@@ -81,6 +81,9 @@ if (!BOT_TOKEN) {
   throw new Error('BOT_TOKEN не задан в .env')
 }
 
+const adminIds = process.env.ADMIN_IDS?.split(',').map(Number) ?? []
+if (adminIds.length === 0 || adminIds.some(isNaN)) throw new Error('ADMIN_IDS must be comma-separated list of valid Telegram user IDs')
+
 const bot = new Telegraf(BOT_TOKEN)
 
 initAdminNotifications(bot, ADMIN_IDS)

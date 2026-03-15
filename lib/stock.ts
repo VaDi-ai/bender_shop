@@ -90,6 +90,17 @@ export async function atomicSale(
       })
     }
 
+    // Update client stats
+    if (params.clientId !== null) {
+      await tx.client.update({
+        where: { id: params.clientId },
+        data: {
+          totalRevenue: { increment: params.price * params.qty },
+          totalPurchases: { increment: 1 },
+        },
+      })
+    }
+
     return { variantId: variant?.id ?? null }
   })
 }

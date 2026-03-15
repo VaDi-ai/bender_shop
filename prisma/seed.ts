@@ -1,5 +1,7 @@
 import { prisma } from '../lib/prisma'
 
+if (process.env.NODE_ENV === 'production') throw new Error('Seed scripts disabled in production')
+
 async function main() {
   // ── Дефолтные сегменты ────────────────────────────────────────────────────
   const defaultSegments = [
