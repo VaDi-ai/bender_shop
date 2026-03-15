@@ -235,6 +235,10 @@
     }
     .product-attr-chip:hover { border-color: rgba(168,255,62,0.5); color: var(--text); }
     .product-attr-chip.active { border-color: var(--accent); color: var(--accent); }
+    .product-attr-chip.unavailable { opacity: 0.3; cursor: not-allowed; }
+    .product-attr-chip.unavailable:hover { border-color: #333; color: var(--hint); }
+    .product-card.out-of-stock { opacity: 0.55; }
+    .product-card.out-of-stock .product-photo { filter: grayscale(0.5); }
     .product-btn-wrap { margin-top: auto; }
     .product-btn-wrap.hidden { display: none; }
 
@@ -1086,24 +1090,28 @@
             const key  = attrKeys[0]
             const vals = p.attributes[key]
             if (Array.isArray(vals) && vals.length) {
-              chipsHtml = `<div class="product-attr-chips">${vals.slice(0, 6).map(v =>
-                `<span class="product-attr-chip" data-pid="${p.id}" data-key="${esc(key)}" data-val="${esc(v)}">${esc(v)}</span>`
-              ).join('')}</div>`
+              chipsHtml = `<div class="product-attr-chips">${vals.slice(0, 6).map(v => {
+                const inStockForVal = p.variants.some(vt => (vt.attributes || {})[key] === v)
+                return `<span class="product-attr-chip${inStockForVal ? '' : ' unavailable'}" data-pid="${p.id}" data-key="${esc(key)}" data-val="${esc(v)}">${esc(v)}</span>`
+              }).join('')}</div>`
             }
           }
         }
 
+        // After API fix, variants only contains inStock+qty>0 items
+        const hasStock = hasVariants ? p.variants.length > 0 : p.quantity > 0
+
         // ВЗЯТЬ: always shown if no variants; hidden until chip selected otherwise
         const showBtn = !hasVariants
-        return `<div class="product-card" data-id="${p.id}" style="animation-delay:${i * 50}ms" onclick="openProductModal(${p.id})">
+        return `<div class="product-card${hasStock ? '' : ' out-of-stock'}" data-id="${p.id}" style="animation-delay:${i * 50}ms" onclick="openProductModal(${p.id})">
   ${photoAreaHtml}
   <div class="product-info">
     <div class="product-name">${esc(p.name)}</div>
     <div class="product-price" data-base="${esc(priceText)}">${esc(priceText)}</div>
     ${chipsHtml}
     <div class="product-btn-wrap${showBtn ? '' : ' hidden'}">
-      <div class="box-button" onclick="cardBtnClick(event,${p.id})">
-        <div class="button"><span>ВЗЯТЬ</span></div>
+      <div class="box-button${hasStock ? '' : ' disabled'}" onclick="cardBtnClick(event,${p.id})">
+        <div class="button"><span>${hasStock ? 'ВЗЯТЬ' : 'НЕТ В НАЛИЧИИ'}</span></div>
       </div>
     </div>
   </div>
@@ -1135,6 +1143,7 @@
       document.querySelectorAll('.product-attr-chip[data-pid]').forEach(chip => {
         chip.addEventListener('click', e => {
           e.stopPropagation()
+          if (chip.classList.contains('unavailable')) return
           selectCardAttr(Number(chip.dataset.pid), chip.dataset.key, chip.dataset.val)
         })
       })
@@ -1156,9 +1165,20 @@
       // Find matching variant
       const variant = getCardVariant(productId)
 
-      // Show/hide ВЗЯТЬ
+      // Show ВЗЯТЬ or НЕТ В НАЛИЧИИ
       const btnWrap = card.querySelector('.product-btn-wrap')
-      if (btnWrap) btnWrap.classList.toggle('hidden', !variant)
+      if (btnWrap) {
+        btnWrap.classList.remove('hidden')
+        const boxBtn  = btnWrap.querySelector('.box-button')
+        const btnSpan = btnWrap.querySelector('.box-button .button span')
+        if (variant) {
+          if (boxBtn) boxBtn.classList.remove('disabled')
+          if (btnSpan) btnSpan.textContent = 'ВЗЯТЬ'
+        } else {
+          if (boxBtn) boxBtn.classList.add('disabled')
+          if (btnSpan) btnSpan.textContent = 'НЕТ В НАЛИЧИИ'
+        }
+      }
 
       // Update price
       const priceEl = card.querySelector('.product-price')
@@ -1389,22 +1409,27 @@
     }
 
     function updateModalBtn() {
-      const btn  = document.getElementById('modalAddBtn')
-      const hint = document.getElementById('modalAttrHint')
-      const p    = modalProduct
+      const btn     = document.getElementById('modalAddBtn')
+      const btnSpan = btn.querySelector('.button span')
+      const hint    = document.getElementById('modalAttrHint')
+      const p       = modalProduct
       if (!p) { btn.classList.add('disabled'); return }
 
       const hasVariants = p.variants && p.variants.length > 0
       const attrKeys    = (p.attributes && typeof p.attributes === 'object') ? Object.keys(p.attributes) : []
       const allSelected = attrKeys.every(k => modalSelectedAttrs[k])
 
-      let canAdd = false
+      let canAdd     = false
+      let outOfStock = false
       if (!hasVariants) {
-        canAdd = p.quantity > 0
+        canAdd     = p.quantity > 0
+        outOfStock = !canAdd
       } else {
-        canAdd = allSelected && modalActiveVariant !== null
+        canAdd     = allSelected && modalActiveVariant !== null
+        outOfStock = allSelected && modalActiveVariant === null
       }
       btn.classList.toggle('disabled', !canAdd)
+      if (btnSpan) btnSpan.textContent = outOfStock ? 'НЕТ В НАЛИЧИИ' : 'ВЗЯТЬ У БЕНДЕРА'
       if (hint) hint.style.display = 'none'
     }
 

@@ -242,6 +242,7 @@ export function startApiServer(bot?: Telegraf): void {
       const products = await prisma.product.findMany({
         where: {
           isAvailable: true,
+          variants: { some: { quantity: { gt: 0 }, inStock: true } },
           ...(category ? { category: { name: category } } : {}),
           ...(brand ? { brand } : {}),
         },
@@ -261,7 +262,7 @@ export function startApiServer(bot?: Telegraf): void {
           specs: true,
           category: { select: { id: true, name: true } },
           variants: {
-            where: { inStock: true },
+            where: { inStock: true, quantity: { gt: 0 } },
             select: {
               id: true,
               sku: true,
@@ -312,6 +313,14 @@ export function startApiServer(bot?: Telegraf): void {
   app.get('/api/categories', async (_req, res, next) => {
     try {
       const categories = await prisma.category.findMany({
+        where: {
+          products: {
+            some: {
+              isAvailable: true,
+              variants: { some: { quantity: { gt: 0 }, inStock: true } },
+            },
+          },
+        },
         include: { _count: { select: { products: true } } },
         orderBy: { name: 'asc' },
       })
