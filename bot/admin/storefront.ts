@@ -14,6 +14,7 @@ import { Context, Markup, Telegraf } from 'telegraf'
 import { prisma } from '../../lib/prisma'
 import { getApiKeyValue, setApiKeyValue } from '../../lib/api-key-store'
 import { getUserId } from '../helpers'
+import { logSecurityEvent } from '../../lib/security-log'
 
 // ─── Типы состояния ───────────────────────────────────────────────────────────
 
@@ -163,6 +164,7 @@ export function setupStorefrontHandlers(bot: Telegraf): void {
     const banner = await prisma.heroBanner.findUnique({ where: { id } })
     if (banner && banner.order > 0) {
       await prisma.heroBanner.update({ where: { id }, data: { order: banner.order - 1 } })
+      try { await logSecurityEvent('banner_reordered', { adminId: getUserId(ctx) }, getUserId(ctx)) } catch { /* ignore */ }
     }
     await showBanners(ctx)
   })
@@ -174,6 +176,7 @@ export function setupStorefrontHandlers(bot: Telegraf): void {
     const banner = await prisma.heroBanner.findUnique({ where: { id } })
     if (banner) {
       await prisma.heroBanner.update({ where: { id }, data: { order: banner.order + 1 } })
+      try { await logSecurityEvent('banner_reordered', { adminId: getUserId(ctx) }, getUserId(ctx)) } catch { /* ignore */ }
     }
     await showBanners(ctx)
   })
@@ -183,6 +186,7 @@ export function setupStorefrontHandlers(bot: Telegraf): void {
     try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
     const id = Number((ctx.match as RegExpMatchArray)[1])
     await prisma.heroBanner.delete({ where: { id } })
+    try { await logSecurityEvent('banner_deleted', { bannerId: id, adminId: getUserId(ctx) }, getUserId(ctx)) } catch { /* ignore */ }
     await ctx.reply(`🗑️ Баннер #${id} удалён.`)
     await showBanners(ctx)
   })
@@ -209,6 +213,7 @@ export async function handleStorefrontMessage(
   if (state.flow === 'marquee' && state.step === 'text') {
     storefrontState.delete(userId)
     await setApiKeyValue('setting_marquee', text)
+    try { await logSecurityEvent('storefront_updated', { field: 'marquee', adminId: userId }, userId) } catch { /* ignore */ }
     await ctx.reply('✅ Бегущая строка обновлена.', Markup.removeKeyboard())
     await showMarquee(ctx)
     return true
@@ -255,7 +260,7 @@ export async function handleStorefrontMessage(
       return true
     }
     storefrontState.delete(userId)
-    await prisma.heroBanner.create({
+    const banner = await prisma.heroBanner.create({
       data: {
         imageFile: state.imageFile,
         title: state.title,
@@ -263,6 +268,7 @@ export async function handleStorefrontMessage(
         order,
       },
     })
+    try { await logSecurityEvent('banner_added', { bannerId: banner.id, adminId: userId }, userId) } catch { /* ignore */ }
     await ctx.reply('✅ Баннер добавлен!', Markup.removeKeyboard())
     await showBanners(ctx)
     return true

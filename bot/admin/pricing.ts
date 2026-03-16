@@ -1665,6 +1665,7 @@ export function setupPricingHandlers(bot: Telegraf): void {
       await prisma.productVariant.update({ where: { id: v.id }, data: { attributes: attrs } })
     }
     await prisma.region.delete({ where: { id: regionId } })
+    try { await logSecurityEvent('region_deleted', { code: region.code, adminId: getUserId(ctx) }, getUserId(ctx)) } catch { /* ignore */ }
     await ctx.reply(`✅ Регион ${region.code} удалён. Очищено вариантов: ${variants.length}`)
     await showRegionsMenu(ctx)
   })
@@ -2079,6 +2080,7 @@ export async function handlePricingMessage(
     await prisma.region.create({
       data: { code: state.code, name: state.name, flag: state.flag, currency },
     })
+    try { await logSecurityEvent('region_created', { code: state.code, currency, adminId: userId }, userId) } catch { /* ignore */ }
     await ctx.reply(`✅ Регион ${state.flag} ${state.code} (${state.name}, ${currency}) добавлен!`)
     await showRegionsMenu(ctx)
     return true
@@ -2093,6 +2095,7 @@ export async function handlePricingMessage(
     }
     pricingState.delete(userId)
     await prisma.region.update({ where: { id: state.regionId }, data: { name } })
+    try { await logSecurityEvent('region_updated', { code: state.regionCode, changes: { name }, adminId: userId }, userId) } catch { /* ignore */ }
     await ctx.reply(`✅ Название региона ${state.regionCode} изменено на «${name}»`)
     await showRegionsMenu(ctx)
     return true
@@ -2107,6 +2110,7 @@ export async function handlePricingMessage(
     }
     pricingState.delete(userId)
     await prisma.region.update({ where: { id: state.regionId }, data: { flag } })
+    try { await logSecurityEvent('region_updated', { code: state.regionCode, changes: { flag }, adminId: userId }, userId) } catch { /* ignore */ }
     await ctx.reply(`✅ Флаг региона ${state.regionCode} изменён на ${flag}`)
     await showRegionsMenu(ctx)
     return true
@@ -2121,6 +2125,7 @@ export async function handlePricingMessage(
     }
     pricingState.delete(userId)
     await prisma.region.update({ where: { id: state.regionId }, data: { currency } })
+    try { await logSecurityEvent('region_updated', { code: state.regionCode, changes: { currency }, adminId: userId }, userId) } catch { /* ignore */ }
     await ctx.reply(`✅ Валюта региона ${state.regionCode} изменена на ${currency}`)
     await showRegionsMenu(ctx)
     return true

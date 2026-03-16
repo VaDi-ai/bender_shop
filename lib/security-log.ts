@@ -18,6 +18,21 @@ export type SecurityEvent =
   | 'broadcast_sent'
   | 'promotion_created'
   | 'promotion_cancelled'
+  | 'reservation_created'
+  | 'inventory_created'
+  | 'inventory_updated'
+  | 'inventory_deleted'
+  | 'category_changed'
+  | 'segment_created'
+  | 'segment_renamed'
+  | 'segment_deleted'
+  | 'storefront_updated'
+  | 'banner_added'
+  | 'banner_deleted'
+  | 'banner_reordered'
+  | 'region_created'
+  | 'region_updated'
+  | 'region_deleted'
 
 // ─── Ссылка на бот для реалтайм-алертов ──────────────────────────────────────
 
@@ -54,6 +69,21 @@ const EVENT_DESCRIPTIONS: Record<SecurityEvent, string> = {
   broadcast_sent:             '📢 Отправлена рассылка',
   promotion_created:          '🏷️ Создана акция',
   promotion_cancelled:        '🏷️ Отменена акция',
+  reservation_created:        '🔖 Создан резерв',
+  inventory_created:          '📦 Создан товар',
+  inventory_updated:          '📦 Изменение остатков',
+  inventory_deleted:          '📦 Удалён товар',
+  category_changed:           '📂 Изменена категория',
+  segment_created:            '📊 Создан сегмент',
+  segment_renamed:            '📊 Переименован сегмент',
+  segment_deleted:            '📊 Удалён сегмент',
+  storefront_updated:         '🖼️ Обновлена витрина',
+  banner_added:               '🖼️ Добавлен баннер',
+  banner_deleted:             '🖼️ Удалён баннер',
+  banner_reordered:           '🖼️ Изменён порядок баннеров',
+  region_created:             '🌍 Добавлен регион',
+  region_updated:             '🌍 Изменён регион',
+  region_deleted:             '🌍 Удалён регион',
 }
 
 const SENSITIVE_KEY_PATTERNS = ['token', 'key', 'hash', 'secret']

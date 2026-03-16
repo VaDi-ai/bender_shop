@@ -36,6 +36,17 @@ export function fmtPrice(amount: number): string {
   return amount.toLocaleString('ru-RU')
 }
 
+function getImageContentType(filename: string): string {
+  const ext = filename.split('.').pop()?.toLowerCase()
+  switch (ext) {
+    case 'png': return 'image/png'
+    case 'gif': return 'image/gif'
+    case 'webp': return 'image/webp'
+    case 'svg': return 'image/svg+xml'
+    default: return 'image/jpeg'
+  }
+}
+
 // ─── Валидация подписи Telegram WebApp ────────────────────────────────────────
 
 function validateTelegramWebApp(initData: string): { valid: boolean; userId?: number } {
@@ -467,7 +478,7 @@ export function startApiServer(bot?: Telegraf): void {
       await new Promise<void>((resolve, reject) => {
         const request = https
           .get(downloadUrl, (tgRes) => {
-            res.setHeader('Content-Type', 'image/jpeg')
+            res.setHeader('Content-Type', getImageContentType(filePath))
             res.setHeader('Cache-Control', 'public, max-age=86400')
             tgRes.pipe(res)
             tgRes.on('end', resolve)

@@ -107,7 +107,9 @@ async function executeTask(
       return
     }
 
-    // TODO: каналы avito / instagram — реализовать при подключении webhooks
+    // TODO: каналы avito / instagram — реализовать при подключении webhooks.
+    // Паттерн: аналогично telegram — отправить через соответствующий API
+    // (Avito Messenger API / Instagram Graph API).
     console.warn(
       `[Scheduler] Задача #${task.id}: канал ${client.source} не поддерживается, пропускаем`,
     )

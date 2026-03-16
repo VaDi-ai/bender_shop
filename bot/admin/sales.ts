@@ -327,6 +327,8 @@ export function setupSalesHandlers(bot: Telegraf): void {
         return res
       })
 
+      try { await logSecurityEvent('reservation_created', { productId, variantId: null, quantity: qty, clientId, adminId: userId }, userId) } catch { /* logging must not break operation */ }
+
       const msg = `🔖 Резерв: ${productName} × ${qty} для ${client.name} до отдельного уведомления`
       await ctx.reply(
         msg,
@@ -579,6 +581,8 @@ export function setupSalesHandlers(bot: Telegraf): void {
         })
         return res
       })
+      try { await logSecurityEvent('reservation_created', { productId, variantId: null, quantity: qty, clientName, adminId: userId }, userId) } catch { /* logging must not break operation */ }
+
       const msg = `🔖 Резерв: ${productName} × ${qty} для ${clientName} до отдельного уведомления${comment ? '\n📝 ' + comment : ''}`
       await ctx.reply(
         msg,

@@ -1011,6 +1011,7 @@ export function setupInventoryHandlers(bot: Telegraf): void {
     const s = state as Extract<CategoryAddFlow, { step: 'textSide' }>
     try {
       await prisma.category.create({ data: { name: s.name, textSide: side } })
+      try { await logSecurityEvent('category_changed', { action: 'create', name: s.name, adminId: userId }, userId) } catch { /* ignore */ }
       inventoryState.delete(userId)
       const label = side === 'right' ? '▶️ Текст справа' : '◀️ Текст слева'
       await ctx.reply(`✅ Категория «${s.name}» добавлена (${label}).`, Markup.removeKeyboard())
@@ -1321,6 +1322,7 @@ export function setupInventoryHandlers(bot: Telegraf): void {
       return
     }
     await prisma.category.delete({ where: { id: categoryId } })
+    try { await logSecurityEvent('category_changed', { action: 'delete', name: cat.name, adminId: getUserId(ctx) }, getUserId(ctx)) } catch { /* ignore */ }
     await ctx.reply(`✅ Категория «${cat.name}» удалена.`)
     await showCategories(ctx)
   })
@@ -2984,6 +2986,8 @@ async function handleAddFlow(
           }
         }
 
+        try { await logSecurityEvent('inventory_created', { productId: product.id, sku: state.sku, name: state.name, adminId: userId }, userId) } catch { /* ignore */ }
+
         inventoryState.delete(userId)
         const photoInfo = state.photoFileIds.length > 0 ? `${state.photoFileIds.length} шт.` : '—'
         const lines = [
@@ -3046,7 +3050,7 @@ async function handleStockInFlow(
     const comment = text === '/skip' ? 'Приход' : text
     try {
       await stockIn(state.variantId, state.qty, comment, String(userId))
-      try { await logSecurityEvent('inventory_modified', { variantId: state.variantId, qty: state.qty, type: 'in', adminId: userId }, userId) } catch { /* logging failure should not break the operation */ }
+      try { await logSecurityEvent('inventory_updated', { variantId: state.variantId, qty: state.qty, type: 'in', adminId: userId }, userId) } catch { /* logging failure should not break the operation */ }
       const updated = await prisma.productVariant.findUnique({ where: { id: state.variantId } })
       inventoryState.delete(userId)
       await ctx.reply(
@@ -3099,7 +3103,7 @@ async function handleStockOutFlow(
     const comment = text === '/skip' ? 'Списание' : text
     try {
       await stockOut(state.variantId, state.qty, comment, String(userId))
-      try { await logSecurityEvent('inventory_modified', { variantId: state.variantId, qty: state.qty, type: 'out', adminId: userId }, userId) } catch { /* logging failure should not break the operation */ }
+      try { await logSecurityEvent('inventory_updated', { variantId: state.variantId, qty: state.qty, type: 'out', adminId: userId }, userId) } catch { /* logging failure should not break the operation */ }
       const updated = await prisma.productVariant.findUnique({ where: { id: state.variantId } })
       inventoryState.delete(userId)
       await ctx.reply(

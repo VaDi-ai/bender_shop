@@ -76,14 +76,15 @@ import { logSecurityEvent, initSecurityAlerts } from '../lib/security-log'
 import { aiSuggestions, storeSuggestion } from './ai/agent'
 
 const BOT_TOKEN = process.env.BOT_TOKEN
-const ADMIN_IDS = (process.env.ADMIN_IDS ?? '').split(',').map((id) => Number(id.trim()))
 
 if (!BOT_TOKEN) {
   throw new Error('BOT_TOKEN не задан в .env')
 }
 
-const adminIds = process.env.ADMIN_IDS?.split(',').map(Number) ?? []
-if (adminIds.length === 0 || adminIds.some(isNaN)) throw new Error('ADMIN_IDS must be comma-separated list of valid Telegram user IDs')
+const ADMIN_IDS = (process.env.ADMIN_IDS ?? '').split(',').map((id) => Number(id.trim())).filter(Boolean)
+if (ADMIN_IDS.length === 0 || ADMIN_IDS.some(isNaN)) {
+  throw new Error('ADMIN_IDS must be comma-separated list of valid Telegram user IDs')
+}
 
 const bot = new Telegraf(BOT_TOKEN)
 

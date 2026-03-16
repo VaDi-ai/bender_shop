@@ -3,7 +3,10 @@
  *
  * Заглушка для будущей интеграции Instagram Direct через Meta Messenger API.
  *
- * TODO: реализовать после получения доступа к Instagram Graph API.
+ * TODO: реализовать после получения Access Token от владельца.
+ * Шаги: 1) получить token, 2) добавить INSTAGRAM_APP_SECRET в ENV,
+ * 3) реализовать processInstagramMessage по аналогии с processAvitoMessage,
+ * 4) добавить relay медиа в CRM-топик.
  * Документация: https://developers.facebook.com/docs/messenger-platform/instagram
  *
  * Пример подключения Express:

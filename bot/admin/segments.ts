@@ -16,6 +16,7 @@
 import { Context, Markup, Telegraf } from 'telegraf'
 import { prisma } from '../../lib/prisma'
 import { getUserId } from '../helpers'
+import { logSecurityEvent } from '../../lib/security-log'
 
 // ─── Типы состояния ───────────────────────────────────────────────────────────
 
@@ -140,11 +141,12 @@ export function setupSegmentHandlers(bot: Telegraf): void {
     const defaultSeg = await prisma.segment.findFirst({ where: { isDefault: true } })
 
     // Клиентов переводим в дефолтный (или null если дефолтного нет)
-    await prisma.client.updateMany({
+    const migratedResult = await prisma.client.updateMany({
       where: { segmentId },
       data: { segmentId: defaultSeg?.id ?? null },
     })
     await prisma.segment.delete({ where: { id: segmentId } })
+    try { await logSecurityEvent('segment_deleted', { name: seg.name, migratedClients: migratedResult.count, adminId: getUserId(ctx) }, getUserId(ctx)) } catch { /* ignore */ }
 
     await ctx.reply(`✅ Сегмент "${seg.color} ${seg.name}" удалён.`)
     await showSegments(ctx)
@@ -173,6 +175,7 @@ export function setupSegmentHandlers(bot: Telegraf): void {
 
     try {
       await prisma.segment.create({ data: { name, color } })
+      try { await logSecurityEvent('segment_created', { name, color, adminId: userId }, userId) } catch { /* ignore */ }
       segmentsState.delete(userId)
       await ctx.reply(`✅ Сегмент "${color} ${name}" создан.`)
       await showSegments(ctx)
@@ -196,6 +199,7 @@ export async function handleSegmentMessage(
   // Переименование: получили новое название
   if (state.flow === 'rename') {
     const { segmentId } = state
+    const oldSeg = await prisma.segment.findUnique({ where: { id: segmentId } })
     segmentsState.delete(userId)
 
     try {
@@ -203,6 +207,7 @@ export async function handleSegmentMessage(
         where: { id: segmentId },
         data: { name: text.trim() },
       })
+      try { await logSecurityEvent('segment_renamed', { oldName: oldSeg?.name ?? '?', newName: updated.name, adminId: userId }, userId) } catch { /* ignore */ }
       await ctx.reply(`✅ Сегмент переименован: "${updated.color} ${updated.name}".`)
       await showSegments(ctx)
     } catch {
