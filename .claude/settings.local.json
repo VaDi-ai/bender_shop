@@ -40,7 +40,12 @@
       "Bash(find \"D:\\\\va\\\\projects\\\\bender-shop\\\\generated\" -name \"*.d.ts\" -o -name \"index.ts\" 2>/dev/null | head -20)",
       "Bash(npm list:*)",
       "Bash(ls D:/va/projects/bender-shop/.env* 2>&1)",
-      "Bash(cd:*)"
+      "Bash(cd:*)",
+      "Bash(echo:*)",
+      "Bash(git status:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)"
     ]
   }
 }

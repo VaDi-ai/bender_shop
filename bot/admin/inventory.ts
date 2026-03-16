@@ -710,6 +710,15 @@ async function showStockProduct(ctx: Context, productId: number): Promise<void> 
     await ctx.reply('❌ Товар не найден.')
     return
   }
+
+  // Warn about stock desync: Product has quantity but all variants are empty
+  const variantTotal = product.variants.reduce((sum, v) => sum + v.quantity, 0)
+  if (product.variants.length > 0 && product.quantity > 0 && variantTotal === 0) {
+    await ctx.reply(
+      `⚠️ Внимание: у товара «${product.name}» указан остаток ${product.quantity} шт., но ни один вариант не оприходован.\n\nОприходуйте варианты через кнопки ➕ ниже или через Excel-импорт.`,
+    )
+  }
+
   const lines: string[] = [`📦 *${product.name}* — варианты:\n`]
   const buttons: ReturnType<typeof Markup.button.callback>[][] = []
   product.variants.forEach((v, i) => {
@@ -1108,7 +1117,7 @@ export function setupInventoryHandlers(bot: Telegraf): void {
   })
 
   bot.action('inv:download_template', async (ctx) => {
-    try { await ctx.answerCbQuery() } catch { /* ignore */ }
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
     await ctx.reply(
       [
         '📋 Шаблон для оприходования/списания',
@@ -1116,6 +1125,7 @@ export function setupInventoryHandlers(bot: Telegraf): void {
         'Лист «Оприходование»:',
         '- SKU — артикул варианта товара',
         '- Количество — +5 приход, -2 списание',
+        '- Цена — если указана, обновит цену варианта (необязательно)',
         '- Комментарий — необязательно',
         '',
         'Лист «Справочник SKU» — все варианты с актуальными остатками.',
@@ -1124,10 +1134,128 @@ export function setupInventoryHandlers(bot: Telegraf): void {
       ].join('\n'),
     )
     try {
-      const port = process.env.API_PORT ?? '3000'
-      const response = await fetch(`http://localhost:${port}/api/download/template`)
-      const buffer = Buffer.from(await response.arrayBuffer())
-      await ctx.replyWithDocument({ source: buffer, filename: 'bender-shop-template.xlsx' })
+      const variants = await prisma.productVariant.findMany({
+        include: { product: true },
+        orderBy: { id: 'asc' },
+      })
+
+      const wb = new ExcelJS.Workbook()
+
+      const ws1 = wb.addWorksheet('Оприходование')
+      ws1.columns = [
+        { key: 'sku', width: 28 },
+        { key: 'qty', width: 15 },
+        { key: 'price', width: 15 },
+        { key: 'comment', width: 30 },
+        { key: 'name', width: 35 },
+      ]
+
+      const headerFill: ExcelJS.FillPattern = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FF1A1A1A' },
+      }
+      const headerFont: Partial<ExcelJS.Font> = { bold: true, color: { argb: 'FFCCFF00' } }
+      const exampleFill: ExcelJS.FillPattern = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FF2A2A2A' },
+      }
+      const exampleFont: Partial<ExcelJS.Font> = { color: { argb: 'FF888888' } }
+
+      const headerRow = ws1.addRow(['SKU варианта*', 'Количество*', 'Цена', 'Комментарий', 'Название (справочно)'])
+      headerRow.eachCell((cell) => {
+        cell.fill = headerFill
+        cell.font = headerFont
+      })
+
+      const ex1 = variants[0]
+      const ex2 = variants[1]
+
+      const exRows = [
+        ex1
+          ? [
+              ex1.sku,
+              5,
+              Number(ex1.price),
+              'Приход со склада',
+              ex1.product.name +
+                ' — ' +
+                Object.entries(ex1.attributes as Record<string, string>)
+                  .map(([k, v]) => `${k}: ${v}`)
+                  .join(', '),
+            ]
+          : ['VARIANT-SKU-001', 5, 15000, 'Приход со склада', 'Название товара'],
+        ex2
+          ? [
+              ex2.sku,
+              -2,
+              '',
+              'Возврат',
+              ex2.product.name +
+                ' — ' +
+                Object.entries(ex2.attributes as Record<string, string>)
+                  .map(([k, v]) => `${k}: ${v}`)
+                  .join(', '),
+            ]
+          : ['VARIANT-SKU-002', -2, '', 'Возврат', 'Название товара'],
+      ]
+
+      for (const rowData of exRows) {
+        const row = ws1.addRow(rowData)
+        row.eachCell((cell) => {
+          cell.fill = exampleFill
+          cell.font = exampleFont
+        })
+      }
+      ws1.views = [{ state: 'frozen', ySplit: 1 }]
+
+      const ws2 = wb.addWorksheet('Справочник SKU')
+      ws2.columns = [
+        { key: 'sku', width: 28 },
+        { key: 'product', width: 30 },
+        { key: 'attrs', width: 35 },
+        { key: 'price', width: 15 },
+        { key: 'qty', width: 12 },
+        { key: 'reserved', width: 18 },
+        { key: 'inStock', width: 14 },
+      ]
+
+      const refHeader = ws2.addRow(['SKU', 'Товар', 'Атрибуты', 'Цена', 'Остаток', 'Зарезервировано', 'В наличии'])
+      refHeader.eachCell((cell) => {
+        cell.fill = headerFill
+        cell.font = headerFont
+      })
+
+      const rowFills = ['FF1A1A1A', 'FF111111']
+      variants.forEach((v, i) => {
+        const attrs = Object.entries(v.attributes as Record<string, string>)
+          .map(([k, val]) => `${k}: ${val}`)
+          .join(', ')
+        const row = ws2.addRow([
+          v.sku,
+          v.product.name,
+          attrs,
+          v.price.toString(),
+          v.quantity,
+          v.inStock ? 'Да' : 'Нет',
+        ])
+        const fill: ExcelJS.FillPattern = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: rowFills[i % 2] },
+        }
+        row.eachCell((cell) => {
+          cell.fill = fill
+        })
+      })
+      ws2.views = [{ state: 'frozen', ySplit: 1 }]
+
+      const buf = await wb.xlsx.writeBuffer()
+      await ctx.replyWithDocument({
+        source: Buffer.from(buf),
+        filename: 'bender-shop-template.xlsx',
+      })
     } catch (err) {
       console.error('[inv:download_template]', err)
       await ctx.reply('❌ Не удалось сформировать шаблон.')
@@ -1931,10 +2059,13 @@ async function processImportFile(ctx: Context, buffer: Buffer, userId: number): 
   const rows: ExcelJS.Row[] = []
   sheet.eachRow((row, rowNum) => { if (rowNum > 1) rows.push(row) })
 
+  let priceUpdated = 0
+
   for (const row of rows) {
-    const sku     = String(row.getCell(1).value ?? '').trim()
-    const qtyCell = row.getCell(2).value
-    const comment = String(row.getCell(3).value ?? '').trim() || undefined
+    const sku       = String(row.getCell(1).value ?? '').trim()
+    const qtyCell   = row.getCell(2).value
+    const priceCell = row.getCell(3).value
+    const comment   = String(row.getCell(4).value ?? '').trim() || undefined
 
     if (!sku || IMPORT_EXAMPLE_SKUS.has(sku)) continue
     const qty = typeof qtyCell === 'number' ? Math.round(qtyCell) : parseInt(String(qtyCell ?? ''), 10)
@@ -1944,6 +2075,18 @@ async function processImportFile(ctx: Context, buffer: Buffer, userId: number): 
     if (!variant) { notFound.push(sku); continue }
 
     try {
+      // Update price if specified
+      if (priceCell) {
+        const price = typeof priceCell === 'number' ? priceCell : parseFloat(String(priceCell))
+        if (!isNaN(price) && price > 0) {
+          await prisma.productVariant.update({
+            where: { id: variant.id },
+            data: { price },
+          })
+          priceUpdated++
+        }
+      }
+
       if (qty > 0) {
         await stockIn(variant.id, qty, comment ?? 'Импорт из файла', String(userId))
         inCount++; inTotal += qty
@@ -1959,6 +2102,7 @@ async function processImportFile(ctx: Context, buffer: Buffer, userId: number): 
   const lines = ['✅ Импорт завершён:']
   if (inCount > 0)      lines.push(`📥 Приход: ${inCount} позиций (+${inTotal} шт.)`)
   if (outCount > 0)     lines.push(`📤 Списание: ${outCount} позиций (-${outTotal} шт.)`)
+  if (priceUpdated > 0) lines.push(`💰 Обновлено цен: ${priceUpdated}`)
   if (notFound.length)  lines.push(`❌ Не найдено SKU: ${notFound.join(', ')}`)
   if (errors.length)    lines.push(`⚠️ Ошибки: ${errors.join(', ')}`)
 
@@ -2794,6 +2938,7 @@ async function handleAddFlow(
         await ctx.reply('❌ Введите целое неотрицательное число (0 и более)')
         return true
       }
+      const hasVariants = state.attributes != null && Object.keys(state.attributes).length > 0
       try {
         const photoUrl = state.photoFileIds.length > 0 ? state.photoFileIds[0] : undefined
         const product = await prisma.product.create({
@@ -2807,9 +2952,10 @@ async function handleAddFlow(
             ...(state.category && { category: { connectOrCreate: { where: { name: state.category }, create: { name: state.category } } } }),
             photoUrl,
             photos: state.photoFileIds,
-            stock: qty,
-            quantity: qty,
-            isAvailable: qty > 0,
+            // If variants will be generated, don't set stock on Product — stock lives on variants
+            stock: hasVariants ? 0 : qty,
+            quantity: hasVariants ? 0 : qty,
+            isAvailable: hasVariants ? false : qty > 0,
           },
         })
 
@@ -2851,9 +2997,14 @@ async function handleAddFlow(
           `Цена:      ${product.price} ₽`,
           `Категория: ${state.category ?? '—'}`,
           `Фото:      ${photoInfo}`,
-          `На складе: ${product.stock} шт.`,
+          `На складе: ${hasVariants ? '0 (оприходуйте варианты)' : `${product.stock} шт.`}`,
         ]
         await ctx.reply(lines.join('\n'), Markup.removeKeyboard())
+        if (hasVariants && qty > 0) {
+          await ctx.reply(
+            `⚠️ У товара ${variantCount} вариантов — оприходуйте остатки через каждый вариант отдельно или через Excel-шаблон (Импорт → Скачать шаблон).\n\nУказанное количество (${qty} шт.) НЕ распределено по вариантам.`,
+          )
+        }
         await showInventory(ctx)
       } catch (err) {
         console.error('inventory add error:', err)
