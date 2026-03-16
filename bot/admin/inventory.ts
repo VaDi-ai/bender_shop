@@ -1123,14 +1123,16 @@ export function setupInventoryHandlers(bot: Telegraf): void {
         '📋 Шаблон для оприходования/списания',
         '',
         'Лист «Оприходование»:',
-        '- SKU — артикул варианта товара',
+        '- SKU — выберите из выпадающего списка',
         '- Количество — +5 приход, -2 списание',
-        '- Цена — если указана, обновит цену варианта (необязательно)',
-        '- Комментарий — необязательно',
+        '- Цена — если указана, обновит цену варианта',
+        '- Комментарий — для аудита (необязательно)',
+        '- Товар — заполняется автоматически',
         '',
-        'Лист «Справочник SKU» — все варианты с актуальными остатками.',
+        'Лист «Справочник SKU» — все варианты с остатками и регионами.',
+        'Лист «Инструкция» — подробное описание.',
         '',
-        'Скопируй нужные SKU из справочника в лист оприходования.',
+        '⚠️ Новые товары сначала создавайте через бот, потом оприходуйте через шаблон.',
       ].join('\n'),
     )
     try {
@@ -1141,6 +1143,19 @@ export function setupInventoryHandlers(bot: Telegraf): void {
 
       const wb = new ExcelJS.Workbook()
 
+      const headerFill: ExcelJS.FillPattern = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FF2B579A' },
+      }
+      const headerFont: Partial<ExcelJS.Font> = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 }
+      const evenRowFill: ExcelJS.FillPattern = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFF2F2F2' },
+      }
+
+      // ── Лист «Оприходование» ──────────────────────────────────────────────
       const ws1 = wb.addWorksheet('Оприходование')
       ws1.columns = [
         { key: 'sku', width: 28 },
@@ -1150,106 +1165,91 @@ export function setupInventoryHandlers(bot: Telegraf): void {
         { key: 'name', width: 35 },
       ]
 
-      const headerFill: ExcelJS.FillPattern = {
-        type: 'pattern',
-        pattern: 'solid',
-        fgColor: { argb: 'FF1A1A1A' },
-      }
-      const headerFont: Partial<ExcelJS.Font> = { bold: true, color: { argb: 'FFCCFF00' } }
-      const exampleFill: ExcelJS.FillPattern = {
-        type: 'pattern',
-        pattern: 'solid',
-        fgColor: { argb: 'FF2A2A2A' },
-      }
-      const exampleFont: Partial<ExcelJS.Font> = { color: { argb: 'FF888888' } }
-
-      const headerRow = ws1.addRow(['SKU варианта*', 'Количество*', 'Цена', 'Комментарий', 'Название (справочно)'])
+      const headerRow = ws1.addRow(['SKU варианта*', 'Количество*', 'Цена', 'Комментарий', 'Товар (автоподставка)'])
       headerRow.eachCell((cell) => {
         cell.fill = headerFill
         cell.font = headerFont
       })
 
-      const ex1 = variants[0]
-      const ex2 = variants[1]
-
-      const exRows = [
-        ex1
-          ? [
-              ex1.sku,
-              5,
-              Number(ex1.price),
-              'Приход со склада',
-              ex1.product.name +
-                ' — ' +
-                Object.entries(ex1.attributes as Record<string, string>)
-                  .map(([k, v]) => `${k}: ${v}`)
-                  .join(', '),
-            ]
-          : ['VARIANT-SKU-001', 5, 15000, 'Приход со склада', 'Название товара'],
-        ex2
-          ? [
-              ex2.sku,
-              -2,
-              '',
-              'Возврат',
-              ex2.product.name +
-                ' — ' +
-                Object.entries(ex2.attributes as Record<string, string>)
-                  .map(([k, v]) => `${k}: ${v}`)
-                  .join(', '),
-            ]
-          : ['VARIANT-SKU-002', -2, '', 'Возврат', 'Название товара'],
-      ]
-
-      for (const rowData of exRows) {
-        const row = ws1.addRow(rowData)
-        row.eachCell((cell) => {
-          cell.fill = exampleFill
-          cell.font = exampleFont
-        })
+      // Data validation: dropdown SKU list from Справочник SKU
+      const skuRange = `'Справочник SKU'!$A$2:$A$${variants.length + 1}`
+      for (let row = 2; row <= 200; row++) {
+        ws1.getCell(`A${row}`).dataValidation = {
+          type: 'list',
+          formulae: [skuRange],
+          showErrorMessage: true,
+          errorTitle: 'Неверный SKU',
+          error: 'Выберите SKU из выпадающего списка или введите существующий SKU из справочника.',
+        }
+        // VLOOKUP: auto-fill product name from Справочник SKU
+        ws1.getCell(`E${row}`).value = {
+          formula: `IF(A${row}="","",VLOOKUP(A${row},'Справочник SKU'!A:B,2,FALSE))`,
+        }
+        ws1.getCell(`E${row}`).font = { color: { argb: 'FF888888' }, italic: true }
       }
       ws1.views = [{ state: 'frozen', ySplit: 1 }]
 
+      // ── Лист «Справочник SKU» ─────────────────────────────────────────────
       const ws2 = wb.addWorksheet('Справочник SKU')
       ws2.columns = [
         { key: 'sku', width: 28 },
         { key: 'product', width: 30 },
         { key: 'attrs', width: 35 },
+        { key: 'region', width: 18 },
         { key: 'price', width: 15 },
         { key: 'qty', width: 12 },
-        { key: 'reserved', width: 18 },
         { key: 'inStock', width: 14 },
       ]
 
-      const refHeader = ws2.addRow(['SKU', 'Товар', 'Атрибуты', 'Цена', 'Остаток', 'Зарезервировано', 'В наличии'])
+      const refHeader = ws2.addRow(['SKU', 'Товар', 'Атрибуты', 'Регион', 'Цена', 'Остаток', 'В наличии'])
       refHeader.eachCell((cell) => {
         cell.fill = headerFill
         cell.font = headerFont
       })
 
-      const rowFills = ['FF1A1A1A', 'FF111111']
       variants.forEach((v, i) => {
-        const attrs = Object.entries(v.attributes as Record<string, string>)
+        const attrsObj = v.attributes as Record<string, string>
+        const regionKey = Object.keys(attrsObj).find((k) => /регион|region/i.test(k))
+        const region = regionKey ? attrsObj[regionKey] : ''
+        const attrs = Object.entries(attrsObj)
+          .filter(([k]) => !/регион|region/i.test(k))
           .map(([k, val]) => `${k}: ${val}`)
           .join(', ')
         const row = ws2.addRow([
           v.sku,
           v.product.name,
           attrs,
+          region,
           v.price.toString(),
           v.quantity,
-          v.inStock ? 'Да' : 'Нет',
+          v.quantity > 0 ? 'Да' : 'Нет',
         ])
-        const fill: ExcelJS.FillPattern = {
-          type: 'pattern',
-          pattern: 'solid',
-          fgColor: { argb: rowFills[i % 2] },
+        if (i % 2 === 1) {
+          row.eachCell((cell) => {
+            cell.fill = evenRowFill
+          })
         }
-        row.eachCell((cell) => {
-          cell.fill = fill
-        })
       })
       ws2.views = [{ state: 'frozen', ySplit: 1 }]
+
+      // ── Лист «Инструкция» ─────────────────────────────────────────────────
+      const ws3 = wb.addWorksheet('Инструкция')
+      ws3.getColumn(1).width = 80
+      const instructions = [
+        '📋 Инструкция по заполнению:',
+        '',
+        '1. Выберите SKU из выпадающего списка в колонке A (или введите вручную)',
+        '2. Укажите количество: положительное = приход, отрицательное = списание',
+        '3. Цена (необязательно): если указана — обновит цену варианта',
+        '4. Комментарий (необязательно): для аудита — причина прихода/списания',
+        '5. Колонка "Товар" заполняется автоматически по SKU',
+        '',
+        '⚠️ Для добавления НОВОГО товара — сначала создайте его через бот (Товароучёт → Новый товар),',
+        '   затем оприходуйте через этот шаблон.',
+      ]
+      instructions.forEach((line) => {
+        ws3.addRow([line])
+      })
 
       const buf = await wb.xlsx.writeBuffer()
       await ctx.replyWithDocument({
@@ -2038,8 +2038,6 @@ export async function handleInventoryDocument(ctx: Context, userId: number): Pro
 
 // ─── Обработка файла импорта (лист «Оприходование» через stockIn/stockOut) ────
 
-const IMPORT_EXAMPLE_SKUS = new Set(['IPHONE17PRO-256-ORG', 'MACBOOK-M4-16-256-MN'])
-
 async function processImportFile(ctx: Context, buffer: Buffer, userId: number): Promise<void> {
   const wb = new ExcelJS.Workbook()
   await wb.xlsx.load(buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength) as ArrayBuffer)
@@ -2067,7 +2065,7 @@ async function processImportFile(ctx: Context, buffer: Buffer, userId: number): 
     const priceCell = row.getCell(3).value
     const comment   = String(row.getCell(4).value ?? '').trim() || undefined
 
-    if (!sku || IMPORT_EXAMPLE_SKUS.has(sku)) continue
+    if (!sku) continue
     const qty = typeof qtyCell === 'number' ? Math.round(qtyCell) : parseInt(String(qtyCell ?? ''), 10)
     if (isNaN(qty) || qty === 0) continue
 
