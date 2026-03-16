@@ -11,6 +11,13 @@ export type SecurityEvent =
   | 'ai_mode_changed'
   | 'maintenance_mode_toggled'
   | 'security_log_purged'
+  | 'price_changed'
+  | 'inventory_modified'
+  | 'sale_confirmed'
+  | 'reservation_released'
+  | 'broadcast_sent'
+  | 'promotion_created'
+  | 'promotion_cancelled'
 
 // ─── Ссылка на бот для реалтайм-алертов ──────────────────────────────────────
 
@@ -40,6 +47,13 @@ const EVENT_DESCRIPTIONS: Record<SecurityEvent, string> = {
   ai_mode_changed:            '🤖 Изменён режим AI-агента',
   maintenance_mode_toggled:   '🔧 Переключён режим техработ',
   security_log_purged:        '🗑️ Очищен лог безопасности',
+  price_changed:              '💰 Изменена цена товара',
+  inventory_modified:         '📦 Изменение остатков (приход/списание)',
+  sale_confirmed:             '💵 Подтверждена продажа',
+  reservation_released:       '🔖 Завершён/отменён резерв',
+  broadcast_sent:             '📢 Отправлена рассылка',
+  promotion_created:          '🏷️ Создана акция',
+  promotion_cancelled:        '🏷️ Отменена акция',
 }
 
 const SENSITIVE_KEY_PATTERNS = ['token', 'key', 'hash', 'secret']

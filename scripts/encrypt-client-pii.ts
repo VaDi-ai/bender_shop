@@ -17,8 +17,11 @@ import { encryptClientField } from '../lib/client-crypto'
 
 const prisma = new PrismaClient()
 const BATCH_SIZE = 100
+const DRY_RUN = process.argv.includes('--dry-run')
 
 async function main(): Promise<void> {
+  if (DRY_RUN) console.log('*** DRY RUN — no changes will be written ***\n')
+
   const clients = await prisma.client.findMany({
     select: { id: true, phone: true, email: true, birthDate: true },
   })
@@ -29,40 +32,40 @@ async function main(): Promise<void> {
 
   for (let i = 0; i < clients.length; i += BATCH_SIZE) {
     const batch = clients.slice(i, i + BATCH_SIZE)
-    const updates: Promise<unknown>[] = []
 
     for (const client of batch) {
       const data: Record<string, string | null> = {}
       let needsUpdate = false
 
       if (client.phone && !isEncrypted(client.phone)) {
-        data.phone = encryptClientField(client.phone)
+        data.phone = encryptClientField(client.phone, 'phone')
         needsUpdate = true
       }
       if (client.email && !isEncrypted(client.email)) {
-        data.email = encryptClientField(client.email)
+        data.email = encryptClientField(client.email, 'email')
         needsUpdate = true
       }
-      // birthDate is now String? — encrypt if present and not already encrypted
       if (client.birthDate && !isEncrypted(client.birthDate)) {
-        // birthDate may be an ISO string or Date-like string from the old DateTime column
-        data.birthDate = encryptClientField(client.birthDate)
+        data.birthDate = encryptClientField(client.birthDate, 'birthDate')
         needsUpdate = true
       }
 
       if (needsUpdate) {
-        updates.push(prisma.client.update({ where: { id: client.id }, data }))
+        if (!DRY_RUN) {
+          await prisma.$transaction(async (tx) => {
+            await tx.client.update({ where: { id: client.id }, data })
+          })
+        }
         encrypted++
       } else {
         skipped++
       }
     }
 
-    await Promise.all(updates)
-    console.log(`Encrypted ${Math.min(i + BATCH_SIZE, clients.length)}/${clients.length} clients...`)
+    console.log(`${DRY_RUN ? '[dry-run] ' : ''}Processed ${Math.min(i + BATCH_SIZE, clients.length)}/${clients.length} clients...`)
   }
 
-  console.log(`\nDone. Encrypted ${encrypted} clients, skipped ${skipped} (already encrypted).`)
+  console.log(`\nDone. ${DRY_RUN ? '[DRY RUN] Would encrypt' : 'Encrypted'} ${encrypted} clients, skipped ${skipped} (already encrypted).`)
 }
 
 main()

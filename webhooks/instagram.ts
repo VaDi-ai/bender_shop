@@ -45,13 +45,19 @@ if (!process.env.INSTAGRAM_VERIFY_TOKEN) console.warn('INSTAGRAM_VERIFY_TOKEN no
 
 export function handleInstagramVerification(req: Request, res: Response): void {
   const mode = req.query['hub.mode']
-  const token = req.query['hub.verify_token']
+  const token = String(req.query['hub.verify_token'] ?? '')
   const challenge = req.query['hub.challenge']
-  if (mode === 'subscribe' && token === process.env.INSTAGRAM_VERIFY_TOKEN) {
-    res.status(200).send(challenge)
-  } else {
-    res.sendStatus(403)
+  const expected = process.env.INSTAGRAM_VERIFY_TOKEN ?? ''
+
+  if (mode === 'subscribe' && expected.length > 0 && token.length === expected.length) {
+    const tokenBuf = Buffer.from(token, 'utf8')
+    const expectedBuf = Buffer.from(expected, 'utf8')
+    if (crypto.timingSafeEqual(tokenBuf, expectedBuf)) {
+      res.status(200).send(challenge)
+      return
+    }
   }
+  res.sendStatus(403)
 }
 
 // ─── X-Hub-Signature-256 verification ────────────────────────────────────────

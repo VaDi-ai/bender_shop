@@ -140,7 +140,7 @@ export function startApiServer(bot?: Telegraf): void {
         fontSrc: ["'self'", "data:"],
         frameSrc: ["'self'", "https://telegram.org"],
         imgSrc: ["'self'", "data:", "https://api.telegram.org", "https://t.me"],
-        connectSrc: ["'self'", "https://bendershop.store", "https://api.telegram.org"],
+        connectSrc: ["'self'", "https://bendershop.store", "https://api.telegram.org", "https://web.telegram.org"],
       },
     },
   }))
@@ -523,15 +523,15 @@ export function startApiServer(bot?: Telegraf): void {
       const headerFill: ExcelJS.FillPattern = {
         type: 'pattern',
         pattern: 'solid',
-        fgColor: { argb: 'FF1A1A1A' },
+        fgColor: { argb: 'FF2B579A' },
       }
-      const headerFont: Partial<ExcelJS.Font> = { bold: true, color: { argb: 'FFCCFF00' } }
+      const headerFont: Partial<ExcelJS.Font> = { bold: true, color: { argb: 'FFFFFFFF' } }
       const exampleFill: ExcelJS.FillPattern = {
         type: 'pattern',
         pattern: 'solid',
-        fgColor: { argb: 'FF2A2A2A' },
+        fgColor: { argb: 'FFFFF3CD' },
       }
-      const exampleFont: Partial<ExcelJS.Font> = { color: { argb: 'FF888888' } }
+      const exampleFont: Partial<ExcelJS.Font> = { color: { argb: 'FF856404' } }
 
       const headerRow = ws1.addRow(['SKU варианта*', 'Количество*', 'Комментарий', 'Название (справочно)'])
       headerRow.eachCell((cell) => {
@@ -595,7 +595,7 @@ export function startApiServer(bot?: Telegraf): void {
         cell.font = headerFont
       })
 
-      const rowFills = ['FF1A1A1A', 'FF111111']
+      const rowFills = ['FFFFFFFF', 'FFF2F2F2']
       variants.forEach((v, i) => {
         const attrs = Object.entries(v.attributes as Record<string, string>)
           .map(([k, val]) => `${k}: ${val}`)
@@ -716,14 +716,15 @@ export function startApiServer(bot?: Telegraf): void {
           // Цена всегда из БД — никогда от клиента
           const variantPrice = new Decimal(variant.price)
           if (item.price !== undefined && !variantPrice.equals(new Decimal(item.price))) {
-            // Fire-and-forget: logging runs outside this transaction
-            void logSecurityEvent('price_manipulation_attempt', {
-              ip: req.ip,
-              telegramId,
-              variantId: item.variantId,
-              submittedPrice: item.price,
-              actualPrice: variantPrice.toFixed(2),
-            }, telegramId)
+            try {
+              await logSecurityEvent('price_manipulation_attempt', {
+                ip: req.ip,
+                telegramId,
+                variantId: item.variantId,
+                submittedPrice: item.price,
+                actualPrice: variantPrice.toFixed(2),
+              }, telegramId)
+            } catch { /* logging must not break order creation */ }
           }
           const lineTotal = variantPrice.times(item.quantity)
           totalDecimal = totalDecimal.plus(lineTotal)

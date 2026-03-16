@@ -1,5 +1,28 @@
 import { Decimal } from '@prisma/client/runtime/client'
+import { Prisma } from '../generated/prisma/client'
 import { prisma } from './prisma'
+
+// ─── Retry wrapper for Serializable transactions ────────────────────────────
+
+const SERIALIZATION_MAX_RETRIES = 3
+
+async function withSerializableRetry<T>(
+  fn: () => Promise<T>,
+): Promise<T> {
+  for (let attempt = 0; attempt < SERIALIZATION_MAX_RETRIES; attempt++) {
+    try {
+      return await fn()
+    } catch (err: any) {
+      const code = err?.code ?? err?.meta?.code ?? ''
+      if (code === '40001' && attempt < SERIALIZATION_MAX_RETRIES - 1) {
+        console.warn(`[stock] Serialization conflict, retry ${attempt + 1}/${SERIALIZATION_MAX_RETRIES}`)
+        continue
+      }
+      throw err
+    }
+  }
+  throw new Error('withSerializableRetry: exhausted retries')
+}
 
 // ─── Атомарная продажа ────────────────────────────────────────────────────────
 
@@ -25,7 +48,8 @@ export type AtomicSaleParams = {
 export async function atomicSale(
   params: AtomicSaleParams,
 ): Promise<{ variantId: number | null }> {
-  return prisma.$transaction(async (tx) => {
+  return withSerializableRetry(() =>
+    prisma.$transaction(async (tx) => {
     // Проверяем актуальный остаток
     const product = await tx.product.findUnique({ where: { id: params.productId } })
     if (!product) throw new Error('Товар не найден')
@@ -103,7 +127,8 @@ export async function atomicSale(
     }
 
     return { variantId: variant?.id ?? null }
-  })
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable })
+  )
 }
 
 // Приход товара
@@ -131,22 +156,24 @@ export async function stockOut(
   comment: string,
   userId: string
 ): Promise<void> {
-  await prisma.$transaction(async (tx) => {
-    const variant = await tx.productVariant.findUnique({ where: { id: variantId } })
-    if (!variant || variant.quantity < qty) throw new Error('Недостаточно товара')
+  await withSerializableRetry(() =>
+    prisma.$transaction(async (tx) => {
+      const variant = await tx.productVariant.findUnique({ where: { id: variantId } })
+      if (!variant || variant.quantity < qty) throw new Error('Недостаточно товара')
 
-    await tx.productVariant.update({
-      where: { id: variantId },
-      data: {
-        quantity: { decrement: qty },
-        inStock: variant.quantity - qty > 0,
-      },
-    })
+      await tx.productVariant.update({
+        where: { id: variantId },
+        data: {
+          quantity: { decrement: qty },
+          inStock: variant.quantity - qty > 0,
+        },
+      })
 
-    await tx.stockMovement.create({
-      data: { variantId, type: 'out', quantity: qty, comment, createdBy: userId },
-    })
-  })
+      await tx.stockMovement.create({
+        data: { variantId, type: 'out', quantity: qty, comment, createdBy: userId },
+      })
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable })
+  )
 }
 
 // ─── Атомарное завершение/отмена резерва ──────────────────────────────────────
@@ -159,7 +186,8 @@ export async function releaseReserve(
   reservationId: number,
   newStatus: 'cancelled' | 'completed',
 ): Promise<void> {
-  await prisma.$transaction(async (tx) => {
+  await withSerializableRetry(() =>
+    prisma.$transaction(async (tx) => {
     const reservation = await tx.reservation.findUniqueOrThrow({ where: { id: reservationId } })
     if (reservation.status !== 'active') return
 
@@ -176,7 +204,8 @@ export async function releaseReserve(
         data: { reserved: { decrement: decrementQty } },
       })
     }
-  })
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable })
+  )
 }
 
 // История движения по варианту

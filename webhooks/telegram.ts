@@ -890,14 +890,14 @@ async function handleEditMessage(
       await telegram.sendMessage(userId, '❌ Неверная дата.')
       return
     }
-    const encryptedDate = encryptDate(date)
+    const encryptedDate = encryptDate(date, 'birthDate')
     await prisma.client.update({
       where: { id: clientId },
       data: { birthDate: encryptedDate },
     })
   } else {
     const encryptedValue = (field === 'phone' || field === 'email')
-      ? encryptClientField(value)
+      ? encryptClientField(value, field)
       : value
     await prisma.client.update({
       where: { id: clientId },

@@ -19,6 +19,7 @@ import { prisma } from '../../lib/prisma'
 import { BroadcastType, DiscountType, FilterType } from '../../generated/prisma/client'
 import { applyPromotion, cancelPromotion, findVariantsByFilter, filterLabel } from '../../lib/promotions'
 import { getUserId } from '../helpers'
+import { logSecurityEvent } from '../../lib/security-log'
 
 // ─── Отправка с экспоненциальным откатом при 429 (аналогично broadcasts.ts) ───
 
@@ -376,6 +377,7 @@ async function launchPromotion(ctx: Context, userId: number, withNotification: b
   })
 
   const varCount = await applyPromotion(promo.id)
+  try { await logSecurityEvent('promotion_created', { promoId: promo.id, name: state.name, discountType: state.discountType, discountValue: state.discountValue, varCount, adminId: userId }, userId) } catch { /* logging failure should not break the operation */ }
 
   if (withNotification) {
     await sendPromoNotification(ctx, promo.id, state)
@@ -761,6 +763,7 @@ export function setupPromotionsHandlers(bot: Telegraf): void {
     if (!promo) return await ctx.reply('Акция не найдена.')
 
     await cancelPromotion(promoId)
+    try { await logSecurityEvent('promotion_cancelled', { promoId, name: promo.name, adminId: getUserId(ctx) }, getUserId(ctx)) } catch { /* logging failure should not break the operation */ }
 
     await ctx.reply(
       `✅ Акция «${promo.name}» завершена. Цены восстановлены.`,

@@ -18,6 +18,7 @@ import { prisma } from '../../lib/prisma'
 import { atomicSale, releaseReserve } from '../../lib/stock'
 import { getApiKeyValue } from '../../lib/api-key-store'
 import { getUserId } from '../helpers'
+import { logSecurityEvent } from '../../lib/security-log'
 
 const CRM_GROUP_ID = Number(process.env.CRM_GROUP_ID)
 
@@ -264,6 +265,7 @@ export function setupSalesHandlers(bot: Telegraf): void {
         userId: String(userId),
         comment: `Продажа клиенту ${client.name}`,
       })
+      try { await logSecurityEvent('sale_confirmed', { productId, productName, qty, price, clientId, adminId: userId }, userId) } catch { /* logging failure should not break the operation */ }
 
       // Update lastPurchaseDate (totalRevenue/totalPurchases already incremented by atomicSale)
       await prisma.client.update({
@@ -278,6 +280,7 @@ export function setupSalesHandlers(bot: Telegraf): void {
       })
       if (activeReservation) {
         await releaseReserve(activeReservation.id, 'completed')
+        try { await logSecurityEvent('reservation_released', { reservationId: activeReservation.id, status: 'completed', adminId: userId }, userId) } catch { /* logging failure should not break the operation */ }
       }
 
       const msg = `✅ Продажа оформлена: ${productName} × ${qty} — ${fmtPrice(total)} ₽`
@@ -532,6 +535,7 @@ export function setupSalesHandlers(bot: Telegraf): void {
         userId: String(userId),
         comment: `Продажа клиенту ${clientName}`,
       })
+      try { await logSecurityEvent('sale_confirmed', { productId, productName, qty, price, clientName, adminId: userId }, userId) } catch { /* logging failure should not break the operation */ }
       const msg = `✅ Продажа оформлена: ${productName} × ${qty} — ${fmtPrice(total)} ₽\n👤 Клиент: ${clientName}`
       await ctx.reply(msg)
       await notifyToSalesTopic(ctx, msg, clientName)
@@ -602,6 +606,7 @@ export function setupSalesHandlers(bot: Telegraf): void {
         return ctx.answerCbQuery('Резерв уже закрыт или не найден')
       }
       await releaseReserve(reservationId, 'completed')
+      try { await logSecurityEvent('reservation_released', { reservationId, status: 'completed', adminId: getUserId(ctx) }, getUserId(ctx)) } catch { /* logging failure should not break the operation */ }
       await ctx.editMessageReplyMarkup({ inline_keyboard: [] }).catch((err) => console.error('[sales] editMarkup:', err))
       await ctx.reply(`✅ Резерв #${reservationId} завершён — товар выдан.`)
     } catch (err) {
@@ -620,6 +625,7 @@ export function setupSalesHandlers(bot: Telegraf): void {
         return ctx.answerCbQuery('Резерв уже закрыт или не найден')
       }
       await releaseReserve(reservationId, 'cancelled')
+      try { await logSecurityEvent('reservation_released', { reservationId, status: 'cancelled', adminId: getUserId(ctx) }, getUserId(ctx)) } catch { /* logging failure should not break the operation */ }
       await ctx.editMessageReplyMarkup({ inline_keyboard: [] }).catch((err) => console.error('[sales] editMarkup:', err))
       await ctx.reply(`❌ Резерв #${reservationId} отменён.`)
     } catch (err) {

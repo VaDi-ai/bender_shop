@@ -20,30 +20,30 @@ import fs from 'fs'
 const HEADER_FILL: ExcelJS.Fill = {
   type: 'pattern',
   pattern: 'solid',
-  fgColor: { argb: 'FF1A1A1A' },
+  fgColor: { argb: 'FF2B579A' },
 }
 
 const HEADER_FONT: Partial<ExcelJS.Font> = {
   bold: true,
-  color: { argb: 'FFCCFF00' },
+  color: { argb: 'FFFFFFFF' },
   size: 11,
 }
 
 const REQUIRED_FONT: Partial<ExcelJS.Font> = {
   bold: true,
-  color: { argb: 'FFFFFFCC' }, // чуть ярче для обязательных
+  color: { argb: 'FFFFFFFF' },
   size: 11,
 }
 
 const EXAMPLE_FONT: Partial<ExcelJS.Font> = {
-  color: { argb: 'FF888888' },
+  color: { argb: 'FF856404' },
   italic: true,
 }
 
 const EXAMPLE_FILL: ExcelJS.Fill = {
   type: 'pattern',
   pattern: 'solid',
-  fgColor: { argb: 'FF2A2A2A' },
+  fgColor: { argb: 'FFFFF3CD' },
 }
 
 function styleHeaderRow(
@@ -55,7 +55,7 @@ function styleHeaderRow(
     cell.font = requiredCols.includes(colNumber) ? REQUIRED_FONT : HEADER_FONT
     cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true }
     cell.border = {
-      bottom: { style: 'thin', color: { argb: 'FFCCFF00' } },
+      bottom: { style: 'thin', color: { argb: 'FF2B579A' } },
     }
   })
   row.height = 28

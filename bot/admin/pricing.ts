@@ -19,6 +19,7 @@ import {
   type AIParsedRate,
 } from '../../lib/ai-parser'
 import { getUserId } from '../helpers'
+import { logSecurityEvent } from '../../lib/security-log'
 
 // ─── Типы ─────────────────────────────────────────────────────────────────────
 
@@ -383,6 +384,7 @@ async function applyChanges(ctx: Context, userId: number): Promise<void> {
           createdBy: String(userId),
         },
       })
+      try { await logSecurityEvent('price_changed', { variantId: v.variantId, variantSku: v.variantSku, oldPrice: v.currentPrice, newPrice: v.newPrice, source: state.source, adminId: userId }, userId) } catch { /* logging failure should not break the operation */ }
       updated++
     } catch {
       errors.push(v.variantSku)
@@ -520,8 +522,8 @@ export async function generatePriceListBuffer(): Promise<Buffer> {
     { key: 'comment',  width: 20 },
   ]
 
-  const headerFill: ExcelJS.FillPattern = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1A1A1A' } }
-  const headerFont: Partial<ExcelJS.Font> = { bold: true, color: { argb: 'FFCCFF00' } }
+  const headerFill: ExcelJS.FillPattern = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2B579A' } }
+  const headerFont: Partial<ExcelJS.Font> = { bold: true, color: { argb: 'FFFFFFFF' } }
   const newPriceFill: ExcelJS.FillPattern = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2A3A2A' } }
 
   const headerRow = ws.addRow(['SKU', 'Товар', 'Атрибуты', 'Регион', 'Текущая цена', 'Новая цена', 'Комментарий'])
@@ -531,7 +533,7 @@ export async function generatePriceListBuffer(): Promise<Buffer> {
   ws.getColumn('price').numFmt = '#,##0'
   ws.getColumn('newPrice').numFmt = '#,##0'
 
-  const altFills = ['FF1A1A1A', 'FF111111']
+  const altFills = ['FFFFFFFF', 'FFF2F2F2']
   variants.forEach((v, i) => {
     const attrsObj = v.attributes as Record<string, string>
     const region = attrsObj['Регион'] ?? ''

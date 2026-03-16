@@ -18,6 +18,7 @@ import * as os from 'os'
 import { Context, Markup, Telegraf } from 'telegraf'
 import { prisma } from '../../lib/prisma'
 import { stockIn, stockOut, getStockHistory } from '../../lib/stock'
+import { logSecurityEvent } from '../../lib/security-log'
 import { getUserId } from '../helpers'
 
 // ─── Типы состояния ───────────────────────────────────────────────────────────
@@ -2700,14 +2701,14 @@ async function exportInventory(ctx: Context): Promise<void> {
     ]
 
     const headerFill: ExcelJS.FillPattern = {
-      type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1A1A1A' },
+      type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2B579A' },
     }
-    const headerFont: Partial<ExcelJS.Font> = { bold: true, color: { argb: 'FFCCFF00' } }
+    const headerFont: Partial<ExcelJS.Font> = { bold: true, color: { argb: 'FFFFFFFF' } }
 
     const hdr = ws.addRow(['SKU', 'Товар', 'Атрибуты', 'Цена', 'Остаток', 'Зарезервировано'])
     hdr.eachCell((cell) => { cell.fill = headerFill; cell.font = headerFont })
 
-    const rowFills = ['FF1A1A1A', 'FF111111']
+    const rowFills = ['FFFFFFFF', 'FFF2F2F2']
     variants.forEach((v, i) => {
       const attrs = Object.entries(v.attributes as Record<string, string>)
         .map(([k, val]) => `${k}: ${val}`).join(', ')
@@ -3045,6 +3046,7 @@ async function handleStockInFlow(
     const comment = text === '/skip' ? 'Приход' : text
     try {
       await stockIn(state.variantId, state.qty, comment, String(userId))
+      try { await logSecurityEvent('inventory_modified', { variantId: state.variantId, qty: state.qty, type: 'in', adminId: userId }, userId) } catch { /* logging failure should not break the operation */ }
       const updated = await prisma.productVariant.findUnique({ where: { id: state.variantId } })
       inventoryState.delete(userId)
       await ctx.reply(
@@ -3097,6 +3099,7 @@ async function handleStockOutFlow(
     const comment = text === '/skip' ? 'Списание' : text
     try {
       await stockOut(state.variantId, state.qty, comment, String(userId))
+      try { await logSecurityEvent('inventory_modified', { variantId: state.variantId, qty: state.qty, type: 'out', adminId: userId }, userId) } catch { /* logging failure should not break the operation */ }
       const updated = await prisma.productVariant.findUnique({ where: { id: state.variantId } })
       inventoryState.delete(userId)
       await ctx.reply(

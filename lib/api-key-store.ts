@@ -16,7 +16,11 @@ import { encrypt, decrypt, getEncryptedKeyVersion } from './crypto'
 export async function getApiKeyValue(service: string): Promise<string | null> {
   const record = await prisma.apiKey.findUnique({ where: { service } })
   if (!record) return null
-  return decrypt(record.value)
+  try {
+    return decrypt(record.value, service)  // try with AAD
+  } catch {
+    return decrypt(record.value)  // fallback without AAD for old data
+  }
 }
 
 /**
@@ -25,7 +29,7 @@ export async function getApiKeyValue(service: string): Promise<string | null> {
  * Persists the key version used so migrations can detect stale records.
  */
 export async function setApiKeyValue(service: string, value: string): Promise<void> {
-  const encValue = encrypt(value)
+  const encValue = encrypt(value, service)  // always with AAD
   const keyVersion = getEncryptedKeyVersion(encValue) ?? 1
   await prisma.apiKey.upsert({
     where: { service },

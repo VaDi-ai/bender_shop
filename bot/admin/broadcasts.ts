@@ -20,6 +20,7 @@ import { Context, Markup, Telegraf } from 'telegraf'
 import { prisma } from '../../lib/prisma'
 import { BroadcastType, MediaType } from '../../generated/prisma/client'
 import { getUserId } from '../helpers'
+import { logSecurityEvent } from '../../lib/security-log'
 
 // ─── Типы состояния ───────────────────────────────────────────────────────────
 
@@ -405,6 +406,8 @@ async function executeBroadcast(
       createdBy: String(userId),
     },
   })
+
+  try { await logSecurityEvent('broadcast_sent', { type: state.type, target: logTarget(state.type, state.target, state.tagFilter), totalSent: sent, totalFailed: failed, adminId: userId }, userId) } catch { /* logging failure should not break the operation */ }
 
   await ctx.reply(
     `✅ Рассылка завершена\n\nДоставлено: ${sent}\n❌ Ошибок: ${failed}`,

@@ -15,21 +15,30 @@ export function encryptClientField(value: string | null | undefined, fieldName?:
 export function decryptClientField(value: string | null | undefined, fieldName?: string): string | null {
   if (value == null || value === '') return null
   if (!isEncrypted(value)) return value
-  return decrypt(value, fieldName ?? '')
+  try {
+    return decrypt(value, fieldName ?? '')
+  } catch {
+    return decrypt(value)  // fallback for data without AAD
+  }
 }
 
-export function encryptDate(date: Date | null | undefined): string | null {
+export function encryptDate(date: Date | null | undefined, fieldName?: string): string | null {
   if (date == null) return null
-  return encrypt(date.toISOString())
+  return encrypt(date.toISOString(), fieldName ?? '')
 }
 
-export function decryptDate(value: string | null | undefined): Date | null {
+export function decryptDate(value: string | null | undefined, fieldName?: string): Date | null {
   if (value == null || value === '') return null
   if (!isEncrypted(value)) {
     const d = new Date(value)
     return isNaN(d.getTime()) ? null : d
   }
-  const iso = decrypt(value)
+  let iso: string
+  try {
+    iso = decrypt(value, fieldName ?? '')
+  } catch {
+    iso = decrypt(value)  // fallback for data without AAD
+  }
   const d = new Date(iso)
   return isNaN(d.getTime()) ? null : d
 }

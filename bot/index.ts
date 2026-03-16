@@ -697,15 +697,19 @@ const DEFAULT_REGIONS = [
 ] as const
 
 ;(async () => {
-  for (const r of DEFAULT_REGIONS) {
-    await prisma.region.upsert({
-      where: { code: r.code },
-      create: r,
-      update: {},
-    })
+  try {
+    for (const r of DEFAULT_REGIONS) {
+      await prisma.region.upsert({
+        where: { code: r.code },
+        create: r,
+        update: {},
+      })
+    }
+    console.log('Регионы инициализированы')
+  } catch (err) {
+    console.error('Region seeder failed — pricing module may not work correctly:', err)
   }
-  console.log('Регионы инициализированы')
-})().catch((err) => console.error('Region seeder failed:', err))
+})()
 
 // ─── DB keepalive: предотвращает разрыв соединения на db.prisma.io ────────────
 
@@ -713,7 +717,7 @@ setInterval(async () => {
   try {
     await prisma.$queryRaw`SELECT 1`
   } catch (e) {
-    console.log('DB keepalive failed, reconnecting...')
+    console.error('DB keepalive failed:', e)
   }
 }, 4 * 60 * 1000)
 
@@ -849,12 +853,12 @@ async function gracefulShutdown(signal: string): Promise<void> {
     await new Promise((r) => setTimeout(r, 200))
   }
 
-  await serializeAISuggestions()
-  bot.stop(signal)
-  await prisma.$disconnect()
-  await pool.end()
+  try { await serializeAISuggestions() } catch (e) { console.error('[shutdown] serializeAISuggestions failed:', e) }
+  try { bot.stop(signal) } catch (e) { console.error('[shutdown] bot.stop failed:', e) }
+  try { await prisma.$disconnect() } catch (e) { console.error('[shutdown] prisma disconnect failed:', e) }
+  try { await pool.end() } catch (e) { console.error('[shutdown] pool.end failed:', e) }
   process.exit(0)
 }
 
-process.once('SIGTERM', () => gracefulShutdown('SIGTERM'))
-process.once('SIGINT', () => gracefulShutdown('SIGINT'))
+process.once('SIGTERM', () => { gracefulShutdown('SIGTERM').catch(e => { console.error('[shutdown] fatal:', e); process.exit(1) }) })
+process.once('SIGINT', () => { gracefulShutdown('SIGINT').catch(e => { console.error('[shutdown] fatal:', e); process.exit(1) }) })
