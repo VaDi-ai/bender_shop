@@ -22,6 +22,8 @@ import { prisma } from '../lib/prisma'
 import { logSecurityEvent } from '../lib/security-log'
 import { getApiKeyValue } from '../lib/api-key-store'
 import { handleInstagramVerification } from '../webhooks/instagram'
+import { DeliveryType } from '../generated/prisma/client'
+import { Decimal } from '@prisma/client/runtime/client'
 
 if (!process.env.BOT_TOKEN) throw new Error('BOT_TOKEN is required')
 const BOT_TOKEN = process.env.BOT_TOKEN
@@ -425,43 +427,49 @@ export function startApiServer(bot?: Telegraf): void {
       return
     }
 
-    const filePath = await new Promise<string>((resolve, reject) => {
-      const tgUrl = `https://api.telegram.org/bot${BOT_TOKEN}/getFile?file_id=${encodeURIComponent(fileId)}`
-      const request = https
-        .get(tgUrl, (tgRes) => {
-          let data = ''
-          tgRes.on('data', (chunk) => (data += chunk))
-          tgRes.on('end', () => {
-            try {
-              const json = JSON.parse(data)
-              if (!json.ok) return reject(new Error('Telegram getFile failed'))
-              resolve(json.result.file_path as string)
-            } catch (e) {
-              reject(e)
-            }
+    try {
+      const filePath = await new Promise<string>((resolve, reject) => {
+        const tgUrl = `https://api.telegram.org/bot${BOT_TOKEN}/getFile?file_id=${encodeURIComponent(fileId)}`
+        const request = https
+          .get(tgUrl, (tgRes) => {
+            let data = ''
+            tgRes.on('data', (chunk) => (data += chunk))
+            tgRes.on('end', () => {
+              try {
+                const json = JSON.parse(data)
+                if (!json.ok) return reject(new Error('Telegram getFile failed'))
+                resolve(json.result.file_path as string)
+              } catch (e) {
+                reject(e)
+              }
+            })
           })
+          .on('error', reject)
+        request.setTimeout(10_000, () => {
+          request.destroy(new Error('Telegram API timeout'))
         })
-        .on('error', reject)
-      request.setTimeout(10_000, () => {
-        request.destroy(new Error('Telegram API timeout'))
       })
-    })
 
-    const downloadUrl = `https://api.telegram.org/file/bot${BOT_TOKEN}/${filePath}`
-    await new Promise<void>((resolve, reject) => {
-      const request = https
-        .get(downloadUrl, (tgRes) => {
-          res.setHeader('Content-Type', 'image/jpeg')
-          res.setHeader('Cache-Control', 'public, max-age=86400')
-          tgRes.pipe(res)
-          tgRes.on('end', resolve)
-          tgRes.on('error', reject)
+      const downloadUrl = `https://api.telegram.org/file/bot${BOT_TOKEN}/${filePath}`
+      await new Promise<void>((resolve, reject) => {
+        const request = https
+          .get(downloadUrl, (tgRes) => {
+            res.setHeader('Content-Type', 'image/jpeg')
+            res.setHeader('Cache-Control', 'public, max-age=86400')
+            tgRes.pipe(res)
+            tgRes.on('end', resolve)
+            tgRes.on('error', reject)
+          })
+          .on('error', reject)
+        request.setTimeout(10_000, () => {
+          request.destroy(new Error('Telegram download timeout'))
         })
-        .on('error', reject)
-      request.setTimeout(10_000, () => {
-        request.destroy(new Error('Telegram download timeout'))
       })
-    })
+    } catch (err) {
+      if (!res.headersSent) {
+        res.status(404).json({ error: 'File not available' })
+      }
+    }
   })
 
   // ── GET /api/download/price-list ───────────────────────────────────────────
@@ -671,7 +679,7 @@ export function startApiServer(bot?: Telegraf): void {
     // ── Весь заказ атомарно: проверка остатков, создание заказа, списание ──
     try {
       const order = await prisma.$transaction(async (tx) => {
-        let totalAmount = 0
+        let totalDecimal = new Decimal(0)
         const enrichedItems: Array<{
           variantId: number
           name: string
@@ -692,23 +700,24 @@ export function startApiServer(bot?: Telegraf): void {
           }
 
           // Цена всегда из БД — никогда от клиента
-          const actualPrice = Number(variant.price)
-          if (item.price !== undefined && Number(item.price) !== actualPrice) {
+          const variantPrice = new Decimal(variant.price)
+          if (item.price !== undefined && !variantPrice.equals(new Decimal(item.price))) {
             // Fire-and-forget: logging runs outside this transaction
             void logSecurityEvent('price_manipulation_attempt', {
               ip: req.ip,
               telegramId,
               variantId: item.variantId,
               submittedPrice: item.price,
-              actualPrice,
+              actualPrice: variantPrice.toFixed(2),
             }, telegramId)
           }
-          totalAmount += actualPrice * item.quantity
+          const lineTotal = variantPrice.times(item.quantity)
+          totalDecimal = totalDecimal.plus(lineTotal)
 
           enrichedItems.push({
             variantId: variant.id,
             name: variant.product.name,
-            price: actualPrice.toString(),
+            price: variantPrice.toFixed(2),
             quantity: item.quantity,
             newQty: variant.quantity - item.quantity,
           })
@@ -732,11 +741,11 @@ export function startApiServer(bot?: Telegraf): void {
                 productName: i.name,
               })),
             },
-            totalAmount: totalAmount.toString(),
+            totalAmount: totalDecimal.toFixed(2),
             payment: paymentMethod,
             customerName: customerName.trim(),
             customerPhone: customerPhone.trim(),
-            deliveryType,
+            deliveryType: deliveryType as DeliveryType,
             deliveryAddress: deliveryAddress?.trim() ?? null,
           },
         })

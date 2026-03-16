@@ -16,7 +16,7 @@
 
 import { Context, Markup, Telegraf } from 'telegraf'
 import { prisma } from '../../lib/prisma'
-import { DiscountType, FilterType } from '../../generated/prisma/client'
+import { BroadcastType, DiscountType, FilterType } from '../../generated/prisma/client'
 import { applyPromotion, cancelPromotion, findVariantsByFilter, filterLabel } from '../../lib/promotions'
 
 // ─── Отправка с экспоненциальным откатом при 429 (аналогично broadcasts.ts) ───
@@ -446,7 +446,7 @@ async function sendPromoNotification(
 
   await prisma.broadcastLog.create({
     data: {
-      type: 'all',
+      type: BroadcastType.all,
       target: `promo:${state.name}`,
       messageText: text,
       totalSent: sent,

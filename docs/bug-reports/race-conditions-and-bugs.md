@@ -5,6 +5,30 @@
 
 ---
 
+## Status (updated 2026-03-16)
+
+| Bug | Status | Notes |
+|-----|--------|-------|
+| 1.1 — Order TOCTOU | ✅ Fixed | Wrapped in $transaction in api/server.ts |
+| 1.2 — stockOut locking | ✅ Fixed | Interactive transaction in lib/stock.ts |
+| 1.3 — Stale inStock | ✅ Fixed | Computed inside transaction |
+| 1.4 — Non-atomic reserve | ✅ Fixed | Part 2 — $transaction in res:confirm/res_nc:confirm |
+| 1.5 — Missing stock check reserve_nc | ✅ Fixed | Part 2 — qty check in reserve/reserve_nc flows |
+| 2.1 — Reserved never decremented | ✅ Fixed | Part 2 — releaseReserve() in lib/stock.ts |
+| 2.2 — Missing reserve completion on sale | ✅ Fixed | Part 2 — sale:confirm calls releaseReserve |
+| 3.1 — Unawaited returns | ✅ Fixed | Part 4 — return await in try/catch |
+| 3.2 — Silent error swallowing | ✅ Fixed | Part 4+5 — .catch(() => {}) replaced with logging |
+| 3.3 — Scheduler async | ✅ Fixed | Already had .catch() |
+| 3.4 — Failed tasks retry | ✅ Fixed | Already had attemptCount + MAX_ATTEMPTS |
+| 4.1 — Decimal precision | ✅ Fixed | Part 4 — Decimal in api/server.ts and lib/stock.ts |
+| 5.1 — Client media dropped | ✅ Fixed | Part 4 — forwardMessage in webhooks/telegram.ts |
+| 5.2 — Admin media not forwarded | ✅ Fixed | Part 4 — copyMessage in webhooks/telegram.ts |
+| 5.3 — Non-null assertion | ✅ Fixed | Part 4 — explicit null checks |
+| 6.1 — Redundant fetches | ✅ Fixed | Part 5 — reuse updated variable in inventory.ts |
+| 6.2 — Scheduler overlap | ✅ Fixed | Already had isRunning mutex |
+
+---
+
 ## Section 1 — Race Conditions & Atomicity
 
 ---

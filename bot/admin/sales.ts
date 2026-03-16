@@ -15,7 +15,7 @@
 
 import { Context, Markup, Telegraf } from 'telegraf'
 import { prisma } from '../../lib/prisma'
-import { atomicSale } from '../../lib/stock'
+import { atomicSale, releaseReserve } from '../../lib/stock'
 import { getApiKeyValue } from '../../lib/api-key-store'
 
 const CRM_GROUP_ID = Number(process.env.CRM_GROUP_ID)
@@ -280,16 +280,7 @@ export function setupSalesHandlers(bot: Telegraf): void {
         orderBy: { createdAt: 'asc' },
       })
       if (activeReservation) {
-        await prisma.$transaction([
-          prisma.reservation.update({
-            where: { id: activeReservation.id },
-            data: { status: 'completed' },
-          }),
-          prisma.product.update({
-            where: { id: productId },
-            data: { reserved: { decrement: activeReservation.quantity } },
-          }),
-        ])
+        await releaseReserve(activeReservation.id, 'completed')
       }
 
       const msg = `✅ Продажа оформлена: ${productName} × ${qty} — ${fmtPrice(total)} ₽`
@@ -319,15 +310,21 @@ export function setupSalesHandlers(bot: Telegraf): void {
       const client = await prisma.client.findUnique({ where: { id: clientId } })
       if (!client) return await ctx.reply('Клиент не найден.')
 
-      // Создаём резерв
-      const reservation = await prisma.reservation.create({
-        data: { clientId, productId, quantity: qty, comment, status: 'active' },
-      })
-
-      // Увеличиваем reserved
-      await prisma.product.update({
-        where: { id: productId },
-        data: { reserved: { increment: qty } },
+      // Атомарно: проверяем остаток, создаём резерв, инкрементируем reserved
+      const reservation = await prisma.$transaction(async (tx) => {
+        const product = await tx.product.findUniqueOrThrow({ where: { id: productId } })
+        const available = product.quantity - product.reserved
+        if (qty > available) {
+          throw new Error(`Недостаточно товара. Доступно: ${available} шт.`)
+        }
+        const res = await tx.reservation.create({
+          data: { clientId, productId, quantity: qty, comment, status: 'active' },
+        })
+        await tx.product.update({
+          where: { id: productId },
+          data: { reserved: { increment: qty } },
+        })
+        return res
       })
 
       const msg = `🔖 Резерв: ${productName} × ${qty} для ${client.name} до отдельного уведомления`
@@ -559,18 +556,27 @@ export function setupSalesHandlers(bot: Telegraf): void {
     const comment = state.comment
 
     try {
-      const reservation = await prisma.reservation.create({
-        data: {
-          clientId: null,
-          productId,
-          quantity: qty,
-          comment: `${clientName}${comment ? ': ' + comment : ''}`,
-          status: 'active',
-        },
-      })
-      await prisma.product.update({
-        where: { id: productId },
-        data: { reserved: { increment: qty } },
+      // Атомарно: проверяем остаток, создаём резерв, инкрементируем reserved
+      const reservation = await prisma.$transaction(async (tx) => {
+        const product = await tx.product.findUniqueOrThrow({ where: { id: productId } })
+        const available = product.quantity - product.reserved
+        if (qty > available) {
+          throw new Error(`Недостаточно товара. Доступно: ${available} шт.`)
+        }
+        const res = await tx.reservation.create({
+          data: {
+            clientId: null,
+            productId,
+            quantity: qty,
+            comment: `${clientName}${comment ? ': ' + comment : ''}`,
+            status: 'active',
+          },
+        })
+        await tx.product.update({
+          where: { id: productId },
+          data: { reserved: { increment: qty } },
+        })
+        return res
       })
       const msg = `🔖 Резерв: ${productName} × ${qty} для ${clientName} до отдельного уведомления${comment ? '\n📝 ' + comment : ''}`
       await ctx.reply(
@@ -598,18 +604,8 @@ export function setupSalesHandlers(bot: Telegraf): void {
       if (!reservation || reservation.status !== 'active') {
         return ctx.answerCbQuery('Резерв уже закрыт или не найден')
       }
-      await prisma.$transaction([
-        prisma.reservation.update({
-          where: { id: reservationId },
-          data: { status: 'completed' },
-        }),
-        // Place 2: status → 'completed' — освобождаем reserved
-        prisma.product.update({
-          where: { id: reservation.productId },
-          data: { reserved: { decrement: reservation.quantity } },
-        }),
-      ])
-      await ctx.editMessageReplyMarkup({ inline_keyboard: [] }).catch(() => {})
+      await releaseReserve(reservationId, 'completed')
+      await ctx.editMessageReplyMarkup({ inline_keyboard: [] }).catch((err) => console.error('[sales] editMarkup:', err))
       await ctx.reply(`✅ Резерв #${reservationId} завершён — товар выдан.`)
     } catch (err) {
       console.error('res:do_complete error:', err)
@@ -626,18 +622,8 @@ export function setupSalesHandlers(bot: Telegraf): void {
       if (!reservation || reservation.status !== 'active') {
         return ctx.answerCbQuery('Резерв уже закрыт или не найден')
       }
-      await prisma.$transaction([
-        prisma.reservation.update({
-          where: { id: reservationId },
-          data: { status: 'cancelled' },
-        }),
-        // Place 1: status → 'cancelled' — освобождаем reserved
-        prisma.product.update({
-          where: { id: reservation.productId },
-          data: { reserved: { decrement: reservation.quantity } },
-        }),
-      ])
-      await ctx.editMessageReplyMarkup({ inline_keyboard: [] }).catch(() => {})
+      await releaseReserve(reservationId, 'cancelled')
+      await ctx.editMessageReplyMarkup({ inline_keyboard: [] }).catch((err) => console.error('[sales] editMarkup:', err))
       await ctx.reply(`❌ Резерв #${reservationId} отменён.`)
     } catch (err) {
       console.error('res:do_cancel error:', err)
@@ -720,6 +706,12 @@ export async function handleSalesMessage(
         return true
       }
       const { clientId, productId, productName, price } = state
+      const product = await prisma.product.findUnique({ where: { id: productId } })
+      const available = (product?.quantity ?? 0) - (product?.reserved ?? 0)
+      if (qty > available) {
+        await ctx.reply(`Недостаточно товара. Доступно: ${available} шт.`)
+        return true
+      }
       salesState.set(userId, { flow: 'reserve', step: 'comment', clientId, productId, productName, price, qty })
       await ctx.reply(
         'Введите комментарий к резерву (или «-» чтобы пропустить):',
@@ -829,6 +821,12 @@ export async function handleSalesMessage(
         return true
       }
       const { clientName, productId, productName, price } = state
+      const product = await prisma.product.findUnique({ where: { id: productId } })
+      const available = (product?.quantity ?? 0) - (product?.reserved ?? 0)
+      if (qty > available) {
+        await ctx.reply(`Недостаточно товара. Доступно: ${available} шт.`)
+        return true
+      }
       salesState.set(userId, { flow: 'reserve_nc', step: 'comment', clientName, productId, productName, price, qty })
       await ctx.reply(
         'Введите комментарий к резерву (или «-» чтобы пропустить):',

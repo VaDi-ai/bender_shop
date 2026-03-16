@@ -80,6 +80,22 @@ enum FilterType {
   products
 }
 
+enum DeliveryType {
+  pickup
+  delivery
+}
+
+enum BroadcastType {
+  all
+  tag
+  segment
+}
+
+enum MediaType {
+  photo
+  video
+}
+
 // ─── Models ───────────────────────────────────────────────────────────────────
 
 model Segment {
@@ -102,14 +118,11 @@ model Client {
   telegramTopicId Int?          // ID темы в группе Telegram CRM
   pinnedMessageId Int?          // ID закреплённого сообщения с панелью управления
 
-  // Расширенные контактные данные
-  // TODO: encrypt phone/email/birthDate at the application layer for GDPR/compliance.
-  //       Use the same AES-256-GCM approach from lib/crypto.ts. Requires a migration
-  //       similar to scripts/encrypt-api-keys.ts before enabling.
+  // Расширенные контактные данные (phone, email, birthDate encrypted at app layer via lib/client-crypto.ts)
   phone           String?
   fullName        String?
   email           String?
-  birthDate       DateTime?
+  birthDate       String?
   lastPurchaseDate DateTime?
   totalPurchases  Int      @default(0)
   totalRevenue    Decimal  @default(0) @db.Decimal(14, 2)
@@ -126,8 +139,8 @@ model Client {
 
   @@unique([source, externalId]) // один клиент per платформа
   @@index([segmentId])
-  @@index([phone])
-  @@index([email])
+  @@index([phone])   // encrypted — index kept for potential prefix/existence checks
+  @@index([email])   // encrypted — index kept for potential prefix/existence checks
   @@index([telegramTopicId])
   @@index([createdAt])
 }
@@ -275,13 +288,12 @@ model Order {
   id              Int          @id @default(autoincrement())
   clientId        Int?
   telegramId      String       // Telegram user ID из WebApp
-  itemsJson       Json?        // [{ variantId, name, price, quantity }] — временно, заменяется OrderItem
   totalAmount     Decimal      @db.Decimal(12, 2)
   payment         OrderPayment // A11
   status          OrderStatus  @default(new) // A11
   customerName    String?
   customerPhone   String?
-  deliveryType    String?      // "pickup" | "delivery"
+  deliveryType    DeliveryType?
   deliveryAddress String?
   createdAt       DateTime     @default(now())
 
@@ -365,11 +377,11 @@ model HeroBanner {
 
 model BroadcastLog {
   id               Int      @id @default(autoincrement())
-  type             String   // "all" | "tag" | "segment"
+  type             BroadcastType
   target           String   // тег, название сегмента или "all"
   messageText      String?
   mediaFileId      String?
-  mediaType        String?  // "photo" | "video"
+  mediaType        MediaType?
   totalSent        Int
   totalFailed      Int
   createdAt        DateTime @default(now())

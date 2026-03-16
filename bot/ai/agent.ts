@@ -316,7 +316,7 @@ ${historyText}${webSearchContext}`
     if (!text) throw new Error('Пустой ответ от модели')
     return text
   } catch (err) {
-    notifyAdminsAboutApiError(err, 'AI ответ клиенту').catch(() => {})
+    notifyAdminsAboutApiError(err, 'AI ответ клиенту').catch((e) => console.error('[ai] notify error:', e))
     throw err
   }
 }

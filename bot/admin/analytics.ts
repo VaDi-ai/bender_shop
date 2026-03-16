@@ -12,6 +12,7 @@
 
 import { Context, Markup, Telegraf } from 'telegraf'
 import { prisma } from '../../lib/prisma'
+import { decryptClientField } from '../../lib/client-crypto'
 
 // ─── Типы состояния ───────────────────────────────────────────────────────────
 
@@ -268,7 +269,7 @@ async function sendClientReport(ctx: Context, clientId: number): Promise<void> {
 
   const lines = [
     `👤 ${client.fullName || client.name}`,
-    client.phone ? `📞 ${client.phone}` : null,
+    client.phone ? `📞 ${decryptClientField(client.phone)}` : null,
     `📌 Источник: ${SOURCE_LABEL[client.source] ?? client.source}`,
     `📊 Сегмент: ${client.segment ? `${client.segment.color} ${client.segment.name}` : '—'}`,
     SEP,

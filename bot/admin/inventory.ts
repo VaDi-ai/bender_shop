@@ -2901,8 +2901,7 @@ async function handleStockInFlow(
         `✅ Приход ${state.qty} шт. записан. Новый остаток: ${updated?.quantity ?? '?'} шт.`,
         Markup.removeKeyboard(),
       )
-      const variant = await prisma.productVariant.findUnique({ where: { id: state.variantId } })
-      if (variant) await showStockProduct(ctx, variant.productId)
+      if (updated) await showStockProduct(ctx, updated.productId)
     } catch (err) {
       inventoryState.delete(userId)
       await ctx.reply(`❌ ${err instanceof Error ? err.message : 'Ошибка'}`, Markup.removeKeyboard())
@@ -2954,8 +2953,7 @@ async function handleStockOutFlow(
         `✅ Списание ${state.qty} шт. записано. Новый остаток: ${updated?.quantity ?? '?'} шт.`,
         Markup.removeKeyboard(),
       )
-      const variant = await prisma.productVariant.findUnique({ where: { id: state.variantId } })
-      if (variant) await showStockProduct(ctx, variant.productId)
+      if (updated) await showStockProduct(ctx, updated.productId)
     } catch (err) {
       inventoryState.delete(userId)
       await ctx.reply(`❌ ${err instanceof Error ? err.message : 'Ошибка'}`, Markup.removeKeyboard())

@@ -37,7 +37,7 @@ pool.on('error', (err) => {
     const code = (err as NodeJS.ErrnoException).code ?? 'unknown'
     const text = `🚨 DB pool error\nCode: ${code}\nПроблема с соединением к базе данных`
     for (const adminId of _poolAlertAdminIds) {
-      _poolAlertBot.telegram.sendMessage(adminId, text).catch(() => {})
+      _poolAlertBot.telegram.sendMessage(adminId, text).catch((e) => console.error('[prisma] pool alert send error:', e))
     }
   }
 })

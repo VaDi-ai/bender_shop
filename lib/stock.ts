@@ -1,3 +1,4 @@
+import { Decimal } from '@prisma/client/runtime/client'
 import { prisma } from './prisma'
 
 // ─── Атомарная продажа ────────────────────────────────────────────────────────
@@ -55,7 +56,7 @@ export async function atomicSale(
               }],
             }
           : undefined,
-        totalAmount: params.price * params.qty,
+        totalAmount: new Decimal(params.price).times(params.qty).toFixed(2),
         payment: 'crm',
         status: 'completed',
       },
@@ -95,7 +96,7 @@ export async function atomicSale(
       await tx.client.update({
         where: { id: params.clientId },
         data: {
-          totalRevenue: { increment: params.price * params.qty },
+          totalRevenue: { increment: new Decimal(params.price).times(params.qty) },
           totalPurchases: { increment: 1 },
         },
       })
@@ -145,6 +146,36 @@ export async function stockOut(
     await tx.stockMovement.create({
       data: { variantId, type: 'out', quantity: qty, comment, createdBy: userId },
     })
+  })
+}
+
+// ─── Атомарное завершение/отмена резерва ──────────────────────────────────────
+
+/**
+ * Атомарно обновляет статус резерва и декрементирует Product.reserved.
+ * Защита от отрицательного reserved: декрементирует не больше текущего значения.
+ */
+export async function releaseReserve(
+  reservationId: number,
+  newStatus: 'cancelled' | 'completed',
+): Promise<void> {
+  await prisma.$transaction(async (tx) => {
+    const reservation = await tx.reservation.findUniqueOrThrow({ where: { id: reservationId } })
+    if (reservation.status !== 'active') return
+
+    await tx.reservation.update({
+      where: { id: reservationId },
+      data: { status: newStatus },
+    })
+
+    const product = await tx.product.findUniqueOrThrow({ where: { id: reservation.productId } })
+    const decrementQty = Math.min(reservation.quantity, product.reserved)
+    if (decrementQty > 0) {
+      await tx.product.update({
+        where: { id: reservation.productId },
+        data: { reserved: { decrement: decrementQty } },
+      })
+    }
   })
 }
 

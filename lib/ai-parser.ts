@@ -97,7 +97,7 @@ ${text}
     return parsed.data
   } catch (err) {
     console.error('AI parser: parseSupplierMessage error:', err)
-    notifyAdminsAboutApiError(err, 'Парсинг прайса поставщика').catch(() => {})
+    notifyAdminsAboutApiError(err, 'Парсинг прайса поставщика').catch((e) => console.error('[ai-parser] notify error:', e))
     return []
   }
 }
@@ -144,7 +144,7 @@ ${text}
     return parsed.data
   } catch (err) {
     console.error('AI parser: parseCurrencyRates error:', err)
-    notifyAdminsAboutApiError(err, 'Парсинг курсов валют').catch(() => {})
+    notifyAdminsAboutApiError(err, 'Парсинг курсов валют').catch((e) => console.error('[ai-parser] notify error:', e))
     return []
   }
 }

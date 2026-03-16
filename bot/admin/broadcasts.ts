@@ -18,24 +18,25 @@
 
 import { Context, Markup, Telegraf } from 'telegraf'
 import { prisma } from '../../lib/prisma'
+import { BroadcastType, MediaType } from '../../generated/prisma/client'
 
 // ─── Типы состояния ───────────────────────────────────────────────────────────
 
 type BroadcastFlowState =
   | {
       flow: 'awaiting_text'
-      type: 'all' | 'tag' | 'segment'
+      type: BroadcastType
       target: string      // для tag — имя тега; для segment — "segId:segName"; для all — 'all'
       tagFilter?: string  // доп. фильтр по тегу для сегмента
     }
   | {
       flow: 'preview'
-      type: 'all' | 'tag' | 'segment'
+      type: BroadcastType
       target: string
       tagFilter?: string
       messageText?: string
       mediaFileId?: string
-      mediaType?: 'photo' | 'video'
+      mediaType?: MediaType
       caption?: string
     }
 
@@ -62,7 +63,7 @@ function typeIcon(type: string): string {
 
 /** Человекочитаемое название аудитории для BroadcastLog.target */
 function logTarget(
-  type: 'all' | 'tag' | 'segment',
+  type: BroadcastType,
   target: string,
   tagFilter?: string,
 ): string {
@@ -74,7 +75,7 @@ function logTarget(
 
 /** Строковое описание аудитории для предпросмотра */
 function audienceLabel(
-  type: 'all' | 'tag' | 'segment',
+  type: BroadcastType,
   target: string,
   count: number,
   tagFilter?: string,
@@ -89,7 +90,7 @@ function audienceLabel(
 // ─── Работа с БД ──────────────────────────────────────────────────────────────
 
 async function countRecipients(
-  type: 'all' | 'tag' | 'segment',
+  type: BroadcastType,
   target: string,
   tagFilter?: string,
 ): Promise<number> {
@@ -111,7 +112,7 @@ async function countRecipients(
 }
 
 async function getRecipients(
-  type: 'all' | 'tag' | 'segment',
+  type: BroadcastType,
   target: string,
   tagFilter?: string,
 ): Promise<{ externalId: string | null }[]> {
@@ -288,13 +289,13 @@ async function showPreview(
     [Markup.button.callback('❌ Отмена', 'bcast:cancel')],
   ])
 
-  if (state.mediaType === 'photo' && state.mediaFileId) {
+  if (state.mediaType === MediaType.photo && state.mediaFileId) {
     await ctx.reply(`📋 Предпросмотр — ${audience}:`)
     await ctx.replyWithPhoto(state.mediaFileId, {
       caption: state.caption,
       reply_markup: previewButtons.reply_markup,
     })
-  } else if (state.mediaType === 'video' && state.mediaFileId) {
+  } else if (state.mediaType === MediaType.video && state.mediaFileId) {
     await ctx.reply(`📋 Предпросмотр — ${audience}:`)
     await ctx.replyWithVideo(state.mediaFileId, {
       caption: state.caption,
@@ -365,9 +366,9 @@ async function executeBroadcast(
   for (let i = 0; i < recipients.length; i++) {
     const tgId = recipients[i].externalId!
     const result = await sendWithBackoff(() => {
-      if (state.mediaType === 'photo' && state.mediaFileId) {
+      if (state.mediaType === MediaType.photo && state.mediaFileId) {
         return ctx.telegram.sendPhoto(tgId, state.mediaFileId, { caption: state.caption })
-      } else if (state.mediaType === 'video' && state.mediaFileId) {
+      } else if (state.mediaType === MediaType.video && state.mediaFileId) {
         return ctx.telegram.sendVideo(tgId, state.mediaFileId, { caption: state.caption })
       } else {
         return ctx.telegram.sendMessage(tgId, state.messageText!)
@@ -432,7 +433,7 @@ export function setupBroadcastHandlers(bot: Telegraf): void {
     const count = await prisma.client.count({
       where: { source: 'telegram', externalId: { not: null } },
     })
-    broadcastsState.set(userId, { flow: 'awaiting_text', type: 'all', target: 'all' })
+    broadcastsState.set(userId, { flow: 'awaiting_text', type: BroadcastType.all, target: 'all' })
     await ctx.reply(
       `📢 Рассылка всем клиентам (${count} чел.)\n\nОтправьте текст, фото или видео:`,
       Markup.inlineKeyboard([[Markup.button.callback('❌ Отмена', 'bcast:cancel')]]),
@@ -470,7 +471,7 @@ export function setupBroadcastHandlers(bot: Telegraf): void {
     const count = await prisma.client.count({
       where: { source: 'telegram', externalId: { not: null }, tags: { some: { name: tagName } } },
     })
-    broadcastsState.set(userId, { flow: 'awaiting_text', type: 'tag', target: tagName })
+    broadcastsState.set(userId, { flow: 'awaiting_text', type: BroadcastType.tag, target: tagName })
     await ctx.reply(
       `🏷️ Рассылка по тегу «${tagName}» (${count} чел.)\n\nОтправьте текст, фото или видео:`,
       Markup.inlineKeyboard([[Markup.button.callback('❌ Отмена', 'bcast:cancel')]]),
@@ -515,7 +516,7 @@ export function setupBroadcastHandlers(bot: Telegraf): void {
     })
     broadcastsState.set(userId, {
       flow: 'awaiting_text',
-      type: 'segment',
+      type: BroadcastType.segment,
       target: `${segId}:${seg.name}`,
     })
     await ctx.reply(
@@ -549,7 +550,7 @@ export function setupBroadcastHandlers(bot: Telegraf): void {
     })
     broadcastsState.set(userId, {
       flow: 'awaiting_text',
-      type: 'segment',
+      type: BroadcastType.segment,
       target: `${segId}:${seg.name}`,
       tagFilter: tagName,
     })
@@ -645,7 +646,7 @@ export async function handleBroadcastPhoto(ctx: Context, userId: number): Promis
     target: state.target,
     tagFilter: state.tagFilter,
     mediaFileId: fileId,
-    mediaType: 'photo',
+    mediaType: MediaType.photo,
     caption: msg.caption,
   }
   broadcastsState.set(userId, previewState)
@@ -666,7 +667,7 @@ export async function handleBroadcastVideo(ctx: Context, userId: number): Promis
     target: state.target,
     tagFilter: state.tagFilter,
     mediaFileId: msg.video.file_id,
-    mediaType: 'video',
+    mediaType: MediaType.video,
     caption: msg.caption,
   }
   broadcastsState.set(userId, previewState)

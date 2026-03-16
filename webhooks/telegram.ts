@@ -33,6 +33,7 @@ import {
   incrementStat,
 } from '../bot/ai/agent'
 import { logSecurityEvent } from '../lib/security-log'
+import { encryptClientField, decryptClientField, encryptDate, decryptDate } from '../lib/client-crypto'
 
 const CRM_GROUP_ID = Number(process.env.CRM_GROUP_ID)
 const ADMIN_IDS = (process.env.ADMIN_IDS ?? '').split(',').map((id) => Number(id.trim()))
@@ -129,8 +130,9 @@ async function buildClientCard(clientId: number): Promise<string> {
   const lastContactStr =
     diffD > 0 ? `${diffD} дн. назад` : diffH > 0 ? `${diffH} ч. назад` : 'недавно'
 
-  const birthStr = client.birthDate
-    ? client.birthDate.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' })
+  const birthDate = decryptDate(client.birthDate)
+  const birthStr = birthDate
+    ? birthDate.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' })
     : '—'
 
   const segLabel = client.segment ? `${client.segment.color} ${client.segment.name}` : '—'
@@ -141,9 +143,11 @@ async function buildClientCard(clientId: number): Promise<string> {
   const lines: string[] = [
     `👤 ${client.fullName ?? client.name}`,
   ]
-  if (client.phone) lines.push(`📞 ${client.phone}`)
-  if (client.email) lines.push(`📧 ${client.email}`)
-  if (client.birthDate) lines.push(`🎂 ${birthStr}`)
+  const phone = decryptClientField(client.phone)
+  const email = decryptClientField(client.email)
+  if (phone) lines.push(`📞 ${phone}`)
+  if (email) lines.push(`📧 ${email}`)
+  if (birthDate) lines.push(`🎂 ${birthStr}`)
   lines.push('━━━━━━━━━━━━━━━')
   lines.push(`📌 Источник: ${sourceLabel(client.source)}`)
   lines.push(`📊 Сегмент: ${segLabel}`)
@@ -199,7 +203,7 @@ export function setupClientHandlers(bot: Telegraf): void {
           logSecurityEvent('unauthorized_access', {
             userId: callerId ?? 'unknown',
             action: data,
-          }).catch(() => {})
+          }).catch((err) => console.error('[security-log] unauthorized_access:', err))
         }
         return ctx.answerCbQuery()
       }
@@ -256,7 +260,7 @@ export function setupClientHandlers(bot: Telegraf): void {
             if (!managerId) return ctx.answerCbQuery()
             await ctx.answerCbQuery()
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            return (ctx.telegram.sendMessage as any)(managerId, '✏️ Что редактировать?', {
+            return await (ctx.telegram.sendMessage as any)(managerId, '✏️ Что редактировать?', {
               reply_markup: Markup.inlineKeyboard([
                 [
                   Markup.button.callback('👤 ФИО', `edit:field:${clientId}:fullName`),
@@ -513,7 +517,7 @@ export function setupClientHandlers(bot: Telegraf): void {
         const clientId = parseCallbackId(data.slice(10))
         if (clientId === null) return ctx.answerCbQuery('Некорректные данные')
         await ctx.answerCbQuery()
-        return ctx.reply(
+        return await ctx.reply(
           '✏️ Что редактировать?',
           Markup.inlineKeyboard([
             [
@@ -547,7 +551,7 @@ export function setupClientHandlers(bot: Telegraf): void {
           email: 'Введите email клиента:',
           birthDate: 'Введите дату рождения (ДД.ММ.ГГГГ):',
         }
-        return ctx.reply(
+        return await ctx.reply(
           prompts[field] ?? 'Введите значение:',
           Markup.inlineKeyboard([[Markup.button.callback('❌ Отмена', 'edit:cancel')]]),
         )
@@ -558,7 +562,7 @@ export function setupClientHandlers(bot: Telegraf): void {
         const userId = ctx.from?.id
         if (userId) editMode.delete(userId)
         await ctx.answerCbQuery()
-        return ctx.reply('Редактирование отменено.')
+        return await ctx.reply('Редактирование отменено.')
       }
 
       // ── Продажа из карточки: crm:sale:{clientId} ─────────────────────────────
@@ -566,7 +570,7 @@ export function setupClientHandlers(bot: Telegraf): void {
         const clientId = parseCallbackId(data.slice(9))
         if (clientId === null) return ctx.answerCbQuery('Некорректные данные')
         await ctx.answerCbQuery()
-        return startSaleFlow(ctx as Context, clientId)
+        return await startSaleFlow(ctx as Context, clientId)
       }
 
       // ── Резерв из карточки: crm:res:{clientId} ────────────────────────────────
@@ -574,7 +578,7 @@ export function setupClientHandlers(bot: Telegraf): void {
         const clientId = parseCallbackId(data.slice(8))
         if (clientId === null) return ctx.answerCbQuery('Некорректные данные')
         await ctx.answerCbQuery()
-        return startReserveFlow(ctx as Context, clientId)
+        return await startReserveFlow(ctx as Context, clientId)
       }
 
       // ── Теги: tags:{clientId} ────────────────────────────────────────────────
@@ -724,11 +728,23 @@ export function setupClientHandlers(bot: Telegraf): void {
         const text = rawMsg['text'] as string | undefined
         const messageId = rawMsg['message_id'] as number | undefined
 
-        if (threadId != null && text) {
-          try {
-            await handleManagerReply(ctx as Context, threadId, text, from.id, messageId)
-          } catch (err) {
-            console.error('handleManagerReply error:', err)
+        if (threadId != null) {
+          if (text) {
+            try {
+              await handleManagerReply(ctx as Context, threadId, text, from.id, messageId)
+            } catch (err) {
+              console.error('handleManagerReply error:', err)
+            }
+          } else if (messageId) {
+            // Медиа-ответ менеджера — переслать клиенту через copyMessage
+            const client = await prisma.client.findFirst({ where: { telegramTopicId: threadId } })
+            if (client?.externalId && client.source === 'telegram') {
+              try {
+                await ctx.telegram.copyMessage(client.externalId, CRM_GROUP_ID, messageId)
+              } catch (err) {
+                console.error('[CRM→Client] Failed to copy media message:', err)
+              }
+            }
           }
         }
       }
@@ -760,6 +776,74 @@ export function setupClientHandlers(bot: Telegraf): void {
       } catch (err) {
         console.error('handleClientMessage error:', err)
       }
+    } else {
+      // Медиа-сообщение от клиента — переслать в CRM-топик
+      try {
+        const mediaType = rawMsg['photo'] ? 'Фото'
+          : rawMsg['voice'] ? 'Голосовое'
+          : rawMsg['video'] ? 'Видео'
+          : rawMsg['document'] ? 'Документ'
+          : rawMsg['sticker'] ? 'Стикер'
+          : rawMsg['location'] ? 'Локация'
+          : 'Медиа'
+
+        const externalId = String(from.id)
+        const name = getClientName(from)
+        const defaultSeg = await prisma.segment.findFirst({ where: { isDefault: true } })
+
+        let client = await prisma.client.findUnique({
+          where: { source_externalId: { source: 'telegram', externalId } },
+          include: { segment: true },
+        })
+        if (!client) {
+          client = await prisma.client.create({
+            data: { name, source: 'telegram', externalId, segmentId: defaultSeg?.id ?? null },
+            include: { segment: true },
+          })
+        }
+
+        if (client.telegramTopicId == null) {
+          await createClientTopic(ctx.telegram, client.id, name)
+          const refreshedClient = await prisma.client.findUnique({
+            where: { id: client.id },
+            include: { segment: true },
+          })
+          if (refreshedClient) client = refreshedClient
+        }
+
+        const messageId = rawMsg['message_id'] as number
+        const chatId = (rawMsg['chat'] as Record<string, unknown>)?.['id'] as number
+        if (client.telegramTopicId && chatId && messageId) {
+          try {
+            await (ctx.telegram.forwardMessage as any)(
+              CRM_GROUP_ID, chatId, messageId,
+              { message_thread_id: client.telegramTopicId },
+            )
+          } catch (fwdErr: any) {
+            if (fwdErr?.response?.description?.includes('message thread not found')) {
+              await prisma.client.update({ where: { id: client.id }, data: { telegramTopicId: null } })
+              const threadId = await createClientTopic(ctx.telegram, client.id, name)
+              await (ctx.telegram.forwardMessage as any)(
+                CRM_GROUP_ID, chatId, messageId,
+                { message_thread_id: threadId },
+              )
+            } else {
+              throw fwdErr
+            }
+          }
+        }
+
+        await prisma.message.create({
+          data: {
+            clientId: client.id,
+            direction: 'in',
+            text: `[${mediaType}]`,
+            source: 'telegram',
+          },
+        })
+      } catch (err) {
+        console.error('handleClientMedia error:', err)
+      }
     }
   })
 }
@@ -777,7 +861,7 @@ async function handleEditMessage(
   editMode.delete(userId)
   const { clientId, field } = edit
 
-  let value: string | Date | null = text.trim()
+  const value: string = text.trim()
 
   if (field === 'phone') {
     if (!/^\+?[0-9\s\-()]{7,20}$/.test(value)) {
@@ -805,13 +889,20 @@ async function handleEditMessage(
       await telegram.sendMessage(userId, '❌ Неверная дата.')
       return
     }
-    value = date
+    const encryptedDate = encryptDate(date)
+    await prisma.client.update({
+      where: { id: clientId },
+      data: { birthDate: encryptedDate },
+    })
+  } else {
+    const encryptedValue = (field === 'phone' || field === 'email')
+      ? encryptClientField(value)
+      : value
+    await prisma.client.update({
+      where: { id: clientId },
+      data: { [field]: encryptedValue },
+    })
   }
-
-  await prisma.client.update({
-    where: { id: clientId },
-    data: { [field]: value },
-  })
 
   const fieldLabel: Record<EditField, string> = {
     fullName: 'ФИО',
@@ -1087,8 +1178,9 @@ async function handleManagerReply(
 
   // ── Режим заметки ─────────────────────────────────────────────────────────
   if (noteMode.has(threadId)) {
-    const clientId = noteMode.get(threadId)!
+    const clientId = noteMode.get(threadId)
     noteMode.delete(threadId)
+    if (clientId == null) return
     await prisma.client.update({ where: { id: clientId }, data: { notes: text } })
     await sendToTopic(ctx.telegram, CRM_GROUP_ID, threadId, '✅ Заметка сохранена')
     return
@@ -1205,16 +1297,21 @@ async function handleWebAppOrder(
     await prisma.order.update({
       where: { id: orderId },
       data: { clientId: client.id },
-    }).catch(() => {})
+    }).catch((err) => console.error('[webhook] order.update clientId:', err))
   }
 
   if (client.telegramTopicId == null) {
     await createClientTopic(telegram, client.id, name)
     // Перечитываем клиента, чтобы получить актуальный telegramTopicId
-    client = (await prisma.client.findUnique({
+    const refreshed = await prisma.client.findUnique({
       where: { id: client.id },
       include: { segment: true },
-    }))!
+    })
+    if (!refreshed) {
+      console.error('[webhook] Client %d not found after topic creation', client.id)
+      return
+    }
+    client = refreshed
   }
 
   const itemLines = verifiedItems
