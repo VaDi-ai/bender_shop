@@ -21,16 +21,19 @@ type VariantWithProduct = ProductVariantModel & { product: ProductModel }
 export async function findVariantsByFilter(
   filterType: FilterType | string,
   filterValue: string,
+  tx?: typeof prisma,
 ): Promise<VariantWithProduct[]> {
+  const db = tx ?? prisma
+
   if (filterType === FilterType.category) {
-    return prisma.productVariant.findMany({
+    return db.productVariant.findMany({
       where: { product: { category: { name: filterValue } } },
       include: { product: true },
     })
   }
 
   if (filterType === FilterType.brand) {
-    return prisma.productVariant.findMany({
+    return db.productVariant.findMany({
       where: { product: { brand: filterValue } },
       include: { product: true },
     })
@@ -39,7 +42,7 @@ export async function findVariantsByFilter(
   if (filterType === FilterType.attribute) {
     const [key, val] = filterValue.split(':').map((s) => s.trim())
     try {
-      const results = await prisma.productVariant.findMany({
+      const results = await db.productVariant.findMany({
         where: { attributes: { path: [key], equals: val } },
         include: { product: true },
       })
@@ -56,7 +59,7 @@ export async function findVariantsByFilter(
 
   if (filterType === FilterType.products) {
     const ids = filterValue.split(',').map(Number).filter(Boolean)
-    return prisma.productVariant.findMany({
+    return db.productVariant.findMany({
       where: { productId: { in: ids } },
       include: { product: true },
     })
@@ -70,6 +73,9 @@ export async function findVariantsByFilter(
 export async function applyPromotion(promotionId: number): Promise<number> {
   // Read promotion and take updatedAt snapshot BEFORE the transaction
   const promo = await prisma.promotion.findUniqueOrThrow({ where: { id: promotionId } })
+  if (promo.isActive) {
+    throw new Error('Акция уже активна')
+  }
   const snapshotUpdatedAt = promo.updatedAt
 
   let variantCount = 0
@@ -81,7 +87,7 @@ export async function applyPromotion(promotionId: number): Promise<number> {
       throw new Error('Акция была изменена параллельно — повторите операцию')
     }
 
-    const variants = await findVariantsByFilter(promo.filterType, promo.filterValue)
+    const variants = await findVariantsByFilter(promo.filterType, promo.filterValue, tx as any)
     if (variants.length === 0) return
 
     // Сохраняем оригинальные цены (skipDuplicates — защита от повторного вызова)
@@ -98,13 +104,13 @@ export async function applyPromotion(promotionId: number): Promise<number> {
     for (const variant of variants) {
       const price = new Decimal(variant.price)
       const discountValue = new Decimal(promo.discountValue)
-      let newPrice: number
+      let discountedPrice: Decimal
       if (promo.discountType === DiscountType.percent) {
-        newPrice = price.mul(new Decimal(1).sub(discountValue.div(100))).toNumber()
+        discountedPrice = price.mul(new Decimal(1).sub(discountValue.div(100)))
       } else {
-        newPrice = price.sub(discountValue).toNumber()
+        discountedPrice = price.sub(discountValue)
       }
-      newPrice = Math.max(1, roundPrice(newPrice))
+      const newPrice = Math.max(1, roundPrice(discountedPrice.toNumber()))
       await tx.productVariant.update({
         where: { id: variant.id },
         data: { price: newPrice },

@@ -26,9 +26,11 @@ import { Telegram } from 'telegraf'
 import { prisma } from '../lib/prisma'
 
 const CRM_GROUP_ID = Number(process.env.CRM_GROUP_ID)
-const AVITO_SECRET = process.env.AVITO_WEBHOOK_SECRET ?? ''
+const AVITO_SECRET = process.env.AVITO_WEBHOOK_SECRET
 
-if (!process.env.AVITO_WEBHOOK_SECRET) console.warn('AVITO_WEBHOOK_SECRET not set')
+if (!AVITO_SECRET) {
+  console.error('AVITO_WEBHOOK_SECRET is required but not set — Avito webhook verification will reject all requests')
+}
 
 // Validate CRM_GROUP_ID at module load; if invalid, processing is skipped entirely.
 const CRM_GROUP_ID_VALID = Number.isFinite(CRM_GROUP_ID) && CRM_GROUP_ID !== 0
@@ -43,6 +45,7 @@ export class AvitoSignatureError extends Error {
 }
 
 function verifyAvitoSignature(rawBody: string | Buffer, signature: string | undefined): void {
+  if (!AVITO_SECRET) throw new AvitoSignatureError()
   if (!signature) throw new AvitoSignatureError()
   const expected = crypto
     .createHmac('sha256', AVITO_SECRET)

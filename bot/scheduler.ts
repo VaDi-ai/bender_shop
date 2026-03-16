@@ -16,7 +16,7 @@ import { prisma } from '../lib/prisma'
 
 const INTERVAL_MS = 10 * 60 * 1000 // 10 минут
 
-let isRunning = false
+export let isRunning = false
 
 type RemindPayload = {
   text?: string
@@ -114,5 +114,9 @@ async function executeTask(
     return
   }
 
+  if (action === 'ai_suggestion') {
+    // AI suggestions are serialized/restored separately, skip
+    return
+  }
   console.warn(`[Scheduler] Задача #${task.id}: неизвестный action="${action}"`)
 }

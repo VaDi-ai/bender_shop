@@ -19,6 +19,7 @@
 import { Context, Markup, Telegraf } from 'telegraf'
 import { prisma } from '../../lib/prisma'
 import { BroadcastType, MediaType } from '../../generated/prisma/client'
+import { getUserId } from '../helpers'
 
 // ─── Типы состояния ───────────────────────────────────────────────────────────
 
@@ -421,15 +422,15 @@ async function executeBroadcast(
 export function setupBroadcastHandlers(bot: Telegraf): void {
   // Главное меню рассылок
   bot.action('bcast:menu', async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
     await showBroadcastMenu(ctx)
   })
 
   // ── Всем клиентам ──────────────────────────────────────────────────────────
 
   bot.action('bcast:all', async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
-    const userId = ctx.from!.id
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
+    const userId = getUserId(ctx)
     const count = await prisma.client.count({
       where: { source: 'telegram', externalId: { not: null } },
     })
@@ -443,12 +444,12 @@ export function setupBroadcastHandlers(bot: Telegraf): void {
   // ── По тегу ────────────────────────────────────────────────────────────────
 
   bot.action('bcast:tags', async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
     await showTagsList(ctx)
   })
 
   bot.action(/^bcast:tag:(.+)$/, async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
     const tagName = ctx.match[1]
     const count = await prisma.client.count({
       where: { source: 'telegram', externalId: { not: null }, tags: { some: { name: tagName } } },
@@ -465,8 +466,8 @@ export function setupBroadcastHandlers(bot: Telegraf): void {
   })
 
   bot.action(/^bcast:tag_go:(.+)$/, async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
-    const userId = ctx.from!.id
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
+    const userId = getUserId(ctx)
     const tagName = ctx.match[1]
     const count = await prisma.client.count({
       where: { source: 'telegram', externalId: { not: null }, tags: { some: { name: tagName } } },
@@ -481,12 +482,12 @@ export function setupBroadcastHandlers(bot: Telegraf): void {
   // ── По сегменту ───────────────────────────────────────────────────────────
 
   bot.action('bcast:segs', async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
     await showSegmentsList(ctx)
   })
 
   bot.action(/^bcast:seg:(\d+)$/, async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
     const segId = parseInt(ctx.match[1], 10)
     const seg = await prisma.segment.findUnique({ where: { id: segId } })
     if (!seg) return await ctx.reply('Сегмент не найден.')
@@ -505,8 +506,8 @@ export function setupBroadcastHandlers(bot: Telegraf): void {
   })
 
   bot.action(/^bcast:seg_go:(\d+)$/, async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
-    const userId = ctx.from!.id
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
+    const userId = getUserId(ctx)
     const segId = parseInt(ctx.match[1], 10)
     const seg = await prisma.segment.findUnique({ where: { id: segId } })
     if (!seg) return await ctx.reply('Сегмент не найден.')
@@ -527,14 +528,14 @@ export function setupBroadcastHandlers(bot: Telegraf): void {
 
   // Выбор тега для фильтрации сегмента
   bot.action(/^bcast:seg_tag:(\d+)$/, async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
     const segId = parseInt(ctx.match[1], 10)
     await showTagsForSegment(ctx, segId)
   })
 
   bot.action(/^bcast:seg_tag_pick:(\d+):(.+)$/, async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
-    const userId = ctx.from!.id
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
+    const userId = getUserId(ctx)
     const segId = parseInt(ctx.match[1], 10)
     const tagName = ctx.match[2]
     const seg = await prisma.segment.findUnique({ where: { id: segId } })
@@ -563,15 +564,15 @@ export function setupBroadcastHandlers(bot: Telegraf): void {
   // ── История ────────────────────────────────────────────────────────────────
 
   bot.action('bcast:history', async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
     await showHistory(ctx)
   })
 
   // ── Отмена ─────────────────────────────────────────────────────────────────
 
   bot.action('bcast:cancel', async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
-    broadcastsState.delete(ctx.from!.id)
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
+    broadcastsState.delete(getUserId(ctx))
     await ctx.reply('Рассылка отменена.')
     await showBroadcastMenu(ctx)
   })
@@ -579,8 +580,8 @@ export function setupBroadcastHandlers(bot: Telegraf): void {
   // ── Предпросмотр: отправить ────────────────────────────────────────────────
 
   bot.action('bcast:send', async (ctx) => {
-    try { await ctx.answerCbQuery('Начинаю отправку…') } catch {}
-    const userId = ctx.from!.id
+    try { await ctx.answerCbQuery('Начинаю отправку…') } catch { /* ignore: answerCbQuery may fail if query expired */ }
+    const userId = getUserId(ctx)
     const state = broadcastsState.get(userId)
     if (!state || state.flow !== 'preview') {
       return await ctx.reply('Сессия истекла. Начните рассылку заново.')
@@ -592,8 +593,8 @@ export function setupBroadcastHandlers(bot: Telegraf): void {
   // ── Предпросмотр: изменить ─────────────────────────────────────────────────
 
   bot.action('bcast:edit', async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
-    const userId = ctx.from!.id
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
+    const userId = getUserId(ctx)
     const state = broadcastsState.get(userId)
     if (!state || state.flow !== 'preview') return
 

@@ -7,6 +7,10 @@ export type SecurityEvent =
   | 'rate_limit_exceeded'
   | 'invalid_order_data'
   | 'unauthorized_access'
+  | 'ai_key_changed'
+  | 'ai_mode_changed'
+  | 'maintenance_mode_toggled'
+  | 'security_log_purged'
 
 // ─── Ссылка на бот для реалтайм-алертов ──────────────────────────────────────
 
@@ -32,6 +36,10 @@ const EVENT_DESCRIPTIONS: Record<SecurityEvent, string> = {
   invalid_telegram_signature: '🔑 Запрос с неверной подписью Telegram',
   rate_limit_exceeded:        '⏳ Превышен лимит запросов',
   invalid_order_data:         '📋 Неверные данные заказа',
+  ai_key_changed:             '🔑 Изменён ключ API (OpenRouter)',
+  ai_mode_changed:            '🤖 Изменён режим AI-агента',
+  maintenance_mode_toggled:   '🔧 Переключён режим техработ',
+  security_log_purged:        '🗑️ Очищен лог безопасности',
 }
 
 const SENSITIVE_KEY_PATTERNS = ['token', 'key', 'hash', 'secret']

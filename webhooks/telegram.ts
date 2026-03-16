@@ -34,6 +34,7 @@ import {
 } from '../bot/ai/agent'
 import { logSecurityEvent } from '../lib/security-log'
 import { encryptClientField, decryptClientField, encryptDate, decryptDate } from '../lib/client-crypto'
+import { safeLog } from '../lib/logger'
 
 const CRM_GROUP_ID = Number(process.env.CRM_GROUP_ID)
 const ADMIN_IDS = (process.env.ADMIN_IDS ?? '').split(',').map((id) => Number(id.trim()))
@@ -614,7 +615,7 @@ export function setupClientHandlers(bot: Telegraf): void {
             await ctx.telegram.editMessageReplyMarkup(chatId, messageId, undefined, {
               inline_keyboard: [],
             })
-          } catch {}
+          } catch { /* ignore: message/markup may already be deleted */ }
         }
         return ctx.answerCbQuery('✅ Ответ отправлен клиенту')
       }
@@ -635,7 +636,7 @@ export function setupClientHandlers(bot: Telegraf): void {
             await ctx.telegram.editMessageReplyMarkup(chatId, messageId, undefined, {
               inline_keyboard: [],
             })
-          } catch {}
+          } catch { /* ignore: message/markup may already be deleted */ }
         }
 
         if (threadId) {
@@ -661,7 +662,7 @@ export function setupClientHandlers(bot: Telegraf): void {
             await ctx.telegram.editMessageReplyMarkup(chatId, messageId, undefined, {
               inline_keyboard: [],
             })
-          } catch {}
+          } catch { /* ignore: message/markup may already be deleted */ }
         }
         return ctx.answerCbQuery('❌ Предложение пропущено')
       }
@@ -1170,7 +1171,7 @@ async function handleManagerReply(
       )
       // Удаляем команду из топика
       if (messageId) {
-        try { await ctx.telegram.deleteMessage(CRM_GROUP_ID, messageId) } catch {}
+        try { await ctx.telegram.deleteMessage(CRM_GROUP_ID, messageId) } catch { /* ignore: message/markup may already be deleted */ }
       }
     }
     return
@@ -1259,13 +1260,13 @@ async function handleWebAppOrder(
 
   // Fetch server-verified prices from DB — never trust client-supplied items/total
   if (!orderId || orderId <= 0) {
-    console.warn('[handleWebAppOrder] Rejected order with missing/zero orderId from user', from.id)
+    safeLog('[handleWebAppOrder] Rejected order with missing/zero orderId', { userId: from.id } as any)
     return
   }
 
   const dbOrder = await prisma.order.findUnique({ where: { id: orderId }, include: { items: true } })
   if (!dbOrder) {
-    console.warn('[handleWebAppOrder] orderId not found in DB:', orderId, 'user:', from.id)
+    safeLog('[handleWebAppOrder] orderId not found in DB', { orderId, userId: from.id } as any)
     return
   }
 

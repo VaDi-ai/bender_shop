@@ -18,6 +18,7 @@ import { Context, Markup, Telegraf } from 'telegraf'
 import { prisma } from '../../lib/prisma'
 import { BroadcastType, DiscountType, FilterType } from '../../generated/prisma/client'
 import { applyPromotion, cancelPromotion, findVariantsByFilter, filterLabel } from '../../lib/promotions'
+import { getUserId } from '../helpers'
 
 // ─── Отправка с экспоненциальным откатом при 429 (аналогично broadcasts.ts) ───
 
@@ -451,7 +452,7 @@ async function sendPromoNotification(
       messageText: text,
       totalSent: sent,
       totalFailed: failed,
-      createdBy: String(ctx.from!.id),
+      createdBy: String(getUserId(ctx)),
     },
   })
 }
@@ -529,20 +530,20 @@ async function showDoneList(ctx: Context): Promise<void> {
 export function setupPromotionsHandlers(bot: Telegraf): void {
   // Меню
   bot.action('promo:menu', async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
     await showPromotionsMenu(ctx)
   })
 
   // Создать акцию
   bot.action('promo:create', async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
-    await askName(ctx, ctx.from!.id)
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
+    await askName(ctx, getUserId(ctx))
   })
 
   // Тип скидки
   bot.action(/^promo:dtype:(percent|fixed)$/, async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
-    const userId = ctx.from!.id
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
+    const userId = getUserId(ctx)
     const state = promotionsState.get(userId)
     if (!state || state.step !== 'discount_type') return
     const discountType = ctx.match[1] as DiscountType
@@ -551,8 +552,8 @@ export function setupPromotionsHandlers(bot: Telegraf): void {
 
   // Тип фильтра
   bot.action(/^promo:ftype:(category|brand|attribute|products)$/, async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
-    const userId = ctx.from!.id
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
+    const userId = getUserId(ctx)
     const state = promotionsState.get(userId)
     if (!state || state.step !== 'filter_type') return
     const ftype = ctx.match[1]
@@ -577,8 +578,8 @@ export function setupPromotionsHandlers(bot: Telegraf): void {
 
   // Выбор категории
   bot.action(/^promo:pick_cat:(.+)$/, async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
-    const userId = ctx.from!.id
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
+    const userId = getUserId(ctx)
     const state = promotionsState.get(userId)
     if (!state || state.step !== 'filter_category') return
     const catName = ctx.match[1]
@@ -593,8 +594,8 @@ export function setupPromotionsHandlers(bot: Telegraf): void {
 
   // Выбор бренда
   bot.action(/^promo:pick_brand:(.+)$/, async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
-    const userId = ctx.from!.id
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
+    const userId = getUserId(ctx)
     const state = promotionsState.get(userId)
     if (!state || state.step !== 'filter_brand') return
     const brand = ctx.match[1]
@@ -609,8 +610,8 @@ export function setupPromotionsHandlers(bot: Telegraf): void {
 
   // Переключение товара (чекбокс)
   bot.action(/^promo:toggle_prod:(\d+)$/, async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
-    const userId = ctx.from!.id
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
+    const userId = getUserId(ctx)
     const state = promotionsState.get(userId)
     if (!state || state.step !== 'filter_products') return
     const prodId = parseInt(ctx.match[1], 10)
@@ -623,12 +624,12 @@ export function setupPromotionsHandlers(bot: Telegraf): void {
 
   // Конкретные товары: готово
   bot.action('promo:products_done', async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
-    const userId = ctx.from!.id
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
+    const userId = getUserId(ctx)
     const state = promotionsState.get(userId)
     if (!state || state.step !== 'filter_products') return
     if (state.selectedProductIds.length === 0) {
-      try { await ctx.answerCbQuery('Выберите хотя бы один товар') } catch {}
+      try { await ctx.answerCbQuery('Выберите хотя бы один товар') } catch { /* ignore: answerCbQuery may fail if query expired */ }
       return
     }
     await askDates(ctx, userId, {
@@ -642,8 +643,8 @@ export function setupPromotionsHandlers(bot: Telegraf): void {
 
   // Сроки: указать
   bot.action('promo:set_dates', async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
-    const userId = ctx.from!.id
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
+    const userId = getUserId(ctx)
     const state = promotionsState.get(userId)
     if (!state || state.step !== 'dates') return
     promotionsState.set(userId, { ...state, step: 'dates_input' })
@@ -655,8 +656,8 @@ export function setupPromotionsHandlers(bot: Telegraf): void {
 
   // Сроки: без ограничений
   bot.action('promo:no_dates', async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
-    const userId = ctx.from!.id
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
+    const userId = getUserId(ctx)
     const state = promotionsState.get(userId)
     if (!state || state.step !== 'dates') return
     promotionsState.set(userId, { ...state, step: 'preview' })
@@ -665,44 +666,44 @@ export function setupPromotionsHandlers(bot: Telegraf): void {
 
   // Запуск без уведомления
   bot.action('promo:launch_silent', async (ctx) => {
-    try { await ctx.answerCbQuery('Запускаю акцию…') } catch {}
-    await launchPromotion(ctx, ctx.from!.id, false)
+    try { await ctx.answerCbQuery('Запускаю акцию…') } catch { /* ignore: answerCbQuery may fail if query expired */ }
+    await launchPromotion(ctx, getUserId(ctx), false)
   })
 
   // Запуск с рассылкой
   bot.action('promo:launch_notify', async (ctx) => {
-    try { await ctx.answerCbQuery('Запускаю акцию и рассылку…') } catch {}
-    await launchPromotion(ctx, ctx.from!.id, true)
+    try { await ctx.answerCbQuery('Запускаю акцию и рассылку…') } catch { /* ignore: answerCbQuery may fail if query expired */ }
+    await launchPromotion(ctx, getUserId(ctx), true)
   })
 
   // Редактировать (вернуться к началу)
   bot.action('promo:edit', async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
-    await askName(ctx, ctx.from!.id)
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
+    await askName(ctx, getUserId(ctx))
   })
 
   // Отмена
   bot.action('promo:cancel', async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
-    promotionsState.delete(ctx.from!.id)
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
+    promotionsState.delete(getUserId(ctx))
     await showPromotionsMenu(ctx)
   })
 
   // Список активных
   bot.action('promo:list_active', async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
     await showActiveList(ctx)
   })
 
   // Список завершённых
   bot.action('promo:list_done', async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
     await showDoneList(ctx)
   })
 
   // Статистика акции
   bot.action(/^promo:stat:(\d+)$/, async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
     const promoId = parseInt(ctx.match[1], 10)
     const promo = await prisma.promotion.findUnique({ where: { id: promoId } })
     if (!promo) return await ctx.reply('Акция не найдена.')
@@ -736,7 +737,7 @@ export function setupPromotionsHandlers(bot: Telegraf): void {
 
   // Подтверждение завершения
   bot.action(/^promo:confirm_cancel:(\d+)$/, async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
     const promoId = parseInt(ctx.match[1], 10)
     const promo = await prisma.promotion.findUnique({ where: { id: promoId } })
     if (!promo) return await ctx.reply('Акция не найдена.')
@@ -754,7 +755,7 @@ export function setupPromotionsHandlers(bot: Telegraf): void {
 
   // Выполнение завершения
   bot.action(/^promo:do_cancel:(\d+)$/, async (ctx) => {
-    try { await ctx.answerCbQuery('Завершаю акцию…') } catch {}
+    try { await ctx.answerCbQuery('Завершаю акцию…') } catch { /* ignore: answerCbQuery may fail if query expired */ }
     const promoId = parseInt(ctx.match[1], 10)
     const promo = await prisma.promotion.findUnique({ where: { id: promoId } })
     if (!promo) return await ctx.reply('Акция не найдена.')

@@ -18,6 +18,7 @@ import * as os from 'os'
 import { Context, Markup, Telegraf } from 'telegraf'
 import { prisma } from '../../lib/prisma'
 import { stockIn, stockOut, getStockHistory } from '../../lib/stock'
+import { getUserId } from '../helpers'
 
 // ─── Типы состояния ───────────────────────────────────────────────────────────
 
@@ -838,7 +839,7 @@ function regionToPhotoState(
 export function setupInventoryHandlers(bot: Telegraf): void {
   bot.action('inv:add', async (ctx) => {
     try { await ctx.answerCbQuery() } catch { /* ignore stale query */ }
-    const userId = ctx.from!.id
+    const userId = getUserId(ctx)
     inventoryState.set(userId, { flow: 'add', step: 'sku' })
     await ctx.reply(
       '➕ Добавление товара\n\nШаг 1 из 9 — введите артикул (SKU):',
@@ -867,7 +868,7 @@ export function setupInventoryHandlers(bot: Telegraf): void {
 
   bot.action(/^inv:stock_in:(\d+)$/, async (ctx) => {
     try { await ctx.answerCbQuery() } catch { /* ignore */ }
-    const userId = ctx.from!.id
+    const userId = getUserId(ctx)
     const variantId = parseInt((ctx.match as RegExpMatchArray)[1], 10)
     const variant = await prisma.productVariant.findUnique({
       where: { id: variantId }, include: { product: true },
@@ -888,7 +889,7 @@ export function setupInventoryHandlers(bot: Telegraf): void {
 
   bot.action(/^inv:stock_out:(\d+)$/, async (ctx) => {
     try { await ctx.answerCbQuery() } catch { /* ignore */ }
-    const userId = ctx.from!.id
+    const userId = getUserId(ctx)
     const variantId = parseInt((ctx.match as RegExpMatchArray)[1], 10)
     const variant = await prisma.productVariant.findUnique({
       where: { id: variantId }, include: { product: true },
@@ -916,7 +917,7 @@ export function setupInventoryHandlers(bot: Telegraf): void {
 
   bot.action('inv:category_add', async (ctx) => {
     try { await ctx.answerCbQuery() } catch { /* ignore stale query */ }
-    const userId = ctx.from!.id
+    const userId = getUserId(ctx)
     inventoryState.set(userId, { flow: 'category_add', step: 'name' })
     await ctx.reply(
       '➕ Новая категория\n\nВведите название:',
@@ -936,7 +937,7 @@ export function setupInventoryHandlers(bot: Telegraf): void {
 
   bot.action(/^inv:cat_banner:(\d+)$/, async (ctx) => {
     try { await ctx.answerCbQuery() } catch { /* ignore stale query */ }
-    const userId = ctx.from!.id
+    const userId = getUserId(ctx)
     const categoryId = parseInt((ctx.match as RegExpMatchArray)[1], 10)
     const cat = await prisma.category.findUnique({ where: { id: categoryId } })
     if (!cat) {
@@ -992,7 +993,7 @@ export function setupInventoryHandlers(bot: Telegraf): void {
 
   bot.action(/^inv:cat_add_textside:(left|right)$/, async (ctx) => {
     try { await ctx.answerCbQuery() } catch { /* ignore stale query */ }
-    const userId = ctx.from!.id
+    const userId = getUserId(ctx)
     const state = inventoryState.get(userId)
     if (!state || state.flow !== 'category_add' || state.step !== 'textSide') return
 
@@ -1021,7 +1022,7 @@ export function setupInventoryHandlers(bot: Telegraf): void {
 
   bot.action('inv:photo_done', async (ctx) => {
     try { await ctx.answerCbQuery() } catch { /* ignore stale query */ }
-    const userId = ctx.from!.id
+    const userId = getUserId(ctx)
     const state = inventoryState.get(userId)
     if (!state || state.flow !== 'add' || state.step !== 'photo') return
 
@@ -1053,7 +1054,7 @@ export function setupInventoryHandlers(bot: Telegraf): void {
 
   bot.action(/^inv:cat_select:(\d+)$/, async (ctx) => {
     try { await ctx.answerCbQuery() } catch { /* ignore stale query */ }
-    const userId = ctx.from!.id
+    const userId = getUserId(ctx)
     const state = inventoryState.get(userId)
     if (!state || state.flow !== 'add' || state.step !== 'category') return
 
@@ -1086,7 +1087,7 @@ export function setupInventoryHandlers(bot: Telegraf): void {
 
   bot.action('inv:cancel', async (ctx) => {
     try { await ctx.answerCbQuery() } catch { /* ignore stale query */ }
-    const userId = ctx.from!.id
+    const userId = getUserId(ctx)
     inventoryState.delete(userId)
     await ctx.reply('Отменено.', Markup.removeKeyboard())
     await showInventory(ctx)
@@ -1135,7 +1136,7 @@ export function setupInventoryHandlers(bot: Telegraf): void {
 
   bot.action('inv:import_file_start', async (ctx) => {
     try { await ctx.answerCbQuery() } catch { /* ignore */ }
-    const userId = ctx.from!.id
+    const userId = getUserId(ctx)
     inventoryState.set(userId, { flow: 'import_file', step: 'awaiting_file' })
     await ctx.reply(
       'Отправьте заполненный файл шаблона (.xlsx)',
@@ -1152,7 +1153,7 @@ export function setupInventoryHandlers(bot: Telegraf): void {
 
   bot.action(/^inv:cat_rename:(\d+)$/, async (ctx) => {
     try { await ctx.answerCbQuery() } catch { /* ignore stale query */ }
-    const userId = ctx.from!.id
+    const userId = getUserId(ctx)
     const categoryId = parseInt((ctx.match as RegExpMatchArray)[1], 10)
     const cat = await prisma.category.findUnique({ where: { id: categoryId } })
     if (!cat) {
@@ -1224,7 +1225,7 @@ export function setupInventoryHandlers(bot: Telegraf): void {
 
   bot.action(/^inv:variant_add:(\d+)$/, async (ctx) => {
     try { await ctx.answerCbQuery() } catch { /* ignore stale query */ }
-    const userId = ctx.from!.id
+    const userId = getUserId(ctx)
     const productId = parseInt((ctx.match as RegExpMatchArray)[1], 10)
     const product = await prisma.product.findUnique({ where: { id: productId } })
     inventoryState.set(userId, { flow: 'variant_add', step: 'sku', productId })
@@ -1306,7 +1307,7 @@ export function setupInventoryHandlers(bot: Telegraf): void {
 
   bot.action(/^inv:var_photo_add:(\d+)$/, async (ctx) => {
     try { await ctx.answerCbQuery() } catch { /* ignore stale query */ }
-    const userId = ctx.from!.id
+    const userId = getUserId(ctx)
     const variantId = parseInt((ctx.match as RegExpMatchArray)[1], 10)
     const variant = await prisma.productVariant.findUnique({ where: { id: variantId } })
     if (!variant) { await ctx.reply('❌ Вариант не найден.'); return }
@@ -1325,7 +1326,7 @@ export function setupInventoryHandlers(bot: Telegraf): void {
 
   bot.action(/^inv:var_photo_done_e:(\d+)$/, async (ctx) => {
     try { await ctx.answerCbQuery() } catch { /* ignore stale query */ }
-    const userId = ctx.from!.id
+    const userId = getUserId(ctx)
     const variantId = parseInt((ctx.match as RegExpMatchArray)[1], 10)
     const state = inventoryState.get(userId)
     const pending = state?.flow === 'variant_photo_edit' ? state.pendingPhotos : []
@@ -1364,7 +1365,7 @@ export function setupInventoryHandlers(bot: Telegraf): void {
 
   bot.action(/^inv:var_attr:(.+)$/, async (ctx) => {
     try { await ctx.answerCbQuery() } catch { /* ignore stale query */ }
-    const userId = ctx.from!.id
+    const userId = getUserId(ctx)
     const state = inventoryState.get(userId)
     if (!state || state.flow !== 'variant_add' || state.step !== 'attrs') return
     const value = decodeURIComponent((ctx.match as RegExpMatchArray)[1])
@@ -1416,8 +1417,8 @@ export function setupInventoryHandlers(bot: Telegraf): void {
   // ── Выбор региона при добавлении варианта ─────────────────────────────────
 
   bot.action(/^inv:var_region:(.+)$/, async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
-    const userId = ctx.from!.id
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
+    const userId = getUserId(ctx)
     const state = inventoryState.get(userId)
     if (!state || state.flow !== 'variant_add' || state.step !== 'region') return
     const regionCode = (ctx.match as RegExpMatchArray)[1]
@@ -1430,8 +1431,8 @@ export function setupInventoryHandlers(bot: Telegraf): void {
   })
 
   bot.action('inv:var_region_skip', async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
-    const userId = ctx.from!.id
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
+    const userId = getUserId(ctx)
     const state = inventoryState.get(userId)
     if (!state || state.flow !== 'variant_add' || state.step !== 'region') return
     const s = state as Extract<VariantAddFlow, { step: 'region' }>
@@ -1444,7 +1445,7 @@ export function setupInventoryHandlers(bot: Telegraf): void {
 
   bot.action('inv:var_photo_skip', async (ctx) => {
     try { await ctx.answerCbQuery() } catch { /* ignore stale query */ }
-    const userId = ctx.from!.id
+    const userId = getUserId(ctx)
     const state = inventoryState.get(userId)
     if (!state || state.flow !== 'variant_add' || state.step !== 'photo') return
     await saveVariant(ctx, userId, state as Extract<VariantAddFlow, { step: 'photo' }>)
@@ -1452,7 +1453,7 @@ export function setupInventoryHandlers(bot: Telegraf): void {
 
   bot.action('inv:var_photo_done', async (ctx) => {
     try { await ctx.answerCbQuery() } catch { /* ignore stale query */ }
-    const userId = ctx.from!.id
+    const userId = getUserId(ctx)
     const state = inventoryState.get(userId)
     if (!state || state.flow !== 'variant_add' || state.step !== 'photo') return
     await saveVariant(ctx, userId, state as Extract<VariantAddFlow, { step: 'photo' }>)
@@ -1468,7 +1469,7 @@ export function setupInventoryHandlers(bot: Telegraf): void {
 
   bot.action(/^inv:attr_add:(\d+)$/, async (ctx) => {
     try { await ctx.answerCbQuery() } catch { /* ignore stale query */ }
-    const userId = ctx.from!.id
+    const userId = getUserId(ctx)
     const productId = parseInt((ctx.match as RegExpMatchArray)[1], 10)
     inventoryState.set(userId, { flow: 'attr_add', step: 'name', productId })
     await ctx.reply(
@@ -1479,7 +1480,7 @@ export function setupInventoryHandlers(bot: Telegraf): void {
 
   bot.action(/^inv:attr_edit:(\d+):(.+)$/, async (ctx) => {
     try { await ctx.answerCbQuery() } catch { /* ignore stale query */ }
-    const userId = ctx.from!.id
+    const userId = getUserId(ctx)
     const m = ctx.match as RegExpMatchArray
     const productId = parseInt(m[1], 10)
     const attrName = m[2]
@@ -1517,7 +1518,7 @@ export function setupInventoryHandlers(bot: Telegraf): void {
 
   bot.action(/^inv:spec_add:(\d+)$/, async (ctx) => {
     try { await ctx.answerCbQuery() } catch { /* ignore stale query */ }
-    const userId = ctx.from!.id
+    const userId = getUserId(ctx)
     const productId = parseInt((ctx.match as RegExpMatchArray)[1], 10)
     inventoryState.set(userId, { flow: 'spec_add', step: 'input', productId })
     await ctx.reply(
@@ -1583,7 +1584,7 @@ export function setupInventoryHandlers(bot: Telegraf): void {
 
   bot.action(/^inv:prod_brand:(\d+)$/, async (ctx) => {
     try { await ctx.answerCbQuery() } catch { /* ignore stale query */ }
-    const userId = ctx.from!.id
+    const userId = getUserId(ctx)
     const productId = parseInt((ctx.match as RegExpMatchArray)[1], 10)
     const product = await prisma.product.findUnique({ where: { id: productId } })
     if (!product) return
@@ -1604,7 +1605,7 @@ export function setupInventoryHandlers(bot: Telegraf): void {
 
   bot.action(/^inv:prod_photo_add:(\d+)$/, async (ctx) => {
     try { await ctx.answerCbQuery() } catch { /* ignore stale query */ }
-    const userId = ctx.from!.id
+    const userId = getUserId(ctx)
     const productId = parseInt((ctx.match as RegExpMatchArray)[1], 10)
     inventoryState.set(userId, { flow: 'product_photo', step: 'uploading', productId, pendingPhotos: [] })
     await ctx.reply(
@@ -1615,7 +1616,7 @@ export function setupInventoryHandlers(bot: Telegraf): void {
 
   bot.action(/^inv:prod_photo_done:(\d+)$/, async (ctx) => {
     try { await ctx.answerCbQuery() } catch { /* ignore stale query */ }
-    const userId = ctx.from!.id
+    const userId = getUserId(ctx)
     const productId = parseInt((ctx.match as RegExpMatchArray)[1], 10)
     const state = inventoryState.get(userId)
     const pending = (state?.flow === 'product_photo' ? state.pendingPhotos : [])

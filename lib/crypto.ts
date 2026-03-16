@@ -64,10 +64,11 @@ function getKeyByVersion(version: number): Buffer {
  * Encrypts a UTF-8 string with AES-256-GCM using the latest key version.
  * Returns: "v{N}:{iv_hex}:{ciphertext_hex}:{authtag_hex}"
  */
-export function encrypt(text: string): string {
+export function encrypt(text: string, aad: string = ''): string {
   const { version, key } = getLatestKey()
   const iv = randomBytes(IV_BYTES)
   const cipher = createCipheriv(ALGORITHM, key, iv)
+  if (aad) cipher.setAAD(Buffer.from(aad, 'utf8'))
   const ciphertext = Buffer.concat([cipher.update(text, 'utf8'), cipher.final()])
   const tag = cipher.getAuthTag()
   return `v${version}:${iv.toString('hex')}:${ciphertext.toString('hex')}:${tag.toString('hex')}`
@@ -78,7 +79,7 @@ export function encrypt(text: string): string {
  * Supports versioned format "v{N}:..." and legacy format "iv:ct:tag" (treated as V1).
  * Throws if the format is invalid or authentication fails.
  */
-export function decrypt(value: string): string {
+export function decrypt(value: string, aad: string = ''): string {
   let key: Buffer
   let ivHex: string, ciphertextHex: string, tagHex: string
 
@@ -109,6 +110,7 @@ export function decrypt(value: string): string {
   }
 
   const decipher = createDecipheriv(ALGORITHM, key, iv)
+  if (aad) decipher.setAAD(Buffer.from(aad, 'utf8'))
   decipher.setAuthTag(tag)
   return decipher.update(ciphertext).toString('utf8') + decipher.final('utf8')
 }

@@ -13,6 +13,7 @@
 import { Context, Markup, Telegraf } from 'telegraf'
 import { prisma } from '../../lib/prisma'
 import { decryptClientField } from '../../lib/client-crypto'
+import { getUserId } from '../helpers'
 
 // ─── Типы состояния ───────────────────────────────────────────────────────────
 
@@ -337,8 +338,8 @@ export async function handleAnalyticsMessage(
 export function setupAnalyticsHandlers(bot: Telegraf): void {
   // Возврат к аналитике за сегодня
   bot.action('an:main', async (ctx) => {
-    try { await ctx.answerCbQuery('⏳ Загрузка...') } catch {}
-    const userId = ctx.from!.id
+    try { await ctx.answerCbQuery('⏳ Загрузка...') } catch { /* ignore: answerCbQuery may fail if query expired */ }
+    const userId = getUserId(ctx)
     analyticsState.delete(userId)
     const now = new Date()
     const from = new Date(now)
@@ -351,26 +352,26 @@ export function setupAnalyticsHandlers(bot: Telegraf): void {
 
   // Выбор периода для основного отчёта
   bot.action('an:period', async (ctx) => {
-    try { await ctx.answerCbQuery('⏳ Загрузка...') } catch {}
+    try { await ctx.answerCbQuery('⏳ Загрузка...') } catch { /* ignore: answerCbQuery may fail if query expired */ }
     await ctx.reply('📅 Выберите период:', periodButtons('main'))
   })
 
   // Выбор периода для топ товаров
   bot.action('an:tp', async (ctx) => {
-    try { await ctx.answerCbQuery('⏳ Загрузка...') } catch {}
+    try { await ctx.answerCbQuery('⏳ Загрузка...') } catch { /* ignore: answerCbQuery may fail if query expired */ }
     await ctx.reply('🏆 Топ товаров — выберите период:', periodButtons('top_prod'))
   })
 
   // Выбор периода для топ клиентов
   bot.action('an:tc', async (ctx) => {
-    try { await ctx.answerCbQuery('⏳ Загрузка...') } catch {}
+    try { await ctx.answerCbQuery('⏳ Загрузка...') } catch { /* ignore: answerCbQuery may fail if query expired */ }
     await ctx.reply('👑 Топ клиентов — выберите период:', periodButtons('top_cli'))
   })
 
   // Универсальный обработчик периода: an:p:{target}:{period}
   bot.action(/^an:p:(\w+):(\w+)$/, async (ctx) => {
-    try { await ctx.answerCbQuery('⏳ Загрузка...') } catch {}
-    const userId = ctx.from!.id
+    try { await ctx.answerCbQuery('⏳ Загрузка...') } catch { /* ignore: answerCbQuery may fail if query expired */ }
+    const userId = getUserId(ctx)
     const target = ctx.match[1] as 'main' | 'top_prod' | 'top_cli'
     const period = ctx.match[2]
 
@@ -398,7 +399,7 @@ export function setupAnalyticsHandlers(bot: Telegraf): void {
 
   // Список клиентов с пагинацией: an:cli:{page}
   bot.action(/^an:cli:(\d+)$/, async (ctx) => {
-    try { await ctx.answerCbQuery('⏳ Загрузка...') } catch {}
+    try { await ctx.answerCbQuery('⏳ Загрузка...') } catch { /* ignore: answerCbQuery may fail if query expired */ }
     const page = Number(ctx.match[1])
     const perPage = 10
 
@@ -437,7 +438,7 @@ export function setupAnalyticsHandlers(bot: Telegraf): void {
 
   // Отчёт по клиенту: an:c:{clientId}
   bot.action(/^an:c:(\d+)$/, async (ctx) => {
-    try { await ctx.answerCbQuery('⏳ Загрузка...') } catch {}
+    try { await ctx.answerCbQuery('⏳ Загрузка...') } catch { /* ignore: answerCbQuery may fail if query expired */ }
     const clientId = Number(ctx.match[1])
     await sendClientReport(ctx, clientId)
   })

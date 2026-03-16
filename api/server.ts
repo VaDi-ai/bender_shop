@@ -65,6 +65,14 @@ function validateTelegramWebApp(initData: string): { valid: boolean; userId?: nu
     if (expected.length !== received.length || !crypto.timingSafeEqual(expected, received))
       return { valid: false }
 
+    // Replay-attack prevention: reject tokens older than 5 minutes
+    const authDate = parseInt(params.get('auth_date') || '0', 10)
+    const now = Math.floor(Date.now() / 1000)
+    const MAX_AGE_SECONDS = 300
+    if (now - authDate > MAX_AGE_SECONDS) {
+      return { valid: false }
+    }
+
     const user = JSON.parse(params.get('user') || '{}')
     return { valid: true, userId: user.id }
   } catch {
@@ -110,7 +118,11 @@ export function startApiServer(bot?: Telegraf): void {
   }
 
   // ── Telegram webhook (production, before body parsers) ─────────────────────
+  // WEBHOOK_SECRET is validated at bot startup (bot/index.ts) for production
   if (bot) {
+    if (!process.env.WEBHOOK_SECRET) {
+      throw new Error('WEBHOOK_SECRET is required for Telegram webhook verification')
+    }
     app.post('/webhook/telegram', bot.webhookCallback('/webhook/telegram', { secretToken: process.env.WEBHOOK_SECRET }))
   }
 
@@ -122,12 +134,13 @@ export function startApiServer(bot?: Telegraf): void {
     contentSecurityPolicy: {
       directives: {
         defaultSrc: ["'self'"],
-        scriptSrc: ["'self'", "https://telegram.org", "'unsafe-inline'"],
-        scriptSrcAttr: ["'unsafe-hashes'", "'unsafe-inline'"],
+        scriptSrc: ["'self'", "https://telegram.org", "'unsafe-inline'"], // TODO: replace with nonce/hash when webapp migrates to Vite
+        scriptSrcAttr: ["'unsafe-inline'"], // for onclick handlers in webapp
         styleSrc: ["'self'", "'unsafe-inline'"],
         fontSrc: ["'self'", "data:"],
         frameSrc: ["'self'", "https://telegram.org"],
-        imgSrc: ["'self'", "data:", "https:"],
+        imgSrc: ["'self'", "data:", "https://api.telegram.org", "https://t.me"],
+        connectSrc: ["'self'", "https://bendershop.store", "https://api.telegram.org"],
       },
     },
   }))
@@ -213,7 +226,7 @@ export function startApiServer(bot?: Telegraf): void {
         new Promise<never>((_, reject) => setTimeout(() => reject(new Error('DB timeout')), 2000)),
       ])
       dbOk = true
-    } catch {}
+    } catch { /* ignore: health check — DB unreachable is reported via status */ }
 
     const botStatus = bot !== undefined ? 'ok' : 'unavailable'
     const status = dbOk ? 'ok' : 'error'
@@ -682,6 +695,7 @@ export function startApiServer(bot?: Telegraf): void {
         let totalDecimal = new Decimal(0)
         const enrichedItems: Array<{
           variantId: number
+          productId: number
           name: string
           price: string
           quantity: number
@@ -716,6 +730,7 @@ export function startApiServer(bot?: Telegraf): void {
 
           enrichedItems.push({
             variantId: variant.id,
+            productId: variant.productId,
             name: variant.product.name,
             price: variantPrice.toFixed(2),
             quantity: item.quantity,
@@ -759,6 +774,14 @@ export function startApiServer(bot?: Telegraf): void {
               inStock: item.newQty > 0,
             },
           })
+          // Decrement Product-level quantity/stock (mirrors atomicSale behavior)
+          await tx.product.update({
+            where: { id: item.productId },
+            data: {
+              quantity: { decrement: item.quantity },
+              stock: { decrement: item.quantity },
+            },
+          })
           await tx.stockMovement.create({
             data: {
               variantId: item.variantId,
@@ -768,6 +791,20 @@ export function startApiServer(bot?: Telegraf): void {
               createdBy: telegramId,
             },
           })
+          // Complete active reservation if exists
+          const activeReserve = await tx.reservation.findFirst({
+            where: { productId: item.productId, variantId: item.variantId, status: 'active' },
+          })
+          if (activeReserve) {
+            await tx.reservation.update({
+              where: { id: activeReserve.id },
+              data: { status: 'completed' },
+            })
+            await tx.product.update({
+              where: { id: item.productId },
+              data: { reserved: { decrement: Math.min(activeReserve.quantity, item.quantity) } },
+            })
+          }
         }
 
         return order

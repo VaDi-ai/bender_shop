@@ -16,7 +16,8 @@ import { humanizeApiError } from '../../lib/api-errors'
 import { setApiKeyValue } from '../../lib/api-key-store'
 import { getAIMode, setAIMode, getAIStats, reinitClient as reinitAgentClient, type AIMode } from '../ai/agent'
 import { reinitClient as reinitParserClient } from '../../lib/ai-parser'
-import type { SecurityEvent } from '../../lib/security-log'
+import { logSecurityEvent, type SecurityEvent } from '../../lib/security-log'
+import { getUserId } from '../helpers'
 
 // ─── Лейблы режимов ───────────────────────────────────────────────────────────
 
@@ -56,7 +57,8 @@ export async function handleSecurityMessage(
     securityState.delete(userId)
     if (text.trim() === 'CONFIRM') {
       const { count } = await prisma.securityLog.deleteMany()
-      console.log(`[security] Log cleared by admin ${userId} — ${count} record(s) deleted`)
+      console.log(`[security] Log cleared by admin — ${count} record(s) deleted`)
+      await logSecurityEvent('security_log_purged', { adminId: userId }, userId)
       await ctx.reply('🗑️ Лог безопасности очищен.')
       await showSecurityLog(ctx)
     } else {
@@ -275,6 +277,7 @@ export async function handleApiKeysMessage(
     reinitParserClient(text)
 
     apiKeysState.delete(userId)
+    await logSecurityEvent('ai_key_changed', { adminId: userId }, userId)
     await ctx.reply('✅ Ключ проверен и сохранён.')
     await showApiKeysMenu(ctx)
     return true
@@ -290,8 +293,10 @@ export function setupAISettingsHandlers(bot: Telegraf): void {
 
   for (const mode of modes) {
     bot.action(`ai:mode:${mode}`, async (ctx) => {
-      try { await ctx.answerCbQuery() } catch {}
+      try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
+      const userId = getUserId(ctx)
       await setAIMode(mode)
+      await logSecurityEvent('ai_mode_changed', { mode, adminId: userId }, userId)
       await showAISettings(ctx)
     })
   }
@@ -301,8 +306,8 @@ export function setupAISettingsHandlers(bot: Telegraf): void {
 
 export function setupApiKeysHandlers(bot: Telegraf): void {
   bot.action('api_key_update_openrouter', async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
-    const userId = ctx.from!.id
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
+    const userId = getUserId(ctx)
     const currentKey = process.env.OPENROUTER_API_KEY ?? ''
     const maskedKey = currentKey ? maskKey(currentKey) : '❌ не задан'
 
@@ -314,30 +319,30 @@ export function setupApiKeysHandlers(bot: Telegraf): void {
   })
 
   bot.action('api_key_cancel', async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
-    apiKeysState.delete(ctx.from!.id)
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
+    apiKeysState.delete(getUserId(ctx))
     await showApiKeysMenu(ctx)
   })
 
   bot.action('sec:view', async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
     await showSecurityLog(ctx)
   })
 
   bot.action('sec:refresh', async (ctx) => {
-    try { await ctx.answerCbQuery('Обновлено') } catch {}
+    try { await ctx.answerCbQuery('Обновлено') } catch { /* ignore: answerCbQuery may fail if query expired */ }
     await showSecurityLog(ctx)
   })
 
   bot.action('sec:clear', async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
-    const userId = ctx.from!.id
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
+    const userId = getUserId(ctx)
     securityState.set(userId, { flow: 'awaiting_sec_clear_confirm' })
     await ctx.reply('⚠️ Удалить весь лог безопасности? Напиши CONFIRM для подтверждения')
   })
 
   bot.action('sec:back', async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
     await showApiKeysMenu(ctx)
   })
 }

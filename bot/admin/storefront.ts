@@ -13,6 +13,7 @@
 import { Context, Markup, Telegraf } from 'telegraf'
 import { prisma } from '../../lib/prisma'
 import { getApiKeyValue, setApiKeyValue } from '../../lib/api-key-store'
+import { getUserId } from '../helpers'
 
 // ─── Типы состояния ───────────────────────────────────────────────────────────
 
@@ -110,19 +111,19 @@ async function showBanners(ctx: Context): Promise<void> {
 export function setupStorefrontHandlers(bot: Telegraf): void {
   // Главный экран
   bot.action('sf:back', async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
     await showStorefront(ctx)
   })
 
   // Бегущая строка
   bot.action('sf:marquee', async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
     await showMarquee(ctx)
   })
 
   bot.action('sf:marquee_edit', async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
-    const userId = ctx.from!.id
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
+    const userId = getUserId(ctx)
     storefrontState.set(userId, { flow: 'marquee', step: 'text' })
     await ctx.reply(
       'Введите новый текст бегущей строки:',
@@ -132,7 +133,7 @@ export function setupStorefrontHandlers(bot: Telegraf): void {
 
   // Сброс кэша
   bot.action('sf:cache_reset', async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
     const version = Date.now().toString()
     await setApiKeyValue('cache_version', version)
     await ctx.reply(`✅ Кэш сайта сброшен. Сайт обновится в течение 30 секунд.`)
@@ -141,13 +142,13 @@ export function setupStorefrontHandlers(bot: Telegraf): void {
 
   // Баннеры
   bot.action('sf:banners', async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
     await showBanners(ctx)
   })
 
   bot.action('sf:banner_add', async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
-    const userId = ctx.from!.id
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
+    const userId = getUserId(ctx)
     storefrontState.set(userId, { flow: 'banner_add', step: 'photo' })
     await ctx.reply(
       '🎠 Добавление баннера\n\nОтправьте фото баннера:',
@@ -157,7 +158,7 @@ export function setupStorefrontHandlers(bot: Telegraf): void {
 
   // Переместить вверх (уменьшить order)
   bot.action(/^sf:banner_up:(\d+)$/, async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
     const id = Number((ctx.match as RegExpMatchArray)[1])
     const banner = await prisma.heroBanner.findUnique({ where: { id } })
     if (banner && banner.order > 0) {
@@ -168,7 +169,7 @@ export function setupStorefrontHandlers(bot: Telegraf): void {
 
   // Переместить вниз (увеличить order)
   bot.action(/^sf:banner_down:(\d+)$/, async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
     const id = Number((ctx.match as RegExpMatchArray)[1])
     const banner = await prisma.heroBanner.findUnique({ where: { id } })
     if (banner) {
@@ -179,7 +180,7 @@ export function setupStorefrontHandlers(bot: Telegraf): void {
 
   // Удалить баннер
   bot.action(/^sf:banner_del:(\d+)$/, async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
     const id = Number((ctx.match as RegExpMatchArray)[1])
     await prisma.heroBanner.delete({ where: { id } })
     await ctx.reply(`🗑️ Баннер #${id} удалён.`)

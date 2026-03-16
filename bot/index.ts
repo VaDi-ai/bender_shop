@@ -2,7 +2,8 @@ import 'dotenv/config'
 import { Telegraf, Markup } from 'telegraf'
 import { message } from 'telegraf/filters'
 import { setupClientHandlers } from '../webhooks/telegram'
-import { startScheduler } from './scheduler'
+import { startScheduler, isRunning as schedulerRunning } from './scheduler'
+import { getUserId } from './helpers'
 import { startApiServer } from '../api/server'
 import { prisma, pool, initPrismaAlerts } from '../lib/prisma'
 import {
@@ -224,10 +225,13 @@ bot.on(message('new_chat_members'), async (ctx) => {
 
 // ─── Middleware: только для администраторов ────────────────────────────────────
 
+// Silent drop for non-admins: adminOnly() would reply "⛔ Нет доступа" to every
+// non-admin message, which is bad UX. Client messages are handled by setupClientHandlers
+// registered above. This middleware only gates the admin panel below.
 bot.use((ctx, next) => {
   const userId = ctx.from?.id
   if (!userId || !ADMIN_IDS.includes(userId)) {
-    return // silently ignore non-admin updates
+    return
   }
   return next()
 })
@@ -511,14 +515,18 @@ bot.hears('🔧 Техработы', async (ctx) => {
 })
 
 bot.action('maint:on', async (ctx) => {
-  try { await ctx.answerCbQuery() } catch {}
+  try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
+  const userId = getUserId(ctx)
   maintenanceMode = true
+  await logSecurityEvent('maintenance_mode_toggled', { enabled: true, adminId: userId }, userId)
   await ctx.reply('🔧 Техработы включены. Клиенты получат автоответ.')
 })
 
 bot.action('maint:off', async (ctx) => {
-  try { await ctx.answerCbQuery() } catch {}
+  try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
+  const userId = getUserId(ctx)
   maintenanceMode = false
+  await logSecurityEvent('maintenance_mode_toggled', { enabled: false, adminId: userId }, userId)
   await ctx.reply('✅ Техработы выключены. Бот работает в штатном режиме.')
 })
 
@@ -528,8 +536,8 @@ export { maintenanceMode }
 // ─── 🏠 Назад в главное меню ──────────────────────────────────────────────────
 
 bot.action('back:main', async (ctx) => {
-  try { await ctx.answerCbQuery() } catch {}
-  const userId = ctx.from!.id
+  try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
+  const userId = getUserId(ctx)
   inventoryState.delete(userId)
   broadcastsState.delete(userId)
   segmentsState.delete(userId)
@@ -834,6 +842,13 @@ async function gracefulShutdown(signal: string): Promise<void> {
   if (shuttingDown) return
   shuttingDown = true
   console.log(`[shutdown] ${signal} received`)
+
+  // Wait for scheduler tick to finish (max 10s)
+  const waitStart = Date.now()
+  while (schedulerRunning && Date.now() - waitStart < 10_000) {
+    await new Promise((r) => setTimeout(r, 200))
+  }
+
   await serializeAISuggestions()
   bot.stop(signal)
   await prisma.$disconnect()

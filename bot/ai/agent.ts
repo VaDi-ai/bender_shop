@@ -41,10 +41,17 @@ export type AIMode = 'manual' | 'semi' | 'auto' | 'off'
 export async function getAIMode(): Promise<AIMode> {
   try {
     const value = await getApiKeyValue('ai_mode')
-    if (value) return value as AIMode
+    if (value) {
+      const validModes: AIMode[] = ['off', 'manual', 'semi', 'auto']
+      if (validModes.includes(value as AIMode)) {
+        return value as AIMode
+      }
+      console.warn(`[ai] Invalid AI mode in DB: "${value}", falling back to "off"`)
+    }
     const envMode = process.env.AI_MODE as AIMode | undefined
     return envMode ?? 'off'
-  } catch {
+  } catch (err) {
+    console.error('[ai] getAIMode failed:', err)
     return 'off'
   }
 }
@@ -218,6 +225,12 @@ export async function generateAIResponse(
   clientId: number,
   newMessage: string,
 ): Promise<string> {
+  // Input length cap to prevent abuse
+  const MAX_INPUT_LENGTH = 4000
+  if (newMessage.length > MAX_INPUT_LENGTH) {
+    newMessage = newMessage.slice(0, MAX_INPUT_LENGTH)
+  }
+
   const client = getClient()
 
   // Загружаем товары в наличии
@@ -259,7 +272,7 @@ export async function generateAIResponse(
   // Web search если клиент спрашивает о конкретной технике
   let webSearchContext = ''
   if (isTechQuery(newMessage)) {
-    const searchResult = await searchTechInfo(newMessage)
+    const searchResult = await searchTechInfo(safeNewMessage)
     if (searchResult) {
       const cleanResult = sanitizeSearchResult(searchResult)
       webSearchContext = `\n\n<search_results>\n${cleanResult}\n</search_results>`

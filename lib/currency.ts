@@ -23,7 +23,7 @@ export async function getActiveCurrencies(): Promise<string[]> {
     const regions = await prisma.region.findMany({ where: { isActive: true } })
     const codes = [...new Set(regions.map((r) => r.currency))]
     return codes.length ? codes : ['HKD', 'EUR', 'CNY', 'USD', 'INR']
-  } catch {
+  } catch { /* ignore: fallback to defaults if DB unavailable */
     return ['HKD', 'EUR', 'CNY', 'USD', 'INR']
   }
 }
@@ -33,7 +33,7 @@ export async function getRegionCurrencyMap(): Promise<Record<string, string>> {
   try {
     const regions = await prisma.region.findMany({ where: { isActive: true } })
     return Object.fromEntries(regions.map((r) => [r.code, r.currency]))
-  } catch {
+  } catch { /* ignore: fallback to defaults if DB unavailable */
     return { HK: 'HKD', EU: 'EUR', IN: 'INR', RU: 'RUB', US: 'USD', CN: 'CNY' }
   }
 }

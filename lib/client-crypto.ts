@@ -7,15 +7,15 @@
 
 import { encrypt, decrypt, isEncrypted } from './crypto'
 
-export function encryptClientField(value: string | null | undefined): string | null {
+export function encryptClientField(value: string | null | undefined, fieldName?: string): string | null {
   if (value == null || value === '') return null
-  return encrypt(value)
+  return encrypt(value, fieldName ?? '')
 }
 
-export function decryptClientField(value: string | null | undefined): string | null {
+export function decryptClientField(value: string | null | undefined, fieldName?: string): string | null {
   if (value == null || value === '') return null
   if (!isEncrypted(value)) return value
-  return decrypt(value)
+  return decrypt(value, fieldName ?? '')
 }
 
 export function encryptDate(date: Date | null | undefined): string | null {

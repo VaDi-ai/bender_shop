@@ -34,9 +34,11 @@ import crypto from 'crypto'
 import type { Request, Response } from 'express'
 import { Telegram } from 'telegraf'
 
-const INSTAGRAM_SECRET = process.env.INSTAGRAM_APP_SECRET ?? ''
+const INSTAGRAM_SECRET = process.env.INSTAGRAM_APP_SECRET
 
-if (!process.env.INSTAGRAM_APP_SECRET) console.warn('INSTAGRAM_APP_SECRET not set')
+if (!INSTAGRAM_SECRET) {
+  console.error('INSTAGRAM_APP_SECRET is required but not set — Instagram webhook verification will reject all requests')
+}
 if (!process.env.INSTAGRAM_VERIFY_TOKEN) console.warn('INSTAGRAM_VERIFY_TOKEN not set')
 
 // ─── Webhook verification (GET) ───────────────────────────────────────────────
@@ -59,6 +61,7 @@ export class InstagramSignatureError extends Error {
 }
 
 function verifyInstagramSignature(rawBody: string | Buffer, signature: string | undefined): void {
+  if (!INSTAGRAM_SECRET) throw new InstagramSignatureError()
   if (!signature) throw new InstagramSignatureError()
   // Meta sends "sha256=<hex>"
   const provided = signature.startsWith('sha256=') ? signature.slice(7) : signature

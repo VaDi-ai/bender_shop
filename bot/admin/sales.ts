@@ -17,6 +17,7 @@ import { Context, Markup, Telegraf } from 'telegraf'
 import { prisma } from '../../lib/prisma'
 import { atomicSale, releaseReserve } from '../../lib/stock'
 import { getApiKeyValue } from '../../lib/api-key-store'
+import { getUserId } from '../helpers'
 
 const CRM_GROUP_ID = Number(process.env.CRM_GROUP_ID)
 
@@ -66,7 +67,7 @@ export const salesState = new Map<number, SalesFlowState>()
 // ─── Экспортируемые хелперы для запуска флоу из карточки клиента ─────────────
 
 export async function startSaleFlow(ctx: Context, clientId: number): Promise<void> {
-  const userId = ctx.from!.id
+  const userId = getUserId(ctx)
   salesState.set(userId, { flow: 'sale', step: 'product_method', clientId })
   await ctx.reply(
     '💰 Продажа — выберите способ выбора товара:',
@@ -79,7 +80,7 @@ export async function startSaleFlow(ctx: Context, clientId: number): Promise<voi
 }
 
 export async function startReserveFlow(ctx: Context, clientId: number): Promise<void> {
-  const userId = ctx.from!.id
+  const userId = getUserId(ctx)
   salesState.set(userId, { flow: 'reserve', step: 'product_method', clientId })
   await ctx.reply(
     '🔖 Резерв — выберите способ выбора товара:',
@@ -97,9 +98,9 @@ export function setupSalesHandlers(bot: Telegraf): void {
 
   // ── Продажа: выбор из списка (категории) ──────────────────────────────────
   bot.action(/^sale:list:(\d+)$/, async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
     const clientId = parseInt(ctx.match[1], 10)
-    const userId = ctx.from!.id
+    const userId = getUserId(ctx)
     const categories = await prisma.category.findMany({ orderBy: { name: 'asc' } })
     if (categories.length === 0) {
       salesState.delete(userId)
@@ -117,9 +118,9 @@ export function setupSalesHandlers(bot: Telegraf): void {
 
   // ── Резерв: выбор из списка ────────────────────────────────────────────────
   bot.action(/^res:list:(\d+)$/, async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
     const clientId = parseInt(ctx.match[1], 10)
-    const userId = ctx.from!.id
+    const userId = getUserId(ctx)
     const categories = await prisma.category.findMany({ orderBy: { name: 'asc' } })
     if (categories.length === 0) {
       salesState.delete(userId)
@@ -137,28 +138,28 @@ export function setupSalesHandlers(bot: Telegraf): void {
 
   // ── Продажа: выбор по SKU ──────────────────────────────────────────────────
   bot.action(/^sale:sku:(\d+)$/, async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
     const clientId = parseInt(ctx.match[1], 10)
-    const userId = ctx.from!.id
+    const userId = getUserId(ctx)
     salesState.set(userId, { flow: 'sale', step: 'product_sku', clientId })
     await ctx.reply('🔢 Введите SKU товара:')
   })
 
   // ── Резерв: выбор по SKU ───────────────────────────────────────────────────
   bot.action(/^res:sku:(\d+)$/, async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
     const clientId = parseInt(ctx.match[1], 10)
-    const userId = ctx.from!.id
+    const userId = getUserId(ctx)
     salesState.set(userId, { flow: 'reserve', step: 'product_sku', clientId })
     await ctx.reply('🔢 Введите SKU товара:')
   })
 
   // ── Продажа: выбор товара из категории ────────────────────────────────────
   bot.action(/^sale:cat:(\d+):(\d+)$/, async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
     const clientId = parseInt(ctx.match[1], 10)
     const categoryId = parseInt(ctx.match[2], 10)
-    const userId = ctx.from!.id
+    const userId = getUserId(ctx)
     const products = await prisma.product.findMany({
       where: { categoryId, isAvailable: true },
       orderBy: { name: 'asc' },
@@ -184,10 +185,10 @@ export function setupSalesHandlers(bot: Telegraf): void {
 
   // ── Резерв: выбор товара из категории ─────────────────────────────────────
   bot.action(/^res:cat:(\d+):(\d+)$/, async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
     const clientId = parseInt(ctx.match[1], 10)
     const categoryId = parseInt(ctx.match[2], 10)
-    const userId = ctx.from!.id
+    const userId = getUserId(ctx)
     const products = await prisma.product.findMany({
       where: { categoryId, isAvailable: true },
       orderBy: { name: 'asc' },
@@ -213,10 +214,10 @@ export function setupSalesHandlers(bot: Telegraf): void {
 
   // ── Продажа: выбран товар → шаг количество ────────────────────────────────
   bot.action(/^sale:pick:(\d+):(\d+)$/, async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
     const clientId = parseInt(ctx.match[1], 10)
     const productId = parseInt(ctx.match[2], 10)
-    const userId = ctx.from!.id
+    const userId = getUserId(ctx)
     const product = await prisma.product.findUnique({ where: { id: productId } })
     if (!product) return await ctx.reply('Товар не найден.')
     salesState.set(userId, { flow: 'sale', step: 'qty', clientId, productId, productName: product.name, price: Number(product.price) })
@@ -226,10 +227,10 @@ export function setupSalesHandlers(bot: Telegraf): void {
 
   // ── Резерв: выбран товар → шаг количество ─────────────────────────────────
   bot.action(/^res:pick:(\d+):(\d+)$/, async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
     const clientId = parseInt(ctx.match[1], 10)
     const productId = parseInt(ctx.match[2], 10)
-    const userId = ctx.from!.id
+    const userId = getUserId(ctx)
     const product = await prisma.product.findUnique({ where: { id: productId } })
     if (!product) return await ctx.reply('Товар не найден.')
     salesState.set(userId, { flow: 'reserve', step: 'qty', clientId, productId, productName: product.name, price: Number(product.price) })
@@ -239,8 +240,8 @@ export function setupSalesHandlers(bot: Telegraf): void {
 
   // ── Подтверждение продажи ──────────────────────────────────────────────────
   bot.action(/^sale:confirm:(\d+)$/, async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
-    const userId = ctx.from!.id
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
+    const userId = getUserId(ctx)
     const state = salesState.get(userId)
     if (!state || state.flow !== 'sale' || state.step !== 'confirm') return
     salesState.delete(userId)
@@ -264,14 +265,10 @@ export function setupSalesHandlers(bot: Telegraf): void {
         comment: `Продажа клиенту ${client.name}`,
       })
 
-      // Обновляем клиента
+      // Update lastPurchaseDate (totalRevenue/totalPurchases already incremented by atomicSale)
       await prisma.client.update({
         where: { id: clientId },
-        data: {
-          totalPurchases: { increment: 1 },
-          totalRevenue: { increment: total },
-          lastPurchaseDate: new Date(),
-        },
+        data: { lastPurchaseDate: new Date() },
       })
 
       // Если продажа закрывает активный резерв — завершить его и освободить reserved
@@ -297,8 +294,8 @@ export function setupSalesHandlers(bot: Telegraf): void {
 
   // ── Подтверждение резерва ──────────────────────────────────────────────────
   bot.action(/^res:confirm:(\d+)$/, async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
-    const userId = ctx.from!.id
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
+    const userId = getUserId(ctx)
     const state = salesState.get(userId)
     if (!state || state.flow !== 'reserve' || state.step !== 'confirm') return
     salesState.delete(userId)
@@ -349,29 +346,29 @@ export function setupSalesHandlers(bot: Telegraf): void {
 
   // ── Отмена ─────────────────────────────────────────────────────────────────
   bot.action('sale:cancel', async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
-    salesState.delete(ctx.from!.id)
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
+    salesState.delete(getUserId(ctx))
     await ctx.reply('Продажа отменена.')
   })
 
   bot.action('res:cancel', async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
-    salesState.delete(ctx.from!.id)
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
+    salesState.delete(getUserId(ctx))
     await ctx.reply('Резерв отменён.')
   })
 
   // ── Флоу без привязки к клиенту (из топика продаж) ────────────────────────
 
   bot.action('sales_topic:new_sale', async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
-    const userId = ctx.from!.id
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
+    const userId = getUserId(ctx)
     salesState.set(userId, { flow: 'sale_nc', step: 'ask_client' })
     await ctx.reply('💰 Новая продажа\n\nВведите имя или телефон клиента:')
   })
 
   bot.action('sales_topic:new_reserve', async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
-    const userId = ctx.from!.id
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
+    const userId = getUserId(ctx)
     salesState.set(userId, { flow: 'reserve_nc', step: 'ask_client' })
     await ctx.reply('🔖 Новый резерв\n\nВведите имя или телефон клиента:')
   })
@@ -379,8 +376,8 @@ export function setupSalesHandlers(bot: Telegraf): void {
   // ── Выбор метода для sale_nc / reserve_nc ─────────────────────────────────
 
   bot.action(/^sale_nc:list$/, async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
-    const userId = ctx.from!.id
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
+    const userId = getUserId(ctx)
     const state = salesState.get(userId)
     if (!state || state.flow !== 'sale_nc') return
     const clientName = (state as Extract<SaleNoClientStep, { step: 'product_method' }>).clientName
@@ -400,8 +397,8 @@ export function setupSalesHandlers(bot: Telegraf): void {
   })
 
   bot.action(/^res_nc:list$/, async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
-    const userId = ctx.from!.id
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
+    const userId = getUserId(ctx)
     const state = salesState.get(userId)
     if (!state || state.flow !== 'reserve_nc') return
     const clientName = (state as Extract<ReserveNoClientStep, { step: 'product_method' }>).clientName
@@ -421,8 +418,8 @@ export function setupSalesHandlers(bot: Telegraf): void {
   })
 
   bot.action(/^sale_nc:sku$/, async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
-    const userId = ctx.from!.id
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
+    const userId = getUserId(ctx)
     const state = salesState.get(userId)
     if (!state || state.flow !== 'sale_nc') return
     const clientName = (state as Extract<SaleNoClientStep, { step: 'product_method' }>).clientName
@@ -431,8 +428,8 @@ export function setupSalesHandlers(bot: Telegraf): void {
   })
 
   bot.action(/^res_nc:sku$/, async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
-    const userId = ctx.from!.id
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
+    const userId = getUserId(ctx)
     const state = salesState.get(userId)
     if (!state || state.flow !== 'reserve_nc') return
     const clientName = (state as Extract<ReserveNoClientStep, { step: 'product_method' }>).clientName
@@ -442,8 +439,8 @@ export function setupSalesHandlers(bot: Telegraf): void {
 
   // ── sale_nc: категория → товары ────────────────────────────────────────────
   bot.action(/^sale_nc:cat:(\d+)$/, async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
-    const userId = ctx.from!.id
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
+    const userId = getUserId(ctx)
     const state = salesState.get(userId)
     if (!state || state.flow !== 'sale_nc') return
     const clientName = (state as Extract<SaleNoClientStep, { step: 'category' }>).clientName
@@ -463,8 +460,8 @@ export function setupSalesHandlers(bot: Telegraf): void {
   })
 
   bot.action(/^res_nc:cat:(\d+)$/, async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
-    const userId = ctx.from!.id
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
+    const userId = getUserId(ctx)
     const state = salesState.get(userId)
     if (!state || state.flow !== 'reserve_nc') return
     const clientName = (state as Extract<ReserveNoClientStep, { step: 'category' }>).clientName
@@ -485,8 +482,8 @@ export function setupSalesHandlers(bot: Telegraf): void {
 
   // ── sale_nc: выбран товар → количество ────────────────────────────────────
   bot.action(/^sale_nc:pick:(\d+)$/, async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
-    const userId = ctx.from!.id
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
+    const userId = getUserId(ctx)
     const state = salesState.get(userId)
     if (!state || state.flow !== 'sale_nc') return
     const clientName = (state as Extract<SaleNoClientStep, { step: 'product_pick' }>).clientName
@@ -499,8 +496,8 @@ export function setupSalesHandlers(bot: Telegraf): void {
   })
 
   bot.action(/^res_nc:pick:(\d+)$/, async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
-    const userId = ctx.from!.id
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
+    const userId = getUserId(ctx)
     const state = salesState.get(userId)
     if (!state || state.flow !== 'reserve_nc') return
     const clientName = (state as Extract<ReserveNoClientStep, { step: 'product_pick' }>).clientName
@@ -514,8 +511,8 @@ export function setupSalesHandlers(bot: Telegraf): void {
 
   // ── sale_nc: подтверждение ─────────────────────────────────────────────────
   bot.action(/^sale_nc:confirm$/, async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
-    const userId = ctx.from!.id
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
+    const userId = getUserId(ctx)
     const state = salesState.get(userId)
     if (!state || state.flow !== 'sale_nc' || state.step !== 'confirm') return
     salesState.delete(userId)
@@ -546,8 +543,8 @@ export function setupSalesHandlers(bot: Telegraf): void {
 
   // ── res_nc: подтверждение ──────────────────────────────────────────────────
   bot.action(/^res_nc:confirm$/, async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
-    const userId = ctx.from!.id
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
+    const userId = getUserId(ctx)
     const state = salesState.get(userId)
     if (!state || state.flow !== 'reserve_nc' || state.step !== 'confirm') return
     salesState.delete(userId)
@@ -597,7 +594,7 @@ export function setupSalesHandlers(bot: Telegraf): void {
 
   // ── Завершить резерв (выдан) ───────────────────────────────────────────────
   bot.action(/^res:do_complete:(\d+)$/, async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
     const reservationId = parseInt(ctx.match[1], 10)
     try {
       const reservation = await prisma.reservation.findUnique({ where: { id: reservationId } })
@@ -615,7 +612,7 @@ export function setupSalesHandlers(bot: Telegraf): void {
 
   // ── Отменить резерв ────────────────────────────────────────────────────────
   bot.action(/^res:do_cancel:(\d+)$/, async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
     const reservationId = parseInt(ctx.match[1], 10)
     try {
       const reservation = await prisma.reservation.findUnique({ where: { id: reservationId } })
@@ -857,8 +854,8 @@ export async function handleSalesMessage(
 
 export function registerSkipCommentHandlers(bot: Telegraf): void {
   bot.action(/^res:skip_comment:(\d+)$/, async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
-    const userId = ctx.from!.id
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
+    const userId = getUserId(ctx)
     const state = salesState.get(userId)
     if (!state || state.flow !== 'reserve' || state.step !== 'comment') return
     const { clientId, productId, productName, price, qty } = state
@@ -874,8 +871,8 @@ export function registerSkipCommentHandlers(bot: Telegraf): void {
   })
 
   bot.action('res_nc:skip_comment', async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
-    const userId = ctx.from!.id
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
+    const userId = getUserId(ctx)
     const state = salesState.get(userId)
     if (!state || state.flow !== 'reserve_nc' || state.step !== 'comment') return
     const { clientName, productId, productName, price, qty } = state

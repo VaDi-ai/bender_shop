@@ -15,6 +15,7 @@
 
 import { Context, Markup, Telegraf } from 'telegraf'
 import { prisma } from '../../lib/prisma'
+import { getUserId } from '../helpers'
 
 // ─── Типы состояния ───────────────────────────────────────────────────────────
 
@@ -74,14 +75,14 @@ export async function showSegments(ctx: Context): Promise<void> {
 export function setupSegmentHandlers(bot: Telegraf): void {
   // Список сегментов (inline-кнопка из аналитики)
   bot.action('segs:list', async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
     await showSegments(ctx)
   })
 
   // Начать переименование
   bot.action(/^segs:rename:(\d+)$/, async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
-    const userId = ctx.from!.id
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
+    const userId = getUserId(ctx)
     const segmentId = parseInt(ctx.match[1], 10)
     const seg = await prisma.segment.findUnique({ where: { id: segmentId } })
     if (!seg) return await ctx.reply('Сегмент не найден.')
@@ -92,7 +93,7 @@ export function setupSegmentHandlers(bot: Telegraf): void {
 
   // Подтверждение удаления
   bot.action(/^segs:del_confirm:(\d+)$/, async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
     const segmentId = parseInt(ctx.match[1], 10)
 
     const [seg, defaultSeg] = await Promise.all([
@@ -129,7 +130,7 @@ export function setupSegmentHandlers(bot: Telegraf): void {
 
   // Подтверждённое удаление
   bot.action(/^segs:del:(\d+)$/, async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
     const segmentId = parseInt(ctx.match[1], 10)
 
     const seg = await prisma.segment.findUnique({ where: { id: segmentId } })
@@ -151,16 +152,16 @@ export function setupSegmentHandlers(bot: Telegraf): void {
 
   // Начать добавление
   bot.action('segs:add', async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
-    const userId = ctx.from!.id
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
+    const userId = getUserId(ctx)
     segmentsState.set(userId, { flow: 'add_name' })
     await ctx.reply('Введите название нового сегмента:')
   })
 
   // Выбор цвета (вызывается из handleSegmentMessage после ввода названия)
   bot.action(/^segs:color:(.+)$/, async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
-    const userId = ctx.from!.id
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
+    const userId = getUserId(ctx)
     const state = segmentsState.get(userId)
 
     if (!state || state.flow !== 'add_color') {

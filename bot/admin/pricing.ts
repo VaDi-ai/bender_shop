@@ -18,6 +18,7 @@ import {
   parseCurrencyRates as aiParseCurrencyRates,
   type AIParsedRate,
 } from '../../lib/ai-parser'
+import { getUserId } from '../helpers'
 
 // ─── Типы ─────────────────────────────────────────────────────────────────────
 
@@ -856,27 +857,27 @@ export function setupPricingHandlers(bot: Telegraf): void {
   // ── Навигация ──────────────────────────────────────────────────────────────
 
   bot.action('pricing:menu', async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
-    pricingState.delete(ctx.from!.id)
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
+    pricingState.delete(getUserId(ctx))
     await showPricingMenu(ctx)
   })
 
   bot.action('pricing:cancel', async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
-    pricingState.delete(ctx.from!.id)
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
+    pricingState.delete(getUserId(ctx))
     await showPricingMenu(ctx)
   })
 
   bot.action('pricing:history', async (ctx) => {
-    try { await ctx.answerCbQuery('⏳ Загрузка...') } catch {}
+    try { await ctx.answerCbQuery('⏳ Загрузка...') } catch { /* ignore: answerCbQuery may fail if query expired */ }
     await showHistory(ctx)
   })
 
   // ── Из сообщения ───────────────────────────────────────────────────────────
 
   bot.action('pricing:msg', async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
-    pricingState.set(ctx.from!.id, { flow: 'awaiting_message' })
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
+    pricingState.set(getUserId(ctx), { flow: 'awaiting_message' })
     await ctx.reply(
       'Перешлите сообщение от поставщика или вставьте текст с ценами.\n\n' +
       'Формат:\niPhone 17 Pro 256 Silver 🇭🇰 - 122.000₽\niPhone 16 256 Black 🇮🇳 - 68.500₽',
@@ -887,7 +888,7 @@ export function setupPricingHandlers(bot: Telegraf): void {
   // ── По курсу валют ─────────────────────────────────────────────────────────
 
   bot.action('pricing:rate', async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
     await ctx.reply(
       '💱 По курсу валют',
       Markup.inlineKeyboard([
@@ -899,8 +900,8 @@ export function setupPricingHandlers(bot: Telegraf): void {
   })
 
   bot.action('pricing:rate_update', async (ctx) => {
-    try { await ctx.answerCbQuery('⏳ Обновляю…') } catch {}
-    const userId = ctx.from!.id
+    try { await ctx.answerCbQuery('⏳ Обновляю…') } catch { /* ignore: answerCbQuery may fail if query expired */ }
+    const userId = getUserId(ctx)
     await ctx.reply('⏳ Получаю актуальные курсы с ЦБ РФ…')
     try {
       const changes = await updateCurrencyRates()
@@ -918,8 +919,8 @@ export function setupPricingHandlers(bot: Telegraf): void {
 
   // Выбор конкретного региона
   bot.action(/^pricing:cadj_region:(.+)$/, async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
-    const userId = ctx.from!.id
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
+    const userId = getUserId(ctx)
     const regionCode = ctx.match[1]
     const state = pricingState.get(userId)
     if (!state || state.flow !== 'cadj_select') return
@@ -943,8 +944,8 @@ export function setupPricingHandlers(bot: Telegraf): void {
   })
 
   bot.action('pricing:cadj_region_edit_pct', async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
-    const userId = ctx.from!.id
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
+    const userId = getUserId(ctx)
     const state = pricingState.get(userId)
     if (!state || state.flow !== 'cadj_region_confirm') return
     pricingState.set(userId, { flow: 'cadj_region_input_pct', changes: state.changes, region: state.region, currency: state.currency })
@@ -955,8 +956,8 @@ export function setupPricingHandlers(bot: Telegraf): void {
   })
 
   bot.action('pricing:cadj_region_apply', async (ctx) => {
-    try { await ctx.answerCbQuery('⏳ Считаю…') } catch {}
-    const userId = ctx.from!.id
+    try { await ctx.answerCbQuery('⏳ Считаю…') } catch { /* ignore: answerCbQuery may fail if query expired */ }
+    const userId = getUserId(ctx)
     const state = pricingState.get(userId)
     if (!state || state.flow !== 'cadj_region_confirm') return
     await showCadjRegionPreview(ctx, userId, state.region, state.currency, state.pct, state.changes)
@@ -964,14 +965,14 @@ export function setupPricingHandlers(bot: Telegraf): void {
 
   // Предпросмотр корректировки региона
   bot.action('pricing:cadj_region_preview_apply', async (ctx) => {
-    try { await ctx.answerCbQuery('⏳ Применяю…') } catch {}
-    await applyChanges(ctx, ctx.from!.id)
+    try { await ctx.answerCbQuery('⏳ Применяю…') } catch { /* ignore: answerCbQuery may fail if query expired */ }
+    await applyChanges(ctx, getUserId(ctx))
   })
 
   // Изменить % из экрана предпросмотра одного региона
   bot.action('pricing:cadj_region_edit_pct2', async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
-    const userId = ctx.from!.id
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
+    const userId = getUserId(ctx)
     const state = pricingState.get(userId)
     if (!state || state.flow !== 'preview') return
     // Extract region/currency from label: "🇭🇰 HK курс +1.26%"
@@ -989,8 +990,8 @@ export function setupPricingHandlers(bot: Telegraf): void {
 
   // Весь сток
   bot.action('pricing:cadj_all', async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
-    const userId = ctx.from!.id
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
+    const userId = getUserId(ctx)
     const state = pricingState.get(userId)
     if (!state || state.flow !== 'cadj_select') return
     pricingState.set(userId, { flow: 'cadj_all_review', changes: state.changes, overrides: {} })
@@ -998,8 +999,8 @@ export function setupPricingHandlers(bot: Telegraf): void {
   })
 
   bot.action(/^pricing:cadj_all_edit:(.+)$/, async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
-    const userId = ctx.from!.id
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
+    const userId = getUserId(ctx)
     const regionCode = ctx.match[1]
     const state = pricingState.get(userId)
     if (!state || state.flow !== 'cadj_all_review') return
@@ -1016,8 +1017,8 @@ export function setupPricingHandlers(bot: Telegraf): void {
   })
 
   bot.action('pricing:cadj_all_back', async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
-    const userId = ctx.from!.id
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
+    const userId = getUserId(ctx)
     const state = pricingState.get(userId)
     if (!state || (state.flow !== 'cadj_all_review' && state.flow !== 'cadj_all_input_pct')) return
     const changes = state.changes
@@ -1027,8 +1028,8 @@ export function setupPricingHandlers(bot: Telegraf): void {
   })
 
   bot.action('pricing:cadj_all_apply', async (ctx) => {
-    try { await ctx.answerCbQuery('⏳ Считаю…') } catch {}
-    const userId = ctx.from!.id
+    try { await ctx.answerCbQuery('⏳ Считаю…') } catch { /* ignore: answerCbQuery may fail if query expired */ }
+    const userId = getUserId(ctx)
     const state = pricingState.get(userId)
     if (!state || state.flow !== 'cadj_all_review') return
     const regionMap = await getRegionCurrencyMap()
@@ -1074,8 +1075,8 @@ export function setupPricingHandlers(bot: Telegraf): void {
 
   // Выбор вручную
   bot.action('pricing:cadj_manual', async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
-    const userId = ctx.from!.id
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
+    const userId = getUserId(ctx)
     const state = pricingState.get(userId)
     if (!state || state.flow !== 'cadj_select') return
     pricingState.set(userId, { flow: 'cadj_manual_select', changes: state.changes, selected: [] })
@@ -1083,8 +1084,8 @@ export function setupPricingHandlers(bot: Telegraf): void {
   })
 
   bot.action(/^pricing:cadj_toggle:(.+)$/, async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
-    const userId = ctx.from!.id
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
+    const userId = getUserId(ctx)
     const regionCode = ctx.match[1]
     const state = pricingState.get(userId)
     if (!state || state.flow !== 'cadj_manual_select') return
@@ -1096,8 +1097,8 @@ export function setupPricingHandlers(bot: Telegraf): void {
   })
 
   bot.action('pricing:cadj_manual_done', async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
-    const userId = ctx.from!.id
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
+    const userId = getUserId(ctx)
     const state = pricingState.get(userId)
     if (!state || state.flow !== 'cadj_manual_select' || !state.selected.length) {
       await ctx.reply('Выберите хотя бы один регион.')
@@ -1130,8 +1131,8 @@ export function setupPricingHandlers(bot: Telegraf): void {
   })
 
   bot.action('pricing:cadj_use_rate_pct', async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
-    const userId = ctx.from!.id
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
+    const userId = getUserId(ctx)
     const state = pricingState.get(userId)
     if (!state || state.flow !== 'cadj_manual_input_pct') return
     const change = state.changes.find((c) => c.currency === state.currentCurrency)
@@ -1141,8 +1142,8 @@ export function setupPricingHandlers(bot: Telegraf): void {
 
   // Выбор валюты после ввода курса (старый флоу сообщения поставщика)
   bot.action(/^pricing:rate_cur:(.+)$/, async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
-    const userId = ctx.from!.id
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
+    const userId = getUserId(ctx)
     const state = pricingState.get(userId)
     if (!state || state.flow !== 'awaiting_currency') return
     const currency = (ctx.match as RegExpMatchArray)[1]
@@ -1157,8 +1158,8 @@ export function setupPricingHandlers(bot: Telegraf): void {
   })
 
   bot.action('pricing:rate_cur_all', async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
-    const userId = ctx.from!.id
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
+    const userId = getUserId(ctx)
     const state = pricingState.get(userId)
     if (!state || state.flow !== 'awaiting_currency') return
     pricingState.set(userId, { flow: 'awaiting_message', rate: state.rate })
@@ -1170,8 +1171,8 @@ export function setupPricingHandlers(bot: Telegraf): void {
 
   // Снять авто-фильтр в превью
   bot.action('pricing:unfilter_region', async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
-    const userId = ctx.from!.id
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
+    const userId = getUserId(ctx)
     const state = pricingState.get(userId)
     if (!state || state.flow !== 'preview' || !state.allPendingVariants) return
     pricingState.set(userId, {
@@ -1186,7 +1187,7 @@ export function setupPricingHandlers(bot: Telegraf): void {
   // ── Из файла Excel ─────────────────────────────────────────────────────────
 
   bot.action('pricing:file', async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
     await ctx.reply(
       '📊 Обновление цен из файла Excel',
       Markup.inlineKeyboard([
@@ -1198,7 +1199,7 @@ export function setupPricingHandlers(bot: Telegraf): void {
   })
 
   bot.action('pricing:file_dl', async (ctx) => {
-    try { await ctx.answerCbQuery('⏳ Генерирую...') } catch {}
+    try { await ctx.answerCbQuery('⏳ Генерирую...') } catch { /* ignore: answerCbQuery may fail if query expired */ }
     await ctx.reply('⏳ Формирую прайс-лист…')
     try {
       const port = process.env.API_PORT ?? '3000'
@@ -1216,8 +1217,8 @@ export function setupPricingHandlers(bot: Telegraf): void {
   })
 
   bot.action('pricing:file_ul', async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
-    pricingState.set(ctx.from!.id, { flow: 'awaiting_file' })
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
+    pricingState.set(getUserId(ctx), { flow: 'awaiting_file' })
     await ctx.reply(
       'Загрузите заполненный файл прайс-листа (xlsx).\nЗаполните только колонку «Новая цена».',
       Markup.inlineKeyboard([[Markup.button.callback('❌ Отмена', 'pricing:cancel')]]),
@@ -1227,24 +1228,24 @@ export function setupPricingHandlers(bot: Telegraf): void {
   // ── Точечное редактирование ────────────────────────────────────────────────
 
   bot.action('pricing:manual', async (ctx) => {
-    try { await ctx.answerCbQuery('⏳ Загрузка...') } catch {}
-    await showManualProductList(ctx, ctx.from!.id, 0)
+    try { await ctx.answerCbQuery('⏳ Загрузка...') } catch { /* ignore: answerCbQuery may fail if query expired */ }
+    await showManualProductList(ctx, getUserId(ctx), 0)
   })
 
   bot.action(/^pricing:man_page:(\d+)$/, async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
     const page = parseInt(ctx.match[1], 10)
-    await showManualProductList(ctx, ctx.from!.id, page)
+    await showManualProductList(ctx, getUserId(ctx), page)
   })
 
   bot.action(/^pricing:man_prod:(\d+)$/, async (ctx) => {
-    try { await ctx.answerCbQuery('⏳ Загрузка...') } catch {}
-    await showManualVariantList(ctx, ctx.from!.id, parseInt(ctx.match[1], 10))
+    try { await ctx.answerCbQuery('⏳ Загрузка...') } catch { /* ignore: answerCbQuery may fail if query expired */ }
+    await showManualVariantList(ctx, getUserId(ctx), parseInt(ctx.match[1], 10))
   })
 
   bot.action(/^pricing:man_v:(\d+)$/, async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
-    const userId = ctx.from!.id
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
+    const userId = getUserId(ctx)
     const variantId = parseInt(ctx.match[1], 10)
     const variant = await prisma.productVariant.findUnique({
       where: { id: variantId },
@@ -1267,8 +1268,8 @@ export function setupPricingHandlers(bot: Telegraf): void {
   })
 
   bot.action(/^pricing:man_all:(\d+)$/, async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
-    const userId = ctx.from!.id
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
+    const userId = getUserId(ctx)
     const productId = parseInt(ctx.match[1], 10)
     const product = await prisma.product.findUnique({ where: { id: productId } })
     if (!product) return await ctx.reply('Товар не найден.')
@@ -1286,7 +1287,7 @@ export function setupPricingHandlers(bot: Telegraf): void {
   // ── Массовая наценка (bulk) ────────────────────────────────────────────────
 
   bot.action('pricing:bulk', async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
     await ctx.reply(
       '📈 Массовая наценка — применить к:',
       Markup.inlineKeyboard([
@@ -1298,8 +1299,8 @@ export function setupPricingHandlers(bot: Telegraf): void {
   })
 
   bot.action('pricing:bulk_all', async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
-    pricingState.set(ctx.from!.id, { flow: 'bulk_pct', filterType: 'all', filterValue: '', filterLabel: 'все варианты' })
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
+    pricingState.set(getUserId(ctx), { flow: 'bulk_pct', filterType: 'all', filterValue: '', filterLabel: 'все варианты' })
     await ctx.reply(
       'Введите процент наценки (например: 5 или 10):',
       Markup.inlineKeyboard([[Markup.button.callback('❌ Отмена', 'pricing:cancel')]]),
@@ -1307,7 +1308,7 @@ export function setupPricingHandlers(bot: Telegraf): void {
   })
 
   bot.action('pricing:bulk_cats', async (ctx) => {
-    try { await ctx.answerCbQuery('⏳ Загрузка...') } catch {}
+    try { await ctx.answerCbQuery('⏳ Загрузка...') } catch { /* ignore: answerCbQuery may fail if query expired */ }
     const cats = await prisma.category.findMany({
       orderBy: { name: 'asc' },
       include: { _count: { select: { products: true } } },
@@ -1321,10 +1322,10 @@ export function setupPricingHandlers(bot: Telegraf): void {
   })
 
   bot.action(/^pricing:bulk_cat:(\d+)$/, async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
     const cat = await prisma.category.findUnique({ where: { id: parseInt(ctx.match[1], 10) } })
     if (!cat) return await ctx.reply('Категория не найдена.')
-    pricingState.set(ctx.from!.id, {
+    pricingState.set(getUserId(ctx), {
       flow: 'bulk_pct',
       filterType: 'category',
       filterValue: cat.name,
@@ -1339,25 +1340,25 @@ export function setupPricingHandlers(bot: Telegraf): void {
   // ── Универсальный предпросмотр ─────────────────────────────────────────────
 
   bot.action('pricing:preview', async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
-    await showPreview(ctx, ctx.from!.id)
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
+    await showPreview(ctx, getUserId(ctx))
   })
 
   bot.action('pricing:apply', async (ctx) => {
-    try { await ctx.answerCbQuery('⏳ Применяю...') } catch {}
-    await applyChanges(ctx, ctx.from!.id)
+    try { await ctx.answerCbQuery('⏳ Применяю...') } catch { /* ignore: answerCbQuery may fail if query expired */ }
+    await applyChanges(ctx, getUserId(ctx))
   })
 
   bot.action('pricing:exclude', async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
-    await showExcludeMenu(ctx, ctx.from!.id)
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
+    await showExcludeMenu(ctx, getUserId(ctx))
   })
 
   // ── Фильтры исключений ─────────────────────────────────────────────────────
 
   bot.action('pricing:excl_60m', async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
-    const userId = ctx.from!.id
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
+    const userId = getUserId(ctx)
     const state = pricingState.get(userId)
     if (!state || state.flow !== 'preview') return
 
@@ -1377,8 +1378,8 @@ export function setupPricingHandlers(bot: Telegraf): void {
   })
 
   bot.action('pricing:excl_today', async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
-    const userId = ctx.from!.id
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
+    const userId = getUserId(ctx)
     const state = pricingState.get(userId)
     if (!state || state.flow !== 'preview') return
 
@@ -1398,8 +1399,8 @@ export function setupPricingHandlers(bot: Telegraf): void {
   })
 
   bot.action('pricing:excl_brands', async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
-    const state = pricingState.get(ctx.from!.id)
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
+    const state = pricingState.get(getUserId(ctx))
     if (!state || state.flow !== 'preview') return
     const active = state.pendingVariants.filter((v) => !state.excludedVariantIds.includes(v.variantId))
     const brands = [...new Set(active.filter((v) => v.brand).map((v) => v.brand!))]
@@ -1412,8 +1413,8 @@ export function setupPricingHandlers(bot: Telegraf): void {
   })
 
   bot.action(/^pricing:excl_b:(.+)$/, async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
-    const userId = ctx.from!.id
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
+    const userId = getUserId(ctx)
     const brand = ctx.match[1]
     const state = pricingState.get(userId)
     if (!state || state.flow !== 'preview') return
@@ -1427,8 +1428,8 @@ export function setupPricingHandlers(bot: Telegraf): void {
   })
 
   bot.action('pricing:excl_cats', async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
-    const state = pricingState.get(ctx.from!.id)
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
+    const state = pricingState.get(getUserId(ctx))
     if (!state || state.flow !== 'preview') return
     const active = state.pendingVariants.filter((v) => !state.excludedVariantIds.includes(v.variantId))
     const catIds = [...new Set(active.filter((v) => v.categoryId).map((v) => v.categoryId!))]
@@ -1442,8 +1443,8 @@ export function setupPricingHandlers(bot: Telegraf): void {
   })
 
   bot.action(/^pricing:excl_c:(\d+)$/, async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
-    const userId = ctx.from!.id
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
+    const userId = getUserId(ctx)
     const catId = parseInt(ctx.match[1], 10)
     const state = pricingState.get(userId)
     if (!state || state.flow !== 'preview') return
@@ -1457,8 +1458,8 @@ export function setupPricingHandlers(bot: Telegraf): void {
   })
 
   bot.action('pricing:excl_prods', async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
-    const state = pricingState.get(ctx.from!.id)
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
+    const state = pricingState.get(getUserId(ctx))
     if (!state || state.flow !== 'preview') return
     const active = state.pendingVariants.filter((v) => !state.excludedVariantIds.includes(v.variantId))
     const seen = new Map<number, string>()
@@ -1472,8 +1473,8 @@ export function setupPricingHandlers(bot: Telegraf): void {
   })
 
   bot.action(/^pricing:excl_p:(\d+)$/, async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
-    const userId = ctx.from!.id
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
+    const userId = getUserId(ctx)
     const productId = parseInt(ctx.match[1], 10)
     const state = pricingState.get(userId)
     if (!state || state.flow !== 'preview') return
@@ -1487,8 +1488,8 @@ export function setupPricingHandlers(bot: Telegraf): void {
   })
 
   bot.action('pricing:excl_regions', async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
-    const state = pricingState.get(ctx.from!.id)
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
+    const state = pricingState.get(getUserId(ctx))
     if (!state || state.flow !== 'preview') return
     const active = state.pendingVariants.filter((v) => !state.excludedVariantIds.includes(v.variantId))
     const regions = [...new Set(active.filter((v) => v.region).map((v) => v.region!))]
@@ -1502,8 +1503,8 @@ export function setupPricingHandlers(bot: Telegraf): void {
   })
 
   bot.action(/^pricing:excl_r:(.+)$/, async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
-    const userId = ctx.from!.id
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
+    const userId = getUserId(ctx)
     const region = ctx.match[1]
     const state = pricingState.get(userId)
     if (!state || state.flow !== 'preview') return
@@ -1519,8 +1520,8 @@ export function setupPricingHandlers(bot: Telegraf): void {
   // ── Ввод курсов вручную (AI) ────────────────────────────────────────────────
 
   bot.action('pricing:input_rates', async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
-    const userId = ctx.from!.id
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
+    const userId = getUserId(ctx)
     pricingState.set(userId, { flow: 'awaiting_currencies' })
     await ctx.reply(
       '💱 Отправьте текст с курсами валют в любом формате.\n\n' +
@@ -1535,8 +1536,8 @@ export function setupPricingHandlers(bot: Telegraf): void {
   })
 
   bot.action('pricing:save_rates', async (ctx) => {
-    try { await ctx.answerCbQuery('⏳ Сохраняю…') } catch {}
-    const userId = ctx.from!.id
+    try { await ctx.answerCbQuery('⏳ Сохраняю…') } catch { /* ignore: answerCbQuery may fail if query expired */ }
+    const userId = getUserId(ctx)
     const state = pricingState.get(userId)
     if (!state || state.flow !== 'confirm_currencies') return
     const { parsed } = state
@@ -1563,14 +1564,14 @@ export function setupPricingHandlers(bot: Telegraf): void {
   // ── Регионы и валюты ────────────────────────────────────────────────────────
 
   bot.action('pricing:regions', async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
-    pricingState.delete(ctx.from!.id)
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
+    pricingState.delete(getUserId(ctx))
     await showRegionsMenu(ctx)
   })
 
   bot.action('pricing:region_add', async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
-    pricingState.set(ctx.from!.id, { flow: 'region_add_code' })
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
+    pricingState.set(getUserId(ctx), { flow: 'region_add_code' })
     await ctx.reply(
       'Шаг 1 из 4 — введите код региона (2–3 буквы, например US, JP, AE):',
       Markup.inlineKeyboard([[Markup.button.callback('❌ Отмена', 'pricing:regions')]]),
@@ -1578,7 +1579,7 @@ export function setupPricingHandlers(bot: Telegraf): void {
   })
 
   bot.action(/^pricing:region_edit:(\d+)$/, async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
     const regionId = parseInt(ctx.match[1], 10)
     const region = await prisma.region.findUnique({ where: { id: regionId } })
     if (!region) { await ctx.reply('❌ Регион не найден.'); return }
@@ -1596,34 +1597,34 @@ export function setupPricingHandlers(bot: Telegraf): void {
   })
 
   bot.action(/^pricing:region_edit_name:(\d+)$/, async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
     const regionId = parseInt(ctx.match[1], 10)
     const region = await prisma.region.findUnique({ where: { id: regionId } })
     if (!region) return
-    pricingState.set(ctx.from!.id, { flow: 'region_edit_name', regionId, regionCode: region.code })
+    pricingState.set(getUserId(ctx), { flow: 'region_edit_name', regionId, regionCode: region.code })
     await ctx.reply(`Введите новое название для ${region.code} (сейчас: ${region.name}):`)
   })
 
   bot.action(/^pricing:region_edit_flag:(\d+)$/, async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
     const regionId = parseInt(ctx.match[1], 10)
     const region = await prisma.region.findUnique({ where: { id: regionId } })
     if (!region) return
-    pricingState.set(ctx.from!.id, { flow: 'region_edit_flag', regionId, regionCode: region.code })
+    pricingState.set(getUserId(ctx), { flow: 'region_edit_flag', regionId, regionCode: region.code })
     await ctx.reply(`Введите новый флаг для ${region.code} (сейчас: ${region.flag}):`)
   })
 
   bot.action(/^pricing:region_edit_cur:(\d+)$/, async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
     const regionId = parseInt(ctx.match[1], 10)
     const region = await prisma.region.findUnique({ where: { id: regionId } })
     if (!region) return
-    pricingState.set(ctx.from!.id, { flow: 'region_edit_currency', regionId, regionCode: region.code })
+    pricingState.set(getUserId(ctx), { flow: 'region_edit_currency', regionId, regionCode: region.code })
     await ctx.reply(`Введите новый код валюты для ${region.code} (сейчас: ${region.currency}, например JPY, AED):`)
   })
 
   bot.action(/^pricing:region_del:(\d+)$/, async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
     const regionId = parseInt(ctx.match[1], 10)
     const region = await prisma.region.findUnique({ where: { id: regionId } })
     if (!region) { await ctx.reply('❌ Регион не найден.'); return }
@@ -1648,7 +1649,7 @@ export function setupPricingHandlers(bot: Telegraf): void {
   })
 
   bot.action(/^pricing:region_del_ok:(\d+)$/, async (ctx) => {
-    try { await ctx.answerCbQuery('⏳ Удаляю…') } catch {}
+    try { await ctx.answerCbQuery('⏳ Удаляю…') } catch { /* ignore: answerCbQuery may fail if query expired */ }
     const regionId = parseInt(ctx.match[1], 10)
     const region = await prisma.region.findUnique({ where: { id: regionId } })
     if (!region) return
@@ -1669,14 +1670,14 @@ export function setupPricingHandlers(bot: Telegraf): void {
   // ── Курсы валют ──────────────────────────────────────────────────────────────
 
   bot.action('pricing:rates', async (ctx) => {
-    try { await ctx.answerCbQuery('⏳ Загрузка...') } catch {}
+    try { await ctx.answerCbQuery('⏳ Загрузка...') } catch { /* ignore: answerCbQuery may fail if query expired */ }
     await showRatesMenu(ctx)
   })
 
   // Из уведомления о курсах → корректировка
   bot.action('pricing:cadj_from_notify', async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
-    const userId = ctx.from!.id
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
+    const userId = getUserId(ctx)
     if (!lastCurrencyChanges.length) {
       await ctx.reply('Нет данных об изменениях курсов. Нажмите «🔄 Обновить курсы сейчас».',
         Markup.inlineKeyboard([[Markup.button.callback('💰 Меню цен', 'pricing:menu')]]))
@@ -1686,7 +1687,7 @@ export function setupPricingHandlers(bot: Telegraf): void {
   })
 
   bot.action('pricing:rates_cbr', async (ctx) => {
-    try { await ctx.answerCbQuery('⏳ Загружаю…') } catch {}
+    try { await ctx.answerCbQuery('⏳ Загружаю…') } catch { /* ignore: answerCbQuery may fail if query expired */ }
     await ctx.reply('⏳ Получаю курсы с ЦБ РФ…')
     try {
       const changes = await updateCurrencyRates()
@@ -1705,8 +1706,8 @@ export function setupPricingHandlers(bot: Telegraf): void {
   })
 
   bot.action('pricing:rate_add', async (ctx) => {
-    try { await ctx.answerCbQuery() } catch {}
-    pricingState.set(ctx.from!.id, { flow: 'rate_add_code' })
+    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
+    pricingState.set(getUserId(ctx), { flow: 'rate_add_code' })
     await ctx.reply(
       'Введите код валюты (например JPY, AED, THB):',
       Markup.inlineKeyboard([[Markup.button.callback('❌ Отмена', 'pricing:rates')]]),
