@@ -6,7 +6,8 @@
  * При получении текстового сообщения — AI парсит и сохраняет цены.
  */
 
-import { Context, Telegraf } from 'telegraf'
+import { Telegraf } from 'telegraf'
+import type { Context } from 'telegraf'
 import { prisma } from '../lib/prisma'
 import { parseSupplierMessage } from '../lib/ai-parser'
 import { getApiKeyValue } from '../lib/api-key-store'
@@ -100,6 +101,52 @@ export async function handleSupplierMessage(
     console.error(`[supplier] Parse error from "${supplier.name}":`, err)
     return false
   }
+}
+
+/**
+ * Отправляет запрос цены в чат поставщика.
+ */
+export async function requestPriceFromSupplier(
+  bot: Telegraf,
+  supplierId: number,
+  query: string,
+): Promise<boolean> {
+  const supplier = await prisma.supplier.findUnique({ where: { id: supplierId } })
+  if (!supplier || !supplier.isActive) return false
+
+  try {
+    await bot.telegram.sendMessage(
+      supplier.chatId,
+      `Добрый день! Подскажите актуальную цену:\n${query}`,
+    )
+    console.log(`[supplier] Price request sent to "${supplier.name}": ${query}`)
+    return true
+  } catch (err) {
+    console.error(`[supplier] Failed to send request to "${supplier.name}":`, err)
+    return false
+  }
+}
+
+/**
+ * Отправляет запрос ВСЕМ активным поставщикам.
+ * Возвращает количество успешно отправленных.
+ */
+export async function requestPriceFromAllSuppliers(
+  bot: Telegraf,
+  query: string,
+): Promise<number> {
+  const suppliers = await prisma.supplier.findMany({ where: { isActive: true } })
+  let sent = 0
+  for (const supplier of suppliers) {
+    try {
+      await bot.telegram.sendMessage(supplier.chatId, `Подскажите актуальную цену:\n${query}`)
+      sent++
+    } catch {
+      console.error(`[supplier] Failed to request from "${supplier.name}"`)
+    }
+  }
+  console.log(`[supplier] Price request sent to ${sent}/${suppliers.length} suppliers: ${query}`)
+  return sent
 }
 
 /**

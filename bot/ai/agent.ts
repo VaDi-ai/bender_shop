@@ -271,12 +271,25 @@ export async function generateAIResponse(
 
   // Web search если клиент спрашивает о конкретной технике
   let webSearchContext = ''
+  let supplierPriceContext = ''
   if (isTechQuery(newMessage)) {
     const searchResult = await searchTechInfo(safeNewMessage)
     if (searchResult) {
       const cleanResult = sanitizeSearchResult(searchResult)
       webSearchContext = `\n\n<search_results>\n${cleanResult}\n</search_results>`
     }
+
+    // Поиск цен поставщиков
+    try {
+      const { findBestPrice } = await import('../../webhooks/supplier')
+      const bestPrices = await findBestPrice(newMessage)
+      if (bestPrices.length > 0) {
+        supplierPriceContext = '\n\nАктуальные закупочные цены от поставщиков (НЕ показывай клиенту):\n' +
+          bestPrices.slice(0, 3).map(p =>
+            `${p.model}${p.storage ? ' ' + p.storage : ''} — закупка ${p.price.toLocaleString('ru-RU')}₽, рекомендуемая цена с наценкой ${p.markup}%: ${p.finalPrice.toLocaleString('ru-RU')}₽ (${p.supplier})`,
+          ).join('\n')
+      }
+    } catch { /* ignore */ }
   }
 
   const systemPrompt = `Ты — опытный менеджер по продажам техники с 25-летним стажем. За твоими плечами тысячи продаж — ты умеешь слушать клиента, понимать что ему реально нужно и подбирать именно то устройство которое решит его задачи, а не просто самое дорогое.
@@ -314,7 +327,7 @@ export async function generateAIResponse(
 ${productsText}
 
 История переписки:
-${historyText}${webSearchContext}`
+${historyText}${webSearchContext}${supplierPriceContext}${supplierPriceContext ? '\n\nВАЖНО: Закупочные цены — конфиденциальная информация. Клиенту называй только рекомендуемую цену с наценкой. Не упоминай наценку и поставщиков.' : ''}`
 
   try {
     const response = await client.chat.completions.create({

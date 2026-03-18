@@ -93,6 +93,9 @@ function buildControlPanelKeyboard(clientId: number) {
       Markup.button.callback('📝 Заметка', `cp:note:${clientId}`),
       Markup.button.callback('👤 Карточка', `cp:card:${clientId}`),
     ],
+    [
+      Markup.button.callback('🔍 Запросить цену', `cp:price:${clientId}`),
+    ],
   ])
 }
 
@@ -343,9 +346,89 @@ export function setupClientHandlers(bot: Telegraf): void {
             return ctx.answerCbQuery()
           }
 
+          case 'price': {
+            if (!managerId) return ctx.answerCbQuery()
+            await ctx.answerCbQuery()
+
+            const lastMsg = await prisma.message.findFirst({
+              where: { clientId, direction: 'in' },
+              orderBy: { createdAt: 'desc' },
+            })
+
+            const recentQuery = lastMsg?.text ?? ''
+            const { findBestPrice } = await import('../webhooks/supplier')
+
+            if (recentQuery.length >= 5) {
+              // Search in cached supplier prices
+              const cached = await findBestPrice(recentQuery)
+              if (cached.length > 0) {
+                const priceLines = cached.slice(0, 5).map((p, i) =>
+                  `${i + 1}. ${p.supplier}: ${p.model}${p.storage ? ' ' + p.storage : ''} — ${p.finalPrice.toLocaleString('ru-RU')}₽ (+${p.markup}%)`,
+                )
+                if (threadId) {
+                  await sendToTopic(ctx.telegram, CRM_GROUP_ID, threadId, [
+                    `🔍 По запросу клиента "${recentQuery.slice(0, 60)}":\n`,
+                    ...priceLines,
+                  ].join('\n'))
+                }
+                return
+              }
+            }
+
+            if (threadId) {
+              await sendToTopicWithMarkup(
+                ctx.telegram,
+                CRM_GROUP_ID,
+                threadId,
+                `🔍 Нет кешированных цен${recentQuery ? ` на "${recentQuery.slice(0, 60)}"` : ''}.\nЗапросить у всех поставщиков?`,
+                Markup.inlineKeyboard([
+                  ...(recentQuery.length >= 5
+                    ? [[Markup.button.callback('📨 Запросить у поставщиков', `cp:price_send:${clientId}`)]]
+                    : []),
+                ]).reply_markup,
+              )
+            }
+            return
+          }
+
           default:
             return ctx.answerCbQuery()
         }
+      }
+
+      // ── Запрос цены у поставщиков: cp:price_send:{clientId} ─────────────────
+      if (data.startsWith('cp:price_send:')) {
+        const clientId = parseCallbackId(data.slice(14))
+        if (clientId === null) return ctx.answerCbQuery('Некорректные данные')
+        await ctx.answerCbQuery('⏳ Отправляю...')
+
+        const lastMsg = await prisma.message.findFirst({
+          where: { clientId, direction: 'in' },
+          orderBy: { createdAt: 'desc' },
+        })
+        if (!lastMsg?.text) {
+          return ctx.answerCbQuery('Нет сообщений от клиента')
+        }
+
+        const { requestPriceFromAllSuppliers } = await import('../webhooks/supplier')
+        const bot = (ctx as any).telegram?.constructor?.name === 'Telegram'
+          ? { telegram: ctx.telegram } as any
+          : ctx
+        const sent = await requestPriceFromAllSuppliers(
+          { telegram: ctx.telegram } as any,
+          lastMsg.text.slice(0, 200),
+        )
+
+        const threadId = (ctx.callbackQuery as any)?.message?.message_thread_id as number | undefined
+        if (threadId) {
+          await sendToTopic(
+            ctx.telegram,
+            CRM_GROUP_ID,
+            threadId,
+            `📨 Запрос отправлен ${sent} поставщикам. Ответы появятся автоматически.`,
+          )
+        }
+        return
       }
 
       // ── Сегмент: seg:{clientId} — используется в карточке клиента ────────────
@@ -1092,6 +1175,22 @@ async function handleAIResponse(
 ): Promise<void> {
   const mode = await getAIMode()
   if (mode === 'off') return
+
+  // Подсказка с ценами поставщиков в топик (только менеджеру)
+  try {
+    const { findBestPrice } = await import('../webhooks/supplier')
+    const bestPrices = await findBestPrice(userMessage)
+    if (bestPrices.length > 0) {
+      const priceHint = [
+        '💰 Цены поставщиков:',
+        ...bestPrices.slice(0, 3).map((p, i) => {
+          const icon = i === 0 ? '⭐' : '  '
+          return `${icon} ${p.supplier}: ${p.model}${p.storage ? ' ' + p.storage : ''} — ${p.price.toLocaleString('ru-RU')}₽ → ${p.finalPrice.toLocaleString('ru-RU')}₽ (+${p.markup}%)`
+        }),
+      ].join('\n')
+      await sendToTopic(telegram, CRM_GROUP_ID, threadId, priceHint)
+    }
+  } catch { /* ignore supplier price lookup errors */ }
 
   let aiText: string
   try {

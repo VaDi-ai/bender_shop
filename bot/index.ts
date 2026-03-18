@@ -77,7 +77,7 @@ import {
   showSuppliersMenu,
   handleSuppliersMessage,
 } from './admin/suppliers'
-import { handleSupplierMessage } from '../webhooks/supplier'
+import { handleSupplierMessage, findBestPrice, requestPriceFromAllSuppliers } from '../webhooks/supplier'
 import { cancelPromotion } from '../lib/promotions'
 import { logSecurityEvent, initSecurityAlerts } from '../lib/security-log'
 import { aiSuggestions, storeSuggestion } from './ai/agent'
@@ -786,10 +786,258 @@ setInterval(async () => {
         }
       } catch { /* ignore */ }
     }
+    // Проверить значительное изменение курса (> 0.5%)
+    const usdRate = await prisma.currencyRate.findUnique({ where: { currency: 'USD' } })
+    if (usdRate && usdRate.previousRate) {
+      const current = Number(usdRate.rate)
+      const previous = Number(usdRate.previousRate)
+      const changePct = Math.abs((current - previous) / previous * 100)
+
+      if (changePct > 0.5) {
+        const direction = current > previous ? '📈' : '📉'
+        for (const adminId of ADMIN_IDS) {
+          try {
+            await bot.telegram.sendMessage(adminId, [
+              `⚠️ Курс доллара изменился на ${changePct.toFixed(2)}%`,
+              `${direction} ${previous.toFixed(2)}₽ → ${current.toFixed(2)}₽`,
+              '',
+              'Рекомендуется скорректировать цены на витрине.',
+            ].join('\n'), {
+              reply_markup: {
+                inline_keyboard: [
+                  [{ text: '📊 Скорректировать цены', callback_data: 'pricing:usd_adjust' }],
+                  [{ text: '⏭️ Пропустить', callback_data: 'morning:skip_adjust' }],
+                ],
+              },
+            })
+          } catch { /* ignore */ }
+        }
+      }
+    }
   } catch (e) {
     console.error('Currency notify error:', e)
   }
 }, 60 * 60 * 1000)
+
+// ─── Утренняя сводка цен от поставщиков (11:00 МСК) ─────────────────────────
+
+async function notifyNightClients(): Promise<void> {
+  try {
+    const now = new Date()
+    const todayStart = new Date(now)
+    todayStart.setHours(0, 0, 0, 0)
+
+    const nightStart = new Date(todayStart)
+    nightStart.setDate(nightStart.getDate() - 1)
+    nightStart.setHours(20, 0, 0, 0)
+
+    const nightEnd = new Date(todayStart)
+    nightEnd.setHours(11, 0, 0, 0)
+
+    const nightMessages = await prisma.message.findMany({
+      where: {
+        direction: 'in',
+        createdAt: { gte: nightStart, lte: nightEnd },
+      },
+      include: { client: true },
+      distinct: ['clientId'],
+    })
+
+    for (const msg of nightMessages) {
+      if (!msg.client || msg.client.source !== 'telegram' || !msg.client.externalId) continue
+      try {
+        await bot.telegram.sendMessage(
+          msg.client.externalId,
+          '☀️ Доброе утро! Мы на связи.\n\nАктуальные цены на сегодня готовы. Если вас интересовал какой-то товар — напишите, подберём лучший вариант!',
+        )
+      } catch { /* ignore: user may have blocked bot */ }
+    }
+
+    if (nightMessages.length > 0) {
+      console.log(`[Morning] Notified ${nightMessages.length} night clients`)
+    }
+  } catch (err) {
+    console.error('[Morning] notifyNightClients error:', err)
+  }
+}
+
+setInterval(async () => {
+  try {
+    const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Europe/Moscow' }))
+    if (now.getHours() !== 11 || now.getMinutes() > 15) return
+
+    const todayStr = now.toISOString().slice(0, 10)
+    const notifyKey = 'morning_summary_date'
+    const lastNotify = await getApiKeyValue(notifyKey)
+    if (lastNotify === todayStr) return
+    await setApiKeyValue(notifyKey, todayStr)
+
+    // Собрать цены за сегодня
+    const todayStart = new Date(todayStr + 'T00:00:00Z')
+    const prices = await prisma.supplierPrice.findMany({
+      where: { isActive: true, parsedAt: { gte: todayStart } },
+      include: { supplier: true },
+      orderBy: [{ model: 'asc' }, { price: 'asc' }],
+    })
+
+    if (prices.length === 0) {
+      for (const adminId of ADMIN_IDS) {
+        try {
+          await bot.telegram.sendMessage(adminId, '📋 Утренняя сводка: пока нет новых цен от поставщиков. Прайсы обычно появляются к 10:30–11:00.')
+        } catch { /* ignore */ }
+      }
+      return
+    }
+
+    // Группировать по модели
+    const byModel = new Map<string, typeof prices>()
+    for (const p of prices) {
+      const key = `${p.model}${p.storage ? ' ' + p.storage : ''}`
+      if (!byModel.has(key)) byModel.set(key, [])
+      byModel.get(key)!.push(p)
+    }
+
+    const defaultMarkupStr = await getApiKeyValue('default_markup')
+    const defaultMarkup = parseFloat(defaultMarkupStr ?? '5')
+
+    const lines: string[] = [`📋 Утренняя сводка цен (${prices.length} позиций от ${new Set(prices.map(p => p.supplierId)).size} поставщиков):\n`]
+
+    let count = 0
+    for (const [model, modelPrices] of byModel) {
+      if (count >= 30) { lines.push(`\n...и ещё ${byModel.size - 30} моделей`); break }
+      const best = modelPrices[0]
+      const markup = Number(best.supplier.markup) || defaultMarkup
+      const finalPrice = Math.ceil(Number(best.price) * (1 + markup / 100))
+
+      lines.push(`${model}${best.color ? ' ' + best.color : ''}${best.country ? ' ' + best.country : ''}`)
+      lines.push(`  💰 ${Number(best.price).toLocaleString('ru-RU')}₽ → ${finalPrice.toLocaleString('ru-RU')}₽ (+${markup}%) от ${best.supplier.name}`)
+
+      if (modelPrices.length > 1) {
+        lines.push(`  📊 ещё ${modelPrices.length - 1} предложений`)
+      }
+      lines.push('')
+      count++
+    }
+
+    for (const adminId of ADMIN_IDS) {
+      try {
+        await bot.telegram.sendMessage(adminId, lines.join('\n'), {
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: '📊 Обновить цены на витрине', callback_data: 'morning:update_prices' }],
+              [{ text: '📋 Подробная таблица', callback_data: 'morning:detailed' }],
+            ],
+          },
+        })
+      } catch { /* ignore */ }
+    }
+
+    await notifyNightClients()
+  } catch (err) {
+    console.error('[Morning summary] Error:', err)
+  }
+}, 15 * 60 * 1000)
+
+// ─── Обработчики утренних кнопок ─────────────────────────────────────────────
+
+bot.action('morning:skip_adjust', async (ctx) => {
+  try { await ctx.answerCbQuery('Пропущено') } catch { /* ignore */ }
+})
+
+bot.action('morning:detailed', async (ctx) => {
+  try { await ctx.answerCbQuery() } catch { /* ignore */ }
+  await ctx.reply('Откройте 🏭 Поставщики → 📊 Все цены за сегодня для подробной таблицы.')
+})
+
+bot.action('morning:update_prices', async (ctx) => {
+  try { await ctx.answerCbQuery() } catch { /* ignore */ }
+
+  const todayStart = new Date()
+  todayStart.setHours(0, 0, 0, 0)
+
+  const prices = await prisma.supplierPrice.findMany({
+    where: { isActive: true, parsedAt: { gte: todayStart } },
+    include: { supplier: true },
+    orderBy: { price: 'asc' },
+  })
+
+  if (prices.length === 0) {
+    await ctx.reply('Нет цен от поставщиков за сегодня.')
+    return
+  }
+
+  const defaultMarkupStr = await getApiKeyValue('default_markup')
+  const defaultMarkup = parseFloat(defaultMarkupStr ?? '5')
+
+  // Лучшая цена по каждой модели
+  const bestByModel = new Map<string, typeof prices[0]>()
+  for (const p of prices) {
+    const key = `${p.model}${p.storage ? ' ' + p.storage : ''}`
+    if (!bestByModel.has(key)) bestByModel.set(key, p)
+  }
+
+  // Сопоставить с вариантами в каталоге
+  const variants = await prisma.productVariant.findMany({
+    where: { price: { gt: 0 } },
+    include: { product: true },
+  })
+
+  const changes: string[] = []
+
+  for (const variant of variants) {
+    const productName = variant.product.name.toLowerCase()
+    const attrs = variant.attributes as Record<string, string>
+    const storage = attrs['Память'] || attrs['Storage'] || ''
+
+    for (const [, bestPrice] of bestByModel) {
+      if (productName.includes(bestPrice.model.toLowerCase()) &&
+          (!bestPrice.storage || storage.toLowerCase().includes(bestPrice.storage.toLowerCase().replace(/\s/g, '')))) {
+
+        const markup = Number(bestPrice.supplier.markup) || defaultMarkup
+        const newPrice = Math.ceil(Number(bestPrice.price) * (1 + markup / 100))
+        const oldPrice = Number(variant.price)
+
+        if (Math.abs(newPrice - oldPrice) > 100) {
+          changes.push(`${variant.product.name} ${Object.values(attrs).join('/')}: ${oldPrice.toLocaleString('ru-RU')}₽ → ${newPrice.toLocaleString('ru-RU')}₽`)
+        }
+        break
+      }
+    }
+  }
+
+  if (changes.length === 0) {
+    await ctx.reply('✅ Цены на витрине актуальны — существенных изменений нет.')
+    return
+  }
+
+  const preview = changes.slice(0, 20)
+  await ctx.reply(
+    [
+      `📊 Предложение обновить ${changes.length} позиций:\n`,
+      ...preview,
+      changes.length > 20 ? `\n...и ещё ${changes.length - 20}` : '',
+    ].join('\n'),
+    Markup.inlineKeyboard([
+      [Markup.button.callback('💰 Меню цен', 'pricing:menu')],
+      [Markup.button.callback('🔙 Назад', 'back:main')],
+    ]),
+  )
+})
+
+// ─── Обработчики запроса цен у поставщиков ──────────────────────────────────
+
+bot.action(/^price_request:send_all:(\d+):(.+)$/, async (ctx) => {
+  try { await ctx.answerCbQuery() } catch { /* ignore */ }
+  const query = decodeURIComponent((ctx.match as RegExpMatchArray)[2])
+  const sent = await requestPriceFromAllSuppliers(bot, query)
+  await ctx.reply(`📨 Запрос отправлен ${sent} поставщикам. Ответы появятся автоматически.`)
+})
+
+bot.action('price_request:cancel', async (ctx) => {
+  try { await ctx.answerCbQuery() } catch { /* ignore */ }
+  const userId = ctx.from?.id
+  if (userId) salesState.delete(userId)
+})
 
 // ─── Инициализация технического топика «📦 Продажи и резервы» ─────────────────
 
