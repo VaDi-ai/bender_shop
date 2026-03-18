@@ -443,6 +443,48 @@ model CurrencyRate {
   @@index([currency])
 }
 
+model Supplier {
+  id          Int      @id @default(autoincrement())
+  name        String   @unique
+  chatId      String   @unique
+  chatType    String   @default("group") // "group" | "channel" | "private"
+  isActive    Boolean  @default(true)
+  markup      Decimal  @default(5) @db.Decimal(5, 2)
+  notes       String?
+  lastPriceAt DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  prices SupplierPrice[]
+
+  @@index([chatId])
+  @@index([isActive])
+}
+
+model SupplierPrice {
+  id         Int      @id @default(autoincrement())
+  supplierId Int
+
+  model      String
+  storage    String?
+  color      String?
+  simType    String?
+  country    String?
+  price      Decimal  @db.Decimal(12, 2)
+
+  rawMessage String
+  messageId  Int?
+  isActive   Boolean  @default(true)
+  parsedAt   DateTime @default(now())
+
+  supplier Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+
+  @@index([supplierId])
+  @@index([model])
+  @@index([parsedAt])
+  @@index([isActive, model])
+}
+
 model SecurityLog {
   id              Int      @id @default(autoincrement())
   event           String

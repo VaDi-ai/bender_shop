@@ -71,6 +71,13 @@ import {
   sendDailyCurrencyRates,
   lastCurrencyChanges,
 } from './admin/pricing'
+import {
+  suppliersState,
+  setupSupplierHandlers,
+  showSuppliersMenu,
+  handleSuppliersMessage,
+} from './admin/suppliers'
+import { handleSupplierMessage } from '../webhooks/supplier'
 import { cancelPromotion } from '../lib/promotions'
 import { logSecurityEvent, initSecurityAlerts } from '../lib/security-log'
 import { aiSuggestions, storeSuggestion } from './ai/agent'
@@ -149,6 +156,7 @@ const adminKeyboard = Markup.keyboard([
   ['📦 Товароучёт', '🔑 API Ключи'],
   ['📂 Сегменты', '🤖 AI Агент'],
   ['🖼️ Витрина', '💰 Цены'],
+  ['🏭 Поставщики'],
 ]).resize()
 
 // Кнопки главного меню — для сброса пошаговых флоу при нажатии
@@ -165,12 +173,26 @@ const MENU_BUTTONS = new Set([
   '🤖 AI Агент',
   '🖼️ Витрина',
   '💰 Цены',
+  '🏭 Поставщики',
 ])
 
 // ─── Обработка сообщений от клиентов ─────────────────────────────────────────
 // Регистрируется ДО admin-middleware, чтобы клиенты не получали «⛔ Доступ запрещён»
 
 setupClientHandlers(bot)
+
+// ─── Обработка сообщений из чатов поставщиков ───────────────────────────────
+// Регистрируется ДО admin-middleware, чтобы прайсы от поставщиков обрабатывались.
+
+bot.on(message('text'), async (ctx, next) => {
+  const chatId = ctx.chat?.id
+  if (ctx.chat?.type === 'private') return next()
+  if (chatId === Number(process.env.CRM_GROUP_ID)) return next()
+
+  const handled = await handleSupplierMessage(ctx, bot)
+  if (handled) return
+  return next()
+})
 
 // ─── Публичные обработчики (до admin-middleware) ───────────────────────────────
 
@@ -258,6 +280,7 @@ bot.on(message('text'), async (ctx, next) => {
     pricingState.delete(userId)
     apiKeysState.delete(userId)
     securityState.delete(userId)
+    suppliersState.delete(userId)
     return next()
   }
 
@@ -318,6 +341,12 @@ bot.on(message('text'), async (ctx, next) => {
   // Подтверждение очистки лога безопасности
   if (securityState.has(userId)) {
     const handled = await handleSecurityMessage(ctx, userId, text)
+    if (handled) return
+  }
+
+  // Флоу поставщиков
+  if (suppliersState.has(userId)) {
+    const handled = await handleSuppliersMessage(ctx, userId, text)
     if (handled) return
   }
 
@@ -548,6 +577,7 @@ bot.action('back:main', async (ctx) => {
   promotionsState.delete(userId)
   pricingState.delete(userId)
   apiKeysState.delete(userId)
+  suppliersState.delete(userId)
   await ctx.reply('🏠 Главное меню', adminKeyboard)
 })
 
@@ -607,6 +637,14 @@ setupPricingHandlers(bot)
 
 bot.hears('💰 Цены', async (ctx) => {
   await showPricingMenu(ctx)
+})
+
+// ─── 🏭 Поставщики ───────────────────────────────────────────────────────────
+
+setupSupplierHandlers(bot)
+
+bot.hears('🏭 Поставщики', async (ctx) => {
+  await showSuppliersMenu(ctx)
 })
 
 // ─── 💰 Продажи и резервы ─────────────────────────────────────────────────────

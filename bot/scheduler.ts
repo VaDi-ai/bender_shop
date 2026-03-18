@@ -72,6 +72,17 @@ async function runTick(bot: Telegraf): Promise<void> {
         }
       }
     }
+    // Деактивация устаревших цен поставщиков (старше 24ч)
+    try {
+      const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000)
+      const { count } = await prisma.supplierPrice.updateMany({
+        where: { isActive: true, parsedAt: { lt: cutoff } },
+        data: { isActive: false },
+      })
+      if (count > 0) console.log(`[Scheduler] Deactivated ${count} stale supplier prices`)
+    } catch (err) {
+      console.error('[Scheduler] Supplier price cleanup error:', err)
+    }
   } catch (err) {
     console.error('[Scheduler] Ошибка получения задач:', err)
   } finally {
