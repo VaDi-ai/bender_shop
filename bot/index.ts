@@ -555,6 +555,7 @@ bot.hears('🔧 Техработы', async (ctx) => {
     Markup.inlineKeyboard([
       [Markup.button.callback(label, action)],
       [Markup.button.callback('🗄️ Бэкап сейчас', 'maint:backup')],
+      [Markup.button.callback('✨ Обогатить все карточки', 'maint:enrich_all')],
       [Markup.button.callback('📖 Как восстановить', 'maint:restore_info')],
       [Markup.button.callback('🏠 Главное меню', 'back:main')],
     ]),
@@ -631,6 +632,25 @@ bot.action('maint:restore_info', async (ctx) => {
     '🔄 Для отката кода (не данных):',
     'Railway Dashboard → Deployments → выбрать рабочий → Redeploy',
   ].join('\n'))
+})
+
+bot.action('maint:enrich_all', async (ctx) => {
+  try { await ctx.answerCbQuery() } catch { /* ignore */ }
+  await ctx.reply('⏳ Запускаю обогащение карточек товаров... Это может занять несколько минут.')
+
+  try {
+    const { enrichAllProducts } = await import('../lib/enrich')
+    const result = await enrichAllProducts()
+    await ctx.reply([
+      '✨ Обогащение завершено:',
+      `📦 Обработано: ${result.total}`,
+      `✅ Обогащено: ${result.enriched}`,
+      result.failed > 0 ? `❌ Не удалось: ${result.failed}` : '',
+    ].filter(Boolean).join('\n'))
+  } catch (err) {
+    console.error('[Enrich] Batch error:', err)
+    await ctx.reply('❌ Ошибка при обогащении.')
+  }
 })
 
 // Экспортируем флаг для использования в webhooks/telegram.ts (если потребуется)

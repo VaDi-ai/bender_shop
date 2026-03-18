@@ -541,6 +541,7 @@ async function showProductCard(ctx: Context, productId: number): Promise<void> {
         Markup.button.callback('🖼️ Превью товара', `inv:prod_photos:${productId}`),
         Markup.button.callback('🏢 Бренд', `inv:prod_brand:${productId}`),
       ],
+      [Markup.button.callback('✨ Заполнить из интернета', `inv:enrich:${productId}`)],
       [Markup.button.callback('🔙 К товароучёту', 'inv:back')],
     ]),
   )
@@ -1727,6 +1728,30 @@ export function setupInventoryHandlers(bot: Telegraf): void {
     await showProductPhotos(ctx, productId)
   })
 
+  // ── Обогащение карточки из интернета ──────────────────────────────────────
+
+  bot.action(/^inv:enrich:(\d+)$/, async (ctx) => {
+    try { await ctx.answerCbQuery('⏳ Ищу характеристики...') } catch { /* ignore */ }
+    const productId = parseInt((ctx.match as RegExpMatchArray)[1], 10)
+
+    try {
+      const { enrichProductCard } = await import('../../lib/enrich')
+      await ctx.reply('⏳ Ищу характеристики в интернете...')
+      const success = await enrichProductCard(productId, true)
+
+      if (success) {
+        const product = await prisma.product.findUnique({ where: { id: productId } })
+        const specCount = product?.specs ? Object.keys(product.specs as object).length : 0
+        await ctx.reply(`✨ Готово! Заполнено:\n📝 Описание: ${product?.description ? 'да' : 'нет'}\n📋 Характеристик: ${specCount}`)
+      } else {
+        await ctx.reply('❌ Не удалось найти характеристики. Попробуйте позже или заполните вручную.')
+      }
+    } catch (err) {
+      console.error('[Enrich] Manual error:', err)
+      await ctx.reply('❌ Ошибка при поиске характеристик.')
+    }
+  })
+
 }
 
 // ─── Пошаговый обработчик текста ─────────────────────────────────────────────
@@ -2117,6 +2142,19 @@ async function processImport(ctx: Context, rows: FileRow[]): Promise<void> {
     Markup.removeKeyboard(),
   )
   await showInventory(ctx)
+
+  // Автообогащение карточек товаров без описания/спецификаций
+  ;(async () => {
+    try {
+      const { enrichAllProducts } = await import('../../lib/enrich')
+      const result = await enrichAllProducts()
+      if (result.enriched > 0) {
+        await ctx.reply(`✨ Автообогащение: заполнены характеристики для ${result.enriched} товаров из ${result.total}.`)
+      }
+    } catch (err) {
+      console.error('[Enrich] After import error:', err)
+    }
+  })()
 }
 
 // ─── Обработка оприходования из файла (qty +=) ───────────────────────────────
@@ -2959,6 +2997,19 @@ async function handleAddFlow(
           )
         }
         await showInventory(ctx)
+
+        // Автообогащение карточки из интернета
+        ;(async () => {
+          try {
+            const { enrichProductCard } = await import('../../lib/enrich')
+            const success = await enrichProductCard(product.id)
+            if (success) {
+              await ctx.reply(`✨ Характеристики для "${product.name}" автоматически заполнены из интернета.`)
+            }
+          } catch (err) {
+            console.error('[Enrich] After create error:', err)
+          }
+        })()
       } catch (err) {
         console.error('inventory add error:', err)
         inventoryState.delete(userId)
