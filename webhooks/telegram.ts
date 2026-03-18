@@ -1087,6 +1087,7 @@ async function handleClientMessage(
   text: string,
 ): Promise<void> {
   try {
+    console.log(`[CRM] ← client ${from.id}: ${(text ?? '[media]').slice(0, 80)}`)
     const externalId = String(from.id)
     const name = getClientName(from)
 
@@ -1293,6 +1294,7 @@ async function handleManagerReply(
   }
 
   // ── Обычный ответ — пересылаем клиенту ───────────────────────────────────
+  console.log(`[CRM] → manager ${managerId} in topic ${threadId}: ${(text ?? '[media]').slice(0, 80)}`)
   const client = await prisma.client.findFirst({ where: { telegramTopicId: threadId } })
   if (!client) return
 

@@ -33,13 +33,13 @@ import {
   handleAnalyticsMessage,
 } from './admin/analytics'
 import {
-  showAISettings, setupAISettingsHandlers,
+  showAISettings, setupAISettingsHandlers, setupAIScheduleHandlers,
   showApiKeysMenu, setupApiKeysHandlers, handleApiKeysMessage, apiKeysState,
   securityState, handleSecurityMessage,
 } from './admin/ai_settings'
 import { initAdminNotifications } from '../lib/notify-admins'
 import { getApiKeyValue, setApiKeyValue } from '../lib/api-key-store'
-import { reinitClient as reinitAgentClient } from './ai/agent'
+import { reinitClient as reinitAgentClient, getAIMode, setAIMode } from './ai/agent'
 import { reinitClient as reinitParserClient } from '../lib/ai-parser'
 import {
   storefrontState,
@@ -102,6 +102,20 @@ initPrismaAlerts(bot, ADMIN_IDS)
 // ─── Режим техработ (in-memory) ───────────────────────────────────────────────
 
 let maintenanceMode = false
+
+// ─── Request logging ─────────────────────────────────────────────────────────
+
+bot.use(async (ctx, next) => {
+  const updateType = ctx.updateType
+  const fromId = ctx.from?.id
+  const chatId = ctx.chat?.id
+  const chatType = ctx.chat?.type ?? ''
+  const text = ((ctx.message as any)?.text ?? '').slice(0, 60)
+  const cbData = (ctx.callbackQuery as any)?.data ?? ''
+  const info = text || cbData || ''
+  console.log(`[BOT] ${updateType} from=${fromId ?? '?'} chat=${chatId ?? '?'}(${chatType})${info ? ' ' + info : ''}`)
+  return next()
+})
 
 // ─── Защита от флуда ─────────────────────────────────────────────────────────
 
@@ -618,6 +632,7 @@ bot.hears('📂 Сегменты', async (ctx) => {
 // ─── 🤖 AI Агент ──────────────────────────────────────────────────────────────
 
 setupAISettingsHandlers(bot)
+setupAIScheduleHandlers(bot)
 
 bot.hears('🤖 AI Агент', async (ctx) => {
   await showAISettings(ctx)
@@ -935,6 +950,50 @@ setInterval(async () => {
     await notifyNightClients()
   } catch (err) {
     console.error('[Morning summary] Error:', err)
+  }
+}, 15 * 60 * 1000)
+
+// ─── AI авто-режим по расписанию (каждые 15 минут) ──────────────────────────
+
+setInterval(async () => {
+  try {
+    const scheduleEnabled = await getApiKeyValue('ai_schedule_enabled')
+    if (scheduleEnabled !== 'true') return
+
+    const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Europe/Moscow' }))
+    const hour = now.getHours()
+    const WORK_START = 11
+    const WORK_END = 20
+
+    const currentMode = await getAIMode()
+    const isWorkHours = hour >= WORK_START && hour < WORK_END
+
+    if (!isWorkHours && currentMode !== 'auto' && currentMode !== 'off') {
+      await setAIMode('auto')
+      await setApiKeyValue('ai_auto_by_schedule', 'true')
+      console.log(`[AI Schedule] ${hour}:00 MSK → AUTO (after hours)`)
+      for (const adminId of ADMIN_IDS) {
+        try {
+          await bot.telegram.sendMessage(adminId,
+            `🤖 AI переключён в автомат (нерабочее время ${hour}:00 МСК).\nАгент представляется AI-помощником.`)
+        } catch { /* ignore */ }
+      }
+    } else if (isWorkHours && currentMode === 'auto') {
+      const wasAutoScheduled = await getApiKeyValue('ai_auto_by_schedule')
+      if (wasAutoScheduled === 'true') {
+        await setAIMode('semi')
+        await setApiKeyValue('ai_auto_by_schedule', 'false')
+        console.log(`[AI Schedule] ${hour}:00 MSK → SEMI (work hours)`)
+        for (const adminId of ADMIN_IDS) {
+          try {
+            await bot.telegram.sendMessage(adminId,
+              `👤 AI переключён в полуавтомат (рабочее время ${hour}:00 МСК).`)
+          } catch { /* ignore */ }
+        }
+      }
+    }
+  } catch (err) {
+    console.error('[AI Schedule] Error:', err)
   }
 }, 15 * 60 * 1000)
 

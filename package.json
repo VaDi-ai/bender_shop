@@ -11,7 +11,10 @@
     "db:migrate": "prisma migrate dev",
     "db:generate": "prisma generate",
     "db:studio": "prisma studio",
-    "db:push": "prisma db push"
+    "db:push": "prisma db push",
+    "db:constraints": "ts-node scripts/add-check-constraints.ts",
+    "backup": "ts-node scripts/backup-db.ts",
+    "restore": "ts-node scripts/restore-db.ts"
   },
   "keywords": [],
   "author": "",

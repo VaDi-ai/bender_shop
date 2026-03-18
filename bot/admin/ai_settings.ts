@@ -13,7 +13,7 @@ import OpenAI from 'openai'
 import { Context, Markup, Telegraf } from 'telegraf'
 import { prisma } from '../../lib/prisma'
 import { humanizeApiError } from '../../lib/api-errors'
-import { setApiKeyValue } from '../../lib/api-key-store'
+import { getApiKeyValue, setApiKeyValue } from '../../lib/api-key-store'
 import { getAIMode, setAIMode, getAIStats, reinitClient as reinitAgentClient, type AIMode } from '../ai/agent'
 import { reinitClient as reinitParserClient } from '../../lib/ai-parser'
 import { logSecurityEvent, type SecurityEvent } from '../../lib/security-log'
@@ -127,6 +127,7 @@ export async function showAISettings(ctx: Context): Promise<void> {
         Markup.button.callback('🟠 Полуавтомат', 'ai:mode:semi'),
         Markup.button.callback('🟢 Автомат', 'ai:mode:auto'),
       ],
+      [Markup.button.callback('⏰ Расписание', 'ai:schedule')],
       [Markup.button.callback('🏠 Главное меню', 'back:main')],
     ]),
   )
@@ -300,6 +301,52 @@ export function setupAISettingsHandlers(bot: Telegraf): void {
       await showAISettings(ctx)
     })
   }
+}
+
+// ─── Обработчики расписания AI ────────────────────────────────────────────────
+
+export function setupAIScheduleHandlers(bot: Telegraf): void {
+  bot.action('ai:schedule', async (ctx) => {
+    try { await ctx.answerCbQuery() } catch { /* ignore */ }
+    const enabled = await getApiKeyValue('ai_schedule_enabled')
+    const status = enabled === 'true' ? '✅ Включено' : '❌ Выключено'
+
+    await ctx.reply([
+      `⏰ Расписание AI: ${status}`,
+      '',
+      '• 11:00–20:00 → полуавтомат (менеджер одобряет)',
+      '• 20:00–11:00 → автомат (AI отвечает сам)',
+      '',
+      'AI представляется помощником ночью.',
+    ].join('\n'),
+      Markup.inlineKeyboard([
+        [Markup.button.callback(
+          enabled === 'true' ? '❌ Выключить' : '✅ Включить',
+          enabled === 'true' ? 'ai:schedule_off' : 'ai:schedule_on',
+        )],
+        [Markup.button.callback('🔙 Назад', 'ai:back')],
+      ]),
+    )
+  })
+
+  bot.action('ai:schedule_on', async (ctx) => {
+    try { await ctx.answerCbQuery() } catch { /* ignore */ }
+    await setApiKeyValue('ai_schedule_enabled', 'true')
+    await ctx.reply('✅ Расписание включено.')
+    try { await logSecurityEvent('ai_mode_changed', { action: 'schedule_on', adminId: getUserId(ctx) }, getUserId(ctx)) } catch { /* ignore */ }
+  })
+
+  bot.action('ai:schedule_off', async (ctx) => {
+    try { await ctx.answerCbQuery() } catch { /* ignore */ }
+    await setApiKeyValue('ai_schedule_enabled', 'false')
+    await ctx.reply('❌ Расписание выключено.')
+    try { await logSecurityEvent('ai_mode_changed', { action: 'schedule_off', adminId: getUserId(ctx) }, getUserId(ctx)) } catch { /* ignore */ }
+  })
+
+  bot.action('ai:back', async (ctx) => {
+    try { await ctx.answerCbQuery() } catch { /* ignore */ }
+    await showAISettings(ctx)
+  })
 }
 
 // ─── Регистрация обработчиков API ключей ─────────────────────────────────────

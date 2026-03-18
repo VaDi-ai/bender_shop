@@ -214,6 +214,14 @@ export function startApiServer(bot?: Telegraf): void {
 
   app.use(express.json({ limit: '1mb' }))
 
+  // ─── Request logging (skip /health) ────────────────────────────────────────
+  app.use((req, _res, next) => {
+    if (req.path !== '/health') {
+      console.log(`[HTTP] ${req.method} ${req.path}`)
+    }
+    next()
+  })
+
   // ── GET / и /shop — Mini App ───────────────────────────────────────────────
   app.get('/', (_req, res) => {
     res.redirect('/shop')
@@ -823,8 +831,10 @@ export function startApiServer(bot?: Telegraf): void {
       })
 
       if (!res.headersSent) res.json({ success: true, orderId: order.id })
+      console.log(`[ORDER] #${order.id} by ${telegramId}: ${items.length} items, ${order.totalAmount}₽, ${paymentMethod}`)
     } catch (err: any) {
       if (err.isStockConflict) {
+        console.log(`[ORDER] Stock conflict for ${telegramId}`)
         if (!res.headersSent) res.status(409).json({ error: 'Товар закончился или недоступен' })
         return
       }
