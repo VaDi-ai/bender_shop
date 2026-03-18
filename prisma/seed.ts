@@ -1,6 +1,9 @@
 import { prisma } from '../lib/prisma'
 
-if (process.env.NODE_ENV === 'production') throw new Error('Seed scripts disabled in production')
+if (process.env.NODE_ENV === 'production') {
+  console.error('ERROR: seed.ts must not run in production — it deletes all data!')
+  process.exit(1)
+}
 
 async function main() {
   // ── Дефолтные сегменты ────────────────────────────────────────────────────

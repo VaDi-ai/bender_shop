@@ -3,7 +3,8 @@ import { Prisma } from '../generated/prisma/client'
 import { prisma } from '../lib/prisma'
 
 if (process.env.NODE_ENV === 'production') {
-  throw new Error('Seed scripts disabled in production')
+  console.error('ERROR: seed-products.ts must not run in production!')
+  process.exit(1)
 }
 
 
@@ -313,14 +314,16 @@ const DESCRIPTIONS: Record<string, string> = {
 
 async function main() {
   console.log('🗑️  Очищаем старые данные...')
-  await prisma.stockMovement.deleteMany()
-  await prisma.promotionPrice.deleteMany()
-  await prisma.promotion.deleteMany()
-  await prisma.reservation.deleteMany()
-  await prisma.order.deleteMany()
-  await prisma.productVariant.deleteMany()
-  await prisma.product.deleteMany()
-  await prisma.category.deleteMany()
+  await prisma.$transaction([
+    prisma.stockMovement.deleteMany(),
+    prisma.promotionPrice.deleteMany(),
+    prisma.promotion.deleteMany(),
+    prisma.reservation.deleteMany(),
+    prisma.order.deleteMany(),
+    prisma.productVariant.deleteMany(),
+    prisma.product.deleteMany(),
+    prisma.category.deleteMany(),
+  ])
   console.log('✅ Данные очищены\n')
 
   // ─── CATEGORIES ───────────────────────────────────────────────────────────

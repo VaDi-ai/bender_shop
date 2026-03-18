@@ -846,7 +846,10 @@ export function startApiServer(bot?: Telegraf): void {
   // Graceful HTTP drain: stop accepting connections, allow up to 10s to finish in-flight requests
   const closeServer = () => {
     server.close()
-    setTimeout(() => process.exit(1), 10_000).unref()
+    setTimeout(() => {
+      console.error('[API] Force exit after 10s drain timeout')
+      process.exit(1)
+    }, 10_000)
   }
   process.once('SIGTERM', closeServer)
   process.once('SIGINT', closeServer)
