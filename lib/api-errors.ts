@@ -23,5 +23,6 @@ export function humanizeApiError(e: unknown): string {
     return '🔑 Неверный формат ключа API.'
   if (message.includes('model'))
     return '🤖 Указанная модель недоступна для вашего тарифа OpenRouter.'
-  return '❓ Неизвестная ошибка: ' + (message || String(status ?? '') || 'нет деталей')
+  console.error('[API Error] Unhandled:', message || status)
+  return 'Произошла ошибка. Попробуйте позже или обратитесь к администратору.'
 }

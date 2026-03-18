@@ -1244,8 +1244,27 @@ export async function handlePricingDocument(ctx: Context, userId: number): Promi
   const state = pricingState.get(userId)
   if (!state || state.flow !== 'awaiting_file') return false
 
-  const doc = (ctx.message as { document?: { file_id: string; mime_type?: string } })?.document
+  const doc = (ctx.message as { document?: { file_id: string; mime_type?: string; file_name?: string; file_size?: number } })?.document
   if (!doc) return false
+
+  const mime = doc.mime_type ?? ''
+  const fname = doc.file_name ?? ''
+  const allowedMimes = [
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'application/vnd.ms-excel',
+    'application/octet-stream',
+  ]
+  const isExcel = allowedMimes.includes(mime) || mime.includes('spreadsheet') || /\.xlsx?$/i.test(fname)
+
+  if (!isExcel) {
+    await ctx.reply('❌ Неподдерживаемый формат файла. Загрузите файл .xlsx (Excel).')
+    return true
+  }
+
+  if (doc.file_size && doc.file_size > 10 * 1024 * 1024) {
+    await ctx.reply('❌ Файл слишком большой (макс. 10 МБ).')
+    return true
+  }
 
   await ctx.reply('⏳ Обрабатываю файл…')
 

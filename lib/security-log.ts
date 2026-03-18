@@ -34,6 +34,10 @@ export type SecurityEvent =
   | 'region_updated'
   | 'region_deleted'
   | 'backup_created'
+  | 'supplier_created'
+  | 'supplier_updated'
+  | 'supplier_deleted'
+  | 'supplier_markup_changed'
 
 // ─── Ссылка на бот для реалтайм-алертов ──────────────────────────────────────
 
@@ -86,6 +90,10 @@ const EVENT_DESCRIPTIONS: Record<SecurityEvent, string> = {
   region_updated:             '🌍 Изменён регион',
   region_deleted:             '🌍 Удалён регион',
   backup_created:             '🗄️ Создан бэкап базы данных',
+  supplier_created:           '🏭 Добавлен поставщик',
+  supplier_updated:           '🏭 Обновлён поставщик',
+  supplier_deleted:           '🏭 Удалён поставщик',
+  supplier_markup_changed:    '🏭 Изменена наценка по умолчанию',
 }
 
 const SENSITIVE_KEY_PATTERNS = ['token', 'key', 'hash', 'secret']

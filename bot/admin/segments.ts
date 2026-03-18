@@ -198,6 +198,15 @@ export async function handleSegmentMessage(
 
   // Переименование: получили новое название
   if (state.flow === 'rename') {
+    const name = text.trim()
+    if (name.length > 50) {
+      await ctx.reply('Название сегмента не должно превышать 50 символов.')
+      return true
+    }
+    if (name.length < 1) {
+      await ctx.reply('Введите название сегмента.')
+      return true
+    }
     const { segmentId } = state
     const oldSeg = await prisma.segment.findUnique({ where: { id: segmentId } })
     segmentsState.delete(userId)
@@ -220,6 +229,14 @@ export async function handleSegmentMessage(
   // Добавление шаг 1: получили название → предлагаем выбрать цвет
   if (state.flow === 'add_name') {
     const name = text.trim()
+    if (name.length > 50) {
+      await ctx.reply('Название сегмента не должно превышать 50 символов.')
+      return true
+    }
+    if (name.length < 1) {
+      await ctx.reply('Введите название сегмента.')
+      return true
+    }
     segmentsState.set(userId, { flow: 'add_color', name })
 
     const colorButtons = COLORS.map((c) => Markup.button.callback(c, `segs:color:${c}`))

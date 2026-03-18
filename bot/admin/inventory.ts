@@ -1950,17 +1950,26 @@ export async function handleInventoryDocument(ctx: Context, userId: number): Pro
   if (!state || state.flow !== 'import_file') return
 
   const doc = (
-    ctx.message as { document?: { file_id: string; file_name?: string; mime_type?: string } }
+    ctx.message as { document?: { file_id: string; file_name?: string; mime_type?: string; file_size?: number } }
   )?.document
   if (!doc) return
 
   const mime = doc.mime_type ?? ''
   const fname = doc.file_name ?? 'file'
-  const isXlsx =
-    mime.includes('spreadsheet') || mime.includes('excel') || /\.xlsx?$/i.test(fname)
+  const allowedMimes = [
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'application/vnd.ms-excel',
+    'application/octet-stream',
+  ]
+  const isXlsx = allowedMimes.includes(mime) || mime.includes('spreadsheet') || /\.xlsx?$/i.test(fname)
 
   if (!isXlsx) {
-    await ctx.reply('❌ Отправьте файл .xlsx (шаблон оприходования).')
+    await ctx.reply('❌ Неподдерживаемый формат файла. Загрузите файл .xlsx (Excel).')
+    return
+  }
+
+  if (doc.file_size && doc.file_size > 10 * 1024 * 1024) {
+    await ctx.reply('❌ Файл слишком большой (макс. 10 МБ).')
     return
   }
 

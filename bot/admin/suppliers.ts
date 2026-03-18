@@ -15,6 +15,7 @@ import { Context, Markup, Telegraf } from 'telegraf'
 import { prisma } from '../../lib/prisma'
 import { getApiKeyValue, setApiKeyValue } from '../../lib/api-key-store'
 import { getUserId } from '../helpers'
+import { logSecurityEvent } from '../../lib/security-log'
 
 // ─── Типы ─────────────────────────────────────────────────────────────────────
 
@@ -236,6 +237,7 @@ export function setupSupplierHandlers(bot: Telegraf): void {
     try { await ctx.answerCbQuery() } catch { /* ignore */ }
     const id = parseInt(ctx.match[1], 10)
     await prisma.supplier.update({ where: { id }, data: { isActive: false } })
+    try { await logSecurityEvent('supplier_updated', { supplierId: id, field: 'isActive', newValue: false, adminId: getUserId(ctx) }, getUserId(ctx)) } catch { /* ignore */ }
     await ctx.reply('❌ Поставщик выключен.')
     await showSupplierPrices(ctx, id)
   })
@@ -244,6 +246,7 @@ export function setupSupplierHandlers(bot: Telegraf): void {
     try { await ctx.answerCbQuery() } catch { /* ignore */ }
     const id = parseInt(ctx.match[1], 10)
     await prisma.supplier.update({ where: { id }, data: { isActive: true } })
+    try { await logSecurityEvent('supplier_updated', { supplierId: id, field: 'isActive', newValue: true, adminId: getUserId(ctx) }, getUserId(ctx)) } catch { /* ignore */ }
     await ctx.reply('✅ Поставщик включён.')
     await showSupplierPrices(ctx, id)
   })
@@ -269,7 +272,9 @@ export function setupSupplierHandlers(bot: Telegraf): void {
   bot.action(/^sup:del_ok:(\d+)$/, async (ctx) => {
     try { await ctx.answerCbQuery('⏳ Удаляю…') } catch { /* ignore */ }
     const id = parseInt(ctx.match[1], 10)
+    const supplier = await prisma.supplier.findUnique({ where: { id } })
     await prisma.supplier.delete({ where: { id } })
+    try { await logSecurityEvent('supplier_deleted', { supplierId: id, name: supplier?.name, adminId: getUserId(ctx) }, getUserId(ctx)) } catch { /* ignore */ }
     await ctx.reply('✅ Поставщик удалён.')
     await showSuppliersMenu(ctx)
   })
@@ -409,7 +414,7 @@ export async function handleSuppliersMessage(
       return true
     }
 
-    await prisma.supplier.create({
+    const supplier = await prisma.supplier.create({
       data: {
         name: state.name,
         chatId: state.chatId,
@@ -417,6 +422,7 @@ export async function handleSuppliersMessage(
         markup,
       },
     })
+    try { await logSecurityEvent('supplier_created', { supplierId: supplier.id, name: state.name, chatId: state.chatId, adminId: userId }, userId) } catch { /* ignore */ }
     await ctx.reply(`✅ Поставщик «${state.name}» добавлен (наценка ${markup}%, чат ${state.chatId}).`)
     await showSuppliersMenu(ctx)
     return true
@@ -430,7 +436,9 @@ export async function handleSuppliersMessage(
       return true
     }
     suppliersState.delete(userId)
+    const oldSupplier = await prisma.supplier.findUnique({ where: { id: state.supplierId } })
     await prisma.supplier.update({ where: { id: state.supplierId }, data: { name } })
+    try { await logSecurityEvent('supplier_updated', { supplierId: state.supplierId, field: 'name', oldValue: oldSupplier?.name, newValue: name, adminId: userId }, userId) } catch { /* ignore */ }
     await ctx.reply(`✅ Имя изменено на «${name}».`)
     await showSupplierPrices(ctx, state.supplierId)
     return true
@@ -444,7 +452,9 @@ export async function handleSuppliersMessage(
       return true
     }
     suppliersState.delete(userId)
+    const oldSup = await prisma.supplier.findUnique({ where: { id: state.supplierId } })
     await prisma.supplier.update({ where: { id: state.supplierId }, data: { markup: val } })
+    try { await logSecurityEvent('supplier_updated', { supplierId: state.supplierId, field: 'markup', oldValue: Number(oldSup?.markup), newValue: val, adminId: userId }, userId) } catch { /* ignore */ }
     await ctx.reply(`✅ Наценка изменена на ${val}%.`)
     await showSupplierPrices(ctx, state.supplierId)
     return true
@@ -458,7 +468,9 @@ export async function handleSuppliersMessage(
       return true
     }
     suppliersState.delete(userId)
+    const oldMarkup = await getApiKeyValue('default_markup')
     await setApiKeyValue('default_markup', String(val))
+    try { await logSecurityEvent('supplier_markup_changed', { oldMarkup: oldMarkup ?? '5', newMarkup: val, adminId: userId }, userId) } catch { /* ignore */ }
     await ctx.reply(`✅ Наценка по умолчанию: ${val}%.`)
     await showSuppliersMenu(ctx)
     return true
