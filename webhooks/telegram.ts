@@ -150,6 +150,7 @@ async function buildClientCard(clientId: number): Promise<string> {
   const phone = decryptClientField(client.phone)
   const email = decryptClientField(client.email)
   if (phone) lines.push(`📞 ${phone}`)
+  if (client.telegramUsername) lines.push(`📱 Telegram: ${client.telegramUsername}`)
   if (email) lines.push(`📧 ${email}`)
   if (birthDate) lines.push(`🎂 ${birthStr}`)
   lines.push('━━━━━━━━━━━━━━━')
@@ -160,6 +161,22 @@ async function buildClientCard(clientId: number): Promise<string> {
   lines.push('━━━━━━━━━━━━━━━')
   lines.push(`🏷️ Теги: ${tagsStr}`)
   lines.push(`📝 Заметка: ${notesStr}`)
+
+  // Последний заказ
+  const lastOrder = await prisma.order.findFirst({
+    where: { clientId },
+    orderBy: { createdAt: 'desc' },
+    select: { id: true, deliveryType: true, deliveryAddress: true, customerPhone: true, createdAt: true, totalAmount: true },
+  })
+  if (lastOrder) {
+    const delivery = lastOrder.deliveryType === 'pickup'
+      ? '📍 Самовывоз'
+      : `🚚 ${lastOrder.deliveryAddress ?? 'Доставка'}`
+    lines.push('')
+    lines.push(`📦 Последний заказ #${lastOrder.id} (${lastOrder.createdAt.toLocaleDateString('ru-RU')}):`)
+    lines.push(`   ${delivery}`)
+    lines.push(`   💵 ${Number(lastOrder.totalAmount).toLocaleString('ru-RU')}₽`)
+  }
 
   return lines.join('\n')
 }
@@ -881,7 +898,7 @@ export function setupClientHandlers(bot: Telegraf): void {
         })
         if (!client) {
           client = await prisma.client.create({
-            data: { name, source: 'telegram', externalId, segmentId: defaultSeg?.id ?? null },
+            data: { name, source: 'telegram', externalId, segmentId: defaultSeg?.id ?? null, telegramUsername: from.username ? `@${from.username}` : null },
             include: { segment: true },
           })
         }
@@ -1101,10 +1118,15 @@ async function handleClientMessage(
     let isNewClient = false
     if (!client) {
       client = await prisma.client.create({
-        data: { name, source: 'telegram', externalId, segmentId: defaultSeg?.id ?? null },
+        data: { name, source: 'telegram', externalId, segmentId: defaultSeg?.id ?? null, telegramUsername: from.username ? `@${from.username}` : null },
         include: { segment: true },
       })
       isNewClient = true
+    } else if (from.username && client.telegramUsername !== `@${from.username}`) {
+      await prisma.client.update({
+        where: { id: client.id },
+        data: { telegramUsername: `@${from.username}` },
+      })
     }
 
     // Приветственное сообщение для нового клиента
@@ -1420,7 +1442,7 @@ async function handleWebAppOrder(
 
   if (!client) {
     client = await prisma.client.create({
-      data: { name, source: 'telegram', externalId, segmentId: defaultSeg?.id ?? null },
+      data: { name, source: 'telegram', externalId, segmentId: defaultSeg?.id ?? null, telegramUsername: from.username ? `@${from.username}` : null },
       include: { segment: true },
     })
   }

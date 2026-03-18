@@ -664,6 +664,7 @@ export function startApiServer(bot?: Telegraf): void {
       customerPhone,
       deliveryType,
       deliveryAddress,
+      customerComment,
     } = req.body
 
     const telegramUserId = (req as any).telegramUserId as number
@@ -686,8 +687,9 @@ export function startApiServer(bot?: Telegraf): void {
       return
     }
 
-    if (!customerPhone || !/^\+?[\d\s\-()\u00d7]{7,15}$/.test(customerPhone)) {
-      res.status(400).json({ error: 'Неверный формат телефона' })
+    const phoneDigits = (customerPhone || '').replace(/\D/g, '')
+    if (phoneDigits.length !== 11 || !phoneDigits.startsWith('7')) {
+      res.status(400).json({ error: 'Неверный формат телефона. Используйте +7 (XXX) XXX-XX-XX' })
       return
     }
 
@@ -787,6 +789,7 @@ export function startApiServer(bot?: Telegraf): void {
             customerPhone: customerPhone.trim(),
             deliveryType: deliveryType as DeliveryType,
             deliveryAddress: deliveryAddress?.trim() ?? null,
+            customerComment: typeof customerComment === 'string' ? customerComment.trim().slice(0, 500) : null,
           },
         })
 
@@ -862,14 +865,26 @@ export function startApiServer(bot?: Telegraf): void {
           const deliveryText = deliveryType === 'pickup'
             ? '📍 Самовывоз (ТЦ Горбушка, 211/1)'
             : `🚚 Доставка: ${deliveryAddress}`
+          const commentLine = customerComment ? `\n💬 Комментарий: ${String(customerComment).slice(0, 200)}` : ''
+
+          // Получить telegram username клиента
+          const client = await prisma.client.findUnique({
+            where: { source_externalId: { source: 'telegram', externalId: telegramId } },
+          })
+          const tgUsername = client?.telegramUsername ?? null
+          const tgLink = tgUsername
+            ? `https://t.me/${tgUsername.replace('@', '')}`
+            : `tg://user?id=${telegramId}`
+          const tgLine = tgUsername ? `📱 Telegram: ${tgUsername} (${tgLink})` : `📱 Telegram: ${tgLink}`
 
           const orderText = [
             `🛒 Новый заказ #${order.id}`,
             '',
             `👤 ${customerName.trim()}`,
             `📞 ${customerPhone.trim()}`,
+            tgLine,
             deliveryText,
-            `💰 ${paymentMethod === 'cash' ? 'Наличные' : 'Карта'}${cardSurcharge}`,
+            `💰 ${paymentMethod === 'cash' ? 'Наличные' : 'Карта'}${cardSurcharge}${commentLine}`,
             '',
             `📦 Товары:`,
             itemLines,
@@ -899,9 +914,6 @@ export function startApiServer(bot?: Telegraf): void {
           }
 
           // 3. Если клиент уже в CRM — отправить в его топик тоже
-          const client = await prisma.client.findUnique({
-            where: { source_externalId: { source: 'telegram', externalId: telegramId } },
-          })
           if (client?.telegramTopicId && CRM_GROUP_ID) {
             try {
               await telegram.sendMessage(CRM_GROUP_ID, `🛒 Клиент оформил заказ #${order.id} через сайт\n\n${itemLines}\n\n💵 ${totalStr}₽`, {

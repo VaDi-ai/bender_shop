@@ -115,6 +115,7 @@ model Client {
   externalId      String?       // ID на внешней платформе (Avito, Instagram и т.д.)
   segmentId       Int?
   notes           String?
+  telegramUsername String?        // @username в Telegram
   telegramTopicId Int?          // ID темы в группе Telegram CRM
   pinnedMessageId Int?          // ID закреплённого сообщения с панелью управления
 
@@ -295,6 +296,7 @@ model Order {
   customerPhone   String?
   deliveryType    DeliveryType?
   deliveryAddress String?
+  customerComment String?
   createdAt       DateTime     @default(now())
 
   client Client?      @relation(fields: [clientId], references: [id])
