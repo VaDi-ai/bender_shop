@@ -14,7 +14,8 @@
     "db:push": "prisma db push",
     "db:constraints": "ts-node scripts/add-check-constraints.ts",
     "backup": "ts-node scripts/backup-db.ts",
-    "restore": "ts-node scripts/restore-db.ts"
+    "restore": "ts-node scripts/restore-db.ts",
+    "clear-products": "ts-node scripts/clear-test-products.ts"
   },
   "keywords": [],
   "author": "",

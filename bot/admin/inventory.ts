@@ -1157,19 +1157,21 @@ export function setupInventoryHandlers(bot: Telegraf): void {
     try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
     await ctx.reply(
       [
-        '📋 Шаблон для оприходования/списания',
+        '📋 Шаблон для создания и оприходования товаров',
         '',
-        'Лист «Оприходование»:',
-        '- SKU — выберите из выпадающего списка',
-        '- Количество — +5 приход, -2 списание',
-        '- Цена — если указана, обновит цену варианта',
-        '- Комментарий — для аудита (необязательно)',
-        '- Товар — заполняется автоматически',
+        '📦 Лист «Создание товаров» — для НОВЫХ товаров:',
+        '  • Название, бренд, категория (выпадающий список)',
+        '  • Атрибуты в JSON: {"Память": ["256GB", "512GB"], "Цвет": ["Silver"]}',
+        '  • Цена и количество',
+        '  • Описание подтянется автоматически из интернета',
         '',
-        'Лист «Справочник SKU» — все варианты с остатками и регионами.',
-        'Лист «Инструкция» — подробное описание.',
+        '📥 Лист «Оприходование» — для СУЩЕСТВУЮЩИХ товаров:',
+        '  • Выберите SKU из списка',
+        '  • Количество: +5 приход, -2 списание',
         '',
-        '⚠️ Новые товары сначала создавайте через бот, потом оприходуйте через шаблон.',
+        '📖 Лист «Инструкция» — подробное описание.',
+        '',
+        '⚠️ Удалите строки-примеры (серым) перед загрузкой!',
       ].join('\n'),
     )
     try {
@@ -1226,6 +1228,50 @@ export function setupInventoryHandlers(bot: Telegraf): void {
       }
       ws1.views = [{ state: 'frozen', ySplit: 1 }]
 
+      // ── Лист «Создание товаров» ─────────────────────────────────────────────
+      const wsCreate = wb.addWorksheet('Создание товаров')
+      wsCreate.columns = [
+        { key: 'name', width: 30 },
+        { key: 'brand', width: 15 },
+        { key: 'category', width: 20 },
+        { key: 'attributes', width: 50 },
+        { key: 'price', width: 12 },
+        { key: 'quantity', width: 12 },
+        { key: 'description', width: 40 },
+      ]
+
+      const createHeaderRow = wsCreate.addRow(['Название*', 'Бренд', 'Категория*', 'Атрибуты (JSON)', 'Цена*', 'Количество*', 'Описание'])
+      createHeaderRow.eachCell((cell) => {
+        cell.fill = headerFill
+        cell.font = headerFont
+      })
+
+      // Выпадающий список категорий
+      const categories = await prisma.category.findMany({ orderBy: { name: 'asc' } })
+      const catList = categories.map(c => c.name).join(',')
+      for (let row = 2; row <= 100; row++) {
+        wsCreate.getCell(`C${row}`).dataValidation = {
+          type: 'list',
+          formulae: [catList.length < 250 ? `"${catList}"` : `"${catList.slice(0, 249)}"`],
+          showErrorMessage: true,
+          errorTitle: 'Неверная категория',
+          error: 'Выберите категорию из списка.',
+        }
+      }
+
+      // Примеры (серым)
+      const exampleFont: Partial<ExcelJS.Font> = { color: { argb: 'FF999999' }, italic: true }
+      const exampleRows = [
+        ['iPhone 17 Pro Max', 'Apple', categories[0]?.name ?? 'Телефоны', '{"Память": ["256GB", "512GB"], "Цвет": ["Silver", "Black"]}', 128000, 5, ''],
+        ['MacBook Air M4', 'Apple', categories[1]?.name ?? 'Ноутбуки', '{"Память": ["16GB/256GB", "16GB/512GB"], "Цвет": ["Silver", "Space Gray"]}', 115000, 3, ''],
+        ['AirPods Pro 3', 'Apple', categories[2]?.name ?? 'Аудио', '{}', 24900, 10, ''],
+      ]
+      for (const rowData of exampleRows) {
+        const r = wsCreate.addRow(rowData)
+        r.eachCell((cell) => { cell.font = exampleFont })
+      }
+      wsCreate.views = [{ state: 'frozen', ySplit: 1 }]
+
       // ── Лист «Справочник SKU» ─────────────────────────────────────────────
       const ws2 = wb.addWorksheet('Справочник SKU')
       ws2.columns = [
@@ -1270,14 +1316,31 @@ export function setupInventoryHandlers(bot: Telegraf): void {
       const instructions = [
         '📋 Инструкция по заполнению:',
         '',
-        '1. Выберите SKU из выпадающего списка в колонке A (или введите вручную)',
+        '📦 Лист «Создание товаров» — для добавления НОВЫХ товаров:',
+        '',
+        '1. Название* — как увидит покупатель (например: iPhone 17 Pro Max)',
+        '2. Бренд — Apple, Samsung, Sony и т.д.',
+        '3. Категория* — выберите из выпадающего списка',
+        '4. Атрибуты (JSON) — варианты товара в формате:',
+        '   {"Память": ["256GB", "512GB"], "Цвет": ["Silver", "Black"]}',
+        '   Если вариантов нет (аксессуары) — оставьте {} или пустым',
+        '5. Цена* — базовая цена в рублях (число без пробелов)',
+        '6. Количество* — сколько единиц оприходовать',
+        '7. Описание — необязательно, бот подтянет из интернета',
+        '',
+        '⚠️ Строки-примеры (серым курсивом) удалите перед загрузкой!',
+        '⚠️ Если атрибуты указаны — создаются варианты (декартово произведение).',
+        '   Количество распределяется ПОРОВНУ по вариантам.',
+        '',
+        '─────────────────────────────────────────────',
+        '',
+        '📥 Лист «Оприходование» — для СУЩЕСТВУЮЩИХ товаров:',
+        '',
+        '1. Выберите SKU из выпадающего списка в колонке A',
         '2. Укажите количество: положительное = приход, отрицательное = списание',
         '3. Цена (необязательно): если указана — обновит цену варианта',
         '4. Комментарий (необязательно): для аудита — причина прихода/списания',
         '5. Колонка "Товар" заполняется автоматически по SKU',
-        '',
-        '⚠️ Для добавления НОВОГО товара — сначала создайте его через бот (Товароучёт → Новый товар),',
-        '   затем оприходуйте через этот шаблон.',
       ]
       instructions.forEach((line) => {
         ws3.addRow([line])
@@ -2075,10 +2138,188 @@ async function processImportFile(ctx: Context, buffer: Buffer, userId: number): 
   const wb = new ExcelJS.Workbook()
   await wb.xlsx.load(buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength) as ArrayBuffer)
 
+  // ── Обработка листа «Создание товаров» ──────────────────────────────────
+  const wsCreate = wb.getWorksheet('Создание товаров')
+  if (wsCreate && wsCreate.rowCount > 1) {
+    let created = 0
+    let skipped = 0
+    const createErrors: string[] = []
+
+    const createRows: ExcelJS.Row[] = []
+    wsCreate.eachRow((row, rowNum) => { if (rowNum > 1) createRows.push(row) })
+
+    for (const row of createRows) {
+      const rowNum = row.number
+      const name = String(row.getCell(1).value ?? '').trim()
+      const brand = String(row.getCell(2).value ?? '').trim() || null
+      const categoryName = String(row.getCell(3).value ?? '').trim()
+      const attrsRaw = String(row.getCell(4).value ?? '').trim()
+      const priceVal = row.getCell(5).value
+      const price = typeof priceVal === 'number' ? priceVal : parseFloat(String(priceVal ?? '0').replace(/\s/g, '').replace(',', '.'))
+      const qtyVal = row.getCell(6).value
+      const quantity = typeof qtyVal === 'number' ? Math.round(qtyVal) : parseInt(String(qtyVal ?? '0'), 10)
+      const description = String(row.getCell(7).value ?? '').trim() || null
+
+      if (!name || !categoryName) continue
+      // Skip example rows
+      if (name === 'iPhone 17 Pro Max' && brand === 'Apple' && price === 128000) continue
+      if (name === 'MacBook Air M4' && brand === 'Apple' && price === 115000) continue
+      if (name === 'AirPods Pro 3' && brand === 'Apple' && price === 24900) continue
+
+      if (isNaN(price) || price <= 0) {
+        createErrors.push(`Стр.${rowNum}: неверная цена для "${name}"`)
+        skipped++
+        continue
+      }
+
+      const category = await prisma.category.findFirst({ where: { name: categoryName } })
+      if (!category) {
+        createErrors.push(`Стр.${rowNum}: категория "${categoryName}" не найдена`)
+        skipped++
+        continue
+      }
+
+      const existing = await prisma.product.findFirst({ where: { name } })
+      if (existing) {
+        createErrors.push(`Стр.${rowNum}: товар "${name}" уже существует`)
+        skipped++
+        continue
+      }
+
+      let attributes: Record<string, string[]> = {}
+      if (attrsRaw && attrsRaw !== '{}') {
+        try {
+          attributes = JSON.parse(attrsRaw)
+        } catch {
+          createErrors.push(`Стр.${rowNum}: неверный JSON атрибутов для "${name}"`)
+          skipped++
+          continue
+        }
+      }
+
+      const productSku = await generateProductSku(category.id)
+
+      const product = await prisma.product.create({
+        data: {
+          sku: productSku,
+          name,
+          description,
+          brand,
+          categoryId: category.id,
+          price,
+          stock: 0,
+          quantity: 0,
+          attributes: Object.keys(attributes).length > 0 ? attributes : undefined,
+          photos: [],
+          isAvailable: true,
+        },
+      })
+
+      const attrKeys = Object.keys(attributes)
+      if (attrKeys.length > 0) {
+        const combos = cartesianProduct(attributes)
+        const qtyPerVariant = Math.max(0, Math.floor(quantity / Math.max(1, combos.length)))
+
+        for (const combo of combos) {
+          const variantSku = await generateVariantSku(productSku, product.id)
+          const variant = await prisma.productVariant.create({
+            data: {
+              productId: product.id,
+              sku: variantSku,
+              price,
+              quantity: qtyPerVariant,
+              inStock: qtyPerVariant > 0,
+              attributes: combo,
+              photos: [],
+            },
+          })
+
+          if (qtyPerVariant > 0) {
+            await prisma.stockMovement.create({
+              data: {
+                variantId: variant.id,
+                type: 'in',
+                quantity: qtyPerVariant,
+                comment: 'Первичное оприходование (Excel)',
+                createdBy: String(userId),
+              },
+            })
+          }
+        }
+
+        const totalQty = qtyPerVariant * combos.length
+        await prisma.product.update({
+          where: { id: product.id },
+          data: { stock: totalQty, quantity: totalQty },
+        })
+      } else {
+        const variantSku = await generateVariantSku(productSku, product.id)
+        const variant = await prisma.productVariant.create({
+          data: {
+            productId: product.id,
+            sku: variantSku,
+            price,
+            quantity: Math.max(0, quantity),
+            inStock: quantity > 0,
+            attributes: {},
+            photos: [],
+          },
+        })
+
+        if (quantity > 0) {
+          await prisma.stockMovement.create({
+            data: {
+              variantId: variant.id,
+              type: 'in',
+              quantity,
+              comment: 'Первичное оприходование (Excel)',
+              createdBy: String(userId),
+            },
+          })
+          await prisma.product.update({
+            where: { id: product.id },
+            data: { stock: quantity, quantity },
+          })
+        }
+      }
+
+      created++
+    }
+
+    if (created > 0 || skipped > 0) {
+      const createReport = [
+        `📦 Создание товаров:`,
+        `✅ Создано: ${created}`,
+        skipped > 0 ? `⚠️ Пропущено: ${skipped}` : '',
+        ...createErrors.slice(0, 10),
+        createErrors.length > 10 ? `...и ещё ${createErrors.length - 10} ошибок` : '',
+      ].filter(Boolean).join('\n')
+      await ctx.reply(createReport)
+    }
+
+    // Автообогащение новых товаров
+    if (created > 0) {
+      ;(async () => {
+        try {
+          const { enrichAllProducts } = await import('../../lib/enrich')
+          const result = await enrichAllProducts()
+          if (result.enriched > 0) {
+            await ctx.reply(`✨ Автообогащение: характеристики заполнены для ${result.enriched} товаров.`)
+          }
+        } catch (err) {
+          console.error('[Enrich] After create-import error:', err)
+        }
+      })()
+    }
+  }
+
+  // ── Обработка листа «Оприходование» ──────────────────────────────────────
   const sheet = wb.getWorksheet('Оприходование')
   if (!sheet) {
-    await ctx.reply('❌ Лист «Оприходование» не найден. Используйте скачанный шаблон.', Markup.removeKeyboard())
-    await showInventory(ctx)
+    if (!wsCreate || wsCreate.rowCount <= 1) {
+      await ctx.reply('❌ Лист «Оприходование» или «Создание товаров» не найден. Используйте скачанный шаблон.', Markup.removeKeyboard())
+      await showInventory(ctx)
+    }
     return
   }
 
