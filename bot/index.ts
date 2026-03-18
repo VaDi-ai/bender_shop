@@ -671,7 +671,20 @@ bot.action('back:main', async (ctx) => {
   pricingState.delete(userId)
   apiKeysState.delete(userId)
   suppliersState.delete(userId)
-  await ctx.reply('🏠 Главное меню', adminKeyboard)
+
+  const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000)
+  let recentIncoming = 0
+  try {
+    recentIncoming = await prisma.message.count({
+      where: { direction: 'in', createdAt: { gte: oneHourAgo } },
+    })
+  } catch { /* ignore */ }
+
+  const menuText = recentIncoming > 0
+    ? `🏠 Главное меню  |  📬 ${recentIncoming} новых за час`
+    : '🏠 Главное меню'
+
+  await ctx.reply(menuText, adminKeyboard)
 })
 
 // ─── /pin — закрепить сообщение с кнопкой Mini App (только для администраторов) ─

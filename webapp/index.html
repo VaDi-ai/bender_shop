@@ -85,6 +85,13 @@
     }
     .header-logo { font-family: 'Courier New', Courier, monospace; font-size: 20px; color: var(--accent); text-shadow: var(--neon); letter-spacing: 3px; cursor: pointer; user-select: none; }
     .header-right { display: flex; align-items: center; gap: 10px; }
+    .search-wrap { flex: 1; max-width: 300px; position: relative; margin: 0 12px; }
+    .search-input { width: 100%; background: rgba(255,255,255,0.05); border: 1px solid #2a2a2a; border-radius: 8px; padding: 8px 32px 8px 12px; color: #e5e5e5; font-family: 'Courier New', monospace; font-size: 13px; outline: none; transition: border-color 0.2s; }
+    .search-input::placeholder { color: #555; font-size: 12px; }
+    .search-input:focus { border-color: var(--accent); }
+    .search-clear { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); background: none; border: none; color: #555; font-size: 14px; cursor: pointer; padding: 4px; }
+    .search-clear:hover { color: var(--accent); }
+    @media (max-width: 480px) { .search-wrap { max-width: 160px; margin: 0 8px; } .search-input { font-size: 12px; padding: 6px 28px 6px 10px; } }
     .cart-btn { display: flex; align-items: center; gap: 8px; background: transparent; color: var(--text); border: 1px solid #2a2a2a; padding: 8px 14px; font-size: 15px; cursor: pointer; transition: border-color 0.2s; }
     .cart-btn:hover { border-color: var(--accent); }
     .cart-badge { font-family: 'Courier New', Courier, monospace; background: var(--accent); color: var(--accent-fg); min-width: 20px; height: 20px; padding: 0 4px; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; }
@@ -707,6 +714,10 @@
   <!-- Fixed header -->
   <header class="header">
     <span class="header-logo" onclick="scrollToTop()">BENDER SHOP</span>
+    <div class="search-wrap">
+      <input type="text" class="search-input" id="searchInput" placeholder="Поиск товаров..." autocomplete="off">
+      <button class="search-clear" id="searchClear" style="display:none">✕</button>
+    </div>
     <div class="header-right">
       <button class="cart-btn" id="cartBtn" aria-label="Корзина">
         🛒<span class="cart-badge" id="cartBadge" data-count="0">0</span>
@@ -1154,13 +1165,33 @@
     // ── Render product grid ───────────────────────────────────────────────────
     function renderGrid() {
       const grid = document.getElementById('grid')
-      const products = activeBrand
-        ? allProducts.filter(p => {
-            const b = (p.brand && p.brand.trim()) ? p.brand.trim() : (p.name || '').split(' ')[0]
-            return b === activeBrand
-          })
-        : allProducts
-      if (!products.length) { grid.innerHTML = '<div class="state-msg">Товаров нет</div>'; return }
+      let products = allProducts
+
+      // Фильтр по поиску
+      if (searchQuery) {
+        products = products.filter(p => {
+          const searchIn = [
+            p.name, p.brand, p.description,
+            ...(p.variants || []).map(v => Object.values(v.attributes || {}).join(' ')),
+          ].filter(Boolean).join(' ').toLowerCase()
+          return searchIn.includes(searchQuery)
+        })
+      }
+
+      // Фильтр по бренду
+      if (activeBrand) {
+        products = products.filter(p => {
+          const b = (p.brand && p.brand.trim()) ? p.brand.trim() : (p.name || '').split(' ')[0]
+          return b === activeBrand
+        })
+      }
+
+      if (!products.length) {
+        grid.innerHTML = searchQuery
+          ? `<div class="state-msg">По запросу «${esc(searchQuery)}» ничего не найдено</div>`
+          : '<div class="state-msg">Товаров нет</div>'
+        return
+      }
 
       grid.innerHTML = products.map((p, i) => {
         const photos = getProductPhotos(p, null)
@@ -1893,6 +1924,28 @@
       })
     }
 
+    // ─── Search ──────────────────────────────────────────────────────────────
+    let searchQuery = ''
+
+    function initSearch() {
+      const input = document.getElementById('searchInput')
+      const clearBtn = document.getElementById('searchClear')
+      if (!input) return
+
+      input.addEventListener('input', function() {
+        searchQuery = this.value.trim().toLowerCase()
+        clearBtn.style.display = searchQuery ? 'block' : 'none'
+        renderGrid()
+      })
+
+      clearBtn.addEventListener('click', function() {
+        input.value = ''
+        searchQuery = ''
+        clearBtn.style.display = 'none'
+        renderGrid()
+      })
+    }
+
     // ── Init ──────────────────────────────────────────────────────────────────
     checkCacheVersion()
     loadMarquee()
@@ -1900,6 +1953,7 @@
     loadCategories()
     loadProducts('')
     initPhoneMask()
+    initSearch()
     setInterval(checkCacheVersion, 30000)
   </script>
 
