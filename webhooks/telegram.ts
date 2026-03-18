@@ -1098,11 +1098,41 @@ async function handleClientMessage(
       include: { segment: true },
     })
 
+    let isNewClient = false
     if (!client) {
       client = await prisma.client.create({
         data: { name, source: 'telegram', externalId, segmentId: defaultSeg?.id ?? null },
         include: { segment: true },
       })
+      isNewClient = true
+    }
+
+    // Приветственное сообщение для нового клиента
+    if (isNewClient) {
+      const webAppUrl = process.env.WEBAPP_URL
+      try {
+        const welcomeText = [
+          'Привет! 👋 Добро пожаловать в Bender Shop!',
+          '',
+          '🛍 У нас можно купить технику по лучшим ценам — iPhone, MacBook, PlayStation, Dyson и многое другое.',
+          '',
+          '📍 Мы работаем:',
+          '   Барклая 8, ТЦ Горбушка, Павильон 211/1',
+          '   ⏰ Ежедневно с 11:00 до 20:00',
+          '',
+          '💬 Напишите что вас интересует — ответим быстро!',
+          '🛒 Или откройте каталог по кнопке ниже 👇',
+        ].join('\n')
+        if (webAppUrl) {
+          await telegram.sendMessage(from.id, welcomeText, {
+            reply_markup: {
+              inline_keyboard: [[{ text: '🛍 Открыть каталог', web_app: { url: webAppUrl } }]],
+            },
+          })
+        } else {
+          await telegram.sendMessage(from.id, welcomeText)
+        }
+      } catch { /* ignore: user may have blocked bot */ }
     }
 
     // Создать топик форума, если его ещё нет

@@ -18,6 +18,7 @@ import cors from 'cors'
 import rateLimit from 'express-rate-limit'
 import ExcelJS from 'exceljs'
 import type { Telegraf } from 'telegraf'
+import { Telegram } from 'telegraf'
 import { prisma } from '../lib/prisma'
 import { logSecurityEvent } from '../lib/security-log'
 import { getApiKeyValue } from '../lib/api-key-store'
@@ -29,6 +30,10 @@ if (!process.env.BOT_TOKEN) throw new Error('BOT_TOKEN is required')
 const BOT_TOKEN = process.env.BOT_TOKEN
 const PORT = Number(process.env.PORT || process.env.API_PORT || 3000)
 const WEBAPP_PATH = path.join(__dirname, '../../webapp/index.html')
+
+const telegram = new Telegram(BOT_TOKEN)
+const CRM_GROUP_ID = Number(process.env.CRM_GROUP_ID)
+const ADMIN_IDS = (process.env.ADMIN_IDS ?? '').split(',').map((id) => Number(id.trim())).filter(Boolean)
 
 // ─── Хелпер: форматируем цену ─────────────────────────────────────────────────
 
@@ -832,6 +837,98 @@ export function startApiServer(bot?: Telegraf): void {
 
       if (!res.headersSent) res.json({ success: true, orderId: order.id })
       console.log(`[ORDER] #${order.id} by ${telegramId}: ${items.length} items, ${order.totalAmount}₽, ${paymentMethod}`)
+
+      // ── Уведомление о заказе (не блокирует ответ) ────────────────────
+      const totalStr = order.totalAmount.toString()
+      ;(async () => {
+        try {
+          const enrichedItems: Array<{ name: string; quantity: number; price: string }> = []
+          const orderItems = await prisma.orderItem.findMany({
+            where: { orderId: order.id },
+          })
+          for (const oi of orderItems) {
+            enrichedItems.push({
+              name: oi.productName,
+              quantity: oi.quantity,
+              price: oi.priceAtPurchase.toString(),
+            })
+          }
+
+          const itemLines = enrichedItems.map(i =>
+            `  • ${i.name} × ${i.quantity} — ${Number(i.price).toLocaleString('ru-RU')}₽`
+          ).join('\n')
+
+          const cardSurcharge = paymentMethod === 'card' ? '\n💳 Эквайринг +14%' : ''
+          const deliveryText = deliveryType === 'pickup'
+            ? '📍 Самовывоз (ТЦ Горбушка, 211/1)'
+            : `🚚 Доставка: ${deliveryAddress}`
+
+          const orderText = [
+            `🛒 Новый заказ #${order.id}`,
+            '',
+            `👤 ${customerName.trim()}`,
+            `📞 ${customerPhone.trim()}`,
+            deliveryText,
+            `💰 ${paymentMethod === 'cash' ? 'Наличные' : 'Карта'}${cardSurcharge}`,
+            '',
+            `📦 Товары:`,
+            itemLines,
+            '',
+            `💵 Итого: ${totalStr}₽`,
+          ].join('\n')
+
+          // 1. Отправить в топик продаж CRM-группы
+          if (CRM_GROUP_ID) {
+            try {
+              const salesTopicId = await getApiKeyValue('sales_topic')
+              if (salesTopicId) {
+                await telegram.sendMessage(CRM_GROUP_ID, orderText, {
+                  message_thread_id: Number(salesTopicId),
+                })
+              }
+            } catch (e) {
+              console.error('[ORDER] Failed to send to CRM group:', e)
+            }
+          }
+
+          // 2. Отправить всем админам в личку
+          for (const adminId of ADMIN_IDS) {
+            try {
+              await telegram.sendMessage(adminId, orderText)
+            } catch { /* ignore */ }
+          }
+
+          // 3. Если клиент уже в CRM — отправить в его топик тоже
+          const client = await prisma.client.findUnique({
+            where: { source_externalId: { source: 'telegram', externalId: telegramId } },
+          })
+          if (client?.telegramTopicId && CRM_GROUP_ID) {
+            try {
+              await telegram.sendMessage(CRM_GROUP_ID, `🛒 Клиент оформил заказ #${order.id} через сайт\n\n${itemLines}\n\n💵 ${totalStr}₽`, {
+                message_thread_id: client.telegramTopicId,
+              })
+            } catch { /* ignore */ }
+          }
+
+          // 4. Подтверждение клиенту в личку
+          try {
+            await telegram.sendMessage(telegramUserId, [
+              `✅ Ваш заказ #${order.id} оформлен!`,
+              '',
+              `📦 ${enrichedItems.map(i => i.name).join(', ')}`,
+              `💵 Итого: ${totalStr}₽`,
+              '',
+              deliveryType === 'pickup'
+                ? '📍 Заберите заказ по адресу: Барклая 8, ТЦ Горбушка, Павильон 211/1\n⏰ Ежедневно с 11:00 до 20:00'
+                : `🚚 Доставка по адресу: ${deliveryAddress}`,
+              '',
+              'Мы свяжемся с вами для подтверждения!',
+            ].join('\n'))
+          } catch { /* ignore: user may have blocked bot */ }
+        } catch (err) {
+          console.error('[ORDER] Notification error:', err)
+        }
+      })()
     } catch (err: any) {
       if (err.isStockConflict) {
         console.log(`[ORDER] Stock conflict for ${telegramId}`)
