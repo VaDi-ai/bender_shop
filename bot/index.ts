@@ -687,30 +687,6 @@ startApiServer(process.env.NODE_ENV === 'production' ? bot : undefined)
   }
 })()
 
-// ─── Инициализация дефолтных регионов ────────────────────────────────────────
-
-const DEFAULT_REGIONS = [
-  { code: 'HK', name: 'Гонконг',  flag: '🇭🇰', currency: 'HKD' },
-  { code: 'EU', name: 'Европа',   flag: '🇪🇺', currency: 'EUR' },
-  { code: 'IN', name: 'Индия',    flag: '🇮🇳', currency: 'INR' },
-  { code: 'RU', name: 'Россия',   flag: '🇷🇺', currency: 'RUB' },
-  { code: 'CN', name: 'Китай',    flag: '🇨🇳', currency: 'CNY' },
-] as const
-
-;(async () => {
-  try {
-    for (const r of DEFAULT_REGIONS) {
-      await prisma.region.upsert({
-        where: { code: r.code },
-        create: r,
-        update: {},
-      })
-    }
-    console.log('Регионы инициализированы')
-  } catch (err) {
-    console.error('Region seeder failed — pricing module may not work correctly:', err)
-  }
-})()
 
 // ─── DB keepalive: предотвращает разрыв соединения на db.prisma.io ────────────
 

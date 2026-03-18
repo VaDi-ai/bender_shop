@@ -353,16 +353,6 @@ model ApiKey {
   updatedAt  DateTime @updatedAt
 }
 
-model Region {
-  id        Int      @id @default(autoincrement())
-  code      String   @unique
-  name      String
-  flag      String
-  currency  String
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-}
-
 model HeroBanner {
   id        Int      @id @default(autoincrement())
   imageFile String

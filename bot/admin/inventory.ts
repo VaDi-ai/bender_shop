@@ -112,15 +112,6 @@ type VariantAddFlow =
     }
   | {
       flow: 'variant_add'
-      step: 'region'
-      productId: number
-      sku: string
-      price: number
-      qty: number
-      attrs: Record<string, string>
-    }
-  | {
-      flow: 'variant_add'
       step: 'photo'
       productId: number
       sku: string
@@ -813,25 +804,11 @@ async function saveVariant(
   }
 }
 
-// ─── Выбор региона ────────────────────────────────────────────────────────────
+// ─── Переход к шагу фото ──────────────────────────────────────────────────────
 
-async function buildRegionKeyboard() {
-  const regions = await prisma.region.findMany({ where: { isActive: true }, orderBy: { code: 'asc' } })
-  const rows: ReturnType<typeof Markup.button.callback>[][] = []
-  for (let i = 0; i < regions.length; i += 4) {
-    rows.push(regions.slice(i, i + 4).map((r) =>
-      Markup.button.callback(`${r.flag} ${r.code}`, `inv:var_region:${r.code}`),
-    ))
-  }
-  rows.push([Markup.button.callback('⏭️ Пропустить', 'inv:var_region_skip')])
-  return Markup.inlineKeyboard(rows)
-}
-
-function regionToPhotoState(
-  s: Extract<VariantAddFlow, { step: 'region' }>,
-  regionCode?: string,
+function attrsToPhotoState(
+  s: { productId: number; sku: string; price: number; qty: number; attrs: Record<string, string> },
 ): Extract<VariantAddFlow, { step: 'photo' }> {
-  const attrs = regionCode ? { ...s.attrs, 'Регион': regionCode } : { ...s.attrs }
   return {
     flow: 'variant_add',
     step: 'photo',
@@ -839,7 +816,7 @@ function regionToPhotoState(
     sku: s.sku,
     price: s.price,
     qty: s.qty,
-    attrs,
+    attrs: s.attrs,
     photos: [],
   }
 }
@@ -1197,13 +1174,12 @@ export function setupInventoryHandlers(bot: Telegraf): void {
         { key: 'sku', width: 28 },
         { key: 'product', width: 30 },
         { key: 'attrs', width: 35 },
-        { key: 'region', width: 18 },
         { key: 'price', width: 15 },
         { key: 'qty', width: 12 },
         { key: 'inStock', width: 14 },
       ]
 
-      const refHeader = ws2.addRow(['SKU', 'Товар', 'Атрибуты', 'Регион', 'Цена', 'Остаток', 'В наличии'])
+      const refHeader = ws2.addRow(['SKU', 'Товар', 'Атрибуты', 'Цена', 'Остаток', 'В наличии'])
       refHeader.eachCell((cell) => {
         cell.fill = headerFill
         cell.font = headerFont
@@ -1211,17 +1187,13 @@ export function setupInventoryHandlers(bot: Telegraf): void {
 
       variants.forEach((v, i) => {
         const attrsObj = v.attributes as Record<string, string>
-        const regionKey = Object.keys(attrsObj).find((k) => /регион|region/i.test(k))
-        const region = regionKey ? attrsObj[regionKey] : ''
         const attrs = Object.entries(attrsObj)
-          .filter(([k]) => !/регион|region/i.test(k))
           .map(([k, val]) => `${k}: ${val}`)
           .join(', ')
         const row = ws2.addRow([
           v.sku,
           v.product.name,
           attrs,
-          region,
           v.price.toString(),
           v.quantity,
           v.quantity > 0 ? 'Да' : 'Нет',
@@ -1506,18 +1478,16 @@ export function setupInventoryHandlers(bot: Telegraf): void {
     const nextIndex = s.currentAttrIndex + 1
 
     if (nextIndex >= s.attrKeys.length) {
-      inventoryState.set(userId, {
-        flow: 'variant_add',
-        step: 'region',
+      inventoryState.set(userId, attrsToPhotoState({
         productId: s.productId,
         sku: s.sku,
         price: s.price,
         qty: s.qty,
         attrs: newSelectedAttrs,
-      })
+      }))
       await ctx.reply(
-        `${currentKey}: ${value} ✅\n\nШаг 5 — выберите регион/страну варианта:`,
-        await buildRegionKeyboard(),
+        `${currentKey}: ${value} ✅\n\nШаг 5 — добавьте фото варианта (до 5 штук) или пропустите:`,
+        Markup.inlineKeyboard([[Markup.button.callback('⏭️ Пропустить', 'inv:var_photo_skip')]]),
       )
     } else {
       inventoryState.set(userId, {
@@ -1543,35 +1513,6 @@ export function setupInventoryHandlers(bot: Telegraf): void {
         Markup.inlineKeyboard(valRows),
       )
     }
-  })
-
-  // ── Выбор региона при добавлении варианта ─────────────────────────────────
-
-  bot.action(/^inv:var_region:(.+)$/, async (ctx) => {
-    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
-    const userId = getUserId(ctx)
-    const state = inventoryState.get(userId)
-    if (!state || state.flow !== 'variant_add' || state.step !== 'region') return
-    const regionCode = (ctx.match as RegExpMatchArray)[1]
-    const s = state as Extract<VariantAddFlow, { step: 'region' }>
-    inventoryState.set(userId, regionToPhotoState(s, regionCode))
-    await ctx.reply(
-      `🌍 Регион: ${regionCode} ✅\n\nШаг 6 — добавьте фото варианта (до 5 штук) или пропустите:`,
-      Markup.inlineKeyboard([[Markup.button.callback('⏭️ Пропустить', 'inv:var_photo_skip')]]),
-    )
-  })
-
-  bot.action('inv:var_region_skip', async (ctx) => {
-    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
-    const userId = getUserId(ctx)
-    const state = inventoryState.get(userId)
-    if (!state || state.flow !== 'variant_add' || state.step !== 'region') return
-    const s = state as Extract<VariantAddFlow, { step: 'region' }>
-    inventoryState.set(userId, regionToPhotoState(s))
-    await ctx.reply(
-      'Шаг 6 — добавьте фото варианта (до 5 штук) или пропустите:',
-      Markup.inlineKeyboard([[Markup.button.callback('⏭️ Пропустить', 'inv:var_photo_skip')]]),
-    )
   })
 
   bot.action('inv:var_photo_skip', async (ctx) => {
@@ -3263,18 +3204,16 @@ async function handleVariantAddFlow(
       const attrKeys = Object.keys(productAttrs)
 
       if (attrKeys.length === 0) {
-        inventoryState.set(userId, {
-          flow: 'variant_add',
-          step: 'region',
+        inventoryState.set(userId, attrsToPhotoState({
           productId: state.productId,
           sku: state.sku,
           price: state.price,
           qty,
           attrs: {},
-        })
+        }))
         await ctx.reply(
-          `Количество: ${qty} шт.\n\nШаг 5 — выберите регион/страну варианта:`,
-          await buildRegionKeyboard(),
+          `Количество: ${qty} шт.\n\nШаг 5 — добавьте фото варианта (до 5 штук) или пропустите:`,
+          Markup.inlineKeyboard([[Markup.button.callback('⏭️ Пропустить', 'inv:var_photo_skip')]]),
         )
       } else {
         inventoryState.set(userId, {
@@ -3305,11 +3244,6 @@ async function handleVariantAddFlow(
 
     case 'attrs': {
       await ctx.reply('Используйте кнопки выше для выбора значения атрибута.')
-      return true
-    }
-
-    case 'region': {
-      await ctx.reply('Выберите регион кнопкой выше:', await buildRegionKeyboard())
       return true
     }
 

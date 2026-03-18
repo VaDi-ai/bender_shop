@@ -19,7 +19,6 @@ export type AIParsedProduct = {
   model: string
   storage: string | null
   color: string | null
-  region: string | null
   simType: string | null
   price: number
   rawLine: string
@@ -36,7 +35,6 @@ const AIParsedProductSchema = z.array(
     model: z.string(),
     storage: z.string().nullable(),
     color: z.string().nullable(),
-    region: z.string().nullable(),
     simType: z.string().nullable(),
     price: z.number(),
     rawLine: z.string(),
@@ -70,7 +68,6 @@ ${text}
   "model": "точное название модели например iPhone 17 Pro или MacBook Air M4",
   "storage": "объём памяти например 256 ГБ или 1 ТБ или null",
   "color": "цвет на английском например Silver или null",
-  "region": "регион HK/EU/IN/RU/CN или null если не указан",
   "simType": "тип SIM например 1 Sim+eSim или null",
   "price": число без пробелов и символов валюты,
   "rawLine": "оригинальная строка"
@@ -78,7 +75,6 @@ ${text}
 
 Правила:
 - Точки в числах это разделители тысяч: 122.000 = 122000
-- Флаги эмодзи: 🇭🇰=HK, 🇪🇺=EU, 🇮🇳=IN, 🇷🇺=RU, 🇨🇳=CN
 - Если строка не содержит товар и цену — пропустить
 - Верни только JSON массив []`,
         },
