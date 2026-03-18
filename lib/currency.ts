@@ -17,6 +17,34 @@ const CURRENCY_NAMES: Record<string, string> = {
   GBP: 'Фунт стерлингов', JPY: 'Японская иена', AED: 'Дирхам ОАЭ',
 }
 
+/** Популярные валюты для быстрого выбора при ручном добавлении */
+export const POPULAR_CURRENCIES = [
+  { code: 'USD', flag: '🇺🇸', name: 'Доллар США' },
+  { code: 'EUR', flag: '🇪🇺', name: 'Евро' },
+  { code: 'CNY', flag: '🇨🇳', name: 'Юань' },
+  { code: 'HKD', flag: '🇭🇰', name: 'Гонконгский доллар' },
+  { code: 'GBP', flag: '🇬🇧', name: 'Фунт стерлингов' },
+  { code: 'JPY', flag: '🇯🇵', name: 'Японская иена' },
+  { code: 'KRW', flag: '🇰🇷', name: 'Вон' },
+  { code: 'INR', flag: '🇮🇳', name: 'Индийская рупия' },
+  { code: 'TRY', flag: '🇹🇷', name: 'Турецкая лира' },
+  { code: 'AED', flag: '🇦🇪', name: 'Дирхам ОАЭ' },
+  { code: 'THB', flag: '🇹🇭', name: 'Тайский бат' },
+  { code: 'SGD', flag: '🇸🇬', name: 'Сингапурский доллар' },
+  { code: 'KZT', flag: '🇰🇿', name: 'Тенге' },
+  { code: 'AZN', flag: '🇦🇿', name: 'Манат' },
+  { code: 'GEL', flag: '🇬🇪', name: 'Лари' },
+  { code: 'BRL', flag: '🇧🇷', name: 'Бразильский реал' },
+] as const
+
+/** Известные коды валют для валидации ручного ввода */
+export const KNOWN_CURRENCY_CODES = new Set([
+  'USD','EUR','GBP','JPY','CNY','HKD','INR','TRY','AED','THB',
+  'SGD','KZT','AZN','GEL','BRL','KRW','CHF','CAD','AUD','NZD',
+  'PLN','CZK','SEK','NOK','DKK','HUF','RON','BGN','IDR','MYR',
+  'PHP','VND','EGP','ZAR','UAH','BYN','UZS','AMD','MDL','TJS',
+])
+
 /** Загружает уникальные коды валют из активных регионов БД. */
 export async function getActiveCurrencies(): Promise<string[]> {
   try {

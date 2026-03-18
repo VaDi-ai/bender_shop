@@ -12,6 +12,7 @@ import { prisma } from '../../lib/prisma'
 import {
   CURRENCY_FLAGS, fetchCurrencyRates, getActiveCurrencies, getRegionCurrencyMap,
   roundPrice, updateCurrencyRates, getSavedRates, type CurrencyChange,
+  POPULAR_CURRENCIES, KNOWN_CURRENCY_CODES,
 } from '../../lib/currency'
 import {
   parseSupplierMessage as aiParseSupplier,
@@ -99,6 +100,7 @@ type PricingFlow =
   | { flow: 'region_edit_flag'; regionId: number; regionCode: string }
   | { flow: 'region_edit_currency'; regionId: number; regionCode: string }
   | { flow: 'rate_add_code' }
+  | { flow: 'rate_add_code_confirm'; currency: string }
   | { flow: 'rate_add_value'; currency: string }
   // ── Корректировка цен по курсу ──────────────────────────────────────────────
   | { flow: 'cadj_select'; changes: CurrencyChange[] }
@@ -1710,9 +1712,56 @@ export function setupPricingHandlers(bot: Telegraf): void {
 
   bot.action('pricing:rate_add', async (ctx) => {
     try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
+
+    // Убрать валюты, которые уже добавлены
+    const existing = await prisma.currencyRate.findMany({ select: { currency: true } })
+    const existingCodes = new Set(existing.map(r => r.currency))
+    const available = POPULAR_CURRENCIES.filter(c => !existingCodes.has(c.code))
+
+    // Кнопки по 2 в ряд
+    const rows: ReturnType<typeof Markup.button.callback>[][] = []
+    for (let i = 0; i < available.length; i += 2) {
+      const row = available.slice(i, i + 2).map(c =>
+        Markup.button.callback(`${c.flag} ${c.code}`, `pricing:rate_pick:${c.code}`),
+      )
+      rows.push(row)
+    }
+    rows.push([Markup.button.callback('✏️ Другая валюта (ввести код)', 'pricing:rate_custom')])
+    rows.push([Markup.button.callback('❌ Отмена', 'pricing:rates')])
+
+    await ctx.reply(
+      '💱 Выберите валюту или введите код вручную:',
+      Markup.inlineKeyboard(rows),
+    )
+  })
+
+  // Выбор валюты из списка → сразу спросить курс
+  bot.action(/^pricing:rate_pick:([A-Z]{3,4})$/, async (ctx) => {
+    try { await ctx.answerCbQuery() } catch { /* ignore */ }
+    const currency = ctx.match[1]
+    pricingState.set(getUserId(ctx), { flow: 'rate_add_value', currency })
+
+    // Попробовать подтянуть курс с ЦБ автоматически
+    let hint = ''
+    try {
+      const rates = await fetchCurrencyRates()
+      if (rates[currency]) {
+        hint = `\n\n💡 Текущий курс ЦБ РФ: ${rates[currency].toFixed(2)}₽`
+      }
+    } catch { /* ignore */ }
+
+    await ctx.reply(
+      `Введите курс ${currency} к рублю (рублей за 1 единицу):${hint}`,
+      Markup.inlineKeyboard([[Markup.button.callback('❌ Отмена', 'pricing:rates')]]),
+    )
+  })
+
+  // Ввод кода вручную
+  bot.action('pricing:rate_custom', async (ctx) => {
+    try { await ctx.answerCbQuery() } catch { /* ignore */ }
     pricingState.set(getUserId(ctx), { flow: 'rate_add_code' })
     await ctx.reply(
-      'Введите код валюты (например JPY, AED, THB):',
+      'Введите код валюты (3-4 латинские буквы, например JPY):',
       Markup.inlineKeyboard([[Markup.button.callback('❌ Отмена', 'pricing:rates')]]),
     )
   })
@@ -2138,6 +2187,41 @@ export async function handlePricingMessage(
       await ctx.reply('Введите корректный код валюты (3–4 буквы, например JPY, AED):')
       return true
     }
+
+    if (!KNOWN_CURRENCY_CODES.has(currency)) {
+      await ctx.reply(
+        `⚠️ Валюта «${currency}» не найдена в списке известных. Вы уверены?\n\nЕсли код правильный — введите его ещё раз для подтверждения.\nДля отмены нажмите кнопку ниже.`,
+        Markup.inlineKeyboard([[Markup.button.callback('❌ Отмена', 'pricing:rates')]]),
+      )
+      pricingState.set(userId, { flow: 'rate_add_code_confirm', currency })
+      return true
+    }
+
+    pricingState.set(userId, { flow: 'rate_add_value', currency })
+
+    // Подсказка с курсом ЦБ
+    let hint = ''
+    try {
+      const rates = await fetchCurrencyRates()
+      if (rates[currency]) {
+        hint = `\n\n💡 Текущий курс ЦБ РФ: ${rates[currency].toFixed(2)}₽`
+      }
+    } catch { /* ignore */ }
+
+    await ctx.reply(
+      `Введите курс ${currency} к рублю (рублей за 1 единицу валюты):${hint}`,
+      Markup.inlineKeyboard([[Markup.button.callback('❌ Отмена', 'pricing:rates')]]),
+    )
+    return true
+  }
+
+  // Подтверждение неизвестной валюты — повторный ввод того же кода
+  if (state.flow === 'rate_add_code_confirm') {
+    const currency = text.trim().toUpperCase()
+    if (currency !== state.currency) {
+      await ctx.reply(`Код не совпадает. Ожидалось «${state.currency}». Попробуйте ещё раз или отмените.`)
+      return true
+    }
     pricingState.set(userId, { flow: 'rate_add_value', currency })
     await ctx.reply(`Введите курс ${currency} к рублю (рублей за 1 единицу валюты):`)
     return true
@@ -2158,7 +2242,23 @@ export async function handlePricingMessage(
       update: { previousRate: existing ? existing.rate : null, rate },
     })
     await ctx.reply(`✅ Курс ${state.currency}: ${rate.toFixed(2)}₽ сохранён`)
-    await showRatesMenu(ctx)
+
+    // Подсказка про автообновление через регион
+    const regionWithCurrency = await prisma.region.findFirst({ where: { currency: state.currency, isActive: true } })
+    if (!regionWithCurrency) {
+      await ctx.reply(
+        `💡 Для автоматического обновления курса ${state.currency} с ЦБ РФ — создайте регион с этой валютой:\n🌍 Регионы и валюты → ➕ Добавить регион`,
+        Markup.inlineKeyboard([
+          [Markup.button.callback('🌍 Создать регион', 'pricing:region_add')],
+          [Markup.button.callback('🔙 К курсам', 'pricing:rates')],
+        ]),
+      )
+    } else {
+      await ctx.reply(
+        `✅ Регион с валютой ${state.currency} уже существует (${regionWithCurrency.code}) — курс будет обновляться автоматически с ЦБ РФ.`,
+      )
+      await showRatesMenu(ctx)
+    }
     return true
   }
 
