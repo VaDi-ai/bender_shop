@@ -841,6 +841,25 @@ async function saveVariant(
         photos: s.photos,
       },
     })
+    if (s.qty > 0) {
+      await prisma.stockMovement.create({
+        data: {
+          variantId: variant.id,
+          type: 'in',
+          quantity: s.qty,
+          comment: 'Создание варианта',
+          createdBy: String(userId),
+        },
+      })
+      await prisma.product.update({
+        where: { id: s.productId },
+        data: {
+          stock: { increment: s.qty },
+          quantity: { increment: s.qty },
+          isAvailable: true,
+        },
+      })
+    }
     inventoryState.delete(userId)
     const attrStr = Object.entries(s.attrs).map(([k, v]) => `${k}: ${v}`).join(', ')
     await ctx.reply(
@@ -1090,10 +1109,28 @@ export function setupInventoryHandlers(bot: Telegraf): void {
       ? `${s.photoFileIds.length} фото`
       : 'без фото'
 
-    await ctx.reply(
-      `Фото: ${photoInfo}\n\nШаг 8 из 8 — введите начальное количество на складе:`,
-      Markup.keyboard([['0', '❌ Отмена']]).resize(),
-    )
+    const comboCount = s.attributes
+      ? Object.values(s.attributes).reduce((acc: number, vals: string[]) => acc * vals.length, 1)
+      : 0
+
+    if (comboCount > 1) {
+      const combos = cartesianProduct(s.attributes!)
+      const qtyLines = [
+        `Фото: ${photoInfo}\n\nШаг 8 из 8 — количество (${comboCount} вариантов):\n`,
+        ...combos.map((attrs, i) => `${i + 1}. ${Object.values(attrs).join(' / ')}`),
+        '',
+        'Варианты ввода:',
+        `• Одно число (например 30) — поровну (~${Math.floor(30 / comboCount)} на каждый)`,
+        '• Через запятую (5,3,2,0,...) — индивидуально',
+        '• 0 — создать без остатка',
+      ]
+      await ctx.reply(qtyLines.join('\n'), Markup.keyboard([['0', '❌ Отмена']]).resize())
+    } else {
+      await ctx.reply(
+        `Фото: ${photoInfo}\n\nШаг 8 из 8 — введите начальное количество на складе:`,
+        Markup.keyboard([['0', '❌ Отмена']]).resize(),
+      )
+    }
   })
 
   // ── Выбор категории при добавлении товара ──────────────────────────────────
@@ -3207,15 +3244,43 @@ async function handleAddFlow(
     }
 
     case 'qty': {
-      const qty = parseInt(text, 10)
-      if (isNaN(qty) || qty < 0) {
-        await ctx.reply('❌ Введите целое неотрицательное число (0 и более)')
-        return true
-      }
       const hasVariants = state.attributes != null && Object.keys(state.attributes).length > 0
+      let perVariantQty: number[] = []
+
+      if (hasVariants) {
+        const combos = cartesianProduct(state.attributes!)
+        const comboCount = combos.length
+
+        if (text.includes(',')) {
+          perVariantQty = text.split(',').map(s => {
+            const n = parseInt(s.trim(), 10)
+            return isNaN(n) || n < 0 ? 0 : n
+          })
+          while (perVariantQty.length < comboCount) perVariantQty.push(0)
+          perVariantQty = perVariantQty.slice(0, comboCount)
+        } else {
+          const totalQty = parseInt(text, 10)
+          if (isNaN(totalQty) || totalQty < 0) {
+            await ctx.reply('❌ Введите число или числа через запятую')
+            return true
+          }
+          const qtyPer = Math.floor(totalQty / comboCount)
+          const remainder = totalQty - (qtyPer * comboCount)
+          perVariantQty = combos.map((_, i) => i === 0 ? qtyPer + remainder : qtyPer)
+        }
+      } else {
+        const qty = parseInt(text, 10)
+        if (isNaN(qty) || qty < 0) {
+          await ctx.reply('❌ Введите целое неотрицательное число')
+          return true
+        }
+        perVariantQty = [qty]
+      }
+
+      const totalQty = perVariantQty.reduce((s, q) => s + q, 0)
+
       try {
         const photoUrl = state.photoFileIds.length > 0 ? state.photoFileIds[0] : undefined
-        // Find categoryId for SKU generation
         const catRecord = state.category ? await prisma.category.findUnique({ where: { name: state.category } }) : null
         const autoSku = await generateProductSku(catRecord?.id ?? null)
         const product = await prisma.product.create({
@@ -3229,55 +3294,107 @@ async function handleAddFlow(
             ...(state.category && { category: { connectOrCreate: { where: { name: state.category }, create: { name: state.category } } } }),
             photoUrl,
             photos: state.photoFileIds,
-            // If variants will be generated, don't set stock on Product — stock lives on variants
-            stock: hasVariants ? 0 : qty,
-            quantity: hasVariants ? 0 : qty,
-            isAvailable: hasVariants ? false : qty > 0,
+            stock: totalQty,
+            quantity: totalQty,
+            isAvailable: totalQty > 0,
           },
         })
 
-        // Генерируем варианты из атрибутов (декартово произведение)
         let variantCount = 0
-        if (state.attributes && Object.keys(state.attributes).length > 0) {
-          const combos = cartesianProduct(state.attributes)
+
+        if (hasVariants) {
+          const combos = cartesianProduct(state.attributes!)
           for (let i = 0; i < combos.length; i++) {
             const varSku = await generateVariantSku(autoSku, product.id)
-            await prisma.productVariant.create({
+            const varQty = perVariantQty[i] ?? 0
+            const variant = await prisma.productVariant.create({
               data: {
                 productId: product.id,
                 sku: varSku,
-                price: 0,
-                quantity: 0,
-                inStock: false,
+                price: state.price,
+                quantity: varQty,
+                inStock: varQty > 0,
                 attributes: combos[i],
                 photos: [],
               },
             })
+            if (varQty > 0) {
+              await prisma.stockMovement.create({
+                data: {
+                  variantId: variant.id,
+                  type: 'in',
+                  quantity: varQty,
+                  comment: 'Первичное оприходование',
+                  createdBy: String(userId),
+                },
+              })
+            }
             variantCount++
+          }
+        } else {
+          const varSku = await generateVariantSku(autoSku, product.id)
+          const varQty = perVariantQty[0] ?? 0
+          const variant = await prisma.productVariant.create({
+            data: {
+              productId: product.id,
+              sku: varSku,
+              price: state.price,
+              quantity: varQty,
+              inStock: varQty > 0,
+              attributes: {},
+              photos: [],
+            },
+          })
+          if (varQty > 0) {
+            await prisma.stockMovement.create({
+              data: {
+                variantId: variant.id,
+                type: 'in',
+                quantity: varQty,
+                comment: 'Первичное оприходование',
+                createdBy: String(userId),
+              },
+            })
           }
         }
 
-        try { await logSecurityEvent('inventory_created', { productId: product.id, sku: autoSku, name: state.name, adminId: userId }, userId) } catch { /* ignore */ }
+        try { await logSecurityEvent('inventory_created', { productId: product.id, name: state.name, variants: variantCount, quantity: totalQty, adminId: userId }, userId) } catch { /* ignore */ }
 
         inventoryState.delete(userId)
         const photoInfo = state.photoFileIds.length > 0 ? `${state.photoFileIds.length} шт.` : '—'
         const lines = [
-          variantCount > 0
-            ? `✅ Товар создан, ${variantCount} вариантов сгенерировано`
-            : '✅ Товар добавлен!',
+          '✅ Товар создан и оприходован!',
           '',
           `Название:  ${product.name}`,
-          `Цена:      ${product.price} ₽`,
+          `Цена:      ${Number(state.price).toLocaleString('ru-RU')} ₽`,
           `Категория: ${state.category ?? '—'}`,
           `Фото:      ${photoInfo}`,
-          `На складе: ${hasVariants ? '0 (оприходуйте варианты)' : `${product.stock} шт.`}`,
         ]
-        await ctx.reply(lines.join('\n'), Markup.removeKeyboard())
-        if (hasVariants && qty > 0) {
-          await ctx.reply(
-            `⚠️ У товара ${variantCount} вариантов — оприходуйте остатки через каждый вариант отдельно или через Excel-шаблон (Импорт → Скачать шаблон).\n\nУказанное количество (${qty} шт.) НЕ распределено по вариантам.`,
-          )
+
+        if (variantCount > 0) {
+          const combos = cartesianProduct(state.attributes!)
+          const stockedVariants = perVariantQty.filter(q => q > 0).length
+          lines.push(`Вариантов: ${variantCount}`)
+          lines.push(`В наличии: ${stockedVariants} из ${variantCount}`)
+          lines.push(`Всего:     ${totalQty} шт.`)
+
+          if (perVariantQty.some((q, i) => i > 0 && q !== perVariantQty[0])) {
+            lines.push('')
+            combos.forEach((attrs, i) => {
+              const attrStr = Object.values(attrs).join(' / ')
+              const q = perVariantQty[i]
+              const icon = q > 0 ? '🟢' : '🔴'
+              lines.push(`  ${icon} ${attrStr} — ${q} шт.`)
+            })
+          }
+        } else {
+          lines.push(`На складе: ${totalQty} шт.`)
         }
+
+        lines.push('')
+        lines.push('✨ Характеристики подтянутся из интернета автоматически.')
+
+        await ctx.reply(lines.join('\n'), Markup.removeKeyboard())
         await showInventory(ctx)
 
         // Автообогащение карточки из интернета
@@ -3286,7 +3403,7 @@ async function handleAddFlow(
             const { enrichProductCard } = await import('../../lib/enrich')
             const success = await enrichProductCard(product.id)
             if (success) {
-              await ctx.reply(`✨ Характеристики для "${product.name}" автоматически заполнены из интернета.`)
+              await ctx.reply(`✨ Характеристики для "${product.name}" заполнены из интернета.`)
             }
           } catch (err) {
             console.error('[Enrich] After create error:', err)
