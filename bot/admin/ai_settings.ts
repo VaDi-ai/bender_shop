@@ -332,7 +332,23 @@ export function setupAIScheduleHandlers(bot: Telegraf): void {
   bot.action('ai:schedule_on', async (ctx) => {
     try { await ctx.answerCbQuery() } catch { /* ignore */ }
     await setApiKeyValue('ai_schedule_enabled', 'true')
-    await ctx.reply('✅ Расписание включено.')
+
+    // Немедленно проверить и переключить если нужно
+    const mskNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Europe/Moscow' }))
+    const mskHour = mskNow.getHours()
+    const isWorkHours = mskHour >= 11 && mskHour < 20
+    const currentMode = await getAIMode()
+
+    if (!isWorkHours && currentMode !== 'auto' && currentMode !== 'off') {
+      await setAIMode('auto')
+      await setApiKeyValue('ai_auto_by_schedule', 'true')
+      await ctx.reply(`✅ Расписание включено.\n🤖 Сейчас нерабочее время (${mskHour}:00 МСК) — Бендер переключён в автомат!`)
+    } else if (isWorkHours) {
+      await ctx.reply(`✅ Расписание включено.\n👤 Сейчас рабочее время — режим не изменён (${currentMode}).`)
+    } else {
+      await ctx.reply('✅ Расписание включено.')
+    }
+
     try { await logSecurityEvent('ai_mode_changed', { action: 'schedule_on', adminId: getUserId(ctx) }, getUserId(ctx)) } catch { /* ignore */ }
   })
 

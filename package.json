@@ -19,6 +19,7 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
+  "engines": { "node": ">=22.0.0" },
   "type": "commonjs",
   "devDependencies": {
     "@types/cors": "^2.8.19",

@@ -1161,9 +1161,9 @@ setInterval(async () => {
   }
 }, 15 * 60 * 1000)
 
-// ─── AI авто-режим по расписанию (каждые 15 минут) ──────────────────────────
+// ─── AI авто-режим по расписанию ─────────────────────────────────────────────
 
-setInterval(async () => {
+async function checkAISchedule(): Promise<void> {
   try {
     const scheduleEnabled = await getApiKeyValue('ai_schedule_enabled')
     if (scheduleEnabled !== 'true') return
@@ -1183,7 +1183,7 @@ setInterval(async () => {
       for (const adminId of ADMIN_IDS) {
         try {
           await bot.telegram.sendMessage(adminId,
-            `🤖 AI переключён в автомат (нерабочее время ${hour}:00 МСК).\nАгент представляется AI-помощником.`)
+            `🤖 AI переключён в автомат (нерабочее время ${hour}:00 МСК).\nБендер на связи!`)
         } catch { /* ignore */ }
       }
     } else if (isWorkHours && currentMode === 'auto') {
@@ -1203,7 +1203,10 @@ setInterval(async () => {
   } catch (err) {
     console.error('[AI Schedule] Error:', err)
   }
-}, 15 * 60 * 1000)
+}
+
+setInterval(checkAISchedule, 10 * 60 * 1000)
+setTimeout(checkAISchedule, 10_000)
 
 // ─── Обработчики утренних кнопок ─────────────────────────────────────────────
 
