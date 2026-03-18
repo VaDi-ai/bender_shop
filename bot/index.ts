@@ -80,6 +80,7 @@ import {
 import { handleSupplierMessage, findBestPrice, requestPriceFromAllSuppliers } from '../webhooks/supplier'
 import { cancelPromotion } from '../lib/promotions'
 import { logSecurityEvent, initSecurityAlerts } from '../lib/security-log'
+import { createBackupBuffer } from '../lib/backup'
 import { aiSuggestions, storeSuggestion } from './ai/agent'
 
 const BOT_TOKEN = process.env.BOT_TOKEN
@@ -553,6 +554,8 @@ bot.hears('🔧 Техработы', async (ctx) => {
     `🔧 Режим техработ\n\nСтатус: ${status}\n\nПри включении новые клиентские сообщения получают автоответ о техработах.`,
     Markup.inlineKeyboard([
       [Markup.button.callback(label, action)],
+      [Markup.button.callback('🗄️ Бэкап сейчас', 'maint:backup')],
+      [Markup.button.callback('📖 Как восстановить', 'maint:restore_info')],
       [Markup.button.callback('🏠 Главное меню', 'back:main')],
     ]),
   )
@@ -572,6 +575,62 @@ bot.action('maint:off', async (ctx) => {
   maintenanceMode = false
   await logSecurityEvent('maintenance_mode_toggled', { enabled: false, adminId: userId }, userId)
   await ctx.reply('✅ Техработы выключены. Бот работает в штатном режиме.')
+})
+
+bot.action('maint:backup', async (ctx) => {
+  try { await ctx.answerCbQuery('⏳ Создаю бэкап...') } catch { /* ignore */ }
+  const userId = ctx.from?.id
+  if (!userId) return
+
+  try {
+    await ctx.reply('⏳ Создаю бэкап базы данных...')
+    const { buffer, stats } = await createBackupBuffer()
+    const sizeMB = (buffer.length / 1024 / 1024).toFixed(2)
+    const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '')
+
+    const statsLines = Object.entries(stats)
+      .filter(([, count]) => count > 0)
+      .map(([key, count]) => `  ${key}: ${count}`)
+      .join('\n')
+
+    await ctx.replyWithDocument(
+      { source: buffer, filename: `bender-backup-${dateStr}.json` },
+      {
+        caption: [
+          `🗄️ Бэкап (${new Date().toISOString().slice(0, 10)})`,
+          `📦 Размер: ${sizeMB} MB`,
+          '',
+          statsLines,
+        ].join('\n'),
+      },
+    )
+
+    try {
+      await logSecurityEvent('backup_created', { sizeMB, adminId: userId, manual: true }, userId)
+    } catch { /* ignore */ }
+  } catch (err) {
+    console.error('[Backup] Manual backup failed:', err)
+    await ctx.reply(`❌ Бэкап не удался: ${err instanceof Error ? err.message : 'Ошибка'}`)
+  }
+})
+
+bot.action('maint:restore_info', async (ctx) => {
+  try { await ctx.answerCbQuery() } catch { /* ignore */ }
+  await ctx.reply([
+    '📖 Восстановление из бэкапа:',
+    '',
+    '1. Скачайте файл бэкапа из чата',
+    '2. На компьютере с Railway CLI:',
+    '   railway run npx ts-node scripts/restore-db.ts backup.json --dry-run',
+    '3. Если всё ок:',
+    '   railway run npx ts-node scripts/restore-db.ts backup.json --force',
+    '',
+    '⚠️ Восстановление перезаписывает ВСЕ данные!',
+    'Делайте --dry-run перед --force.',
+    '',
+    '🔄 Для отката кода (не данных):',
+    'Railway Dashboard → Deployments → выбрать рабочий → Redeploy',
+  ].join('\n'))
 })
 
 // Экспортируем флаг для использования в webhooks/telegram.ts (если потребуется)
@@ -750,6 +809,59 @@ setInterval(async () => {
     console.error('DB keepalive failed:', e)
   }
 }, 4 * 60 * 1000)
+
+// ─── Ежедневный автобэкап в 03:00 МСК ──────────────────────────────────────
+
+setInterval(async () => {
+  try {
+    const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Europe/Moscow' }))
+    if (now.getHours() !== 3) return
+
+    const todayStr = now.toISOString().slice(0, 10)
+    const lastBackup = await getApiKeyValue('last_backup_date')
+    if (lastBackup === todayStr) return
+
+    await setApiKeyValue('last_backup_date', todayStr)
+
+    console.log('[Backup] Starting daily backup...')
+    const { buffer, stats } = await createBackupBuffer()
+    const sizeMB = (buffer.length / 1024 / 1024).toFixed(2)
+    const dateStr = todayStr.replace(/-/g, '')
+
+    const statsLines = Object.entries(stats)
+      .filter(([, count]) => count > 0)
+      .map(([key, count]) => `  ${key}: ${count}`)
+      .join('\n')
+
+    const caption = [
+      `🗄️ Ежедневный бэкап (${todayStr})`,
+      `📦 Размер: ${sizeMB} MB`,
+      '',
+      statsLines,
+    ].join('\n')
+
+    // Отправить файл первому админу
+    const adminId = ADMIN_IDS[0]
+    if (adminId) {
+      try {
+        await bot.telegram.sendDocument(adminId, {
+          source: buffer,
+          filename: `bender-backup-${dateStr}.json`,
+        }, { caption })
+        console.log(`[Backup] Sent to admin ${adminId} (${sizeMB} MB)`)
+      } catch (err) {
+        console.error('[Backup] Failed to send to Telegram:', err)
+      }
+    }
+  } catch (err) {
+    console.error('[Backup] Daily backup failed:', err)
+    for (const adminId of ADMIN_IDS) {
+      try {
+        await bot.telegram.sendMessage(adminId, `⚠️ Ежедневный бэкап не удался: ${err instanceof Error ? err.message : 'unknown error'}`)
+      } catch { /* ignore */ }
+    }
+  }
+}, 60 * 60 * 1000) // проверка каждый час
 
 // ─── Автозавершение акций по истечению срока (каждые 10 минут) ───────────────
 
