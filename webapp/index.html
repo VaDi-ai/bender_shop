@@ -524,6 +524,39 @@
       .products { grid-template-columns: 1fr; }
       .hero-slider { height: 40vh; }
     }
+
+    /* ── Order result screens ──────────────────────────────────── */
+    .order-result {
+      position: fixed; inset: 0; z-index: 9999; background: #0a0a0a;
+      display: flex; align-items: center; justify-content: center;
+      animation: orFadeIn 400ms ease;
+    }
+    @keyframes orFadeIn { from { opacity: 0; } to { opacity: 1; } }
+    .order-result-content { text-align: center; padding: 40px 24px; max-width: 340px; width: 100%; }
+    .order-result-icon {
+      width: 80px; height: 80px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 36px; font-weight: 700; margin: 0 auto 24px;
+      animation: orScaleIn 500ms cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    @keyframes orScaleIn { from { transform: scale(0); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+    .success-icon { border: 3px solid #a8ff3e; color: #a8ff3e; box-shadow: 0 0 30px rgba(168,255,62,0.3), 0 0 60px rgba(168,255,62,0.1); }
+    .error-icon { border: 3px solid #ff4444; color: #ff4444; box-shadow: 0 0 30px rgba(255,68,68,0.3), 0 0 60px rgba(255,68,68,0.1); }
+    .order-result-title { font-family: 'Courier New', Courier, monospace; font-size: 24px; color: #fff; letter-spacing: 4px; text-transform: uppercase; margin-bottom: 8px; }
+    .order-result-number { font-family: 'Courier New', Courier, monospace; font-size: 18px; color: #a8ff3e; text-shadow: 0 0 10px rgba(168,255,62,0.5); letter-spacing: 2px; margin-bottom: 24px; }
+    .order-result-details { font-size: 13px; color: #888; line-height: 1.8; margin-bottom: 20px; text-align: left; padding: 16px; background: #111; border: 1px solid #222; border-radius: 12px; }
+    .order-result-msg { font-size: 14px; color: #aaa; margin-bottom: 32px; line-height: 1.6; }
+    .order-result-actions { display: flex; flex-direction: column; gap: 10px; }
+    .order-result-btn {
+      width: 100%; padding: 14px; font-family: 'Courier New', Courier, monospace; font-size: 13px;
+      letter-spacing: 2px; text-transform: uppercase; border: none; cursor: pointer; border-radius: 8px;
+      transition: transform 0.15s, box-shadow 0.3s;
+    }
+    .order-result-btn:active { transform: scale(0.98); }
+    .order-result-btn.primary { background: #a8ff3e; color: #0a0a0a; font-weight: 700; }
+    .order-result-btn.primary:hover { box-shadow: 0 0 20px rgba(168,255,62,0.3); }
+    .order-result-btn.secondary { background: transparent; color: #888; border: 1px solid #333; }
+    .order-result-btn.secondary:hover { border-color: #555; color: #aaa; }
   </style>
 </head>
 <body>
@@ -1729,19 +1762,20 @@
         if (!res.ok) {
           btn.classList.remove('disabled'); btnSpan.textContent = 'ОФОРМИТЬ'
           if (json.error === 'Товар закончился') {
-            alert('Товар «' + (json.product || '') + '» уже закончился')
+            showOrderError('ТОВАР ЗАКОНЧИЛСЯ', 'К сожалению, «' + (json.product || 'товар') + '» уже закончился. Попробуйте выбрать другой вариант.')
             await loadProducts(activeCat)
-          } else { alert('Ошибка оформления. Попробуйте ещё раз.') }
+          } else { showOrderError('ОШИБКА', json.error || 'Не удалось оформить заказ. Проверьте данные и попробуйте ещё раз.') }
           return
         }
         const orderId = json.orderId || 0
         const payload = JSON.stringify({ orderId, items, payment: payMethod, total: totalAmt, customerName, customerPhone, deliveryType, deliveryAddress })
+        const savedItems = items.map(i => ({ name: i.name, qty: i.qty }))
         cart = []; updateBadge(); closeCart()
-        if (tg && tg.sendData) { tg.sendData(payload) }
-        else { alert('Заказ #' + orderId + ' принят!') }
+        showOrderSuccess(orderId, savedItems, totalAmt, payMethod, deliveryType, deliveryAddress)
+        if (tg && tg.sendData) { try { tg.sendData(payload) } catch { /* ignore */ } }
       } catch {
         btn.classList.remove('disabled'); btnSpan.textContent = 'ОФОРМИТЬ'
-        alert('Ошибка оформления. Попробуйте ещё раз.')
+        showOrderError('НЕТ СВЯЗИ', 'Проверьте интернет-соединение и попробуйте ещё раз.')
       }
     }
 
@@ -1779,6 +1813,49 @@
     function closeFModal() {
       document.getElementById('fmodalBackdrop').classList.remove('show')
       document.body.style.overflow = ''
+    }
+
+    // ─── Order result screens ───────────────────────────────────────────────
+
+    function showOrderSuccess(orderId, items, total, payment, delivery, address) {
+      const el = document.getElementById('orderSuccess')
+      document.getElementById('successOrderNum').textContent = '#' + orderId
+
+      const itemLines = items.map(i => i.name + ' × ' + i.qty).join('<br>')
+      const payText = payment === 'cash' ? '💵 Наличные' : '💳 Карта'
+      const deliveryText = delivery === 'pickup'
+        ? '📍 Самовывоз — ТЦ Горбушка, 211/1'
+        : '🚚 Доставка: ' + (address || '')
+
+      document.getElementById('successDetails').innerHTML = [
+        itemLines,
+        '<br>' + payText,
+        deliveryText,
+        '<br>💵 Итого: <strong style="color:#a8ff3e">' + formatPrice(parseFloat(total)) + '</strong>',
+      ].join('<br>')
+
+      el.style.display = 'flex'
+    }
+
+    function showOrderError(title, message) {
+      const el = document.getElementById('orderError')
+      document.getElementById('errorTitle').textContent = title || 'ОШИБКА'
+      document.getElementById('errorMsg').textContent = message || 'Что-то пошло не так. Попробуйте ещё раз.'
+      el.style.display = 'flex'
+    }
+
+    function closeSuccessAndGoHome() {
+      document.getElementById('orderSuccess').style.display = 'none'
+      selectCategory('')
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+    }
+
+    function closeErrorScreen() {
+      document.getElementById('orderError').style.display = 'none'
+    }
+
+    function closeApp() {
+      if (tg && tg.close) tg.close()
     }
 
     // ─── Phone mask +7 (XXX) XXX-XX-XX ──────────────────────────────────────
@@ -1825,5 +1902,35 @@
     initPhoneMask()
     setInterval(checkCacheVersion, 30000)
   </script>
+
+  <!-- ── Order success screen ─────────────────────────────────────── -->
+  <div class="order-result" id="orderSuccess" style="display:none;">
+    <div class="order-result-content">
+      <div class="order-result-icon success-icon">✓</div>
+      <div class="order-result-title">ЗАКАЗ ОФОРМЛЕН</div>
+      <div class="order-result-number" id="successOrderNum">#0000</div>
+      <div class="order-result-details" id="successDetails"></div>
+      <div class="order-result-msg">
+        Мы свяжемся с вами в рабочее время для подтверждения.<br>⏰ Магазин работает ежедневно с 11:00 до 20:00
+      </div>
+      <div class="order-result-actions">
+        <button class="order-result-btn primary" onclick="closeSuccessAndGoHome()">ПРОДОЛЖИТЬ ПОКУПКИ</button>
+        <button class="order-result-btn secondary" onclick="closeApp()">ЗАКРЫТЬ</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Order error screen ───────────────────────────────────────── -->
+  <div class="order-result" id="orderError" style="display:none;">
+    <div class="order-result-content">
+      <div class="order-result-icon error-icon">✕</div>
+      <div class="order-result-title" id="errorTitle">ОШИБКА</div>
+      <div class="order-result-msg" id="errorMsg">Что-то пошло не так</div>
+      <div class="order-result-actions">
+        <button class="order-result-btn primary" onclick="closeErrorScreen()">ПОПРОБОВАТЬ ЕЩЁ РАЗ</button>
+      </div>
+    </div>
+  </div>
+
 </body>
 </html>
