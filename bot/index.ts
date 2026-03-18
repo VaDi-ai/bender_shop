@@ -999,6 +999,102 @@ setInterval(async () => {
     if (lastNotify === todayStr) return
     await setApiKeyValue(notifyKey, todayStr)
 
+    // ── Ночная сводка Бендера ───────────────────────────────────────────────
+    try {
+      const nightBriefStart = new Date(todayStr + 'T00:00:00Z')
+      nightBriefStart.setDate(nightBriefStart.getDate() - 1)
+      nightBriefStart.setUTCHours(17, 0, 0, 0) // 20:00 MSK = 17:00 UTC
+
+      const nightBriefEnd = new Date(todayStr + 'T00:00:00Z')
+      nightBriefEnd.setUTCHours(8, 0, 0, 0) // 11:00 MSK = 08:00 UTC
+
+      const nightMessages = await prisma.message.findMany({
+        where: {
+          direction: 'in',
+          createdAt: { gte: nightBriefStart, lte: nightBriefEnd },
+        },
+        include: { client: true },
+        orderBy: { createdAt: 'asc' },
+      })
+
+      const nightReserves = await prisma.task.findMany({
+        where: {
+          action: 'night_reserve',
+          createdAt: { gte: nightBriefStart, lte: nightBriefEnd },
+        },
+        include: { client: true },
+      })
+
+      const nightRequests = await prisma.task.findMany({
+        where: {
+          action: 'night_request',
+          createdAt: { gte: nightBriefStart, lte: nightBriefEnd },
+        },
+        include: { client: true },
+      })
+
+      const uniqueClients = new Set(nightMessages.map(m => m.clientId)).size
+
+      if (uniqueClients > 0 || nightReserves.length > 0) {
+        const lines = [
+          '🤖 НОЧНАЯ СВОДКА БЕНДЕРА',
+          '',
+          `💬 Диалогов: ${uniqueClients} клиентов, ${nightMessages.length} сообщений`,
+        ]
+
+        if (nightReserves.length > 0) {
+          lines.push('')
+          lines.push(`🔖 БРОНИ (${nightReserves.length}) — НУЖНО ПОДТВЕРДИТЬ:`)
+          for (const r of nightReserves) {
+            const payload = r.payload as any
+            const clientName = r.client?.name ?? 'Неизвестный'
+            const clientUsername = (r.client as any)?.telegramUsername ?? ''
+            lines.push(`  • ${clientName} ${clientUsername} → ${payload.productName} (${Number(payload.price).toLocaleString('ru-RU')}₽)`)
+          }
+        }
+
+        if (nightRequests.length > 0) {
+          lines.push('')
+          lines.push(`❓ ЗАПРОСЫ (товар не найден):`)
+          for (const r of nightRequests) {
+            const payload = r.payload as any
+            const clientName = r.client?.name ?? 'Неизвестный'
+            lines.push(`  • ${clientName} искал: "${payload.requestedItem}"`)
+          }
+        }
+
+        const clientsNeedReply = new Set<string>()
+        for (const m of nightMessages) {
+          if (m.client?.telegramTopicId) {
+            const clientName = m.client.name
+            const username = (m.client as any)?.telegramUsername ?? ''
+            clientsNeedReply.add(`${clientName} ${username}`.trim())
+          }
+        }
+
+        if (clientsNeedReply.size > 0) {
+          lines.push('')
+          lines.push(`👋 КЛИЕНТЫ, КОТОРЫМ НУЖНО НАПИСАТЬ:`)
+          for (const c of clientsNeedReply) {
+            lines.push(`  • ${c}`)
+          }
+        }
+
+        lines.push('')
+        lines.push('👆 Зайдите в CRM-топики этих клиентов и подтвердите брони.')
+
+        for (const adminId of ADMIN_IDS) {
+          try {
+            await bot.telegram.sendMessage(adminId, lines.join('\n'))
+          } catch { /* ignore */ }
+        }
+
+        console.log(`[Night Brief] Sent: ${uniqueClients} clients, ${nightReserves.length} reserves, ${nightRequests.length} requests`)
+      }
+    } catch (err) {
+      console.error('[Night Brief] Error:', err)
+    }
+
     // Собрать цены за сегодня
     const todayStart = new Date(todayStr + 'T00:00:00Z')
     const prices = await prisma.supplierPrice.findMany({

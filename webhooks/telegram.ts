@@ -1220,6 +1220,86 @@ function moderateAIOutput(text: string): string {
   return cleaned.length > 2000 ? cleaned.slice(0, 2000) : cleaned
 }
 
+async function processAIReservation(
+  aiResponse: string,
+  clientId: number,
+): Promise<string> {
+  const reserveMatch = aiResponse.match(/\[БРОНЬ:\s*(.+?)\]/)
+  if (!reserveMatch) return aiResponse
+
+  const requestedItem = reserveMatch[1].trim()
+  let cleanResponse = aiResponse.replace(/\[БРОНЬ:\s*.+?\]/, '').trim()
+
+  try {
+    const products = await prisma.product.findMany({
+      where: { isAvailable: true },
+      include: { variants: { where: { quantity: { gt: 0 } } } },
+    })
+
+    const found = products.find(p =>
+      requestedItem.toLowerCase().includes(p.name.toLowerCase()) ||
+      p.name.toLowerCase().includes(requestedItem.toLowerCase())
+    )
+
+    if (found && found.variants.length > 0) {
+      const variant = found.variants[0]
+
+      await prisma.$transaction(async (tx) => {
+        await tx.reservation.create({
+          data: {
+            clientId,
+            productId: found.id,
+            variantId: variant.id,
+            quantity: 1,
+            status: 'active',
+            comment: `Ночной бот Бендер (${new Date().toLocaleString('ru-RU', { timeZone: 'Europe/Moscow' })})`,
+          },
+        })
+        await tx.product.update({
+          where: { id: found.id },
+          data: { reserved: { increment: 1 } },
+        })
+      })
+
+      console.log(`[AI Night] Reserved "${found.name}" variant ${variant.id} for client ${clientId}`)
+
+      await prisma.task.create({
+        data: {
+          clientId,
+          action: 'night_reserve',
+          payload: {
+            productName: found.name,
+            variantId: variant.id,
+            variantSku: variant.sku,
+            price: Number(variant.price),
+            reservedAt: new Date().toISOString(),
+          },
+          scheduledAt: new Date(),
+          status: 'done',
+        },
+      })
+    } else {
+      await prisma.task.create({
+        data: {
+          clientId,
+          action: 'night_request',
+          payload: {
+            requestedItem,
+            requestedAt: new Date().toISOString(),
+          },
+          scheduledAt: new Date(),
+          status: 'done',
+        },
+      })
+      console.log(`[AI Night] Product not found for reserve: "${requestedItem}" from client ${clientId}`)
+    }
+  } catch (err) {
+    console.error('[AI Night] Reserve error:', err)
+  }
+
+  return cleanResponse
+}
+
 async function handleAIResponse(
   telegram: Telegram,
   clientId: number,
@@ -1255,6 +1335,13 @@ async function handleAIResponse(
   }
 
   if (mode === 'auto') {
+    // Обработка ночных броней (парсинг [БРОНЬ: ...] тега)
+    const mskNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Europe/Moscow' }))
+    const mskHour = mskNow.getHours()
+    const isNight = mskHour < 11 || mskHour >= 20
+    if (isNight) {
+      aiText = await processAIReservation(aiText, clientId)
+    }
     // Модерируем ответ перед отправкой клиенту
     const safeAiText = moderateAIOutput(aiText)
     // Отправляем клиенту автоматически
