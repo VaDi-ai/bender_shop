@@ -515,8 +515,19 @@
     .fmodal-backdrop.show .fmodal { transform: translateY(0); }
     .fmodal-title { font-family: 'Courier New', Courier, monospace; font-size: 18px; color: #a8ff3e; letter-spacing: 3px; margin-bottom: 16px; border-bottom: 1px solid #1a1a1a; padding-bottom: 12px; padding-right: 32px; }
     .fmodal-body { color: #888; font-size: 13px; line-height: 1.7; }
+    .fmodal-body h3 { font-family: 'Courier New', monospace; font-size: 13px; color: var(--accent); letter-spacing: 1px; text-transform: uppercase; margin: 18px 0 8px; }
+    .fmodal-body h3:first-child { margin-top: 0; }
+    .fmodal-body p { font-size: 13px; color: #bbb; line-height: 1.7; margin: 0 0 10px; }
+    .fmodal-body strong { color: #e5e5e5; }
     .fmodal-close { position: absolute; top: 16px; right: 16px; background: transparent; border: 1px solid #2a2a2a; color: #888; width: 32px; height: 32px; font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: border-color 0.2s, color 0.2s; }
     .fmodal-close:hover { border-color: #a8ff3e; color: #a8ff3e; }
+    .consent-check { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 12px; cursor: pointer; }
+    .consent-check input[type="checkbox"] { width: 16px; height: 16px; margin-top: 2px; accent-color: #a8ff3e; flex-shrink: 0; cursor: pointer; }
+    .consent-text { font-size: 11px; color: #777; line-height: 1.5; }
+    .consent-text a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+    .consent-text a:hover { color: #fff; }
+    .consent-check.error .consent-text { color: #ff4444; }
+    .consent-check.error input[type="checkbox"] { outline: 2px solid #ff4444; outline-offset: 1px; }
 
     /* ── Media queries ────────────────────────────────────────────────────── */
     @media (max-width: 768px) {
@@ -651,6 +662,15 @@
       </div>
     </div>
     <div class="cart-footer">
+      <label class="consent-check" id="consentLabel">
+        <input type="checkbox" id="consentCheckbox">
+        <span class="consent-text">
+          Я соглашаюсь с
+          <a href="#" onclick="event.preventDefault();openFModal('terms')">условиями продажи</a>,
+          <a href="#" onclick="event.preventDefault();openFModal('agreement')">пользовательским соглашением</a> и
+          <a href="#" onclick="event.preventDefault();openFModal('privacy')">обработкой персональных данных</a>
+        </span>
+      </label>
       <div class="box-button disabled" id="checkoutBtn" onclick="checkout()">
         <div class="button"><span>ОФОРМИТЬ</span></div>
       </div>
@@ -1726,7 +1746,8 @@
         bd.classList.add('show')
       } else { bd.classList.remove('show') }
       const checkoutBtn = document.getElementById('checkoutBtn')
-      if (!payMethod || !cart.length) checkoutBtn.classList.add('disabled')
+      const consented = document.getElementById('consentCheckbox')?.checked
+      if (!payMethod || !cart.length || !consented) checkoutBtn.classList.add('disabled')
       else checkoutBtn.classList.remove('disabled')
     }
 
@@ -1768,6 +1789,11 @@
     // ── Checkout ──────────────────────────────────────────────────────────────
     async function checkout() {
       if (!payMethod || !cart.length) return
+      const consentBox = document.getElementById('consentCheckbox')
+      if (!consentBox?.checked) {
+        document.getElementById('consentLabel').classList.add('error')
+        return
+      }
       if (!validateCustomerForm()) return
       const btn     = document.getElementById('checkoutBtn')
       const btnSpan = btn.querySelector('span')
@@ -1828,10 +1854,71 @@
 
     // ── Footer modals ─────────────────────────────────────────────────────────
     const fmodalContent = {
-      terms:     { title: 'УСЛОВИЯ ПРОДАЖИ',               body: 'Товар обмену и возврату подлежит в течение 14 дней с момента покупки при сохранении товарного вида и упаковки. Возврат осуществляется на основании чека или другого документа, подтверждающего факт оплаты. Гарантийные обязательства определяются производителем товара.' },
-      agreement: { title: 'ПОЛЬЗОВАТЕЛЬСКОЕ СОГЛАШЕНИЕ',   body: 'Используя данный сайт, вы соглашаетесь с условиями его использования. Администрация оставляет за собой право изменять условия без предварительного уведомления. Продолжая использование сайта, вы принимаете актуальные условия соглашения. Запрещается использование сайта в незаконных целях.' },
-      privacy:   { title: 'ПОЛИТИКА КОНФИДЕНЦИАЛЬНОСТИ',   body: 'Мы не передаём ваши данные третьим лицам. Персональные данные (имя, телефон, адрес доставки) используются исключительно для обработки и доставки заказов. Данные хранятся в защищённом виде и не используются в коммерческих целях без вашего согласия. Вы вправе запросить удаление своих данных.' },
-      help:      { title: 'ПОМОЩЬ',                        body: '📍 Адрес: Барклая 8, ТЦ Горбушка<br>2й этаж, Павильон 211/1<br><br>⏰ Время работы: 11:00 — 20:00<br><br>По всем вопросам обращайтесь к нашему менеджеру через Telegram или посетите магазин лично.' }
+      terms: {
+        title: 'УСЛОВИЯ ПРОДАЖИ',
+        body: `<p><strong>ИП Сухарев Егор Александрович</strong><br>ОГРНИП 322508100603542, ИНН 501216223904</p>
+<h3>1. Общие положения</h3>
+<p>Настоящие Условия являются публичной офертой (ст. 435, ч. 2 ст. 437 ГК РФ). Оформление заказа является акцептом. К отношениям применяются ГК РФ и Закон «О защите прав потребителей» № 2300-1.</p>
+<h3>2. Оформление заказа</h3>
+<p>Заказ оформляется на сайте bendershop.store или через Telegram-бот @bender_shop_bot. При оформлении укажите: ФИО, телефон, способ получения и оплаты. Оформление заказа не является заключением договора — договор заключается после подтверждения Продавцом.</p>
+<p>Продавец вправе отказать в подтверждении заказа без объяснения причин.</p>
+<h3>3. Оплата</h3>
+<p>Способы оплаты: наличные при получении; банковская карта при получении (комиссия эквайринга 14%). Цена фиксируется на момент подтверждения заказа Продавцом.</p>
+<h3>4. Доставка и получение</h3>
+<p><strong>Самовывоз:</strong> г. Москва, ул. Барклая, д. 8, ТЦ «Горбушка», 2-й этаж, Павильон 211/1. Ежедневно с 11:00 до 20:00.</p>
+<p><strong>Доставка:</strong> условия и стоимость согласовываются при подтверждении заказа. Территория — РФ.</p>
+<p>При получении проверьте целостность упаковки, комплектность и соответствие заказу.</p>
+<h3>5. Гарантия</h3>
+<p>Гарантийные обязательства предоставляются производителем товара. Продавец не предоставляет собственной гарантии сверх гарантии производителя.</p>
+<h3>6. Возврат и обмен</h3>
+<p><strong>Технически сложные товары</strong> (смартфоны, ноутбуки, планшеты, часы, наушники, консоли) надлежащего качества <strong>не подлежат возврату</strong> (Постановление Правительства РФ от 31.12.2020 № 2463).</p>
+<p>При обнаружении недостатков в течение <strong>15 дней</strong> — замена или возврат средств. После 15 дней — при существенном недостатке или нарушении сроков ремонта.</p>
+<p>Возврат средств — тем же способом, которым была произведена оплата, в течение 10 дней.</p>
+<h3>7. Ответственность</h3>
+<p>Продавец не несёт ответственности за ущерб от ненадлежащего использования товара и за невозможность доставки из-за некорректных данных клиента.</p>`
+      },
+      agreement: {
+        title: 'ПОЛЬЗОВАТЕЛЬСКОЕ СОГЛАШЕНИЕ',
+        body: `<p><strong>ИП Сухарев Егор Александрович</strong><br>ОГРНИП 322508100603542, ИНН 501216223904</p>
+<h3>1. Общие положения</h3>
+<p>Используя сайт bendershop.store и Telegram-бот @bender_shop_bot, вы принимаете настоящее Соглашение в полном объёме (п. 2 ст. 437, ст. 438 ГК РФ). При несогласии — прекратите использование.</p>
+<h3>2. Предмет</h3>
+<p>Продавец предоставляет возможность приобретения электроники, техники и аксессуаров через Сайт. Товар выкупается у поставщиков под заказ. Информация на Сайте носит справочный характер.</p>
+<h3>3. Порядок заказа</h3>
+<p>Оформление заказа не является заключением договора. Договор заключается после подтверждения Продавцом. Продавец вправе отказать без объяснения причин.</p>
+<h3>4. Персональные данные</h3>
+<p>Обработка данных — в соответствии с ФЗ-152 «О персональных данных» и Политикой конфиденциальности. Данные не передаются третьим лицам без согласия, кроме случаев, предусмотренных законом.</p>
+<h3>5. Исключительные права</h3>
+<p>Все материалы Сайта (тексты, изображения, дизайн, код) — собственность Продавца. Копирование без разрешения запрещено.</p>
+<h3>6. Ответственность</h3>
+<p>Ответственность Продавца ограничена стоимостью оплаченного заказа. Продавец не гарантирует бесперебойную работу Сайта.</p>
+<h3>7. Прочее</h3>
+<p>Соглашение регулируется законодательством РФ. Споры — по месту нахождения Продавца. Владелец вправе изменять Соглашение в одностороннем порядке.</p>`
+      },
+      privacy: {
+        title: 'ПОЛИТИКА КОНФИДЕНЦИАЛЬНОСТИ',
+        body: `<p><strong>ИП Сухарев Егор Александрович</strong><br>ОГРНИП 322508100603542, ИНН 501216223904</p>
+<h3>Какие данные собираем</h3>
+<p>ФИО, телефон, email, адрес доставки, Telegram ID/username. Автоматически: IP-адрес, cookies, данные браузера.</p>
+<h3>Зачем</h3>
+<p>Оформление и исполнение заказов, клиентская поддержка, информирование об акциях (с согласия), улучшение сервиса.</p>
+<h3>Кому передаём</h3>
+<p>Банкам (приём платежей), службам доставки, хостинг-провайдерам, госорганам (по закону). Без согласия — не передаём.</p>
+<h3>Защита</h3>
+<p>Шифрование данных (AES-256-GCM), защищённая передача (HTTPS/TLS), ролевой доступ, ежедневные резервные копии.</p>
+<h3>Ваши права</h3>
+<p>Запросить информацию об обработке, потребовать уточнения или удаления, отозвать согласие. Обращение — через Telegram-бот или на email.</p>
+<h3>Отзыв согласия</h3>
+<p>Направьте уведомление на email Продавца с пометкой «Отзыв согласия на обработку персональных данных».</p>`
+      },
+      help: {
+        title: 'ПОМОЩЬ',
+        body: `<p>📍 <strong>Адрес:</strong> Барклая 8, ТЦ Горбушка<br>2-й этаж, Павильон 211/1</p>
+<p>⏰ <strong>Время работы:</strong> ежедневно 11:00 — 20:00</p>
+<p>💬 <strong>Telegram:</strong> @bender_shop_bot</p>
+<p>📞 По всем вопросам обращайтесь через Telegram-бот или посетите магазин лично.</p>
+<p>🤖 В нерабочее время (20:00–11:00) на связи AI-помощник Бендер — проконсультирует по товарам и забронирует.</p>`
+      }
     }
 
     function openFModal(key) {
@@ -1954,6 +2041,10 @@
     loadProducts('')
     initPhoneMask()
     initSearch()
+    document.getElementById('consentCheckbox')?.addEventListener('change', function() {
+      document.getElementById('consentLabel').classList.remove('error')
+      updateTotals()
+    })
     setInterval(checkCacheVersion, 30000)
   </script>
 

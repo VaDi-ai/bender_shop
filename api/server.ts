@@ -227,6 +227,29 @@ export function startApiServer(bot?: Telegraf): void {
     next()
   })
 
+  // ── Legal pages ──────────────────────────────────────────────────────────
+  const legalPages: Record<string, string> = {
+    terms: 'terms-of-sale.html',
+    agreement: 'user-agreement.html',
+    privacy: 'privacy-policy.html',
+  }
+
+  app.get('/terms', (_req, res) => res.redirect('/legal/terms'))
+  app.get('/agreement', (_req, res) => res.redirect('/legal/agreement'))
+  app.get('/privacy', (_req, res) => res.redirect('/legal/privacy'))
+
+  app.get('/legal/:doc', (req, res) => {
+    const file = legalPages[req.params.doc]
+    if (!file) { res.status(404).send('Not found'); return }
+    const filePath = path.join(__dirname, '../../public/legal', file)
+    if (fs.existsSync(filePath)) {
+      res.setHeader('Content-Type', 'text/html; charset=utf-8')
+      res.sendFile(filePath)
+    } else {
+      res.status(404).send('Document not found')
+    }
+  })
+
   // ── GET / и /shop — Mini App ───────────────────────────────────────────────
   app.get('/', (_req, res) => {
     res.redirect('/shop')
