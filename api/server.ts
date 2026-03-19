@@ -150,13 +150,13 @@ export function startApiServer(bot?: Telegraf): void {
     contentSecurityPolicy: {
       directives: {
         defaultSrc: ["'self'"],
-        scriptSrc: ["'self'", "https://telegram.org", "'unsafe-inline'"], // TODO: replace with nonce/hash when webapp migrates to Vite
+        scriptSrc: ["'self'", "https://telegram.org", "'unsafe-inline'", "https://api-maps.yandex.ru", "https://yandex.ru"], // TODO: replace with nonce/hash when webapp migrates to Vite
         scriptSrcAttr: ["'unsafe-inline'"], // for onclick handlers in webapp
         styleSrc: ["'self'", "'unsafe-inline'"],
         fontSrc: ["'self'", "data:"],
-        frameSrc: ["'self'", "https://telegram.org"],
-        imgSrc: ["'self'", "data:", "https://api.telegram.org", "https://t.me"],
-        connectSrc: ["'self'", "https://bendershop.store", "https://api.telegram.org", "https://web.telegram.org"],
+        frameSrc: ["'self'", "https://telegram.org", "https://yandex.ru", "https://*.yandex.ru", "https://*.yandex.net", "https://api-maps.yandex.ru", "https://yandex.ru/map-widget/"],
+        imgSrc: ["'self'", "data:", "https://api.telegram.org", "https://t.me", "https://*.yandex.ru", "https://*.yandex.net", "https://api-maps.yandex.ru"],
+        connectSrc: ["'self'", "https://bendershop.store", "https://api.telegram.org", "https://web.telegram.org", "https://*.yandex.ru", "https://*.yandex.net"],
       },
     },
   }))
