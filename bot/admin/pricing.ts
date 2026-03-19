@@ -58,6 +58,8 @@ type PricingSource = 'message' | 'file' | 'markup' | 'manual' | 'currency_update
 
 type PricingFlow =
   | { flow: 'awaiting_message'; rate?: number }
+  | { flow: 'awaiting_supplier_name'; parsed: ParsedLine[] }
+  | { flow: 'awaiting_markup_confirm'; supplierName: string; parsed: ParsedLine[]; markup: number }
   | { flow: 'awaiting_markup'; matches: MatchedVariant[]; unmatched: ParsedLine[]; rate?: number }
   | { flow: 'bulk_pct'; filterType: 'all' | 'category'; filterValue: string; filterLabel: string }
   | {
@@ -161,9 +163,6 @@ export async function showPricingMenu(ctx: Context): Promise<void> {
     Markup.inlineKeyboard([
       [Markup.button.callback('📨 Из сообщения поставщика', 'pricing:msg')],
       [Markup.button.callback('💱 Курс доллара', 'pricing:rate')],
-      [Markup.button.callback('📊 Из файла Excel', 'pricing:file')],
-      [Markup.button.callback('✏️ Точечно', 'pricing:manual')],
-      [Markup.button.callback('📋 История изменений', 'pricing:history')],
       [Markup.button.callback('🔙 Назад', 'back:main')],
     ]),
   )
@@ -496,6 +495,181 @@ function formatChangePercent(pct: string, dir: 'up' | 'down' | 'same'): string {
   return (dir === 'up' ? '+' : '') + pct + '%'
 }
 
+// ─── Определение бренда/категории по модели ──────────────────────────────────
+
+function detectBrand(model: string): string {
+  const lower = model.toLowerCase()
+  if (lower.includes('iphone') || lower.includes('ipad') || lower.includes('macbook') ||
+      lower.includes('airpods') || lower.includes('apple watch') || lower.includes('mac mini') ||
+      lower.includes('imac')) return 'Apple'
+  if (lower.includes('galaxy') || lower.includes('samsung')) return 'Samsung'
+  if (lower.includes('huawei') || lower.includes('pura')) return 'Huawei'
+  if (lower.includes('honor')) return 'Honor'
+  if (lower.includes('xiaomi') || lower.includes('redmi') || lower.includes('poco')) return 'Xiaomi'
+  if (lower.includes('sony') || lower.includes('playstation') || lower.includes('ps5')) return 'Sony'
+  if (lower.includes('dyson')) return 'Dyson'
+  if (lower.includes('jbl')) return 'JBL'
+  if (lower.includes('marshall')) return 'Marshall'
+  if (lower.includes('nintendo') || lower.includes('switch')) return 'Nintendo'
+  return ''
+}
+
+function detectCategory(model: string): string {
+  const lower = model.toLowerCase()
+  if (lower.includes('iphone') || lower.includes('galaxy s') || lower.includes('galaxy z') ||
+      lower.includes('huawei pura') || lower.includes('honor') || lower.includes('pixel')) return 'Телефоны'
+  if (lower.includes('macbook') || lower.includes('laptop')) return 'Ноутбуки и компьютеры'
+  if (lower.includes('ipad') || lower.includes('tab')) return 'Планшеты'
+  if (lower.includes('watch')) return 'Часы'
+  if (lower.includes('airpods') || lower.includes('buds') || lower.includes('jbl') ||
+      lower.includes('marshall') || lower.includes('headphone')) return 'Аудио'
+  if (lower.includes('playstation') || lower.includes('ps5') || lower.includes('xbox') ||
+      lower.includes('switch') || lower.includes('nintendo')) return 'Игровые консоли'
+  if (lower.includes('dyson')) return 'Бытовая техника'
+  return 'Аксессуары'
+}
+
+// ─── Кнопки поставщиков ──────────────────────────────────────────────────────
+
+async function getSupplierButtons(): Promise<ReturnType<typeof Markup.button.callback>[][]> {
+  const suppliers = await prisma.supplier.findMany({ where: { isActive: true }, take: 6 })
+  if (suppliers.length === 0) return []
+  return suppliers.map(s => [Markup.button.callback(`🏭 ${s.name}`, `pricing:supplier_select:${s.id}`)])
+}
+
+// ─── Поиск лучших цен из листов поставщиков ──────────────────────────────────
+
+async function findBestPricesFromSheets(): Promise<Array<{ model: string; price: number; supplierName: string }>> {
+  const { getSheetNames, readSheet } = await import('../../lib/google-sheets')
+
+  const allSheets = await getSheetNames()
+  const supplierSheets = allSheets.filter(name => name.startsWith('Поставщик: '))
+
+  const priceMap = new Map<string, { price: number; supplierName: string }>()
+
+  for (const sheetName of supplierSheets) {
+    const supplierName = sheetName.replace('Поставщик: ', '')
+    try {
+      const data = await readSheet(sheetName)
+      for (let i = 1; i < data.length; i++) {
+        const model = (data[i]?.[2] ?? '').trim()
+        const priceRaw = (data[i]?.[3] ?? '').toString().replace(/\s/g, '')
+        const price = parseFloat(priceRaw)
+
+        if (!model || isNaN(price) || price <= 0) continue
+
+        const key = model.toLowerCase()
+        const existing = priceMap.get(key)
+        if (!existing || price < existing.price) {
+          priceMap.set(key, { price, supplierName })
+        }
+      }
+    } catch (err) {
+      console.error(`[Pricing] Error reading supplier sheet ${sheetName}:`, err)
+    }
+  }
+
+  return Array.from(priceMap.entries()).map(([model, data]) => ({
+    model,
+    price: data.price,
+    supplierName: data.supplierName,
+  }))
+}
+
+// ─── Обработка прайса поставщика → Google Sheets ─────────────────────────────
+
+async function processSupplierPrice(
+  ctx: Context,
+  userId: number,
+  supplierName: string,
+  parsed: ParsedLine[],
+): Promise<void> {
+  await ctx.reply(`⏳ Обрабатываю прайс от «${supplierName}»...`)
+
+  try {
+    const { createSheetIfNotExists, readSheet, writeRange, appendRows } = await import('../../lib/google-sheets')
+
+    // 1. Создать лист поставщика если нет
+    const sheetName = `Поставщик: ${supplierName}`
+    await createSheetIfNotExists(sheetName)
+
+    // 2. Прочитать существующие позиции на листе поставщика
+    const existing = await readSheet(sheetName)
+    const hasHeader = existing.length > 0 && existing[0]?.[0] === 'Бренд'
+
+    if (!hasHeader) {
+      await writeRange(sheetName, 'A1:E1', [['Бренд', 'Категория', 'Название модели', 'Закупочная цена', 'Дата изменения']])
+    }
+
+    // 3. Обновить или добавить позиции
+    const now = new Date().toLocaleDateString('ru-RU', { timeZone: 'Europe/Moscow' })
+    const existingModels = new Map<string, number>()
+    for (let i = 1; i < existing.length; i++) {
+      const name = (existing[i]?.[2] ?? '').trim()
+      if (name) existingModels.set(name.toLowerCase(), i + 1)
+    }
+
+    const newRows: (string | number)[][] = []
+    let updatedCount = 0
+
+    for (const p of parsed) {
+      const fullName = [p.model, p.storage, p.color].filter(Boolean).join(' ')
+      const brand = detectBrand(p.model)
+      const category = detectCategory(p.model)
+      const existingRow = existingModels.get(fullName.toLowerCase())
+
+      if (existingRow) {
+        await writeRange(sheetName, `D${existingRow}:E${existingRow}`, [[p.price, now]])
+        updatedCount++
+      } else {
+        newRows.push([brand, category, fullName, p.price, now])
+      }
+    }
+
+    if (newRows.length > 0) {
+      await appendRows(sheetName, newRows)
+    }
+
+    // 4. Найти лучшие цены среди ВСЕХ поставщиков
+    const bestPrices = await findBestPricesFromSheets()
+
+    // 5. Спросить наценку
+    const defaultMarkup = 5
+    pricingState.set(userId, {
+      flow: 'awaiting_markup_confirm',
+      supplierName,
+      parsed,
+      markup: defaultMarkup,
+    })
+
+    await ctx.reply(
+      [
+        `✅ Прайс «${supplierName}» обработан:`,
+        `📝 Обновлено: ${updatedCount} | Добавлено: ${newRows.length}`,
+        '',
+        `💰 Найдено лучших цен: ${bestPrices.length}`,
+        '',
+        `Наценка по умолчанию: ${defaultMarkup}%`,
+        'Введите другой % наценки или нажмите кнопку:',
+      ].join('\n'),
+      Markup.inlineKeyboard([
+        [
+          Markup.button.callback('3%', 'pricing:markup:3'),
+          Markup.button.callback('5%', 'pricing:markup:5'),
+          Markup.button.callback('7%', 'pricing:markup:7'),
+          Markup.button.callback('10%', 'pricing:markup:10'),
+        ],
+        [Markup.button.callback(`✅ Обновить цены (${defaultMarkup}%)`, 'pricing:apply_sheets')],
+        [Markup.button.callback('❌ Отмена', 'pricing:cancel')],
+      ]),
+    )
+  } catch (err) {
+    console.error('[Pricing] processSupplierPrice error:', err)
+    await ctx.reply(`❌ Ошибка обработки прайса: ${err instanceof Error ? err.message : 'Неизвестная ошибка'}`)
+    pricingState.delete(userId)
+  }
+}
+
 // ─── Регистрация обработчиков ─────────────────────────────────────────────────
 
 export function setupPricingHandlers(bot: Telegraf): void {
@@ -529,6 +703,118 @@ export function setupPricingHandlers(bot: Telegraf): void {
       'Формат:\niPhone 17 Pro 256 Silver - 122.000₽\niPhone 16 256 Black - 68.500₽',
       Markup.inlineKeyboard([[Markup.button.callback('❌ Отмена', 'pricing:cancel')]]),
     )
+  })
+
+  // ── Выбор поставщика ────────────────────────────────────────────────────
+
+  bot.action(/^pricing:supplier_select:(\d+)$/, async (ctx) => {
+    try { await ctx.answerCbQuery() } catch { /* ignore */ }
+    const userId = getUserId(ctx)
+    const state = pricingState.get(userId)
+    if (!state || state.flow !== 'awaiting_supplier_name') return
+
+    const supplierId = parseInt((ctx.match as RegExpMatchArray)[1], 10)
+    const supplier = await prisma.supplier.findUnique({ where: { id: supplierId } })
+    if (!supplier) return
+
+    await processSupplierPrice(ctx, userId, supplier.name, state.parsed)
+  })
+
+  bot.action('pricing:supplier_manual', async (ctx) => {
+    try { await ctx.answerCbQuery() } catch { /* ignore */ }
+    await ctx.reply('Введите имя поставщика:')
+  })
+
+  // ── Выбор наценки ──────────────────────────────────────────────────────
+
+  bot.action(/^pricing:markup:(\d+)$/, async (ctx) => {
+    try { await ctx.answerCbQuery() } catch { /* ignore */ }
+    const userId = getUserId(ctx)
+    const state = pricingState.get(userId)
+    if (!state || state.flow !== 'awaiting_markup_confirm') return
+
+    const markup = parseInt((ctx.match as RegExpMatchArray)[1], 10)
+    state.markup = markup
+
+    try {
+      await ctx.editMessageText(
+        ctx.callbackQuery?.message && 'text' in ctx.callbackQuery.message
+          ? (ctx.callbackQuery.message.text?.replace(/\d+%\)$/, `${markup}%)`) ?? '')
+          : '',
+        Markup.inlineKeyboard([
+          [
+            Markup.button.callback('3%', 'pricing:markup:3'),
+            Markup.button.callback('5%', 'pricing:markup:5'),
+            Markup.button.callback('7%', 'pricing:markup:7'),
+            Markup.button.callback('10%', 'pricing:markup:10'),
+          ],
+          [Markup.button.callback(`✅ Обновить цены (${markup}%)`, 'pricing:apply_sheets')],
+          [Markup.button.callback('❌ Отмена', 'pricing:cancel')],
+        ]),
+      )
+    } catch { /* ignore edit errors */ }
+  })
+
+  // ── Обновить цены в таблице и БД ───────────────────────────────────────
+
+  bot.action('pricing:apply_sheets', async (ctx) => {
+    try { await ctx.answerCbQuery() } catch { /* ignore */ }
+    const userId = getUserId(ctx)
+    const state = pricingState.get(userId)
+    if (!state || state.flow !== 'awaiting_markup_confirm') return
+
+    await ctx.reply('⏳ Обновляю цены в таблице и на витрине...')
+
+    try {
+      const { readSheet, writeRange } = await import('../../lib/google-sheets')
+      const { syncProductsFromSheets } = await import('../../lib/sheets-sync')
+
+      const bestPrices = await findBestPricesFromSheets()
+      const now = new Date().toLocaleDateString('ru-RU', { timeZone: 'Europe/Moscow' })
+
+      const PRODUCT_SHEETS = ['Товарное наличие вариант 1', 'Аксессуары', 'Услуги']
+      let pricesUpdated = 0
+
+      for (const sheetName of PRODUCT_SHEETS) {
+        try {
+          const data = await readSheet(sheetName)
+          for (let i = 1; i < data.length; i++) {
+            const fullName = (data[i]?.[3] ?? '').trim().toLowerCase()
+            if (!fullName) continue
+
+            const best = bestPrices.find(bp => fullName.includes(bp.model.toLowerCase()))
+            if (best) {
+              const recommendedPrice = Math.round(best.price * (1 + state.markup / 100))
+              const rowNum = i + 1
+
+              await writeRange(sheetName, `F${rowNum}`, [[recommendedPrice]])
+              await writeRange(sheetName, `H${rowNum}:I${rowNum}`, [[best.supplierName, now]])
+              pricesUpdated++
+            }
+          }
+        } catch (err) {
+          console.error(`[Pricing] Error updating sheet ${sheetName}:`, err)
+        }
+      }
+
+      const syncResult = await syncProductsFromSheets()
+
+      pricingState.delete(userId)
+
+      await ctx.reply([
+        '✅ Цены обновлены!',
+        '',
+        `📊 Рекомендованных цен записано: ${pricesUpdated}`,
+        `🔄 Синхронизация: ${syncResult.updated} обновлено в БД`,
+        `📈 Наценка: ${state.markup}%`,
+        `🏭 На основе прайса: ${state.supplierName}`,
+      ].join('\n'))
+
+    } catch (err) {
+      console.error('[Pricing] apply_sheets error:', err)
+      await ctx.reply(`❌ Ошибка: ${err instanceof Error ? err.message : 'Неизвестная ошибка'}`)
+      pricingState.delete(userId)
+    }
   })
 
   // ── Курс доллара ──────────────────────────────────────────────────────────
@@ -1044,9 +1330,9 @@ export async function handlePricingMessage(
   const state = pricingState.get(userId)
   if (!state) return false
 
-  // Парсинг сообщения поставщика (AI)
+  // Парсинг сообщения поставщика (AI) → спросить имя поставщика
   if (state.flow === 'awaiting_message') {
-    const indicator = await ctx.reply('🤖 AI анализирует сообщение…')
+    await ctx.reply('🤖 AI анализирует сообщение…')
     let parsed: ParsedLine[]
     try {
       const aiResults = await aiParseSupplier(text)
@@ -1071,60 +1357,54 @@ export async function handlePricingMessage(
       )
       return true
     }
-    void indicator // indicator already sent, no need to delete in Telegram bot API
 
-    await ctx.reply(`⏳ AI нашёл позиций: ${parsed.length}. Ищу совпадения…`)
-    const { matched, unmatched } = await matchVariants(parsed)
-
-    const total = matched.length + unmatched.length
-    const lines = [`📊 Распознано: ${total}\n`]
-    for (const m of matched) {
-      const effective = state.rate ? Math.round(m.supplierPrice * state.rate) : m.supplierPrice
-      lines.push(
-        `✅ ${m.productName}`,
-        `   Текущая: ${fmtPrice(m.currentPrice)} → Поставщик: ${fmtPrice(effective)}`,
-      )
-    }
-    for (const u of unmatched) lines.push(`❓ ${u.rawLine.slice(0, 60)} — не найден`)
-
-    if (!matched.length) {
-      await ctx.reply(lines.join('\n') + '\n\n❌ Ни один вариант не найден.',
-        Markup.inlineKeyboard([[Markup.button.callback('🔙 Назад', 'pricing:menu')]]))
-      return true
-    }
-
-    pricingState.set(userId, { flow: 'awaiting_markup', matches: matched, unmatched, rate: state.rate })
-    await ctx.reply(
-      lines.join('\n') + `\n\nВведите наценку % (например: 5) или /skip — без наценки:`,
-      Markup.inlineKeyboard([[Markup.button.callback('❌ Отмена', 'pricing:cancel')]]),
+    // Показать что распознано и спросить поставщика
+    const previewLines = parsed.slice(0, 10).map(p =>
+      `• ${p.model} ${p.storage ?? ''} ${p.color ?? ''} — ${p.price.toLocaleString('ru-RU')}₽`
     )
+    if (parsed.length > 10) previewLines.push(`... и ещё ${parsed.length - 10} позиций`)
+
+    const supplierButtons = await getSupplierButtons()
+
+    await ctx.reply(
+      `✅ Распознано позиций: ${parsed.length}\n\n${previewLines.join('\n')}\n\nОт какого поставщика этот прайс?`,
+      Markup.inlineKeyboard([
+        ...supplierButtons,
+        [Markup.button.callback('✏️ Ввести имя вручную', 'pricing:supplier_manual')],
+        [Markup.button.callback('❌ Отмена', 'pricing:cancel')],
+      ]),
+    )
+
+    pricingState.set(userId, { flow: 'awaiting_supplier_name', parsed })
     return true
   }
 
-  // Ввод наценки (из сообщения)
-  if (state.flow === 'awaiting_markup') {
-    let markup: number | null = null
-    if (text.trim() !== '/skip') {
-      const val = parseFloat(text.replace(',', '.'))
-      if (isNaN(val) || val < 0 || val > 300) {
-        await ctx.reply('Введите число 0–300 или /skip:')
-        return true
-      }
-      markup = val
+  // Ввод имени поставщика вручную
+  if (state.flow === 'awaiting_supplier_name') {
+    const supplierName = text.trim()
+    if (supplierName.length < 2 || supplierName.length > 50) {
+      await ctx.reply('Имя поставщика: 2-50 символов')
+      return true
     }
-    const pendingVariants = buildPendingFromMatches(state.matches, markup, state.rate ?? null)
-    const rateLabel = state.rate ? `курс ${state.rate}` : ''
-    const markupLabel = markup !== null ? `наценка ${markup}%` : ''
-    const label = [rateLabel, markupLabel].filter(Boolean).join(', ') || 'цены поставщика'
-    pricingState.set(userId, {
-      flow: 'preview',
-      source: 'message',
-      markup,
-      label,
-      pendingVariants,
-      excludedVariantIds: [],
-    })
-    await showPreview(ctx, userId)
+    await processSupplierPrice(ctx, userId, supplierName, state.parsed)
+    return true
+  }
+
+  // Ввод % наценки вручную (при awaiting_markup_confirm)
+  if (state.flow === 'awaiting_markup_confirm') {
+    const val = parseFloat(text.replace(',', '.'))
+    if (isNaN(val) || val < 0 || val > 300) {
+      await ctx.reply('Введите процент от 0 до 300:')
+      return true
+    }
+    state.markup = val
+    await ctx.reply(
+      `Наценка: ${val}%`,
+      Markup.inlineKeyboard([
+        [Markup.button.callback(`✅ Обновить цены (${val}%)`, 'pricing:apply_sheets')],
+        [Markup.button.callback('❌ Отмена', 'pricing:cancel')],
+      ]),
+    )
     return true
   }
 
