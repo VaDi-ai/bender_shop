@@ -426,8 +426,22 @@ bot.on(message('document'), async (ctx, next) => {
 // ─── /start ───────────────────────────────────────────────────────────────────
 
 bot.start((ctx) => {
-  ctx.reply(
-    `Привет, ${ctx.from.first_name}! Добро пожаловать в панель управления Bender Shop.`,
+  const userId = ctx.from?.id
+  if (userId) {
+    inventoryState.delete(userId)
+    broadcastsState.delete(userId)
+    segmentsState.delete(userId)
+    salesState.delete(userId)
+    analyticsState.delete(userId)
+    storefrontState.delete(userId)
+    promotionsState.delete(userId)
+    pricingState.delete(userId)
+    apiKeysState.delete(userId)
+    securityState.delete(userId)
+    suppliersState.delete(userId)
+  }
+  return ctx.reply(
+    `Привет, ${ctx.from?.first_name ?? ''}! Добро пожаловать в панель управления Bender Shop.`,
     adminKeyboard,
   )
 })
@@ -788,6 +802,12 @@ if (process.env.NODE_ENV === 'production') {
 }
 
 console.log('Бот запущен')
+
+// Регистрация команд бота в Telegram
+bot.telegram.setMyCommands([
+  { command: 'start', description: 'Главное меню' },
+  { command: 'shop', description: 'Открыть магазин' },
+]).catch((e) => console.error('setMyCommands error:', e))
 
 // Кнопка-меню Mini App в личных чатах
 if (WEBAPP_URL) {
