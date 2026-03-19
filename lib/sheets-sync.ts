@@ -90,6 +90,29 @@ export async function syncProductsFromSheets(): Promise<{
   total: number
   errors: string[]
 }> {
+  // Full reset: clear all products if SHEETS_FULL_RESET=true and no real orders
+  if (process.env.SHEETS_FULL_RESET === 'true') {
+    const realOrders = await prisma.order.count()
+    if (realOrders === 0) {
+      console.log('[Sheets Sync] Clearing old products (SHEETS_FULL_RESET=true)...')
+      await prisma.$transaction([
+        prisma.stockMovement.deleteMany(),
+        prisma.promotionPrice.deleteMany(),
+        prisma.promotion.deleteMany(),
+        prisma.orderItem.deleteMany(),
+        prisma.order.deleteMany(),
+        prisma.reservation.deleteMany(),
+        prisma.supplierPrice.deleteMany(),
+        prisma.priceChange.deleteMany(),
+        prisma.productVariant.deleteMany(),
+        prisma.product.deleteMany(),
+      ])
+      console.log('[Sheets Sync] Old products cleared')
+    } else {
+      console.log(`[Sheets Sync] Skipping cleanup — ${realOrders} real orders exist`)
+    }
+  }
+
   let rows: SheetRow[]
   try {
     rows = await readAllProducts()
@@ -98,6 +121,24 @@ export async function syncProductsFromSheets(): Promise<{
     return { created: 0, updated: 0, disabled: 0, total: 0, errors: [`Failed to read sheets: ${err}`] }
   }
   console.log(`[Sheets Sync] Read ${rows.length} rows from Google Sheets`)
+
+  // Preload all data for performance
+  const existingVariants = await prisma.productVariant.findMany({ include: { product: true } })
+  const variantsByFullName = new Map<string, typeof existingVariants[0]>()
+  for (const v of existingVariants) {
+    const attrs = v.attributes as Record<string, unknown> | null
+    if (attrs && typeof attrs.fullName === 'string') {
+      variantsByFullName.set(attrs.fullName, v)
+    }
+  }
+
+  const categoriesMap = new Map<string, { id: number; name: string }>()
+  const allCategories = await prisma.category.findMany()
+  for (const c of allCategories) categoriesMap.set(c.name, c)
+
+  const productsByKey = new Map<string, any>()
+  const allProducts = await prisma.product.findMany()
+  for (const p of allProducts) productsByKey.set(p.name + '|' + p.categoryId, p)
 
   let created = 0
   let updated = 0
@@ -109,31 +150,26 @@ export async function syncProductsFromSheets(): Promise<{
     if (idx % 50 === 0) {
       console.log(`[Sheets Sync] Processing row ${idx + 1}/${rows.length}...`)
     }
-    if (Date.now() - startTime > 5 * 60 * 1000) {
-      console.error(`[Sheets Sync] Timeout after 5 minutes at row ${idx + 1}/${rows.length}`)
-      errors.push(`Timeout after 5 minutes at row ${idx + 1}`)
+    if (Date.now() - startTime > 10 * 60 * 1000) {
+      console.error(`[Sheets Sync] Timeout after 10 minutes at row ${idx + 1}/${rows.length}`)
+      errors.push(`Timeout after 10 minutes at row ${idx + 1}`)
       break
     }
     const row = rows[idx]
     try {
-      // Найти или создать категорию
-      const category = await prisma.category.upsert({
-        where: { name: row.category },
-        create: { name: row.category },
-        update: {},
-      })
+      // Найти или создать категорию (from map)
+      let category = categoriesMap.get(row.category)
+      if (!category) {
+        category = await prisma.category.upsert({
+          where: { name: row.category },
+          create: { name: row.category },
+          update: {},
+        })
+        categoriesMap.set(row.category, category)
+      }
 
-      // Ищем существующий вариант по полному имени
-      // fullName уникально идентифицирует вариант (включает модель, память, цвет, страну)
-      let variant = await prisma.productVariant.findFirst({
-        where: {
-          OR: [
-            { sku: row.fullName.slice(0, 50) },
-            { attributes: { path: ['fullName'], equals: row.fullName } },
-          ],
-        },
-        include: { product: true },
-      })
+      // Ищем существующий вариант по fullName (from map)
+      const variant = variantsByFullName.get(row.fullName)
 
       if (variant) {
         // Обновить цену и количество
@@ -171,19 +207,13 @@ export async function syncProductsFromSheets(): Promise<{
         if (oldQty !== newQty || Number(variant.price) !== row.price) updated++
       } else {
         // Создать новый товар/вариант
-        // Базовое имя продукта — убираем специфику варианта
         const productName = extractProductName(row.fullName, row.brand)
+        const productKey = productName + '|' + category.id
 
-        // Ищем существующий Product по имени
-        let product = await prisma.product.findFirst({
-          where: {
-            name: productName,
-            categoryId: category.id,
-          },
-        })
+        // Ищем существующий Product (from map)
+        let product = productsByKey.get(productKey)
 
         if (!product) {
-          // Генерируем SKU
           const catNum = String(category.id).padStart(2, '0')
           const count = await prisma.product.count({ where: { categoryId: category.id } })
           const productSku = `${catNum}-${String(count + 1).padStart(4, '0')}`
@@ -203,6 +233,7 @@ export async function syncProductsFromSheets(): Promise<{
               photos: [],
             },
           })
+          productsByKey.set(productKey, product)
         }
 
         // Создать вариант
@@ -243,34 +274,32 @@ export async function syncProductsFromSheets(): Promise<{
     } catch (err) {
       const msg = `Row ${row.rowIndex} (${row.sheetName}): ${row.fullName} — ${err}`
       errors.push(msg)
-      console.error(`[Sheets Sync] ${msg}`)
+      console.error(`[Sheets Sync] Error row ${row.rowIndex}: ${err}`)
     }
   }
 
-  // Пометить товары которых нет в таблице как недоступные
-  // (только те что были созданы через sheets sync — имеют fullName в attributes)
-  const allSheetVariants = await prisma.productVariant.findMany({
-    where: {
-      attributes: { path: ['fullName'], not: undefined as any },
-    },
-    select: { id: true, productId: true },
+  // Пометить варианты которых нет в таблице как недоступные
+  const allVariantsInDb = await prisma.productVariant.findMany({
+    where: { NOT: { id: { in: Array.from(seenVariantIds) } } },
+    select: { id: true, productId: true, attributes: true },
+  })
+
+  const toDisable = allVariantsInDb.filter(v => {
+    const attrs = v.attributes as Record<string, unknown> | null
+    return attrs && typeof attrs === 'object' && 'fullName' in attrs
   })
 
   let disabled = 0
-  for (const v of allSheetVariants) {
-    if (!seenVariantIds.has(v.id)) {
-      await prisma.productVariant.update({
-        where: { id: v.id },
-        data: { quantity: 0, inStock: false },
-      })
-      disabled++
-    }
-  }
+  if (toDisable.length > 0) {
+    await prisma.productVariant.updateMany({
+      where: { id: { in: toDisable.map(v => v.id) } },
+      data: { quantity: 0, inStock: false },
+    })
+    disabled = toDisable.length
 
-  // Обновить product availability для disabled variants
-  if (disabled > 0) {
-    const affectedProducts = new Set(allSheetVariants.filter(v => !seenVariantIds.has(v.id)).map(v => v.productId))
-    for (const pid of affectedProducts) {
+    // Обновить product availability для disabled variants
+    const affectedProductIds = [...new Set(toDisable.map(v => v.productId))]
+    for (const pid of affectedProductIds) {
       const totalQty = await prisma.productVariant.aggregate({
         where: { productId: pid },
         _sum: { quantity: true },
