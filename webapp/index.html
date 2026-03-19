@@ -85,13 +85,18 @@
     }
     .header-logo { font-family: 'Courier New', Courier, monospace; font-size: 20px; color: var(--accent); text-shadow: var(--neon); letter-spacing: 3px; cursor: pointer; user-select: none; }
     .header-right { display: flex; align-items: center; gap: 10px; }
-    .search-wrap { flex: 1; max-width: 300px; position: relative; margin: 0 12px; }
-    .search-input { width: 100%; background: rgba(255,255,255,0.05); border: 1px solid #2a2a2a; border-radius: 8px; padding: 8px 32px 8px 12px; color: #e5e5e5; font-family: 'Courier New', monospace; font-size: 13px; outline: none; transition: border-color 0.2s; }
-    .search-input::placeholder { color: #555; font-size: 12px; }
-    .search-input:focus { border-color: var(--accent); }
-    .search-clear { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); background: none; border: none; color: #555; font-size: 14px; cursor: pointer; padding: 4px; }
-    .search-clear:hover { color: var(--accent); }
-    @media (max-width: 480px) { .search-wrap { max-width: 160px; margin: 0 8px; } .search-input { font-size: 12px; padding: 6px 28px 6px 10px; } }
+    .search-toggle { background: transparent; border: 1px solid #2a2a2a; color: var(--text); width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: border-color 0.2s, color 0.2s; }
+    .search-toggle:hover, .search-toggle.active { border-color: var(--accent); color: var(--accent); }
+    .search-bar { position: fixed; top: var(--header-h); left: 0; right: 0; z-index: 490; background: #0a0a0a; border-bottom: 1px solid #1a1a1a; padding: 10px 16px; transform: translateY(-100%); opacity: 0; transition: transform 300ms ease, opacity 200ms ease; pointer-events: none; }
+    .search-bar.open { transform: translateY(0); opacity: 1; pointer-events: auto; }
+    .search-bar-inner { display: flex; align-items: center; gap: 10px; background: rgba(255,255,255,0.05); border: 1px solid #2a2a2a; border-radius: 10px; padding: 0 12px; transition: border-color 0.2s; }
+    .search-bar-inner:focus-within { border-color: var(--accent); }
+    .search-bar-icon { flex-shrink: 0; }
+    .search-bar-input { flex: 1; background: transparent; border: none; color: #e5e5e5; font-family: 'Courier New', monospace; font-size: 14px; padding: 10px 0; outline: none; }
+    .search-bar-input::placeholder { color: #555; }
+    .search-bar-clear { background: none; border: none; color: #555; font-size: 16px; cursor: pointer; padding: 4px; display: none; }
+    .search-bar-clear.visible { display: block; }
+    .search-bar-clear:hover { color: var(--accent); }
     .cart-btn { display: flex; align-items: center; gap: 8px; background: transparent; color: var(--text); border: 1px solid #2a2a2a; padding: 8px 14px; font-size: 15px; cursor: pointer; transition: border-color 0.2s; }
     .cart-btn:hover { border-color: var(--accent); }
     .cart-badge { font-family: 'Courier New', Courier, monospace; background: var(--accent); color: var(--accent-fg); min-width: 20px; height: 20px; padding: 0 4px; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; }
@@ -734,17 +739,24 @@
   <!-- Fixed header -->
   <header class="header">
     <span class="header-logo" onclick="scrollToTop()">BENDER SHOP</span>
-    <div class="search-wrap">
-      <input type="text" class="search-input" id="searchInput" placeholder="Поиск товаров..." autocomplete="off">
-      <button class="search-clear" id="searchClear" style="display:none">✕</button>
-    </div>
     <div class="header-right">
+      <button class="search-toggle" id="searchToggle" aria-label="Поиск" onclick="toggleSearch()">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      </button>
       <button class="cart-btn" id="cartBtn" aria-label="Корзина">
         🛒<span class="cart-badge" id="cartBadge" data-count="0">0</span>
       </button>
       <button class="menu-btn" id="menuBtn" aria-label="Меню">☰</button>
     </div>
   </header>
+
+  <div class="search-bar" id="searchBar">
+    <div class="search-bar-inner">
+      <svg class="search-bar-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#555" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <input type="text" class="search-bar-input" id="searchInput" placeholder="Поиск товаров..." autocomplete="off">
+      <button class="search-bar-clear" id="searchClear" onclick="clearSearch()">✕</button>
+    </div>
+  </div>
 
   <main style="padding-top: var(--header-h)">
     <div class="marquee-bar" id="marqueeBar">
@@ -2013,6 +2025,30 @@
 
     // ─── Search ──────────────────────────────────────────────────────────────
     let searchQuery = ''
+    let searchOpen = false
+
+    function toggleSearch() {
+      searchOpen = !searchOpen
+      const bar = document.getElementById('searchBar')
+      const btn = document.getElementById('searchToggle')
+      if (searchOpen) {
+        bar.classList.add('open')
+        btn.classList.add('active')
+        setTimeout(() => document.getElementById('searchInput')?.focus(), 300)
+      } else {
+        bar.classList.remove('open')
+        btn.classList.remove('active')
+        if (searchQuery) clearSearch()
+      }
+    }
+
+    function clearSearch() {
+      const input = document.getElementById('searchInput')
+      if (input) input.value = ''
+      searchQuery = ''
+      document.getElementById('searchClear').classList.remove('visible')
+      renderGrid()
+    }
 
     function initSearch() {
       const input = document.getElementById('searchInput')
@@ -2021,15 +2057,12 @@
 
       input.addEventListener('input', function() {
         searchQuery = this.value.trim().toLowerCase()
-        clearBtn.style.display = searchQuery ? 'block' : 'none'
+        clearBtn.classList.toggle('visible', !!searchQuery)
         renderGrid()
       })
 
-      clearBtn.addEventListener('click', function() {
-        input.value = ''
-        searchQuery = ''
-        clearBtn.style.display = 'none'
-        renderGrid()
+      input.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') toggleSearch()
       })
     }
 
