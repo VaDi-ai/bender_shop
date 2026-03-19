@@ -261,7 +261,7 @@ export async function handleApiKeysMessage(
     try {
       const test = new OpenAI({ baseURL: 'https://openrouter.ai/api/v1', apiKey: text })
       await test.chat.completions.create({
-        model: 'anthropic/claude-sonnet-4-5',
+        model: 'anthropic/claude-sonnet-4',
         messages: [{ role: 'user', content: 'test' }],
         max_tokens: 5,
       })

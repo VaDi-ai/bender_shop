@@ -56,7 +56,7 @@ const AIParsedRateSchema = z.array(
 export async function parseSupplierMessage(text: string): Promise<AIParsedProduct[]> {
   try {
     const response = await client.chat.completions.create({
-      model: 'anthropic/claude-sonnet-4-20250514',
+      model: 'anthropic/claude-haiku-4.5',
       messages: [
         {
           role: 'user',
@@ -70,7 +70,7 @@ ${text}
   "model": "точное название модели например iPhone 17 Pro или MacBook Air M4",
   "storage": "объём памяти например 256 ГБ или 1 ТБ или null",
   "color": "цвет на английском например Silver или null",
-  "country": "код страны HK/EU/IN/CN/US или null если не указан (определять по флагу 🇭🇰=HK, 🇪🇺=EU, 🇮🇳=IN, 🇨🇳=CN, 🇺🇸=US)",
+  "country": "код страны HK/EU/IN/CN/US/AE/TH/KZ/ID или null если не указан (определять по флагу 🇭🇰=HK, 🇪🇺=EU, 🇮🇳=IN, 🇨🇳=CN, 🇺🇸=US, 🇦🇪=AE, 🇹🇭=TH, 🇰🇿=KZ, 🇮🇩=ID)",
   "simType": "тип SIM например 1 Sim+eSim или null",
   "price": число без пробелов и символов валюты,
   "rawLine": "оригинальная строка"
@@ -78,6 +78,10 @@ ${text}
 
 Правила:
 - Точки в числах это разделители тысяч: 122.000 = 122000
+- Пробелы в числах тоже разделители тысяч: 112 800 = 112800
+- "От 1 шт - 51 500" — цена = 51500
+- Артикулы в скобках (SM-S948B) — не включать в model
+- 🏎️ и другие эмодзи кроме флагов стран — игнорировать
 - Если строка не содержит товар и цену — пропустить
 - Верни только JSON массив []`,
         },
@@ -113,7 +117,7 @@ ${text}
 export async function parseCurrencyRates(text: string): Promise<AIParsedRate[]> {
   try {
     const response = await client.chat.completions.create({
-      model: 'anthropic/claude-sonnet-4-20250514',
+      model: 'anthropic/claude-haiku-4.5',
       messages: [
         {
           role: 'user',

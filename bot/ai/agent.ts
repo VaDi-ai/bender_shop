@@ -459,7 +459,7 @@ ${historyText}${webSearchContext}${supplierPriceContext}${supplierPriceContext ?
 
   try {
     const response = await client.chat.completions.create({
-      model: 'anthropic/claude-sonnet-4-5',
+      model: 'anthropic/claude-sonnet-4',
       messages: [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: safeNewMessage },
