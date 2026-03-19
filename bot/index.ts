@@ -1384,6 +1384,42 @@ bot.action('price_request:cancel', async (ctx) => {
   if (userId) salesState.delete(userId)
 })
 
+// ─── Google Sheets синхронизация (каждый час в рабочее время) ─────────────────
+
+setInterval(async () => {
+  try {
+    const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Europe/Moscow' }))
+    const hour = now.getHours()
+    if (hour < 11 || hour >= 20) return // только рабочее время
+
+    console.log(`[Sheets Sync] Auto-sync at ${hour}:00 MSK`)
+    const { syncProductsFromSheets } = await import('../lib/sheets-sync')
+    const result = await syncProductsFromSheets()
+
+    if (result.created > 0 || result.updated > 0) {
+      for (const adminId of ADMIN_IDS) {
+        try {
+          await bot.telegram.sendMessage(adminId,
+            `🔄 Авто-синхронизация Google Sheets:\n➕ ${result.created} создано | 🔄 ${result.updated} обновлено | 🔴 ${result.disabled} снято`)
+        } catch { /* ignore */ }
+      }
+    }
+  } catch (err) {
+    console.error('[Sheets Sync] Auto-sync error:', err)
+  }
+}, 60 * 60 * 1000) // каждый час
+
+// Первая синхронизация через 30 сек после старта
+setTimeout(async () => {
+  try {
+    const { syncProductsFromSheets } = await import('../lib/sheets-sync')
+    await syncProductsFromSheets()
+    console.log('[Sheets Sync] Initial sync done')
+  } catch (err) {
+    console.error('[Sheets Sync] Initial sync error:', err)
+  }
+}, 30_000)
+
 // ─── Инициализация технического топика «📦 Продажи и резервы» ─────────────────
 
 async function ensureSalesTopic(): Promise<void> {

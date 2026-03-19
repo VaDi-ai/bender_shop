@@ -48,6 +48,10 @@ export type AtomicSaleParams = {
 export async function atomicSale(
   params: AtomicSaleParams,
 ): Promise<{ variantId: number | null }> {
+  if (process.env.STOCK_WRITEOFF_ENABLED !== 'true') {
+    console.log('[Stock] Write-off disabled (STOCK_WRITEOFF_ENABLED != true)')
+    return { variantId: null }
+  }
   return withSerializableRetry(() =>
     prisma.$transaction(async (tx) => {
     // Проверяем актуальный остаток
@@ -156,6 +160,10 @@ export async function stockOut(
   comment: string,
   userId: string
 ): Promise<void> {
+  if (process.env.STOCK_WRITEOFF_ENABLED !== 'true') {
+    console.log('[Stock] Write-off disabled (STOCK_WRITEOFF_ENABLED != true)')
+    return
+  }
   await withSerializableRetry(() =>
     prisma.$transaction(async (tx) => {
       const variant = await tx.productVariant.findUnique({ where: { id: variantId } })

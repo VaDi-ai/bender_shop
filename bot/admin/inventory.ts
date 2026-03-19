@@ -382,7 +382,9 @@ export async function showInventory(ctx: Context): Promise<void> {
       Markup.button.callback('🗂️ Категории', 'inv:categories'),
     ],
     [
-      Markup.button.callback('📥 Импорт', 'inv:import_menu'),
+      Markup.button.callback('🔄 Синхронизировать из Google Sheets', 'inv:sheets_sync'),
+    ],
+    [
       Markup.button.callback('📤 Экспорт', 'inv:export'),
     ],
     [Markup.button.callback('🏠 Главное меню', 'back:main')],
@@ -1176,232 +1178,31 @@ export function setupInventoryHandlers(bot: Telegraf): void {
     await showInventory(ctx)
   })
 
-  // ── Подменю «Импорт» ─────────────────────────────────────────────────────
+  // ── Синхронизация из Google Sheets ───────────────────────────────────────
 
-  bot.action('inv:import_menu', async (ctx) => {
+  bot.action('inv:sheets_sync', async (ctx) => {
     try { await ctx.answerCbQuery() } catch { /* ignore */ }
-    await ctx.reply(
-      '📥 Импорт',
-      Markup.inlineKeyboard([
-        [Markup.button.callback('📋 Скачать шаблон', 'inv:download_template')],
-        [Markup.button.callback('📤 Загрузить файл',  'inv:import_file_start')],
-        [Markup.button.callback('🔙 Назад',           'inv:back')],
-      ]),
-    )
-  })
+    await ctx.reply('⏳ Синхронизация с Google Sheets...')
 
-  bot.action('inv:download_template', async (ctx) => {
-    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
-    await ctx.reply(
-      [
-        '📋 Шаблон для создания и оприходования товаров',
-        '',
-        '📦 Лист «Создание товаров» — для НОВЫХ товаров:',
-        '  • Название, бренд, категория (выпадающий список)',
-        '  • Атрибуты в JSON: {"Память": ["256GB", "512GB"], "Цвет": ["Silver"]}',
-        '  • Цена и количество',
-        '  • Описание подтянется автоматически из интернета',
-        '',
-        '📥 Лист «Оприходование» — для СУЩЕСТВУЮЩИХ товаров:',
-        '  • Выберите SKU из списка',
-        '  • Количество: +5 приход, -2 списание',
-        '',
-        '📖 Лист «Инструкция» — подробное описание.',
-        '',
-        '⚠️ Удалите строки-примеры (серым) перед загрузкой!',
-      ].join('\n'),
-    )
     try {
-      const variants = await prisma.productVariant.findMany({
-        include: { product: true },
-        orderBy: { id: 'asc' },
-      })
+      const { syncProductsFromSheets } = await import('../../lib/sheets-sync')
+      const result = await syncProductsFromSheets()
 
-      const wb = new ExcelJS.Workbook()
+      const lines = [
+        '✅ Синхронизация завершена:',
+        `📦 Всего строк: ${result.total}`,
+        `➕ Создано: ${result.created}`,
+        `🔄 Обновлено: ${result.updated}`,
+        result.disabled > 0 ? `🔴 Снято с витрины: ${result.disabled}` : '',
+        result.errors.length > 0 ? `⚠️ Ошибок: ${result.errors.length}` : '',
+        ...result.errors.slice(0, 5),
+      ].filter(Boolean)
 
-      const headerFill: ExcelJS.FillPattern = {
-        type: 'pattern',
-        pattern: 'solid',
-        fgColor: { argb: 'FF2B579A' },
-      }
-      const headerFont: Partial<ExcelJS.Font> = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 }
-      const evenRowFill: ExcelJS.FillPattern = {
-        type: 'pattern',
-        pattern: 'solid',
-        fgColor: { argb: 'FFF2F2F2' },
-      }
-
-      // ── Лист «Оприходование» ──────────────────────────────────────────────
-      const ws1 = wb.addWorksheet('Оприходование')
-      ws1.columns = [
-        { key: 'sku', width: 28 },
-        { key: 'qty', width: 15 },
-        { key: 'price', width: 15 },
-        { key: 'comment', width: 30 },
-        { key: 'name', width: 35 },
-      ]
-
-      const headerRow = ws1.addRow(['SKU варианта*', 'Количество*', 'Цена', 'Комментарий', 'Товар (автоподставка)'])
-      headerRow.eachCell((cell) => {
-        cell.fill = headerFill
-        cell.font = headerFont
-      })
-
-      // Data validation: dropdown SKU list from Справочник SKU
-      const skuRange = `'Справочник SKU'!$A$2:$A$${variants.length + 1}`
-      for (let row = 2; row <= 200; row++) {
-        ws1.getCell(`A${row}`).dataValidation = {
-          type: 'list',
-          formulae: [skuRange],
-          showErrorMessage: true,
-          errorTitle: 'Неверный SKU',
-          error: 'Выберите SKU из выпадающего списка или введите существующий SKU из справочника.',
-        }
-        // VLOOKUP: auto-fill product name from Справочник SKU
-        ws1.getCell(`E${row}`).value = {
-          formula: `IF(A${row}="","",VLOOKUP(A${row},'Справочник SKU'!A:B,2,FALSE))`,
-        }
-        ws1.getCell(`E${row}`).font = { color: { argb: 'FF888888' }, italic: true }
-      }
-      ws1.views = [{ state: 'frozen', ySplit: 1 }]
-
-      // ── Лист «Создание товаров» ─────────────────────────────────────────────
-      const wsCreate = wb.addWorksheet('Создание товаров')
-      wsCreate.columns = [
-        { key: 'name', width: 30 },
-        { key: 'brand', width: 15 },
-        { key: 'category', width: 20 },
-        { key: 'attributes', width: 50 },
-        { key: 'price', width: 12 },
-        { key: 'quantity', width: 12 },
-        { key: 'description', width: 40 },
-      ]
-
-      const createHeaderRow = wsCreate.addRow(['Название*', 'Бренд', 'Категория*', 'Атрибуты (JSON)', 'Цена*', 'Количество*', 'Описание'])
-      createHeaderRow.eachCell((cell) => {
-        cell.fill = headerFill
-        cell.font = headerFont
-      })
-
-      // Выпадающий список категорий
-      const categories = await prisma.category.findMany({ orderBy: { name: 'asc' } })
-      const catList = categories.map(c => c.name).join(',')
-      for (let row = 2; row <= 100; row++) {
-        wsCreate.getCell(`C${row}`).dataValidation = {
-          type: 'list',
-          formulae: [catList.length < 250 ? `"${catList}"` : `"${catList.slice(0, 249)}"`],
-          showErrorMessage: true,
-          errorTitle: 'Неверная категория',
-          error: 'Выберите категорию из списка.',
-        }
-      }
-
-      // Примеры (серым)
-      const exampleFont: Partial<ExcelJS.Font> = { color: { argb: 'FF999999' }, italic: true }
-      const exampleRows = [
-        ['iPhone 17 Pro Max', 'Apple', categories[0]?.name ?? 'Телефоны', '{"Память": ["256GB", "512GB"], "Цвет": ["Silver", "Black"]}', 128000, 5, ''],
-        ['MacBook Air M4', 'Apple', categories[1]?.name ?? 'Ноутбуки', '{"Память": ["16GB/256GB", "16GB/512GB"], "Цвет": ["Silver", "Space Gray"]}', 115000, 3, ''],
-        ['AirPods Pro 3', 'Apple', categories[2]?.name ?? 'Аудио', '{}', 24900, 10, ''],
-      ]
-      for (const rowData of exampleRows) {
-        const r = wsCreate.addRow(rowData)
-        r.eachCell((cell) => { cell.font = exampleFont })
-      }
-      wsCreate.views = [{ state: 'frozen', ySplit: 1 }]
-
-      // ── Лист «Справочник SKU» ─────────────────────────────────────────────
-      const ws2 = wb.addWorksheet('Справочник SKU')
-      ws2.columns = [
-        { key: 'sku', width: 28 },
-        { key: 'product', width: 30 },
-        { key: 'attrs', width: 35 },
-        { key: 'price', width: 15 },
-        { key: 'qty', width: 12 },
-        { key: 'inStock', width: 14 },
-      ]
-
-      const refHeader = ws2.addRow(['SKU', 'Товар', 'Атрибуты', 'Цена', 'Остаток', 'В наличии'])
-      refHeader.eachCell((cell) => {
-        cell.fill = headerFill
-        cell.font = headerFont
-      })
-
-      variants.forEach((v, i) => {
-        const attrsObj = v.attributes as Record<string, string>
-        const attrs = Object.entries(attrsObj)
-          .map(([k, val]) => `${k}: ${val}`)
-          .join(', ')
-        const row = ws2.addRow([
-          v.sku,
-          v.product.name,
-          attrs,
-          v.price.toString(),
-          v.quantity,
-          v.quantity > 0 ? 'Да' : 'Нет',
-        ])
-        if (i % 2 === 1) {
-          row.eachCell((cell) => {
-            cell.fill = evenRowFill
-          })
-        }
-      })
-      ws2.views = [{ state: 'frozen', ySplit: 1 }]
-
-      // ── Лист «Инструкция» ─────────────────────────────────────────────────
-      const ws3 = wb.addWorksheet('Инструкция')
-      ws3.getColumn(1).width = 80
-      const instructions = [
-        '📋 Инструкция по заполнению:',
-        '',
-        '📦 Лист «Создание товаров» — для добавления НОВЫХ товаров:',
-        '',
-        '1. Название* — как увидит покупатель (например: iPhone 17 Pro Max)',
-        '2. Бренд — Apple, Samsung, Sony и т.д.',
-        '3. Категория* — выберите из выпадающего списка',
-        '4. Атрибуты (JSON) — варианты товара в формате:',
-        '   {"Память": ["256GB", "512GB"], "Цвет": ["Silver", "Black"]}',
-        '   Если вариантов нет (аксессуары) — оставьте {} или пустым',
-        '5. Цена* — базовая цена в рублях (число без пробелов)',
-        '6. Количество* — сколько единиц оприходовать',
-        '7. Описание — необязательно, бот подтянет из интернета',
-        '',
-        '⚠️ Строки-примеры (серым курсивом) удалите перед загрузкой!',
-        '⚠️ Если атрибуты указаны — создаются варианты (декартово произведение).',
-        '   Количество распределяется ПОРОВНУ по вариантам.',
-        '',
-        '─────────────────────────────────────────────',
-        '',
-        '📥 Лист «Оприходование» — для СУЩЕСТВУЮЩИХ товаров:',
-        '',
-        '1. Выберите SKU из выпадающего списка в колонке A',
-        '2. Укажите количество: положительное = приход, отрицательное = списание',
-        '3. Цена (необязательно): если указана — обновит цену варианта',
-        '4. Комментарий (необязательно): для аудита — причина прихода/списания',
-        '5. Колонка "Товар" заполняется автоматически по SKU',
-      ]
-      instructions.forEach((line) => {
-        ws3.addRow([line])
-      })
-
-      const buf = await wb.xlsx.writeBuffer()
-      await ctx.replyWithDocument({
-        source: Buffer.from(buf),
-        filename: 'bender-shop-template.xlsx',
-      })
+      await ctx.reply(lines.join('\n'))
     } catch (err) {
-      console.error('[inv:download_template]', err)
-      await ctx.reply('❌ Не удалось сформировать шаблон.')
+      console.error('[Sheets Sync] Error:', err)
+      await ctx.reply(`❌ Ошибка синхронизации: ${err instanceof Error ? err.message : 'Неизвестная ошибка'}`)
     }
-  })
-
-  bot.action('inv:import_file_start', async (ctx) => {
-    try { await ctx.answerCbQuery() } catch { /* ignore */ }
-    const userId = getUserId(ctx)
-    inventoryState.set(userId, { flow: 'import_file', step: 'awaiting_file' })
-    await ctx.reply(
-      'Отправьте заполненный файл шаблона (.xlsx)',
-      Markup.keyboard([['❌ Отмена']]).resize(),
-    )
   })
 
   bot.action('inv:export', async (ctx) => {
