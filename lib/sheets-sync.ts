@@ -90,15 +90,31 @@ export async function syncProductsFromSheets(): Promise<{
   total: number
   errors: string[]
 }> {
-  const rows = await readAllProducts()
+  let rows: SheetRow[]
+  try {
+    rows = await readAllProducts()
+  } catch (err) {
+    console.error(`[Sheets Sync] Failed to read Google Sheets: ${err}`)
+    return { created: 0, updated: 0, disabled: 0, total: 0, errors: [`Failed to read sheets: ${err}`] }
+  }
   console.log(`[Sheets Sync] Read ${rows.length} rows from Google Sheets`)
 
   let created = 0
   let updated = 0
   const errors: string[] = []
   const seenVariantIds = new Set<number>()
+  const startTime = Date.now()
 
-  for (const row of rows) {
+  for (let idx = 0; idx < rows.length; idx++) {
+    if (idx % 50 === 0) {
+      console.log(`[Sheets Sync] Processing row ${idx + 1}/${rows.length}...`)
+    }
+    if (Date.now() - startTime > 5 * 60 * 1000) {
+      console.error(`[Sheets Sync] Timeout after 5 minutes at row ${idx + 1}/${rows.length}`)
+      errors.push(`Timeout after 5 minutes at row ${idx + 1}`)
+      break
+    }
+    const row = rows[idx]
     try {
       // Найти или создать категорию
       const category = await prisma.category.upsert({

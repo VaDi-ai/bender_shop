@@ -221,7 +221,7 @@ export function startApiServer(bot?: Telegraf): void {
 
   // ─── Request logging (skip /health) ────────────────────────────────────────
   app.use((req, _res, next) => {
-    if (req.path !== '/health') {
+    if (req.path !== '/health' && req.path !== '/api/cache-version') {
       console.log(`[HTTP] ${req.method} ${req.path}`)
     }
     next()

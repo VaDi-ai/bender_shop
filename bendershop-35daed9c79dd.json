@@ -1,0 +1,13 @@
+{
+  "type": "service_account",
+  "project_id": "bendershop",
+  "private_key_id": "35daed9c79ddcc48ce59eb4fefab3ff27c50389d",
+  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvAIBADANBgkqhkiG9w0BAQEFAASCBKYwggSiAgEAAoIBAQCxRx2qFsrSqKxb\nCxbcg+XWPdoU6mQv+CT6mWErXrEJE6K1rjLW89XwDohWrl87wSOc5GM9oH8qP33l\nnckbCku6MTRQxEfzb9P6eCFQ4c05yK5XuorcuSQAVotvibpbigMg7YswNatbnTHf\nVjiA8t/WAcImtijQntIcmnXW1ZmGn46Ty+wSzTmM6039Hx2k7s/7kLfUMWRk0D4O\nY52BR+GAXV/wGbwUnf0jKx1UptBLlal9tnOOp5uI7dIUHAywodWPwkIzNG3pBsDD\n388ST5IXgFShmPcCRsDEF3SRsLdrp6YLAnNlNjM417CBRx8T/vvljdpyWQTTsWRY\nwAqqOj1FAgMBAAECggEAEJXF53IC7yLjHxBiRuabE8hNFQxZq6g0M3Kyhcdx2hbJ\nb+RYcsY0o2UEqdFd7P30ejresvcHNpliip8Qn7Q+ofB1A8JdNd/mLcZb3ZCGbevB\nrcjwsVYr0VFHcbupoONASC4ZCb1XpvZFom6TUjMGsGOROaRsnJnjL9RehmcM2ix+\n4g/mNhrOuclJgXyE4iHvCQW2P24oldiX4oNUx2NiyXEydJAPBslP+swSJvg0Df48\ng6jZtc/DiVx3EuII2/l3frQmk0bOb2JbOamcnxAuHbXWPADoyGRyG77lou7WlVQk\nYsIAQnu7+vnmqdkkI0Ud9MQoyaHUyHpO1Vs7GW8UyQKBgQDXT3bTdaocMYEZh8j6\nosduPBitxdPxpK2lOI/rCP25KPqEEBQQl2GAURPmeIs+32Fsvusg9WIYNIEH9VAQ\nJT36APQoit6Xpw24QGkVYlYkD2TqAWoF2KIYV3gLuMPUOJbu9giiAEtacDJFv1VD\n7o2pdRyW22678/p1UXDX4U9EOQKBgQDSx6qFvxJGOB9RjzZIz0j5zg0mY+aOFpv2\n2U3oR96tX+TiCzHJ+cBatCFs0wLxanAx2h3yjIRY/0TdmsSwwFyFUdbTURNotb4Y\nCNdR+a1eYPXJ5H8IqD15mbSittBeis+Xh/LFdr8Mkema031CsBA/H2z+FDY/d2vj\n150srpW5bQKBgFTfhC2zEk1uzj8sIXN7OzYfBnNpqjR0/+ZDN6gksS+OEcKBPAeW\nRN76Fugg2HL+Rz9AuxsQ34w/FiX284qJw7aLLbPVmg0Z0vSwnzvIucAZOWRtDkgj\nrzH9ONsWCEvdytGDtr91cj7CP27zDz9qB/mmqpBlC2+Xq0EXy22t6TsxAoGAFwzs\n0gmONw2mJyYxOo8onODywTMFoJ5KWhlzkqZhbLZi8nFk9YCRj5nJWfxNgxcvw9Pl\nmIPTaWQpJM7rGaU/uPi1NJDWPYo6iqhU28shMYQK/RQ27Dxx1J2BipXRfbVSdHDS\nlNOimv5N/LeKKEPW0wBdy/9r2071BoqqzpsdFpUCgYADzAJqr2/DwFVeuUzmSDv7\nYc0/uWSfWZkHD2TPtORL6joFKsDexf8OlNSRWHMgt/Wh8SdyakPRv/FPAPAvTLL9\nxttMfF5Ufubmf/2pTSUfoQ3u1w3gk77ge2kASsJJm+XN/4nL92C9naUSc+B461n3\nlMk3MDYwmUvDdX0hWEtehw==\n-----END PRIVATE KEY-----\n",
+  "client_email": "bender-sheets@bendershop.iam.gserviceaccount.com",
+  "client_id": "111150486537767857426",
+  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+  "token_uri": "https://oauth2.googleapis.com/token",
+  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/bender-sheets%40bendershop.iam.gserviceaccount.com",
+  "universe_domain": "googleapis.com"
+}
