@@ -56,7 +56,7 @@ const AIParsedRateSchema = z.array(
 export async function parseSupplierMessage(text: string): Promise<AIParsedProduct[]> {
   try {
     const response = await client.chat.completions.create({
-      model: 'anthropic/claude-sonnet-4-5',
+      model: 'anthropic/claude-sonnet-4-20250514',
       messages: [
         {
           role: 'user',
@@ -82,12 +82,19 @@ ${text}
 - Верни только JSON массив []`,
         },
       ],
-      max_tokens: 2000,
+      max_tokens: 4000,
     })
 
     const content = response.choices[0]?.message?.content ?? '[]'
     const clean = content.replace(/```json|```/g, '').trim()
-    const result = JSON.parse(clean)
+    let jsonStr = clean
+    if (!jsonStr.endsWith(']')) {
+      const lastBrace = jsonStr.lastIndexOf('}')
+      if (lastBrace > 0) {
+        jsonStr = jsonStr.slice(0, lastBrace + 1) + ']'
+      }
+    }
+    const result = JSON.parse(jsonStr)
     const parsed = AIParsedProductSchema.safeParse(result)
     if (!parsed.success) {
       console.error('AI parser: schema validation failed (products):', parsed.error.message)
@@ -106,7 +113,7 @@ ${text}
 export async function parseCurrencyRates(text: string): Promise<AIParsedRate[]> {
   try {
     const response = await client.chat.completions.create({
-      model: 'anthropic/claude-sonnet-4-5',
+      model: 'anthropic/claude-sonnet-4-20250514',
       messages: [
         {
           role: 'user',
