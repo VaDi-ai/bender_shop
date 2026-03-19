@@ -18,7 +18,7 @@ import cors from 'cors'
 import rateLimit from 'express-rate-limit'
 import ExcelJS from 'exceljs'
 import type { Telegraf } from 'telegraf'
-import { Telegram } from 'telegraf'
+import { Telegram, Markup } from 'telegraf'
 import { prisma } from '../lib/prisma'
 import { logSecurityEvent } from '../lib/security-log'
 import { getApiKeyValue } from '../lib/api-key-store'
@@ -929,10 +929,15 @@ export function startApiServer(bot?: Telegraf): void {
             }
           }
 
-          // 2. Отправить всем админам в личку
+          // 2. Отправить всем админам в личку (с кнопкой перехода к клиенту если есть топик)
+          const orderButtons = (client?.telegramTopicId && CRM_GROUP_ID)
+            ? Markup.inlineKeyboard([[
+                Markup.button.url('👤 Перейти к клиенту', `https://t.me/c/${String(CRM_GROUP_ID).replace('-100', '')}/${client.telegramTopicId}`),
+              ]])
+            : undefined
           for (const adminId of ADMIN_IDS) {
             try {
-              await telegram.sendMessage(adminId, orderText)
+              await telegram.sendMessage(adminId, orderText, orderButtons)
             } catch { /* ignore */ }
           }
 

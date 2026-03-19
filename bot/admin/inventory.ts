@@ -375,7 +375,7 @@ export async function showInventory(ctx: Context): Promise<void> {
   const keyboard = Markup.inlineKeyboard([
     [
       Markup.button.callback('➕ Новый товар', 'inv:add'),
-      Markup.button.callback('📝 Редактировать', 'inv:edit_product'),
+      Markup.button.callback('📝 Каталог', 'inv:edit_product'),
     ],
     [
       Markup.button.callback('📊 Остатки', 'inv:stock_list'),

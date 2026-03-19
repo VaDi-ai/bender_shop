@@ -165,13 +165,12 @@ export async function adminOnly(ctx: any, next: any) {
 // ─── Главное меню ─────────────────────────────────────────────────────────────
 
 const adminKeyboard = Markup.keyboard([
+  ['📦 Товароучёт', '💰 Цены'],
   ['📊 Аналитика', '📬 Входящие'],
-  ['📢 Рассылки', '💰 Балансы'],
-  ['🏷️ Акции', '🔧 Техработы'],
-  ['📦 Товароучёт', '🔑 API Ключи'],
-  ['📂 Сегменты', '🤖 AI Агент'],
-  ['🖼️ Витрина', '💰 Цены'],
-  ['🏭 Поставщики'],
+  ['🏭 Поставщики', '🤖 AI Агент'],
+  ['📢 Рассылки', '🏷️ Акции'],
+  ['🖼️ Витрина', '📂 Сегменты'],
+  ['🔧 Техработы'],
 ]).resize()
 
 // Кнопки главного меню — для сброса пошаговых флоу при нажатии
@@ -556,6 +555,7 @@ bot.hears('🔧 Техработы', async (ctx) => {
       [Markup.button.callback(label, action)],
       [Markup.button.callback('🗄️ Бэкап сейчас', 'maint:backup')],
       [Markup.button.callback('✨ Обогатить все карточки', 'maint:enrich_all')],
+      [Markup.button.callback('🔑 API Ключи', 'maint:api_keys')],
       [Markup.button.callback('📖 Как восстановить', 'maint:restore_info')],
       [Markup.button.callback('🏠 Главное меню', 'back:main')],
     ]),
@@ -651,6 +651,11 @@ bot.action('maint:enrich_all', async (ctx) => {
     console.error('[Enrich] Batch error:', err)
     await ctx.reply('❌ Ошибка при обогащении.')
   }
+})
+
+bot.action('maint:api_keys', async (ctx) => {
+  try { await ctx.answerCbQuery() } catch { /* ignore */ }
+  await showApiKeysMenu(ctx)
 })
 
 // Экспортируем флаг для использования в webhooks/telegram.ts (если потребуется)
@@ -1116,9 +1121,26 @@ setInterval(async () => {
         lines.push('')
         lines.push('👆 Зайдите в CRM-топики этих клиентов и подтвердите брони.')
 
+        // Кнопки для быстрого перехода к клиентам
+        const crmGroupId = Number(process.env.CRM_GROUP_ID)
+        const nightButtons: any[][] = []
+        for (const r of nightReserves) {
+          const clientName = r.client?.name ?? 'Клиент'
+          const tgUsername = (r.client as any)?.telegramUsername ?? ''
+          const topicId = r.client?.telegramTopicId
+          if (topicId && crmGroupId) {
+            const topicLink = `https://t.me/c/${String(crmGroupId).replace('-100', '')}/${topicId}`
+            nightButtons.push([Markup.button.url(`👤 ${clientName} ${tgUsername}`.trim(), topicLink)])
+          }
+        }
+        if (nightButtons.length > 0) {
+          nightButtons.push([Markup.button.callback('📊 Все остатки', 'inv:stock_list')])
+        }
+
         for (const adminId of ADMIN_IDS) {
           try {
-            await bot.telegram.sendMessage(adminId, lines.join('\n'))
+            await bot.telegram.sendMessage(adminId, lines.join('\n'),
+              nightButtons.length > 0 ? Markup.inlineKeyboard(nightButtons) : undefined)
           } catch { /* ignore */ }
         }
 
