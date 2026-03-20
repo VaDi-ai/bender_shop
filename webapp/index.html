@@ -830,7 +830,7 @@
           <a href="#" onclick="event.preventDefault();openFModal('privacy')">обработкой персональных данных</a>
         </span>
       </label>
-      <div class="box-button disabled" id="checkoutBtn" onclick="checkout()">
+      <div class="box-button disabled" id="checkoutBtn" onclick="checkout()" style="pointer-events:auto">
         <div class="button"><span>ОФОРМИТЬ</span></div>
       </div>
     </div>
@@ -2162,10 +2162,12 @@
 
     // ── Checkout ──────────────────────────────────────────────────────────────
     async function checkout() {
-      if (!payMethod || !cart.length) return
+      if (!cart.length) return
+      if (!payMethod) { showToast('Выберите способ оплаты'); return }
       const consentBox = document.getElementById('consentCheckbox')
       if (!consentBox?.checked) {
         document.getElementById('consentLabel').classList.add('error')
+        showToast('Примите условия')
         return
       }
       if (!validateCustomerForm()) return
@@ -2190,24 +2192,42 @@
         if (deliveryAddress) body.deliveryAddress = deliveryAddress
         const headers = { 'Content-Type': 'application/json' }
         if (tg?.initData) headers['x-telegram-init-data'] = tg.initData
-        const res  = await fetch('/api/orders', { method: 'POST', headers, body: JSON.stringify(body) })
-        const json = await res.json().catch(() => ({}))
+
+        console.log('[CHECKOUT] Sending order...', JSON.stringify(body))
+
+        const res = await fetch('/api/orders', { method: 'POST', headers, body: JSON.stringify(body) })
+
+        console.log('[CHECKOUT] Response status:', res.status, res.statusText)
+
+        const text = await res.text()
+        console.log('[CHECKOUT] Response body:', text)
+
+        let json = {}
+        try { json = JSON.parse(text) } catch(e) {
+          console.error('[CHECKOUT] JSON parse error:', e, 'raw:', text)
+        }
+
         if (!res.ok) {
           btn.classList.remove('disabled'); btnSpan.textContent = 'ОФОРМИТЬ'
           if (json.error && json.error.includes('Товар закончился')) {
-            showOrderError('ТОВАР ЗАКОНЧИЛСЯ', 'К сожалению, «' + (json.product || 'товар') + '» уже закончился. Попробуйте выбрать другой вариант.')
+            showOrderError('ТОВАР ЗАКОНЧИЛСЯ', 'К сожалению, «' + (json.product || 'товар') + '» уже закончился.')
             await loadProducts(activeCat)
-          } else { showOrderError('ОШИБКА', json.error || 'Не удалось оформить заказ. Проверьте данные и попробуйте ещё раз.') }
+          } else {
+            showOrderError('ОШИБКА', json.error || 'Не удалось оформить заказ.')
+          }
           return
         }
-        const orderId = json.orderId || 0
+
+        console.log('[CHECKOUT] Success! orderId:', json.orderId)
+
+        const orderId = json.orderId || json.id || 0
         const savedItems = items.map(i => ({ name: i.name, qty: i.qty }))
         cart = []; updateBadge(); closeCart()
         showOrderSuccess(orderId, savedItems, totalAmt, payMethod, deliveryType, deliveryAddress)
-        // tg.sendData не используем — заказ создаётся через API, бот уведомляется из бэкенда
         // Закрыть Mini App через 3 секунды чтобы пользователь увидел подтверждение
         setTimeout(() => { if (tg && tg.close) tg.close() }, 3000)
-      } catch {
+      } catch(err) {
+        console.error('[CHECKOUT] CATCH error:', err)
         btn.classList.remove('disabled'); btnSpan.textContent = 'ОФОРМИТЬ'
         showOrderError('НЕТ СВЯЗИ', 'Проверьте интернет-соединение и попробуйте ещё раз.')
       }
