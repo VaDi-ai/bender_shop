@@ -10,9 +10,19 @@ import { Decimal } from '@prisma/client/runtime/client'
 import { prisma } from './prisma'
 import { readSheet, getSheetNames } from './google-sheets'
 
-// Листы с товарами (одинаковая структура)
-const PRODUCT_SHEETS = ['Товарное наличие вариант 1', 'Аксессуары', 'Услуги']
+// Листы с товарами
+const MAIN_SHEET = 'Товарное наличие вариант 1'
+const PRODUCT_SHEETS = [MAIN_SHEET, 'Аксессуары', 'Услуги']
 const DEFAULT_QTY = 3 // если «В наличие» пусто
+
+// Column indices for writeback (supplier, date) — per sheet type
+// Main sheet: G=price(6), I=supplier(8), J=date(9)
+// Accessories/Services: F=price(5), H=supplier(7), I=date(8)
+export const WRITEBACK_COLS = {
+  [MAIN_SHEET]:  { price: 'G', supplier: 'I', date: 'J' },
+  'Аксессуары':  { price: 'F', supplier: 'H', date: 'I' },
+  'Услуги':      { price: 'F', supplier: 'H', date: 'I' },
+} as Record<string, { price: string; supplier: string; date: string }>
 
 export interface SheetRow {
   brand: string
@@ -36,16 +46,33 @@ export async function readAllProducts(): Promise<SheetRow[]> {
     if (!allSheets.includes(sheetName)) continue
 
     const data = await readSheet(sheetName)
+    const isMain = sheetName === MAIN_SHEET
+
     // Пропускаем заголовок (строка 1)
     for (let i = 1; i < data.length; i++) {
       const row = data[i]
-      const brand = (row[1] ?? '').trim()
-      const category = (row[2] ?? '').trim()
-      const fullName = (row[3] ?? '').trim()
-      const country = (row[4] ?? '').trim()
-      const priceRaw = (row[5] ?? '').toString().replace(/\s/g, '').replace(',', '.')
-      const qtyRaw = (row[6] ?? '').toString().trim()
 
+      let brand: string, category: string, fullName: string, country: string, priceRaw: string, qtyRaw: string
+
+      if (isMain) {
+        // Основной лист: B=бренд, D=категория/магазин, E=название, F=страна, G=цена, H=кол-во
+        brand    = (row[1] ?? '').trim()
+        category = (row[3] ?? '').trim()   // D: Категория/магазин (для сайта)
+        fullName = (row[4] ?? '').trim()   // E: Название модели
+        country  = (row[5] ?? '').trim()   // F: Страна
+        priceRaw = (row[6] ?? '').toString().replace(/\s/g, '').replace(',', '.')  // G: Цена
+        qtyRaw   = (row[7] ?? '').toString().trim()  // H: В наличие
+      } else {
+        // Аксессуары, Услуги: B=бренд, D=название, E=страна, F=цена, G=кол-во
+        brand    = (row[1] ?? '').trim()
+        category = sheetName               // имя листа = категория для сайта
+        fullName = (row[3] ?? '').trim()   // D: Название
+        country  = (row[4] ?? '').trim()   // E: Страна
+        priceRaw = (row[5] ?? '').toString().replace(/\s/g, '').replace(',', '.')  // F: Цена
+        qtyRaw   = (row[6] ?? '').toString().trim()  // G: В наличие
+      }
+
+      if (!category) category = sheetName
       if (!fullName || !priceRaw) continue // пропуск пустых строк
 
       const price = parseFloat(priceRaw)
@@ -319,11 +346,24 @@ export async function syncProductsFromSheets(): Promise<{
   return { created, updated, disabled, total: rows.length, errors }
 }
 
+// Известные цвета (длинные первыми для жадного матча)
+const KNOWN_COLORS = [
+  'Cobalt Violet', 'Sky Blue', 'Rose Gold', 'Space Gray', 'Jet Black',
+  'Alpine Green', 'Deep Purple', 'Dark Green', 'Sierra Blue', 'Pur Fog',
+  'Jetblack', 'Black', 'White', 'Silver', 'Gold', 'Blue', 'Red', 'Green',
+  'Orange', 'Purple', 'Midnight', 'Starlight', 'Pink', 'Yellow', 'Cream',
+  'Mint', 'Lavender', 'Coral', 'Graphite', 'Natural', 'Titanium', 'Desert',
+  'Navy', 'Denim',
+]
+
 /**
  * Извлекает базовое имя продукта из полного названия.
+ * Оставляет размер экрана для часов (40, 42, 44, 46, 49) как часть имени.
+ *
  * "Apple Watch SE 40 Midnight S/M 2024" → "Apple Watch SE 40"
+ * "Apple Watch S11 46 Starlight M/L"    → "Apple Watch S11 46"
  * "Samsung Galaxy S26 Ultra 16/1TB (SM-S948B) Cobalt Violet" → "Samsung Galaxy S26 Ultra"
- * "iPhone 17 Pro Max 256GB Blue" → "iPhone 17 Pro Max"
+ * "iPhone 17 Pro Max 256GB Blue"        → "iPhone 17 Pro Max"
  */
 function extractProductName(fullName: string, brand: string): string {
   let name = fullName
@@ -334,30 +374,30 @@ function extractProductName(fullName: string, brand: string): string {
   // Убрать страну в скобках: (ОАЭ), (США)
   name = name.replace(/\s*\([А-Яа-яЁё]+\)\s*/g, ' ')
 
+  // Убрать пустые скобки
+  name = name.replace(/\s*\(\s*\)\s*/g, ' ')
+
   // Убрать память: 256GB, 512GB, 1TB, 16/1TB, 12/256Gb, 8/128
   name = name.replace(/\s*\d+\/\d+\s*(GB|TB|Gb|gb)?\s*/gi, ' ')
   name = name.replace(/\s*\d+\s*(GB|TB|Gb)\s*/gi, ' ')
 
-  // Убрать цвета (известные)
-  const colors = ['Black', 'White', 'Silver', 'Gold', 'Blue', 'Red', 'Green', 'Orange', 'Purple',
-    'Midnight', 'Starlight', 'Pink', 'Yellow', 'Cream', 'Cobalt Violet', 'Sky Blue',
-    'Rose Gold', 'Space Gray', 'Jet Black', 'Natural', 'Titanium', 'Desert',
-    'Mint', 'Lavender', 'Coral', 'Graphite', 'Sierra Blue', 'Alpine Green',
-    'Deep Purple', 'Dark Green', 'Navy', 'Denim', 'Pur Fog', 'Jetblack']
-  for (const color of colors) {
+  // Убрать цвета
+  for (const color of KNOWN_COLORS) {
     name = name.replace(new RegExp(`\\b${color}\\b`, 'gi'), '')
   }
 
-  // Убрать размеры ремешков: S/M, M/L, S, M, L
+  // Убрать ремешки: S/M, M/L
   name = name.replace(/\b[SML]\/[SML]\b/g, '')
+
+  // Убрать GPS/LTE/Wi-Fi/Cellular
   name = name.replace(/\b(GPS|LTE|Wi-Fi|Cellular)\b/gi, '')
 
-  // Убрать год: 2024, 2025
+  // Убрать год: 2024, 2025, 2026
   name = name.replace(/\b20[2-3]\d\b/g, '')
 
-  // Убрать артикулы: MRP83, MWWF3, MEH94, SM-F741B
-  name = name.replace(/\b[A-Z]{2,3}[A-Z0-9]{2,5}\b/g, '')
+  // Убрать артикулы: MRP83, MWWF3, SM-F741B (но НЕ короткие модели вроде S11, SE)
   name = name.replace(/\bSM-[A-Z0-9]+\b/g, '')
+  name = name.replace(/\b[A-Z]{2,3}[A-Z0-9]{2,5}\b/g, '')
 
   // Убрать SIM info
   name = name.replace(/\b(eSIM|e-SIM|1\s*Sim|Dual\s*SIM|DS)\b/gi, '')
@@ -386,7 +426,6 @@ function parseAttributes(fullName: string, brand: string, country: string): Reco
       const parts = raw.replace(/\s*(GB|TB|Gb|gb)/i, '').split('/')
       attrs['RAM'] = parts[0] + ' GB'
       const storagePart = parts[1].replace(/\s*/g, '')
-      // Определить единицу
       const unitMatch = raw.match(/(GB|TB|Gb)/i)
       attrs['Память'] = storagePart + (unitMatch ? unitMatch[1].toUpperCase() : 'GB')
     } else {
@@ -394,13 +433,8 @@ function parseAttributes(fullName: string, brand: string, country: string): Reco
     }
   }
 
-  // Цвет
-  const colors = ['Cobalt Violet', 'Sky Blue', 'Rose Gold', 'Space Gray', 'Jet Black',
-    'Alpine Green', 'Deep Purple', 'Dark Green', 'Pur Fog', 'Jetblack',
-    'Black', 'White', 'Silver', 'Gold', 'Blue', 'Red', 'Green', 'Orange', 'Purple',
-    'Midnight', 'Starlight', 'Pink', 'Yellow', 'Cream', 'Mint', 'Lavender',
-    'Coral', 'Graphite', 'Natural', 'Titanium', 'Desert', 'Navy', 'Denim']
-  for (const color of colors) {
+  // Цвет (длинные первыми)
+  for (const color of KNOWN_COLORS) {
     if (fullName.toLowerCase().includes(color.toLowerCase())) {
       attrs['Цвет'] = color
       break
@@ -410,9 +444,13 @@ function parseAttributes(fullName: string, brand: string, country: string): Reco
   // Страна
   if (country) attrs['Страна'] = country
 
-  // Размер (для часов): S/M, M/L, 40mm, 42mm, 44mm, 46mm, 49mm
-  const sizeMatch = fullName.match(/\b(\d{2})\s*(mm|MM)?\b/) || fullName.match(/\b([SML]\/[SML])\b/)
-  if (sizeMatch) attrs['Размер'] = sizeMatch[1] + (sizeMatch[2] || '')
+  // Ремешок: S/M, M/L
+  const bandMatch = fullName.match(/\b([SML]\/[SML])\b/)
+  if (bandMatch) attrs['Ремешок'] = bandMatch[1]
+
+  // Размер экрана (для часов): 40, 42, 44, 46, 49 (mm)
+  const sizeMatch = fullName.match(/\b(40|42|44|45|46|49)\b/)
+  if (sizeMatch) attrs['Размер'] = sizeMatch[1] + 'mm'
 
   return attrs
 }
