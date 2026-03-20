@@ -171,9 +171,10 @@
       overflow: hidden;
       display: flex;
       align-items: center;
-      height: 56px;
+      height: 64px;
       cursor: pointer;
       transition: border-color 0.2s;
+      position: relative;
     }
 
     .cat-btn:hover, .cat-btn.active {
@@ -188,6 +189,8 @@
       padding: 0 12px;
       flex: 1;
       min-width: 0;
+      z-index: 1;
+      position: relative;
     }
 
     .cat-btn-name {
@@ -206,14 +209,21 @@
     }
 
     .cat-btn-img {
-      height: 56px;
-      width: 56px;
+      height: 100%;
+      width: 72px;
       object-fit: cover;
       object-position: center;
-      border-radius: 0 12px 12px 0;
-      opacity: 0.85;
       flex-shrink: 0;
+      position: absolute;
+      right: 0;
+      top: 0;
+      mask-image: linear-gradient(to right, transparent 0%, black 40%);
+      -webkit-mask-image: linear-gradient(to right, transparent 0%, black 40%);
+      opacity: 0.7;
     }
+
+    .cat-btn:hover .cat-btn-img { opacity: 0.9; }
+    .cat-btn.active .cat-btn-img { opacity: 0.9; }
 
     .cat-btn.hidden { display: none; }
 
