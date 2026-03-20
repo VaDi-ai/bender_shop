@@ -387,11 +387,15 @@ export async function syncProductsFromSheets(): Promise<{
   return { created, updated, disabled, total: rows.length, errors }
 }
 
-// Цвета: длинные первыми для жадного матча
+// ─── Color dictionary (long first for greedy match) ─────────────────────────
+
 const COLORS_LONG = [
   'Cobalt Violet', 'Sky Blue', 'Rose Gold', 'Space Gray', 'Space Black',
   'Jet Black', 'Alpine Green', 'Deep Purple', 'Dark Green', 'Sierra Blue',
-  'Pur Fog', 'Anchor Blue',
+  'Pur Fog', 'Anchor Blue', 'Prussian Blue', 'Vinca Blue', 'Icy Blue',
+  'Ceramic White', 'Phantom Black', 'Phantom White', 'Cream Gold',
+  'Lunar Silver', 'Mars Orange', 'Almond Green', 'Rock Gray',
+  'Nickel/Copper', 'Blue/Copper',
 ]
 const COLORS_SHORT = [
   'Jetblack', 'Black', 'White', 'Silver', 'Gold', 'Blue', 'Red', 'Green',
@@ -399,31 +403,23 @@ const COLORS_SHORT = [
   'Mint', 'Lavender', 'Coral', 'Graphite', 'Natural', 'Titanium',
   'Desert', 'Navy', 'Denim', 'Gray', 'Teal', 'Bronze', 'Shadow',
   'Burgundy', 'Copper', 'Ivory', 'Sage', 'Stone', 'Ultramarine',
-  'Charcoal',
+  'Charcoal', 'Fuchsia', 'Obsidian', 'Porcelain', 'Hazel', 'Peony',
+  'Wintergreen', 'Bay', 'Nickel',
   'Голубой', 'Черный', 'Белый', 'Серебристый', 'Золотой', 'Синий',
   'Красный', 'Зеленый', 'Оранжевый', 'Фиолетовый', 'Розовый',
 ]
 const ALL_COLORS = [...COLORS_LONG, ...COLORS_SHORT]
 
+// ─── Dyson completions (part of product name vs attribute) ──────────────────
+const DYSON_COMPLETIONS = [
+  'Complete Long', 'Complete', 'Detect Absolute', 'Absolute', 'Animal',
+]
+
+// ─── Photo/Video kit types ──────────────────────────────────────────────────
+const CAMERA_KITS = ['Body', 'Kit', 'Fly More Combo']
+
 /**
  * Извлекает базовое имя продукта из полного названия.
- *
- * "iPhone 16 512GB Black 2Sim (Китай)"                              → "iPhone 16"
- * "iPhone 16 Pro Max 256GB Black eSim (США)"                        → "iPhone 16 Pro Max"
- * "Samsung Galaxy S26 Ultra 16/1TB (SM-S948B) Cobalt Violet"        → "Samsung Galaxy S26 Ultra"
- * "Apple Watch SE 40 Midnight S/M 2024"                             → "Apple Watch SE"
- * "Apple Watch S11 46 Jet Black S/M MEUW4"                          → "Apple Watch S11"
- * "Apple Watch Series 11 42mm Jet Black GPS S/M"                    → "Apple Watch S11"
- * "Apple Watch Ultra 3 49 Black Black Charcoal Loop S/M MF1D4"     → "Apple Watch Ultra 3"
- * "iPad Air 11 128GB Space Gray Wi-Fi (2025) M3"                    → "iPad Air 11"
- * "MacBook Pro M4 14 24GB 512GB Space Black"                        → "MacBook Pro M4"
- * "MacBook Pro M4 Max 16 48GB 1TB Space Black"                      → "MacBook Pro M4 Max"
- * "Mac mini M4 10c/10c 16GB 256GB Silver"                           → "Mac mini M4"
- * "Mac mini M4 Pro 14c/20c 24GB 512GB Silver"                       → "Mac mini M4 Pro"
- * "Mac Studio M4 Max 16c/40c 48GB 1TB Silver"                       → "Mac Studio M4 Max"
- * "iMac 24 M4 10c/10c 24GB 512GB Silver"                            → "iMac 24 M4"
- * "AirPods Max 2 USB-C Blue"                                        → "AirPods Max 2"
- * "AirPods 4 ANC"                                                   → "AirPods 4 ANC"
  */
 function extractProductName(fullName: string, brand: string): string {
   let name = fullName
@@ -434,34 +430,50 @@ function extractProductName(fullName: string, brand: string): string {
   // ─── Step 1: Remove country in brackets (Russian) ───
   name = name.replace(/\s*\([А-Яа-яЁё/\s]+\)\s*/g, ' ')
 
-  // ─── Step 2: Remove article codes ───
+  // ─── Step 2: Remove article codes in brackets ───
+  // Keep (RC 2) for DJI — handled in parseAttributes
+  const isDJI = /\bDJI\b/i.test(name)
+  if (isDJI) {
+    // Extract and remove (RC 2) etc. — goes to Комплектация attr
+    name = name.replace(/\s*\(RC\s*\d*\)\s*/g, ' ')
+  }
   name = name.replace(/\s*\([A-Z0-9/-]+\)\s*/g, ' ')  // (SM-S948B)
   name = name.replace(/\bSM-[A-Z0-9/]+\b/gi, '')       // SM-F741B
   name = name.replace(/\(\s*\)/g, '')                    // empty ()
 
   // ─── Step 3: Detect product type ───
-  const isWatch = /watch/i.test(name)
+  const isWatch = /\b(apple\s+)?watch\b/i.test(name)
+  const isGarmin = /\bGarmin\b/i.test(name)
   const isMac = /\b(Mac\s*(mini|Studio)|iMac)\b/i.test(name)
   const isMacBook = /MacBook/i.test(name)
   const isiPad = /iPad/i.test(name)
+  const isDyson = /\bDyson\b/i.test(name)
+  const isTV = /\b(QN\d+|OLED|QLED|The Frame|Neo QLED)\b/i.test(name)
+  const isCamera = /\b(Canon|Sony|Nikon|DJI|GoPro)\b/i.test(name)
 
   // ─── Step 4: Remove CPU config (Mac) ───
   name = name.replace(/\b\d+c\/\d+c\b/g, '')
 
-  // ─── Step 5: Remove memory ───
-  name = name.replace(/\b\d+\/\d+\s*(GB|TB|Gb|gb)?\b/gi, '')  // 12/256Gb
-  name = name.replace(/\b\d+\s*(GB|TB)\b/gi, '')                // 256GB, 1TB
+  // ─── Step 5: Remove memory (but NOT for Dyson/TV/Camera/consoles without GB/TB) ───
+  if (!isDyson) {
+    name = name.replace(/\b\d+\/\d+\s*(GB|TB|Gb|gb)?\b/gi, '')  // 12/256Gb
+    name = name.replace(/\b\d+\s*(GB|TB)\b/gi, '')                // 256GB, 1TB
+  }
 
   // ─── Step 6: Remove SIM ───
   name = name.replace(/\b(2Sim|eSim|e-Sim|1Sim\+eSim|Dual\s*SIM|DS)\b/gi, '')
 
   // ─── Step 7: Remove colors ───
-  for (const c of COLORS_LONG) name = name.replace(new RegExp(c, 'gi'), '')
+  // Dyson slash-colors (Nickel/Copper, Blue/Copper) — remove whole compound
+  if (isDyson) {
+    name = name.replace(/\b\w+\/\w+\b/g, '')  // Nickel/Copper, Blue/Copper
+  }
+  for (const c of COLORS_LONG) name = name.replace(new RegExp(c.replace('/', '\\/'), 'gi'), '')
   for (const c of COLORS_SHORT) name = name.replace(new RegExp(`\\b${c}\\b`, 'gi'), '')
 
-  // ─── Step 8: Watch-specific cleanup ───
-  if (isWatch) {
-    name = name.replace(/\b(40|42|44|45|46|49)\s*(mm|MM)?\b/g, '')  // screen size → attr
+  // ─── Step 8: Watch-specific cleanup (Apple Watch) ───
+  if (isWatch && !isGarmin) {
+    name = name.replace(/\b(40|42|44|45|46|49)\s*(mm|MM)?\b/g, '')
     name = name.replace(/\b(Al|Ti|Aluminum|Titanium)\b/gi, '')
     name = name.replace(/\b(SB|LB|TL)\b/g, '')
     name = name.replace(/\bSport\s*Band\b/gi, '')
@@ -479,35 +491,62 @@ function extractProductName(fullName: string, brand: string): string {
     name = name.replace(/\b(GPS|LTE|Cellular)\b/gi, '')
   }
 
+  // ─── Step 8b: Garmin — remove size in mm, keep Solar/Sapphire in name ───
+  if (isGarmin) {
+    name = name.replace(/\b\d{2}mm\b/gi, '')
+    name = name.replace(/\b\d{2}\s*mm\b/gi, '')
+  }
+
   // ─── Step 9: iPad-specific cleanup ───
   if (isiPad) {
     name = name.replace(/\bWi-Fi\s*\+?\s*Cellular\b/gi, '')
     name = name.replace(/\bWi-Fi\b/gi, '')
     name = name.replace(/\bLTE\b/gi, '')
-    name = name.replace(/\b(A\d+|M\d+)\b/g, '')  // chip A16, M3, M4
+    name = name.replace(/\b(A\d+|M\d+)\b/g, '')
   }
 
-  // ─── Step 10: MacBook-specific cleanup ───
+  // ─── Step 10: MacBook — remove screen size ───
   if (isMacBook) {
-    name = name.replace(/\b(13|14|15|16)\b/g, '')  // screen size → attr
+    name = name.replace(/\b(13|14|15|16)\b/g, '')
+  }
+
+  // ─── Step 10b: Dyson — remove completions (→ attr) and model codes ───
+  if (isDyson) {
+    for (const comp of DYSON_COMPLETIONS) {
+      name = name.replace(new RegExp(`\\b${comp}\\b`, 'gi'), '')
+    }
+    name = name.replace(/\b[A-Z]{2}\d{2}\b/g, '')  // HD15, HT01
+  }
+
+  // ─── Step 10c: TV — remove diagonal ───
+  if (isTV) {
+    name = name.replace(/\b\d{2}["″"]\s*/g, '')    // 55", 65"
+    name = name.replace(/\b\d{2}\s*["″"]\s*/g, '')
+  }
+
+  // ─── Step 10d: Camera — remove kit/body ───
+  if (isCamera) {
+    for (const kit of CAMERA_KITS) {
+      name = name.replace(new RegExp(`\\b${kit}\\b`, 'gi'), '')
+    }
   }
 
   // ─── Step 11: Remove year ───
   name = name.replace(/\s*\(20[2-3]\d\)\s*/g, ' ')
   name = name.replace(/\b20[2-3]\d\b/g, '')
 
-  // ─── Step 12: Remove article codes ───
-  name = name.replace(/\b[A-Z]{1,2}[A-Z0-9]{2,5}[0-9][A-Z0-9]?\b/g, '')  // MWWF3, MEH94, MX5R3
-  name = name.replace(/\b[A-Z]\d[A-Z]{2}\b/g, '')  // M3LW
+  // ─── Step 12: Remove Apple article codes ───
+  name = name.replace(/\b[A-Z]{1,2}[A-Z0-9]{2,5}[0-9][A-Z0-9]?\b/g, '')
+  name = name.replace(/\b[A-Z]\d[A-Z]{2}\b/g, '')
 
   // ─── Step 13: Remove USB-C ───
   name = name.replace(/\bUSB-C\b/gi, '')
 
   // ─── Step 14: Remove strap sizes & misc ───
-  if (!isWatch) {
+  if (!isWatch || isGarmin) {
     name = name.replace(/\b[SML]\/[SML]\b/g, '')
   }
-  name = name.replace(/\b[SML]\b(?![\w])/g, '')  // standalone S, M, L
+  name = name.replace(/\b[SML]\b(?![\w])/g, '')
   name = name.replace(/\bmm\b/gi, '')
 
   // ─── Step 15: Remove emoji ───
@@ -522,18 +561,20 @@ function extractProductName(fullName: string, brand: string): string {
 
 /**
  * Извлекает атрибуты из полного названия модели.
- * Разные правила для Watch, iPad, Mac, MacBook, Samsung, iPhone, AirPods.
  */
 function parseAttributes(fullName: string, brand: string, country: string): Record<string, string> {
   const attrs: Record<string, string> = {}
 
-  // Normalize for matching
   const normalized = fullName.replace(/\bSeries\s+(\d+)\b/gi, 'S$1')
 
-  const isWatch = /watch/i.test(normalized)
+  const isWatch = /\b(apple\s+)?watch\b/i.test(normalized)
+  const isGarmin = /\bGarmin\b/i.test(normalized)
   const isMac = /\b(Mac\s*(mini|Studio)|iMac)\b/i.test(normalized)
   const isMacBook = /MacBook/i.test(normalized)
   const isiPad = /iPad/i.test(normalized)
+  const isDyson = /\bDyson\b/i.test(normalized)
+  const isTV = /\b(QN\d+|OLED|QLED|The Frame|Neo QLED)\b/i.test(normalized)
+  const isCamera = /\b(Canon|Sony|Nikon|DJI|GoPro)\b/i.test(normalized)
 
   // ─── CPU chip config (Mac Desktop): 10c/10c, 14c/20c ───
   const chipConfig = normalized.match(/\b(\d+c\/\d+c)\b/)
@@ -547,7 +588,6 @@ function parseAttributes(fullName: string, brand: string, country: string): Reco
 
   // ─── Memory / Storage ───
   if (isMac || isMacBook) {
-    // Mac/MacBook: "16GB 256GB" or "24GB 512GB" or "48GB 1TB" — two separate GB/TB values
     const memMatches = normalized.match(/\b(\d+)\s*(GB|TB)\b/gi)
     if (memMatches && memMatches.length >= 2) {
       attrs['RAM'] = memMatches[0].replace(/\s+/g, '').toUpperCase()
@@ -555,20 +595,19 @@ function parseAttributes(fullName: string, brand: string, country: string): Reco
     } else if (memMatches && memMatches.length === 1) {
       attrs['Память'] = memMatches[0].replace(/\s+/g, '').toUpperCase()
     }
-    // MacBook screen size
     if (isMacBook) {
       const screenMatch = normalized.match(/\b(13|14|15|16)\b/)
       if (screenMatch) attrs['Экран'] = screenMatch[1] + '"'
     }
-  } else {
-    // Samsung: 12/256Gb, 16/1TB
+  } else if (!isDyson && !isTV) {
+    // Samsung/Huawei/Honor: 12/256Gb, 16/1TB
     const slashMem = normalized.match(/\b(\d+)\/(\d+)\s*(GB|TB|Gb|gb)?\b/i)
     if (slashMem) {
       attrs['RAM'] = slashMem[1] + 'GB'
       const unit = (slashMem[3] || 'GB').toUpperCase()
       attrs['Память'] = slashMem[2] + unit
     } else {
-      // iPhone/iPad: 256GB, 1TB
+      // iPhone/iPad/Pixel/Xbox/Steam Deck: 256GB, 1TB
       const storageSingle = normalized.match(/\b(\d+\s*(?:GB|TB))\b/i)
       if (storageSingle) {
         attrs['Память'] = storageSingle[1].replace(/\s+/g, '').toUpperCase()
@@ -587,21 +626,67 @@ function parseAttributes(fullName: string, brand: string, country: string): Reco
     else if (/\bWi-Fi\b/i.test(normalized)) attrs['Связь'] = 'Wi-Fi'
   }
 
-  // ─── Watch: screen size + band ───
-  if (isWatch) {
+  // ─── Apple Watch: screen size + band ───
+  if (isWatch && !isGarmin) {
     const watchSize = normalized.match(/\b(40|42|44|45|46|49)\s*(mm|MM)?\b/)
     if (watchSize) attrs['Размер'] = watchSize[1] + 'mm'
-
     const bandSize = normalized.match(/\b([SML]\/[SML])\b/)
     if (bandSize) attrs['Ремешок'] = bandSize[1]
   }
 
+  // ─── Garmin: size in mm ───
+  if (isGarmin) {
+    const garminSize = normalized.match(/\b(\d{2})\s*mm\b/i)
+    if (garminSize) attrs['Размер'] = garminSize[1] + 'mm'
+  }
+
+  // ─── TV: diagonal ───
+  if (isTV) {
+    const diagMatch = normalized.match(/\b(\d{2})["″"]\s*/)
+    if (diagMatch) attrs['Диагональ'] = diagMatch[1] + '"'
+  }
+
+  // ─── Dyson: completion ───
+  if (isDyson) {
+    for (const comp of DYSON_COMPLETIONS) {
+      if (new RegExp(`\\b${comp}\\b`, 'i').test(normalized)) {
+        attrs['Комплектация'] = comp
+        break
+      }
+    }
+  }
+
+  // ─── Camera: kit type ───
+  if (isCamera) {
+    // DJI (RC 2) etc.
+    const rcMatch = normalized.match(/\(RC\s*(\d*)\)/)
+    if (rcMatch) {
+      attrs['Комплектация'] = 'RC' + (rcMatch[1] ? ' ' + rcMatch[1] : '')
+    } else {
+      for (const kit of CAMERA_KITS) {
+        if (new RegExp(`\\b${kit}\\b`, 'i').test(normalized)) {
+          attrs['Комплектация'] = kit
+          break
+        }
+      }
+    }
+  }
+
   // ─── Color ───
-  const lowerName = normalized.toLowerCase()
-  for (const color of ALL_COLORS) {
-    if (lowerName.includes(color.toLowerCase())) {
-      attrs['Цвет'] = color
-      break
+  // Dyson compound colors: Nickel/Copper, Blue/Copper
+  if (isDyson) {
+    const dysonColor = normalized.match(/\b(\w+\/\w+)\b/)
+    if (dysonColor) {
+      attrs['Цвет'] = dysonColor[1]
+    }
+  }
+  if (!attrs['Цвет']) {
+    const lowerName = normalized.toLowerCase()
+    for (const color of ALL_COLORS) {
+      if (lowerName.includes(color.toLowerCase())) {
+        attrs['Цвет'] = color
+        break
+      }
     }
   }
 
