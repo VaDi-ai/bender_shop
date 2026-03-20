@@ -387,79 +387,134 @@ export async function syncProductsFromSheets(): Promise<{
   return { created, updated, disabled, total: rows.length, errors }
 }
 
-// Полный список цветов (длинные первыми для жадного матча)
-const ALL_COLORS = [
-  'Cobalt Violet', 'Sky Blue', 'Rose Gold', 'Space Gray', 'Jet Black',
-  'Alpine Green', 'Deep Purple', 'Dark Green', 'Sierra Blue', 'Pur Fog',
-  'Space Black',
-  'Голубой', 'Черный', 'Белый', 'Серебристый', 'Золотой', 'Синий',
-  'Красный', 'Зеленый', 'Оранжевый', 'Фиолетовый', 'Розовый',
+// Цвета: длинные первыми для жадного матча
+const COLORS_LONG = [
+  'Cobalt Violet', 'Sky Blue', 'Rose Gold', 'Space Gray', 'Space Black',
+  'Jet Black', 'Alpine Green', 'Deep Purple', 'Dark Green', 'Sierra Blue',
+  'Pur Fog', 'Anchor Blue',
+]
+const COLORS_SHORT = [
   'Jetblack', 'Black', 'White', 'Silver', 'Gold', 'Blue', 'Red', 'Green',
   'Orange', 'Purple', 'Midnight', 'Starlight', 'Pink', 'Yellow', 'Cream',
   'Mint', 'Lavender', 'Coral', 'Graphite', 'Natural', 'Titanium',
-  'Desert', 'Navy', 'Denim', 'Gray', 'Teal', 'Bronze',
+  'Desert', 'Navy', 'Denim', 'Gray', 'Teal', 'Bronze', 'Shadow',
   'Burgundy', 'Copper', 'Ivory', 'Sage', 'Stone', 'Ultramarine',
+  'Charcoal',
+  'Голубой', 'Черный', 'Белый', 'Серебристый', 'Золотой', 'Синий',
+  'Красный', 'Зеленый', 'Оранжевый', 'Фиолетовый', 'Розовый',
 ]
+const ALL_COLORS = [...COLORS_LONG, ...COLORS_SHORT]
 
 /**
  * Извлекает базовое имя продукта из полного названия.
- * Оставляет размер экрана для часов (40, 42, 44, 46, 49) если в названии есть Watch.
  *
- * "iPhone 16 512GB Black 2Sim (Китай)"                        → "iPhone 16"
- * "iPhone 16 Plus 128GB Ultramarine (Индия)"                   → "iPhone 16 Plus"
- * "iPhone 16 Pro 128GB Desert (Южная Корея)"                   → "iPhone 16 Pro"
- * "Samsung Galaxy S26 Ultra 16/1TB (SM-S948B) Cobalt Violet"   → "Samsung Galaxy S26 Ultra"
- * "Apple Watch SE 40 Midnight S/M 2024"                        → "Apple Watch SE 40"
- * "Apple Watch S11 46 Jet Black S/M MEUW4"                     → "Apple Watch S11 46"
+ * "iPhone 16 512GB Black 2Sim (Китай)"                              → "iPhone 16"
+ * "iPhone 16 Pro Max 256GB Black eSim (США)"                        → "iPhone 16 Pro Max"
+ * "Samsung Galaxy S26 Ultra 16/1TB (SM-S948B) Cobalt Violet"        → "Samsung Galaxy S26 Ultra"
+ * "Apple Watch SE 40 Midnight S/M 2024"                             → "Apple Watch SE"
+ * "Apple Watch S11 46 Jet Black S/M MEUW4"                          → "Apple Watch S11"
+ * "Apple Watch Series 11 42mm Jet Black GPS S/M"                    → "Apple Watch S11"
+ * "Apple Watch Ultra 3 49 Black Black Charcoal Loop S/M MF1D4"     → "Apple Watch Ultra 3"
+ * "iPad Air 11 128GB Space Gray Wi-Fi (2025) M3"                    → "iPad Air 11"
+ * "MacBook Pro M4 14 24GB 512GB Space Black"                        → "MacBook Pro M4"
+ * "MacBook Pro M4 Max 16 48GB 1TB Space Black"                      → "MacBook Pro M4 Max"
+ * "Mac mini M4 10c/10c 16GB 256GB Silver"                           → "Mac mini M4"
+ * "Mac mini M4 Pro 14c/20c 24GB 512GB Silver"                       → "Mac mini M4 Pro"
+ * "Mac Studio M4 Max 16c/40c 48GB 1TB Silver"                       → "Mac Studio M4 Max"
+ * "iMac 24 M4 10c/10c 24GB 512GB Silver"                            → "iMac 24 M4"
+ * "AirPods Max 2 USB-C Blue"                                        → "AirPods Max 2"
+ * "AirPods 4 ANC"                                                   → "AirPods 4 ANC"
  */
 function extractProductName(fullName: string, brand: string): string {
-  const isWatch = /watch/i.test(fullName)
   let name = fullName
 
-  // a) Убрать страну в скобках (русские символы, включая пробелы): (Китай), (Южная Корея)
-  name = name.replace(/\s*\([А-Яа-яЁё\s]+\)\s*/g, ' ')
+  // ─── Step 0: Normalize ───
+  name = name.replace(/\bSeries\s+(\d+)\b/gi, 'S$1')  // "Series 11" → "S11"
 
-  // b) Убрать артикулы в скобках: (SM-S948B), (MXEA3)
-  name = name.replace(/\s*\([A-Z0-9/-]+\)\s*/g, ' ')
+  // ─── Step 1: Remove country in brackets (Russian) ───
+  name = name.replace(/\s*\([А-Яа-яЁё/\s]+\)\s*/g, ' ')
 
-  // c) Убрать пустые скобки
-  name = name.replace(/\(\s*\)/g, '')
+  // ─── Step 2: Remove article codes ───
+  name = name.replace(/\s*\([A-Z0-9/-]+\)\s*/g, ' ')  // (SM-S948B)
+  name = name.replace(/\bSM-[A-Z0-9/]+\b/gi, '')       // SM-F741B
+  name = name.replace(/\(\s*\)/g, '')                    // empty ()
 
-  // d) Убрать память: 128GB, 256GB, 16/1TB, 12/256Gb, 8/128
-  name = name.replace(/\s*\d+\/\d+\s*(GB|TB|Gb|gb)?\s*/gi, ' ')
-  name = name.replace(/\s*\d+\s*(GB|TB|Gb)\b/gi, ' ')
+  // ─── Step 3: Detect product type ───
+  const isWatch = /watch/i.test(name)
+  const isMac = /\b(Mac\s*(mini|Studio)|iMac)\b/i.test(name)
+  const isMacBook = /MacBook/i.test(name)
+  const isiPad = /iPad/i.test(name)
 
-  // e) Убрать SIM тип: 2Sim, eSim, e-Sim, 1Sim+eSim, Dual SIM, DS
+  // ─── Step 4: Remove CPU config (Mac) ───
+  name = name.replace(/\b\d+c\/\d+c\b/g, '')
+
+  // ─── Step 5: Remove memory ───
+  name = name.replace(/\b\d+\/\d+\s*(GB|TB|Gb|gb)?\b/gi, '')  // 12/256Gb
+  name = name.replace(/\b\d+\s*(GB|TB)\b/gi, '')                // 256GB, 1TB
+
+  // ─── Step 6: Remove SIM ───
   name = name.replace(/\b(2Sim|eSim|e-Sim|1Sim\+eSim|Dual\s*SIM|DS)\b/gi, '')
 
-  // f) Убрать цвета
-  for (const color of ALL_COLORS) {
-    name = name.replace(new RegExp(`\\b${color}\\b`, 'gi'), '')
+  // ─── Step 7: Remove colors ───
+  for (const c of COLORS_LONG) name = name.replace(new RegExp(c, 'gi'), '')
+  for (const c of COLORS_SHORT) name = name.replace(new RegExp(`\\b${c}\\b`, 'gi'), '')
+
+  // ─── Step 8: Watch-specific cleanup ───
+  if (isWatch) {
+    name = name.replace(/\b(40|42|44|45|46|49)\s*(mm|MM)?\b/g, '')  // screen size → attr
+    name = name.replace(/\b(Al|Ti|Aluminum|Titanium)\b/gi, '')
+    name = name.replace(/\b(SB|LB|TL)\b/g, '')
+    name = name.replace(/\bSport\s*Band\b/gi, '')
+    name = name.replace(/\bOcean\s*Band\b/gi, '')
+    name = name.replace(/\bAlpine\s*Loop\b/gi, '')
+    name = name.replace(/\bAlp\s*Lp\b/gi, '')
+    name = name.replace(/\bMilanese\s*Loop?\b/gi, '')
+    name = name.replace(/\bMilanese\b/gi, '')
+    name = name.replace(/\bCharcoal\s*Loop\b/gi, '')
+    name = name.replace(/\bTrail\s*Loop\b/gi, '')
+    name = name.replace(/\bLink\s*Bracelet\b/gi, '')
+    name = name.replace(/\bInk\s*SL\b/gi, '')
+    name = name.replace(/\bDenim\b/gi, '')
+    name = name.replace(/\b[SML]\/[SML]\b/g, '')
+    name = name.replace(/\b(GPS|LTE|Cellular)\b/gi, '')
   }
 
-  // g) Убрать ремешки: S/M, M/L
-  name = name.replace(/\b[SML]\/[SML]\b/g, '')
+  // ─── Step 9: iPad-specific cleanup ───
+  if (isiPad) {
+    name = name.replace(/\bWi-Fi\s*\+?\s*Cellular\b/gi, '')
+    name = name.replace(/\bWi-Fi\b/gi, '')
+    name = name.replace(/\bLTE\b/gi, '')
+    name = name.replace(/\b(A\d+|M\d+)\b/g, '')  // chip A16, M3, M4
+  }
 
-  // h) Убрать год: 2024, 2025, 2026
+  // ─── Step 10: MacBook-specific cleanup ───
+  if (isMacBook) {
+    name = name.replace(/\b(13|14|15|16)\b/g, '')  // screen size → attr
+  }
+
+  // ─── Step 11: Remove year ───
+  name = name.replace(/\s*\(20[2-3]\d\)\s*/g, ' ')
   name = name.replace(/\b20[2-3]\d\b/g, '')
 
-  // i) Убрать GPS/LTE/Wi-Fi/Cellular
-  name = name.replace(/\b(GPS|LTE|Wi-Fi|Cellular)\b/gi, '')
+  // ─── Step 12: Remove article codes ───
+  name = name.replace(/\b[A-Z]{1,2}[A-Z0-9]{2,5}[0-9][A-Z0-9]?\b/g, '')  // MWWF3, MEH94, MX5R3
+  name = name.replace(/\b[A-Z]\d[A-Z]{2}\b/g, '')  // M3LW
 
-  // j) Убрать артикулы-коды: MRP83, MWWF3, MEUW4 (2-4 буквы + 2-4 цифры/буквы)
-  name = name.replace(/\b[A-Z]{2,4}[A-Z0-9]{2,4}\b/g, '')
+  // ─── Step 13: Remove USB-C ───
+  name = name.replace(/\bUSB-C\b/gi, '')
 
-  // k) Убрать SM-xxx: SM-F741B, SM-S948B
-  name = name.replace(/\bSM-[A-Z0-9/]+\b/g, '')
+  // ─── Step 14: Remove strap sizes & misc ───
+  if (!isWatch) {
+    name = name.replace(/\b[SML]\/[SML]\b/g, '')
+  }
+  name = name.replace(/\b[SML]\b(?![\w])/g, '')  // standalone S, M, L
+  name = name.replace(/\bmm\b/gi, '')
 
-  // l) Для часов: вернуть размер экрана если он был удалён артикульным regex
-  // (размеры 40-49 не матчатся артикульным regex, но на всякий случай)
-
-  // Убрать эмодзи-флаги и прочие эмодзи
+  // ─── Step 15: Remove emoji ───
   name = name.replace(/[\u{1F1E0}-\u{1F1FF}]{2}/gu, '')
   name = name.replace(/[\u{1F300}-\u{1FAFF}]/gu, '')
 
-  // m) Убрать лишние пробелы
+  // ─── Step 16: Final cleanup ───
   name = name.replace(/\s+/g, ' ').trim()
 
   return name || fullName.slice(0, 60)
@@ -467,48 +522,94 @@ function extractProductName(fullName: string, brand: string): string {
 
 /**
  * Извлекает атрибуты из полного названия модели.
+ * Разные правила для Watch, iPad, Mac, MacBook, Samsung, iPhone, AirPods.
  */
 function parseAttributes(fullName: string, brand: string, country: string): Record<string, string> {
   const attrs: Record<string, string> = {}
 
-  // Память: 256GB, 512GB, 1TB, 16/1TB, 12/256Gb
-  const storageMatch = fullName.match(/(\d+\/\d+\s*(?:GB|TB|Gb)?|\d+\s*(?:GB|TB|Gb))/i)
-  if (storageMatch) {
-    const raw = storageMatch[1]
-    if (raw.includes('/')) {
-      const parts = raw.replace(/\s*(GB|TB|Gb)/i, '').split('/')
-      attrs['RAM'] = parts[0] + ' GB'
-      const unit = raw.match(/(GB|TB)/i)?.[1]?.toUpperCase() || 'GB'
-      attrs['Память'] = parts[1] + unit
+  // Normalize for matching
+  const normalized = fullName.replace(/\bSeries\s+(\d+)\b/gi, 'S$1')
+
+  const isWatch = /watch/i.test(normalized)
+  const isMac = /\b(Mac\s*(mini|Studio)|iMac)\b/i.test(normalized)
+  const isMacBook = /MacBook/i.test(normalized)
+  const isiPad = /iPad/i.test(normalized)
+
+  // ─── CPU chip config (Mac Desktop): 10c/10c, 14c/20c ───
+  const chipConfig = normalized.match(/\b(\d+c\/\d+c)\b/)
+  if (chipConfig) attrs['Чип'] = chipConfig[1]
+
+  // ─── Chip (iPad): A16, M3, M4 ───
+  if (isiPad) {
+    const ipadChip = normalized.match(/\b(A\d+|M\d+)\b/)
+    if (ipadChip) attrs['Чип'] = ipadChip[1]
+  }
+
+  // ─── Memory / Storage ───
+  if (isMac || isMacBook) {
+    // Mac/MacBook: "16GB 256GB" or "24GB 512GB" or "48GB 1TB" — two separate GB/TB values
+    const memMatches = normalized.match(/\b(\d+)\s*(GB|TB)\b/gi)
+    if (memMatches && memMatches.length >= 2) {
+      attrs['RAM'] = memMatches[0].replace(/\s+/g, '').toUpperCase()
+      attrs['Память'] = memMatches[1].replace(/\s+/g, '').toUpperCase()
+    } else if (memMatches && memMatches.length === 1) {
+      attrs['Память'] = memMatches[0].replace(/\s+/g, '').toUpperCase()
+    }
+    // MacBook screen size
+    if (isMacBook) {
+      const screenMatch = normalized.match(/\b(13|14|15|16)\b/)
+      if (screenMatch) attrs['Экран'] = screenMatch[1] + '"'
+    }
+  } else {
+    // Samsung: 12/256Gb, 16/1TB
+    const slashMem = normalized.match(/\b(\d+)\/(\d+)\s*(GB|TB|Gb|gb)?\b/i)
+    if (slashMem) {
+      attrs['RAM'] = slashMem[1] + 'GB'
+      const unit = (slashMem[3] || 'GB').toUpperCase()
+      attrs['Память'] = slashMem[2] + unit
     } else {
-      attrs['Память'] = raw.replace(/\s+/g, '').toUpperCase()
+      // iPhone/iPad: 256GB, 1TB
+      const storageSingle = normalized.match(/\b(\d+\s*(?:GB|TB))\b/i)
+      if (storageSingle) {
+        attrs['Память'] = storageSingle[1].replace(/\s+/g, '').toUpperCase()
+      }
     }
   }
 
-  // SIM тип
-  const simMatch = fullName.match(/\b(2Sim|eSim|e-Sim|1Sim\+eSim|Dual\s*SIM)\b/i)
+  // ─── SIM ───
+  const simMatch = normalized.match(/\b(2Sim|eSim|e-Sim|1Sim\+eSim|Dual\s*SIM)\b/i)
   if (simMatch) attrs['SIM'] = simMatch[1]
 
-  // Цвет (длинные первыми)
+  // ─── Connectivity (iPad) ───
+  if (isiPad) {
+    if (/Wi-Fi\s*\+\s*Cellular/i.test(normalized)) attrs['Связь'] = 'Wi-Fi + Cellular'
+    else if (/\bLTE\b/i.test(normalized)) attrs['Связь'] = 'LTE'
+    else if (/\bWi-Fi\b/i.test(normalized)) attrs['Связь'] = 'Wi-Fi'
+  }
+
+  // ─── Watch: screen size + band ───
+  if (isWatch) {
+    const watchSize = normalized.match(/\b(40|42|44|45|46|49)\s*(mm|MM)?\b/)
+    if (watchSize) attrs['Размер'] = watchSize[1] + 'mm'
+
+    const bandSize = normalized.match(/\b([SML]\/[SML])\b/)
+    if (bandSize) attrs['Ремешок'] = bandSize[1]
+  }
+
+  // ─── Color ───
+  const lowerName = normalized.toLowerCase()
   for (const color of ALL_COLORS) {
-    if (fullName.toLowerCase().includes(color.toLowerCase())) {
+    if (lowerName.includes(color.toLowerCase())) {
       attrs['Цвет'] = color
       break
     }
   }
 
-  // Страна (из колонки таблицы)
+  // ─── USB-C (AirPods) ───
+  if (/USB-C/i.test(normalized)) attrs['Разъём'] = 'USB-C'
+
+  // ─── Country (from sheet column) ───
   if (country) attrs['Страна'] = country
-
-  // Ремешок: S/M, M/L
-  const bandMatch = fullName.match(/\b([SML]\/[SML])\b/)
-  if (bandMatch) attrs['Ремешок'] = bandMatch[1]
-
-  // Размер экрана (для часов): 40, 42, 44, 45, 46, 49
-  if (/watch/i.test(fullName)) {
-    const sizeMatch = fullName.match(/\b(40|42|44|45|46|49)\b/)
-    if (sizeMatch) attrs['Размер'] = sizeMatch[1] + 'mm'
-  }
 
   return attrs
 }
