@@ -361,6 +361,29 @@
     .sort-option:hover { background: rgba(168,255,62,0.05); color: #e5e5e5; }
     .sort-option.active { color: #a8ff3e; }
 
+    /* ── Search results header ───────────────────────────────────────── */
+    .search-results-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 16px;
+      font-size: 12px;
+      color: #888;
+    }
+    .search-results-header span:first-child { color: #e5e5e5; font-weight: 500; }
+    .search-results-count { color: var(--accent); font-size: 11px; }
+    .search-results-clear {
+      margin-left: auto;
+      background: none;
+      border: 1px solid #333;
+      color: #666;
+      font-size: 10px;
+      padding: 3px 8px;
+      border-radius: 10px;
+      cursor: pointer;
+    }
+    .search-results-clear:hover { border-color: var(--accent); color: var(--accent); }
+
     /* ── Catalog section ──────────────────────────────────────────────────── */
     #catalog { scroll-margin-top: calc(var(--header-h) + var(--marquee-h)); padding-bottom: 120px; }
     .catalog-header { padding: 36px 20px 20px; border-bottom: 1px solid #161616; }
@@ -1484,6 +1507,7 @@
     // ── Render product grid ───────────────────────────────────────────────────
     function renderGrid() {
       const grid = document.getElementById('grid')
+      document.getElementById('searchResultsHeader')?.remove()
       let products = allProducts
 
       // Фильтр по поиску
@@ -1511,6 +1535,18 @@
       else if (sortMode === 'popular') products.sort((a, b) => (b.salesCount || 0) - (a.salesCount || 0))
       else if (sortMode === 'newest') products.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
       else if (sortMode === 'name') products.sort((a, b) => a.name.localeCompare(b.name, 'ru'))
+
+      if (searchQuery) {
+        const countText = products.length
+          ? `Найдено ${products.length} ${pluralize(products.length, 'товар', 'товара', 'товаров')}`
+          : 'Ничего не найдено'
+        grid.insertAdjacentHTML('beforebegin',
+          `<div class="search-results-header" id="searchResultsHeader">
+            <span>Результаты: «${esc(searchQuery)}»</span>
+            <span class="search-results-count">${countText}</span>
+            <button class="search-results-clear" onclick="clearSearch()">✕ Сбросить</button>
+          </div>`)
+      }
 
       if (!products.length) {
         grid.innerHTML = searchQuery
@@ -2423,6 +2459,18 @@
 
       input.addEventListener('keydown', function(e) {
         if (e.key === 'Escape') toggleSearch()
+        if (e.key === 'Enter') {
+          e.preventDefault()
+          this.blur()
+          const bar = document.getElementById('searchBar')
+          const btn = document.getElementById('searchToggle')
+          if (bar) bar.classList.remove('open')
+          if (btn) btn.classList.remove('active')
+          document.body.classList.remove('search-open')
+          searchOpen = false
+          const catalog = document.getElementById('grid')
+          if (catalog) catalog.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        }
       })
     }
 
