@@ -15,7 +15,8 @@
     "db:constraints": "ts-node scripts/add-check-constraints.ts",
     "backup": "ts-node scripts/backup-db.ts",
     "restore": "ts-node scripts/restore-db.ts",
-    "clear-products": "ts-node scripts/clear-test-products.ts"
+    "clear-products": "ts-node scripts/clear-test-products.ts",
+    "optimize-images": "ts-node scripts/optimize-images.ts"
   },
   "keywords": [],
   "author": "",
@@ -47,6 +48,7 @@
     "openai": "^6.25.0",
     "pg": "^8.18.0",
     "prisma": "^7.4.1",
+    "sharp": "^0.34.5",
     "telegraf": "^4.16.3",
     "zod": "^4.3.6"
   }

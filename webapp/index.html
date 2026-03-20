@@ -1324,20 +1324,20 @@
 
     // ── Category images ──────────────────────────────────────────────────────
     const CATEGORY_IMAGES = {
-      'Телефоны':        '/categories/phones.png',
-      'Планшеты':        '/categories/tablets.png',
-      'Ноутбуки':        '/categories/laptops.png',
-      'Часы':            '/categories/watches.png',
-      'Аудио':           '/categories/audio.png',
-      'Консоли':         '/categories/consoles.png',
-      'Игровые консоли': '/categories/consoles.png',
-      'Умный дом':       '/categories/smarthome.png',
-      'Фототехника':     '/categories/photo.png',
-      'Desktop':         '/categories/desktop.png',
-      'Компьютеры':      '/categories/desktop.png',
-      'Аксессуары':      '/categories/accessories.png',
-      'Услуги':          '/categories/services.png',
-      'Акции':           '/categories/sales.png',
+      'Телефоны':        '/categories/phones.webp',
+      'Планшеты':        '/categories/tablets.webp',
+      'Ноутбуки':        '/categories/laptops.webp',
+      'Часы':            '/categories/watches.webp',
+      'Аудио':           '/categories/audio.webp',
+      'Консоли':         '/categories/consoles.webp',
+      'Игровые консоли': '/categories/consoles.webp',
+      'Умный дом':       '/categories/smarthome.webp',
+      'Фототехника':     '/categories/photo.webp',
+      'Desktop':         '/categories/desktop.webp',
+      'Компьютеры':      '/categories/desktop.webp',
+      'Аксессуары':      '/categories/accessories.webp',
+      'Услуги':          '/categories/services.webp',
+      'Акции':           '/categories/sales.webp',
     }
 
     const TOP_CATEGORIES = ['Телефоны', 'Планшеты', 'Ноутбуки', 'Часы', 'Аудио', 'Консоли']
@@ -1374,7 +1374,7 @@
           <div class="cat-btn-name">${esc(cat.name)}</div>
           <div class="cat-btn-count">${count} ${pluralize(count, 'товар', 'товара', 'товаров')}</div>
         </div>
-        ${img ? `<img class="cat-btn-img" src="${img}" alt="" onerror="this.style.display='none'">` : ''}
+        ${img ? `<img class="cat-btn-img" src="${img}" alt="" loading="lazy" onerror="if(this.src.includes('.webp')){this.src=this.src.replace('.webp','.png')}else{this.style.display='none'}">` : ''}
       </div>
     `
       }).join('')
@@ -1412,7 +1412,7 @@
       scroll.innerHTML = hits.map(p => {
         const photo = p.photos && p.photos[0] ? photoUrl(p.photos[0]) : null
         const imgHtml = photo
-          ? `<img src="${photo}" alt="">`
+          ? `<img src="${photo}" alt="" loading="lazy">`
           : `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#444" stroke-width="1.5"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>`
 
         const minPrice = p.variants && p.variants.length ? minVariantPrice(p) : Number(p.price)
