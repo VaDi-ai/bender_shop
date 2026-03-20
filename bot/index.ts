@@ -570,6 +570,7 @@ bot.hears('🔧 Техработы', async (ctx) => {
       [Markup.button.callback('🗄️ Бэкап сейчас', 'maint:backup')],
       [Markup.button.callback('✨ Обогатить все карточки', 'maint:enrich_all')],
       [Markup.button.callback('🔑 API Ключи', 'maint:api_keys')],
+      [Markup.button.callback('🗑️ Удалить все товары', 'maint:clear_products')],
       [Markup.button.callback('📖 Как восстановить', 'maint:restore_info')],
       [Markup.button.callback('🏠 Главное меню', 'back:main')],
     ]),
@@ -626,6 +627,26 @@ bot.action('maint:backup', async (ctx) => {
   } catch (err) {
     console.error('[Backup] Manual backup failed:', err)
     await ctx.reply(`❌ Бэкап не удался: ${err instanceof Error ? err.message : 'Ошибка'}`)
+  }
+})
+
+bot.action('maint:clear_products', async (ctx) => {
+  try { await ctx.answerCbQuery() } catch { /* ignore */ }
+  await ctx.reply('⚠️ Удаление всех товаров...')
+  try {
+    await prisma.$transaction([
+      prisma.stockMovement.deleteMany(),
+      prisma.orderItem.deleteMany(),
+      prisma.order.deleteMany(),
+      prisma.reservation.deleteMany(),
+      prisma.supplierPrice.deleteMany(),
+      prisma.priceChange.deleteMany(),
+      prisma.productVariant.deleteMany(),
+      prisma.product.deleteMany(),
+    ])
+    await ctx.reply('✅ Все товары удалены. Категории сохранены.')
+  } catch (err) {
+    await ctx.reply(`❌ Ошибка: ${err instanceof Error ? err.message : err}`)
   }
 })
 
