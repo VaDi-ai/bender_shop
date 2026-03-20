@@ -115,7 +115,7 @@ function requireTelegramAuth(req: Request, res: Response, next: NextFunction): v
     res.status(401).json({ error: 'Неверная подпись Telegram' })
     return
   }
-  ;(req as any).telegramUserId = userId
+  ;(req as any).telegramId = userId
   next()
 }
 
@@ -687,7 +687,7 @@ export function startApiServer(bot?: Telegraf): void {
   })
 
   // ── POST /api/orders ───────────────────────────────────────────────────────
-  app.post('/api/orders', requireTelegramAuth, async (req: Request, res: Response, next: NextFunction) => {
+  app.post('/api/orders', async (req: Request, res: Response, next: NextFunction) => {
     const {
       items,
       paymentMethod,
@@ -698,8 +698,29 @@ export function startApiServer(bot?: Telegraf): void {
       customerComment,
     } = req.body
 
-    const telegramUserId = (req as any).telegramUserId as number
-    const telegramId = String(telegramUserId)
+    // Telegram auth: optional — validate if header present, fallback to form data
+    let telegramId = ''
+    const initData = req.headers['x-telegram-init-data'] as string | undefined
+    if (initData) {
+      const { valid, userId } = validateTelegramWebApp(initData)
+      if (valid && userId) {
+        telegramId = String(userId)
+      }
+    }
+
+    // Fallback: use telegramId from body if sent by frontend
+    if (!telegramId && req.body.telegramId) {
+      telegramId = String(req.body.telegramId)
+    }
+
+    // If no Telegram auth, require name + phone from form
+    if (!telegramId) {
+      if (!customerName || customerName.trim().length < 2 || !customerPhone) {
+        res.status(400).json({ error: 'Укажите ФИО и телефон' })
+        return
+      }
+      telegramId = 'web_' + Date.now()
+    }
 
     // ── Валидация входящих данных ──────────────────────────────────────────
     if (!Array.isArray(items) || items.length === 0) {
@@ -960,7 +981,7 @@ export function startApiServer(bot?: Telegraf): void {
 
           // 4. Подтверждение клиенту в личку
           try {
-            await telegram.sendMessage(telegramUserId, [
+            await telegram.sendMessage(telegramId, [
               `✅ Ваш заказ #${order.id} оформлен!`,
               '',
               `📦 ${enrichedItems.map(i => i.name).join(', ')}`,

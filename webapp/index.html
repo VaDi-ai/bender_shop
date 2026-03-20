@@ -780,7 +780,7 @@
             <label for="cfName">ФИО</label>
           </div>
           <div class="cform-field">
-            <input type="tel" id="cfPhone" placeholder="+7 (___) ___-__-__" autocomplete="tel">
+            <input type="tel" id="cfPhone" placeholder=" " autocomplete="tel">
             <label for="cfPhone">Телефон</label>
           </div>
           <div class="cform-field">
@@ -2173,7 +2173,7 @@
       const btnSpan = btn.querySelector('span')
       btn.classList.add('disabled'); btnSpan.textContent = 'ОФОРМЛЯЕМ…'
 
-      const telegramId     = (tg && tg.initDataUnsafe && tg.initDataUnsafe.user) ? String(tg.initDataUnsafe.user.id) : ''
+      const tgUser         = tg?.initDataUnsafe?.user
       const totalAmt       = totalWithFee().toFixed(2)
       const customerName    = document.getElementById('cfName').value.trim()
       const customerPhone   = document.getElementById('cfPhone').value.trim()
@@ -2186,9 +2186,11 @@
       })
 
       try {
-        const body = { telegramId, items, totalAmount: totalAmt, payment: payMethod, customerName, customerPhone, deliveryType, customerComment }
+        const body = { telegramId: tgUser ? String(tgUser.id) : '', items, totalAmount: totalAmt, payment: payMethod, customerName, customerPhone, deliveryType, customerComment }
         if (deliveryAddress) body.deliveryAddress = deliveryAddress
-        const res  = await fetch('/api/orders', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+        const headers = { 'Content-Type': 'application/json' }
+        if (tg?.initData) headers['x-telegram-init-data'] = tg.initData
+        const res  = await fetch('/api/orders', { method: 'POST', headers, body: JSON.stringify(body) })
         const json = await res.json().catch(() => ({}))
         if (!res.ok) {
           btn.classList.remove('disabled'); btnSpan.textContent = 'ОФОРМИТЬ'
