@@ -13,7 +13,7 @@ import { readSheet, getSheetNames } from './google-sheets'
 // Листы с товарами
 const MAIN_SHEET = 'Товарное наличие вариант 1'
 const PRODUCT_SHEETS = [MAIN_SHEET, 'Аксессуары', 'Услуги']
-const DEFAULT_QTY = 3 // если «В наличие» пусто
+const DEFAULT_QTY = parseInt(process.env.DEFAULT_STOCK_QTY || '3', 10) // если «В наличие» пусто
 
 // Column indices for writeback (supplier, date) — per sheet type
 // Main sheet: G=price(6), I=supplier(8), J=date(9)
