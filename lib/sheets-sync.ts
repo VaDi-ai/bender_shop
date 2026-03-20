@@ -104,11 +104,10 @@ export async function readAllProducts(): Promise<SheetRow[]> {
  * Синхронизирует товары из Google Sheets в БД.
  *
  * Логика:
- * - Каждая строка таблицы = один ProductVariant
- * - Product группируется по бренд + базовое имя модели (без цвета/памяти/страны)
- * - Если товар/вариант не существует — создаётся
- * - Если существует — обновляется цена и количество
- * - Товары которые есть в БД но нет в таблице — помечаются isAvailable=false
+ * - Строки группируются по extractProductName + category → один Product
+ * - Каждая строка таблицы = один ProductVariant под этим Product
+ * - Product.attributes = агрегированные уникальные значения из всех вариантов (для chips)
+ * - Product.price = минимальная цена среди вариантов
  */
 export async function syncProductsFromSheets(): Promise<{
   created: number
@@ -149,171 +148,214 @@ export async function syncProductsFromSheets(): Promise<{
   }
   console.log(`[Sheets Sync] Read ${rows.length} rows from Google Sheets`)
 
-  // Preload all data for performance
+  // ── Step 1: Group rows by productName + category ──────────────────────────
+
+  type VariantData = {
+    fullName: string
+    price: number
+    quantity: number
+    attrs: Record<string, string>
+    rowIndex: number
+    sheetName: string
+  }
+  type GroupedProduct = {
+    productName: string
+    brand: string
+    category: string
+    variants: VariantData[]
+  }
+
+  const groups = new Map<string, GroupedProduct>()
+
+  for (const row of rows) {
+    const productName = extractProductName(row.fullName, row.brand)
+    const attrs = parseAttributes(row.fullName, row.brand, row.country)
+    if (row.country) attrs['Страна'] = row.country
+
+    const key = `${productName}|${row.category}`
+
+    if (!groups.has(key)) {
+      groups.set(key, { productName, brand: row.brand, category: row.category, variants: [] })
+    }
+
+    groups.get(key)!.variants.push({
+      fullName: row.fullName,
+      price: row.price,
+      quantity: row.quantity,
+      attrs,
+      rowIndex: row.rowIndex,
+      sheetName: row.sheetName,
+    })
+  }
+
+  console.log(`[Sheets Sync] Grouped into ${groups.size} products`)
+
+  // ── Step 2: Preload existing data ─────────────────────────────────────────
+
   const existingVariants = await prisma.productVariant.findMany({ include: { product: true } })
   const variantsByFullName = new Map<string, typeof existingVariants[0]>()
   for (const v of existingVariants) {
-    const attrs = v.attributes as Record<string, unknown> | null
-    if (attrs && typeof attrs.fullName === 'string') {
-      variantsByFullName.set(attrs.fullName, v)
+    const a = v.attributes as Record<string, unknown> | null
+    if (a && typeof a.fullName === 'string') {
+      variantsByFullName.set(a.fullName, v)
     }
   }
 
   const categoriesMap = new Map<string, { id: number; name: string }>()
-  const allCategories = await prisma.category.findMany()
-  for (const c of allCategories) categoriesMap.set(c.name, c)
+  for (const c of await prisma.category.findMany()) categoriesMap.set(c.name, c)
 
   const productsByKey = new Map<string, any>()
-  const allProducts = await prisma.product.findMany()
-  for (const p of allProducts) productsByKey.set(p.name + '|' + p.categoryId, p)
+  for (const p of await prisma.product.findMany()) productsByKey.set(p.name + '|' + p.categoryId, p)
+
+  // ── Step 3: Create/update products and variants ───────────────────────────
 
   let created = 0
   let updated = 0
   const errors: string[] = []
   const seenVariantIds = new Set<number>()
   const startTime = Date.now()
+  let groupIdx = 0
 
-  for (let idx = 0; idx < rows.length; idx++) {
-    if (idx % 50 === 0) {
-      console.log(`[Sheets Sync] Processing row ${idx + 1}/${rows.length}...`)
+  for (const [key, group] of groups) {
+    groupIdx++
+    if (groupIdx % 20 === 0) {
+      console.log(`[Sheets Sync] Processing product ${groupIdx}/${groups.size}...`)
     }
     if (Date.now() - startTime > 10 * 60 * 1000) {
-      console.error(`[Sheets Sync] Timeout after 10 minutes at row ${idx + 1}/${rows.length}`)
-      errors.push(`Timeout after 10 minutes at row ${idx + 1}`)
+      console.error(`[Sheets Sync] Timeout after 10 minutes at product ${groupIdx}/${groups.size}`)
+      errors.push(`Timeout after 10 minutes at product ${groupIdx}`)
       break
     }
-    const row = rows[idx]
+
     try {
-      // Найти или создать категорию (from map)
-      let category = categoriesMap.get(row.category)
+      // Ensure category exists
+      let category = categoriesMap.get(group.category)
       if (!category) {
         category = await prisma.category.upsert({
-          where: { name: row.category },
-          create: { name: row.category },
+          where: { name: group.category },
+          create: { name: group.category },
           update: {},
         })
-        categoriesMap.set(row.category, category)
+        categoriesMap.set(group.category, category)
       }
 
-      // Ищем существующий вариант по fullName (from map)
-      const variant = variantsByFullName.get(row.fullName)
+      // Aggregate attributes for Product.attributes (chips)
+      const aggregated: Record<string, Set<string>> = {}
+      for (const v of group.variants) {
+        for (const [attrKey, attrVal] of Object.entries(v.attrs)) {
+          if (attrKey === 'fullName' || attrKey === 'Страна') continue
+          if (!aggregated[attrKey]) aggregated[attrKey] = new Set()
+          aggregated[attrKey].add(attrVal)
+        }
+      }
+      const productAttributes: Record<string, string[]> = {}
+      for (const [k, vals] of Object.entries(aggregated)) {
+        if (vals.size > 1) {
+          productAttributes[k] = [...vals].sort()
+        }
+      }
 
-      if (variant) {
-        // Обновить цену и количество
-        const newQty = row.quantity
-        const oldQty = variant.quantity
+      const minPrice = Math.min(...group.variants.map(v => v.price))
+      const totalQty = group.variants.reduce((s, v) => s + v.quantity, 0)
 
-        await prisma.productVariant.update({
-          where: { id: variant.id },
+      const productKey = group.productName + '|' + category.id
+      let product = productsByKey.get(productKey)
+
+      if (!product) {
+        // Create new product
+        const catNum = String(category.id).padStart(2, '0')
+        const count = await prisma.product.count({ where: { categoryId: category.id } })
+        const productSku = `${catNum}-${String(count + 1).padStart(4, '0')}`
+
+        product = await prisma.product.create({
           data: {
-            price: new Decimal(row.price),
-            quantity: newQty,
-            inStock: newQty > 0,
-          },
-        })
-
-        // Обновить product-level данные
-        const allVariants = await prisma.productVariant.findMany({
-          where: { productId: variant.productId },
-        })
-        const totalQty = allVariants.reduce((s, v) => s + (v.id === variant!.id ? newQty : v.quantity), 0)
-
-        await prisma.product.update({
-          where: { id: variant.productId },
-          data: {
-            price: new Decimal(Math.min(...allVariants.map(v => Number(v.id === variant!.id ? row.price : v.price)))),
+            sku: productSku,
+            name: group.productName,
+            brand: group.brand || null,
+            categoryId: category.id,
+            price: new Decimal(minPrice),
             stock: totalQty,
             quantity: totalQty,
             isAvailable: totalQty > 0,
-            brand: row.brand || undefined,
-            categoryId: category.id,
-          },
-        })
-
-        seenVariantIds.add(variant.id)
-        if (oldQty !== newQty || Number(variant.price) !== row.price) updated++
-      } else {
-        // Создать новый товар/вариант
-        const productName = extractProductName(row.fullName, row.brand)
-        const productKey = productName + '|' + category.id
-
-        // Ищем существующий Product (from map)
-        let product = productsByKey.get(productKey)
-
-        if (!product) {
-          const catNum = String(category.id).padStart(2, '0')
-          const count = await prisma.product.count({ where: { categoryId: category.id } })
-          const productSku = `${catNum}-${String(count + 1).padStart(4, '0')}`
-
-          product = await prisma.product.create({
-            data: {
-              sku: productSku,
-              name: productName,
-              brand: row.brand || null,
-              categoryId: category.id,
-              price: new Decimal(row.price),
-              stock: row.quantity,
-              quantity: row.quantity,
-              isAvailable: row.quantity > 0,
-              attributes: {},
-              specs: {},
-              photos: [],
-            },
-          })
-          productsByKey.set(productKey, product)
-        }
-
-        // Создать вариант
-        const variantCount = await prisma.productVariant.count({ where: { productId: product.id } })
-        const variantSku = `${product.sku}-${String(variantCount + 1).padStart(3, '0')}`
-
-        const attrs = parseAttributes(row.fullName, row.brand, row.country)
-
-        const newVariant = await prisma.productVariant.create({
-          data: {
-            productId: product.id,
-            sku: variantSku,
-            price: new Decimal(row.price),
-            quantity: row.quantity,
-            inStock: row.quantity > 0,
-            attributes: { ...attrs, fullName: row.fullName },
+            attributes: productAttributes,
+            specs: {},
             photos: [],
           },
         })
-
-        // Обновить product totals
-        const totalQty = await prisma.productVariant.aggregate({
-          where: { productId: product.id },
-          _sum: { quantity: true },
-        })
+        productsByKey.set(productKey, product)
+        created++
+      } else {
+        // Update existing product
         await prisma.product.update({
           where: { id: product.id },
           data: {
-            stock: totalQty._sum.quantity ?? 0,
-            quantity: totalQty._sum.quantity ?? 0,
-            isAvailable: (totalQty._sum.quantity ?? 0) > 0,
+            price: new Decimal(minPrice),
+            stock: totalQty,
+            quantity: totalQty,
+            isAvailable: totalQty > 0,
+            attributes: productAttributes,
+            brand: group.brand || undefined,
           },
         })
+        updated++
+      }
 
-        seenVariantIds.add(newVariant.id)
-        created++
+      // Create/update variants
+      for (const v of group.variants) {
+        try {
+          const existing = variantsByFullName.get(v.fullName)
+          if (existing) {
+            await prisma.productVariant.update({
+              where: { id: existing.id },
+              data: {
+                productId: product.id,
+                price: new Decimal(v.price),
+                quantity: v.quantity,
+                inStock: v.quantity > 0,
+                attributes: { ...v.attrs, fullName: v.fullName },
+              },
+            })
+            seenVariantIds.add(existing.id)
+          } else {
+            const variantCount = await prisma.productVariant.count({ where: { productId: product.id } })
+            const variantSku = `${product.sku}-${String(variantCount + 1).padStart(3, '0')}`
+
+            const newVariant = await prisma.productVariant.create({
+              data: {
+                productId: product.id,
+                sku: variantSku,
+                price: new Decimal(v.price),
+                quantity: v.quantity,
+                inStock: v.quantity > 0,
+                attributes: { ...v.attrs, fullName: v.fullName },
+                photos: [],
+              },
+            })
+            seenVariantIds.add(newVariant.id)
+          }
+        } catch (err) {
+          const msg = `Row ${v.rowIndex} (${v.sheetName}): ${v.fullName} — ${err}`
+          errors.push(msg)
+          console.error(`[Sheets Sync] Error row ${v.rowIndex}: ${err}`)
+        }
       }
     } catch (err) {
-      const msg = `Row ${row.rowIndex} (${row.sheetName}): ${row.fullName} — ${err}`
+      const msg = `Product "${group.productName}" (${group.category}): ${err}`
       errors.push(msg)
-      console.error(`[Sheets Sync] Error row ${row.rowIndex}: ${err}`)
+      console.error(`[Sheets Sync] Error product: ${msg}`)
     }
   }
 
-  // Пометить варианты которых нет в таблице как недоступные
+  // ── Step 4: Disable variants not seen in the sheet ────────────────────────
+
   const allVariantsInDb = await prisma.productVariant.findMany({
     where: { NOT: { id: { in: Array.from(seenVariantIds) } } },
     select: { id: true, productId: true, attributes: true },
   })
 
   const toDisable = allVariantsInDb.filter(v => {
-    const attrs = v.attributes as Record<string, unknown> | null
-    return attrs && typeof attrs === 'object' && 'fullName' in attrs
+    const a = v.attributes as Record<string, unknown> | null
+    return a && typeof a === 'object' && 'fullName' in a
   })
 
   let disabled = 0
@@ -324,7 +366,6 @@ export async function syncProductsFromSheets(): Promise<{
     })
     disabled = toDisable.length
 
-    // Обновить product availability для disabled variants
     const affectedProductIds = [...new Set(toDisable.map(v => v.productId))]
     for (const pid of affectedProductIds) {
       const totalQty = await prisma.productVariant.aggregate({
