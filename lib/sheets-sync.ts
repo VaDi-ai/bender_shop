@@ -454,3 +454,92 @@ function parseAttributes(fullName: string, brand: string, country: string): Reco
 
   return attrs
 }
+
+// ─── Stale price detection ──────────────────────────────────────────────────
+
+export interface StaleItem {
+  name: string
+  sheetName: string
+  lastUpdate: string
+}
+
+const SHEETS_DATE_COL: Record<string, { nameCol: number; dateCol: number }> = {
+  [MAIN_SHEET]:  { nameCol: 4, dateCol: 9 },   // E=name, J=date
+  'Аксессуары':  { nameCol: 3, dateCol: 8 },   // D=name, I=date
+  'Услуги':      { nameCol: 3, dateCol: 8 },
+}
+
+const SHEETS_PRICE_COL: Record<string, number> = {
+  [MAIN_SHEET]: 6,  // G
+  'Аксессуары': 5,  // F
+  'Услуги': 5,
+}
+
+/**
+ * Проверяет устаревшие цены (>6 часов без обновления) по колонке «Дата обновления» в Google Sheets.
+ */
+export async function checkStalePrices(): Promise<StaleItem[]> {
+  const SIX_HOURS = 6 * 60 * 60 * 1000
+  const now = Date.now()
+  const staleItems: StaleItem[] = []
+
+  for (const sheetName of PRODUCT_SHEETS) {
+    const cfg = SHEETS_DATE_COL[sheetName]
+    const priceCol = SHEETS_PRICE_COL[sheetName]
+    if (!cfg) continue
+
+    try {
+      const data = await readSheet(sheetName)
+      for (let i = 1; i < data.length; i++) {
+        const row = data[i]
+        const name = (row[cfg.nameCol] ?? '').trim()
+        const price = (row[priceCol] ?? '').toString().trim()
+        const dateStr = (row[cfg.dateCol] ?? '').toString().trim()
+
+        if (!name || !price) continue
+
+        let isStale = false
+        if (!dateStr) {
+          isStale = true
+        } else {
+          // Формат DD.MM.YYYY или DD.MM.YYYY HH:MM
+          const parts = dateStr.split('.')
+          if (parts.length >= 3) {
+            const dayMonthYear = parts[2].split(' ')
+            const year = parseInt(dayMonthYear[0], 10)
+            const month = parseInt(parts[1], 10) - 1
+            const day = parseInt(parts[0], 10)
+            let updateDate = new Date(year, month, day)
+            if (dayMonthYear[1]) {
+              const timeParts = dayMonthYear[1].split(':')
+              updateDate.setHours(parseInt(timeParts[0], 10) || 0, parseInt(timeParts[1], 10) || 0)
+            }
+            isStale = (now - updateDate.getTime()) > SIX_HOURS
+          } else {
+            isStale = true
+          }
+        }
+
+        if (isStale) {
+          staleItems.push({ name, sheetName, lastUpdate: dateStr || 'никогда' })
+        }
+      }
+    } catch (err) {
+      console.error(`[Stale Prices] Error reading ${sheetName}: ${err}`)
+    }
+  }
+
+  return staleItems
+}
+
+/**
+ * Готовит текст для копирования поставщикам — список позиций с устаревшими ценами.
+ */
+export function formatStaleSupplierMessage(items: StaleItem[]): string {
+  const names = items.map(item =>
+    item.name.replace(/\s*\([A-Z0-9/]+\)\s*/g, ' ').replace(/\s+/g, ' ').trim()
+  )
+  // Дедуплицировать
+  const unique = [...new Set(names)]
+  return `Коллеги, добрый день, подскажите, пожалуйста, актуальные цены на данные позиции:\n\n${unique.join('\n')}`
+}

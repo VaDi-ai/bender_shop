@@ -650,6 +650,80 @@ bot.action('maint:clear_products', async (ctx) => {
   }
 })
 
+// ─── Stale prices actions ─────────────────────────────────────────────────────
+
+bot.action('stale:hide', async (ctx) => {
+  try { await ctx.answerCbQuery() } catch { /* ignore */ }
+  const items = (globalThis as any).__staleItems as Array<{ name: string }> | undefined
+  if (!items?.length) { await ctx.reply('Нет устаревших позиций.'); return }
+
+  const allVariants = await prisma.productVariant.findMany({ select: { id: true, productId: true, attributes: true } })
+  const toHide: number[] = []
+  const affectedProductIds = new Set<number>()
+
+  for (const v of allVariants) {
+    const attrs = v.attributes as Record<string, unknown> | null
+    if (!attrs?.fullName) continue
+    const fn = String(attrs.fullName).toLowerCase()
+    if (items.some(item => fn.includes(item.name.toLowerCase().slice(0, 30)))) {
+      toHide.push(v.id)
+      affectedProductIds.add(v.productId)
+    }
+  }
+
+  if (toHide.length > 0) {
+    await prisma.productVariant.updateMany({
+      where: { id: { in: toHide } },
+      data: { inStock: false, quantity: 0 },
+    })
+
+    for (const pid of [...affectedProductIds]) {
+      const totalQty = await prisma.productVariant.aggregate({ where: { productId: pid }, _sum: { quantity: true } })
+      await prisma.product.update({
+        where: { id: pid },
+        data: { isAvailable: (totalQty._sum.quantity ?? 0) > 0, stock: totalQty._sum.quantity ?? 0, quantity: totalQty._sum.quantity ?? 0 },
+      })
+    }
+  }
+
+  await ctx.reply(`🔴 Скрыто с витрины: ${toHide.length} вариантов. После обновления цен нажмите «🔄 Синхронизировать».`)
+  delete (globalThis as any).__staleItems
+})
+
+bot.action('stale:ask_manager', async (ctx) => {
+  try { await ctx.answerCbQuery() } catch { /* ignore */ }
+  const items = (globalThis as any).__staleItems as Array<{ name: string }> | undefined
+  if (!items?.length) { await ctx.reply('Нет устаревших позиций.'); return }
+
+  const allVariants = await prisma.productVariant.findMany({ select: { id: true, attributes: true } })
+  const toUpdate: number[] = []
+
+  for (const v of allVariants) {
+    const attrs = v.attributes as Record<string, unknown> | null
+    if (!attrs?.fullName) continue
+    const fn = String(attrs.fullName).toLowerCase()
+    if (items.some(item => fn.includes(item.name.toLowerCase().slice(0, 30)))) {
+      toUpdate.push(v.id)
+    }
+  }
+
+  if (toUpdate.length > 0) {
+    await prisma.productVariant.updateMany({
+      where: { id: { in: toUpdate } },
+      data: { price: 0 },
+    })
+  }
+
+  await ctx.reply(`💬 Обновлено ${toUpdate.length} вариантов — цена «уточняйте у менеджера». После обновления цен нажмите «🔄 Синхронизировать».`)
+  delete (globalThis as any).__staleItems
+})
+
+bot.action('stale:skip', async (ctx) => {
+  try { await ctx.answerCbQuery() } catch { /* ignore */ }
+  await ctx.reply('⏭️ Позиции оставлены без изменений. Рекомендуем обновить цены как можно скорее.')
+  delete (globalThis as any).__staleItems
+})
+
 bot.action('maint:restore_info', async (ctx) => {
   try { await ctx.answerCbQuery() } catch { /* ignore */ }
   await ctx.reply([
@@ -1414,7 +1488,7 @@ setInterval(async () => {
     if (hour < 11 || hour >= 20) return // только рабочее время
 
     console.log(`[Sheets Sync] Auto-sync at ${hour}:00 MSK`)
-    const { syncProductsFromSheets } = await import('../lib/sheets-sync')
+    const { syncProductsFromSheets, checkStalePrices, formatStaleSupplierMessage } = await import('../lib/sheets-sync')
     const result = await syncProductsFromSheets()
 
     if (result.created > 0 || result.updated > 0) {
@@ -1424,6 +1498,31 @@ setInterval(async () => {
             `🔄 Авто-синхронизация Google Sheets:\n➕ ${result.created} создано | 🔄 ${result.updated} обновлено | 🔴 ${result.disabled} снято`)
         } catch { /* ignore */ }
       }
+    }
+
+    // Проверка устаревших цен (>6 часов)
+    try {
+      const staleItems = await checkStalePrices()
+      if (staleItems.length > 0) {
+        ;(globalThis as any).__staleItems = staleItems
+        for (const adminId of ADMIN_IDS) {
+          try {
+            await bot.telegram.sendMessage(adminId, [
+              `⚠️ ВНИМАНИЕ: ${staleItems.length} позиций с устаревшими ценами (>6 часов)`,
+              '',
+              'Что делать с этими позициями пока цены не обновлены?',
+            ].join('\n'),
+            Markup.inlineKeyboard([
+              [Markup.button.callback('🔴 Убрать с витрины', 'stale:hide')],
+              [Markup.button.callback('💬 «Уточняйте у менеджера»', 'stale:ask_manager')],
+              [Markup.button.callback('⏭️ Оставить как есть', 'stale:skip')],
+            ]))
+            await bot.telegram.sendMessage(adminId, formatStaleSupplierMessage(staleItems))
+          } catch { /* ignore */ }
+        }
+      }
+    } catch (err) {
+      console.error('[Stale Prices] Check error:', err)
     }
   } catch (err) {
     console.error('[Sheets Sync] Auto-sync error:', err)
