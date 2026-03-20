@@ -309,15 +309,45 @@
       margin-top: 2px;
     }
 
-    /* ── Sort button ─────────────────────────────────────────────────── */
+    /* ── Sort dropdown ────────────────────────────────────────────────── */
+    .sort-wrap { position: relative; flex-shrink: 0; }
+
     .sort-btn {
       display: flex; align-items: center; gap: 4px;
-      font-size: 10px; color: #666;
+      font-size: 10px; color: #666; background: transparent;
       border: 1px solid #222; padding: 4px 10px; border-radius: 14px;
       cursor: pointer; white-space: nowrap; flex-shrink: 0;
       transition: border-color 0.2s, color 0.2s;
     }
     .sort-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+    .sort-dropdown {
+      display: none;
+      position: absolute;
+      top: 100%;
+      right: 0;
+      margin-top: 4px;
+      background: #111;
+      border: 1px solid #2a2a2a;
+      border-radius: 10px;
+      padding: 4px 0;
+      min-width: 200px;
+      z-index: 100;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+    }
+
+    .sort-dropdown.open { display: block; }
+
+    .sort-option {
+      padding: 8px 14px;
+      font-size: 12px;
+      color: #888;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+    }
+
+    .sort-option:hover { background: rgba(168,255,62,0.05); color: #e5e5e5; }
+    .sort-option.active { color: #a8ff3e; }
 
     /* ── Catalog section ──────────────────────────────────────────────────── */
     #catalog { scroll-margin-top: calc(var(--header-h) + var(--marquee-h)); padding-bottom: 120px; }
@@ -899,10 +929,20 @@
       <div class="brand-filter-wrap">
         <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 16px 0;">
           <div class="brand-filter-label" style="padding:0;">БРЕНДЫ</div>
-          <div class="sort-btn" onclick="toggleSort()">
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h10M4 18h7"/></svg>
-            <span id="sortLabel">По умолчанию</span>
-            <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+          <div class="sort-wrap" id="sortWrap">
+            <button class="sort-btn" onclick="toggleSortDropdown()">
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h10M4 18h7"/></svg>
+              <span id="sortLabel">По умолчанию</span>
+              <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+            </button>
+            <div class="sort-dropdown" id="sortDropdown">
+              <div class="sort-option active" data-sort="default" onclick="setSort('default')">По умолчанию</div>
+              <div class="sort-option" data-sort="price_asc" onclick="setSort('price_asc')">Цена: сначала дешёвые</div>
+              <div class="sort-option" data-sort="price_desc" onclick="setSort('price_desc')">Цена: сначала дорогие</div>
+              <div class="sort-option" data-sort="popular" onclick="setSort('popular')">Популярные</div>
+              <div class="sort-option" data-sort="newest" onclick="setSort('newest')">Новинки</div>
+              <div class="sort-option" data-sort="name" onclick="setSort('name')">По имени А-Я</div>
+            </div>
           </div>
         </div>
         <div class="brand-filter-bar" id="brandFilterBar"></div>
@@ -1249,17 +1289,20 @@
 
     // ── Category images ──────────────────────────────────────────────────────
     const CATEGORY_IMAGES = {
-      'Телефоны':      '/categories/phones.png',
-      'Планшеты':      '/categories/tablets.png',
-      'Ноутбуки':      '/categories/laptops.png',
-      'Часы':          '/categories/watches.png',
-      'Аудио':         '/categories/audio.png',
-      'Консоли':       '/categories/consoles.png',
-      'Умный дом':     '/categories/smarthome.png',
-      'Фототехника':   '/categories/photo.png',
-      'Desktop':       '/categories/desktop.png',
-      'Аксессуары':    '/categories/accessories.png',
-      'Услуги':        '/categories/services.png',
+      'Телефоны':        '/categories/phones.png',
+      'Планшеты':        '/categories/tablets.png',
+      'Ноутбуки':        '/categories/laptops.png',
+      'Часы':            '/categories/watches.png',
+      'Аудио':           '/categories/audio.png',
+      'Консоли':         '/categories/consoles.png',
+      'Игровые консоли': '/categories/consoles.png',
+      'Умный дом':       '/categories/smarthome.png',
+      'Фототехника':     '/categories/photo.png',
+      'Desktop':         '/categories/desktop.png',
+      'Компьютеры':      '/categories/desktop.png',
+      'Аксессуары':      '/categories/accessories.png',
+      'Услуги':          '/categories/services.png',
+      'Акции':           '/categories/sales.png',
     }
 
     const TOP_CATEGORIES = ['Телефоны', 'Планшеты', 'Ноутбуки', 'Часы', 'Аудио', 'Консоли']
@@ -1358,14 +1401,34 @@
     // ── Sort ──────────────────────────────────────────────────────────────────
     let sortMode = 'default'
 
-    function toggleSort() {
-      const modes  = ['default', 'price_asc', 'price_desc', 'name']
-      const labels = ['По умолчанию', 'Цена ↑', 'Цена ↓', 'По имени']
-      const idx = (modes.indexOf(sortMode) + 1) % modes.length
-      sortMode = modes[idx]
-      document.getElementById('sortLabel').textContent = labels[idx]
+    function toggleSortDropdown() {
+      document.getElementById('sortDropdown').classList.toggle('open')
+    }
+
+    function setSort(mode) {
+      sortMode = mode
+      const labels = {
+        default: 'По умолчанию',
+        price_asc: 'Цена ↑',
+        price_desc: 'Цена ↓',
+        popular: 'Популярные',
+        newest: 'Новинки',
+        name: 'По имени',
+      }
+      document.getElementById('sortLabel').textContent = labels[mode] || mode
+      document.querySelectorAll('.sort-option').forEach(el => {
+        el.classList.toggle('active', el.dataset.sort === mode)
+      })
+      document.getElementById('sortDropdown').classList.remove('open')
       renderGrid()
     }
+
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest('.sort-wrap')) {
+        const dd = document.getElementById('sortDropdown')
+        if (dd) dd.classList.remove('open')
+      }
+    })
 
     // ── Select category ───────────────────────────────────────────────────────
     function selectCategory(cat) {
@@ -1433,7 +1496,9 @@
       // Sort
       if (sortMode === 'price_asc') products.sort((a, b) => minVariantPrice(a) - minVariantPrice(b))
       else if (sortMode === 'price_desc') products.sort((a, b) => minVariantPrice(b) - minVariantPrice(a))
-      else if (sortMode === 'name') products.sort((a, b) => a.name.localeCompare(b.name))
+      else if (sortMode === 'popular') products.sort((a, b) => (b.salesCount || 0) - (a.salesCount || 0))
+      else if (sortMode === 'newest') products.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
+      else if (sortMode === 'name') products.sort((a, b) => a.name.localeCompare(b.name, 'ru'))
 
       if (!products.length) {
         grid.innerHTML = searchQuery

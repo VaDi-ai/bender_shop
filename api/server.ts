@@ -255,6 +255,9 @@ export function startApiServer(bot?: Telegraf): void {
     res.redirect('/shop')
   })
 
+  // Static: category images
+  app.use('/categories', express.static(path.join(__dirname, '../../public/categories')))
+
   app.get('/shop', (_req, res) => {
     if (!indexHtml) {
       res.status(503).send('webapp not available')
@@ -323,6 +326,7 @@ export function startApiServer(bot?: Telegraf): void {
           attributes: true,
           specs: true,
           isFeatured: true,
+          createdAt: true,
           category: { select: { id: true, name: true } },
           variants: {
             where: { inStock: true, quantity: { gt: 0 } },
@@ -356,6 +360,8 @@ export function startApiServer(bot?: Telegraf): void {
         attributes: p.attributes ?? null,
         specs: p.specs ?? null,
         isFeatured: p.isFeatured,
+        createdAt: p.createdAt.toISOString(),
+        salesCount: p.variants.reduce((s, v) => s + (v.quantity || 0), 0),
         variants: p.variants.map((v) => ({
           id: v.id,
           sku: v.sku,
