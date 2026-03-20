@@ -690,13 +690,17 @@ export function startApiServer(bot?: Telegraf): void {
   app.post('/api/orders', async (req: Request, res: Response, next: NextFunction) => {
     const {
       items,
-      paymentMethod,
       customerName,
       customerPhone,
       deliveryType,
       deliveryAddress,
       customerComment,
     } = req.body
+
+    // Frontend sends "payment", accept both field names
+    const paymentMethod: string | undefined = req.body.paymentMethod || req.body.payment
+
+    console.log('[API] POST /api/orders body:', JSON.stringify(req.body))
 
     // Telegram auth: optional — validate if header present, fallback to form data
     let telegramId = ''
@@ -724,44 +728,52 @@ export function startApiServer(bot?: Telegraf): void {
 
     // ── Валидация входящих данных ──────────────────────────────────────────
     if (!Array.isArray(items) || items.length === 0) {
+      console.log('[ORDER] Validation failed: empty items, telegramId:', telegramId)
       await logSecurityEvent('invalid_order_data', { ip: req.ip, reason: 'empty items', telegramId }, telegramId)
       res.status(400).json({ error: 'Корзина пуста' })
       return
     }
 
-    if (!['cash', 'card'].includes(paymentMethod)) {
+    if (!paymentMethod || !['cash', 'card'].includes(paymentMethod)) {
+      console.log('[ORDER] Validation failed: invalid paymentMethod:', paymentMethod, '| raw body.payment:', req.body.payment, '| raw body.paymentMethod:', req.body.paymentMethod)
       res.status(400).json({ error: 'Неверный способ оплаты' })
       return
     }
 
     if (!customerName || customerName.trim().length < 2) {
+      console.log('[ORDER] Validation failed: invalid customerName:', customerName)
       res.status(400).json({ error: 'Укажите ФИО' })
       return
     }
 
     const phoneDigits = (customerPhone || '').replace(/\D/g, '')
     if (phoneDigits.length !== 11 || !phoneDigits.startsWith('7')) {
+      console.log('[ORDER] Validation failed: invalid phone:', customerPhone, '→ digits:', phoneDigits)
       res.status(400).json({ error: 'Неверный формат телефона. Используйте +7 (XXX) XXX-XX-XX' })
       return
     }
 
     if (!['pickup', 'delivery'].includes(deliveryType)) {
+      console.log('[ORDER] Validation failed: invalid deliveryType:', deliveryType)
       res.status(400).json({ error: 'Неверный тип доставки' })
       return
     }
 
     if (deliveryType === 'delivery' && (!deliveryAddress || deliveryAddress.trim().length < 5)) {
+      console.log('[ORDER] Validation failed: missing delivery address')
       res.status(400).json({ error: 'Укажите адрес доставки' })
       return
     }
 
     for (const item of items) {
       if (!Number.isInteger(item.variantId) || item.variantId <= 0) {
+        console.log('[ORDER] Validation failed: invalid variantId:', item)
         await logSecurityEvent('invalid_order_data', { ip: req.ip, reason: 'invalid variantId', item, telegramId }, telegramId)
         res.status(400).json({ error: 'Неверный ID товара' })
         return
       }
       if (!Number.isInteger(item.quantity) || item.quantity < 1 || item.quantity > 99) {
+        console.log('[ORDER] Validation failed: invalid quantity:', item)
         res.status(400).json({ error: 'Неверное количество товара' })
         return
       }
@@ -836,7 +848,7 @@ export function startApiServer(bot?: Telegraf): void {
               })),
             },
             totalAmount: totalDecimal.toFixed(2),
-            payment: paymentMethod,
+            payment: paymentMethod as 'cash' | 'card',
             customerName: customerName.trim(),
             customerPhone: customerPhone.trim(),
             deliveryType: deliveryType as DeliveryType,
