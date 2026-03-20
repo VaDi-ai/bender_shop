@@ -2201,11 +2201,12 @@
           return
         }
         const orderId = json.orderId || 0
-        const payload = JSON.stringify({ orderId, items, payment: payMethod, total: totalAmt, customerName, customerPhone, deliveryType, deliveryAddress })
         const savedItems = items.map(i => ({ name: i.name, qty: i.qty }))
         cart = []; updateBadge(); closeCart()
         showOrderSuccess(orderId, savedItems, totalAmt, payMethod, deliveryType, deliveryAddress)
-        if (tg && tg.sendData) { try { tg.sendData(payload) } catch { /* ignore */ } }
+        // tg.sendData не используем — заказ создаётся через API, бот уведомляется из бэкенда
+        // Закрыть Mini App через 3 секунды чтобы пользователь увидел подтверждение
+        setTimeout(() => { if (tg && tg.close) tg.close() }, 3000)
       } catch {
         btn.classList.remove('disabled'); btnSpan.textContent = 'ОФОРМИТЬ'
         showOrderError('НЕТ СВЯЗИ', 'Проверьте интернет-соединение и попробуйте ещё раз.')
