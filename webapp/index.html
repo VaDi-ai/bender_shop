@@ -2194,7 +2194,7 @@
         const json = await res.json().catch(() => ({}))
         if (!res.ok) {
           btn.classList.remove('disabled'); btnSpan.textContent = 'ОФОРМИТЬ'
-          if (json.error === 'Товар закончился') {
+          if (json.error && json.error.includes('Товар закончился')) {
             showOrderError('ТОВАР ЗАКОНЧИЛСЯ', 'К сожалению, «' + (json.product || 'товар') + '» уже закончился. Попробуйте выбрать другой вариант.')
             await loadProducts(activeCat)
           } else { showOrderError('ОШИБКА', json.error || 'Не удалось оформить заказ. Проверьте данные и попробуйте ещё раз.') }

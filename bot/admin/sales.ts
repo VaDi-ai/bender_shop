@@ -97,6 +97,50 @@ export async function startReserveFlow(ctx: Context, clientId: number): Promise<
 
 export function setupSalesHandlers(bot: Telegraf): void {
 
+  // ── Выбор найденного клиента (sale/reserve) ──────────────────────────────
+
+  bot.action(/^sale:pick_client:(\d+)$/, async (ctx) => {
+    try { await ctx.answerCbQuery() } catch { /* ignore */ }
+    const clientId = parseInt(ctx.match[1], 10)
+    await startSaleFlow(ctx, clientId)
+  })
+
+  bot.action(/^res:pick_client:(\d+)$/, async (ctx) => {
+    try { await ctx.answerCbQuery() } catch { /* ignore */ }
+    const clientId = parseInt(ctx.match[1], 10)
+    await startReserveFlow(ctx, clientId)
+  })
+
+  bot.action(/^sale_nc:use_name:(.+)$/, async (ctx) => {
+    try { await ctx.answerCbQuery() } catch { /* ignore */ }
+    const userId = getUserId(ctx)
+    const clientName = decodeURIComponent(ctx.match[1])
+    salesState.set(userId, { flow: 'sale_nc', step: 'product_method', clientName })
+    await ctx.reply(
+      `👤 Клиент: ${clientName} (новый)\n\nВыберите способ выбора товара:`,
+      Markup.inlineKeyboard([
+        [Markup.button.callback('📋 Из списка', 'sale_nc:list')],
+        [Markup.button.callback('🔢 По SKU', 'sale_nc:sku')],
+        [Markup.button.callback('❌ Отмена', 'sale:cancel')],
+      ]),
+    )
+  })
+
+  bot.action(/^res_nc:use_name:(.+)$/, async (ctx) => {
+    try { await ctx.answerCbQuery() } catch { /* ignore */ }
+    const userId = getUserId(ctx)
+    const clientName = decodeURIComponent(ctx.match[1])
+    salesState.set(userId, { flow: 'reserve_nc', step: 'product_method', clientName })
+    await ctx.reply(
+      `👤 Клиент: ${clientName} (новый)\n\nВыберите способ выбора товара:`,
+      Markup.inlineKeyboard([
+        [Markup.button.callback('📋 Из списка', 'res_nc:list')],
+        [Markup.button.callback('🔢 По SKU', 'res_nc:sku')],
+        [Markup.button.callback('❌ Отмена', 'res:cancel')],
+      ]),
+    )
+  })
+
   // ── Продажа: выбор из списка (категории) ──────────────────────────────────
   bot.action(/^sale:list:(\d+)$/, async (ctx) => {
     try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
@@ -368,14 +412,14 @@ export function setupSalesHandlers(bot: Telegraf): void {
     try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
     const userId = getUserId(ctx)
     salesState.set(userId, { flow: 'sale_nc', step: 'ask_client' })
-    await ctx.reply('💰 Новая продажа\n\nВведите имя или телефон клиента:')
+    await ctx.reply('💰 Новая продажа\n\n🔍 Найти клиента:\nВведите имя, телефон или @username')
   })
 
   bot.action('sales_topic:new_reserve', async (ctx) => {
     try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
     const userId = getUserId(ctx)
     salesState.set(userId, { flow: 'reserve_nc', step: 'ask_client' })
-    await ctx.reply('🔖 Новый резерв\n\nВведите имя или телефон клиента:')
+    await ctx.reply('🔖 Новый резерв\n\n🔍 Найти клиента:\nВведите имя, телефон или @username')
   })
 
   // ── Выбор метода для sale_nc / reserve_nc ─────────────────────────────────
@@ -747,10 +791,36 @@ export async function handleSalesMessage(
 
   if (state.flow === 'sale_nc') {
     if (state.step === 'ask_client') {
-      const clientName = text.trim()
-      salesState.set(userId, { flow: 'sale_nc', step: 'product_method', clientName })
+      const query = text.trim()
+      // Search existing clients
+      const clients = await prisma.client.findMany({
+        where: {
+          OR: [
+            { name: { contains: query, mode: 'insensitive' } },
+            { phone: { contains: query } },
+            { telegramUsername: { contains: query, mode: 'insensitive' } },
+          ],
+        },
+        take: 5,
+      })
+
+      if (clients.length > 0) {
+        const buttons = clients.map(c => [
+          Markup.button.callback(
+            `${c.name}${c.phone ? ' • ' + c.phone : ''}`.slice(0, 64),
+            `sale:pick_client:${c.id}`
+          ),
+        ])
+        buttons.push([Markup.button.callback(`➕ Новый: "${query}"`, `sale_nc:use_name:${encodeURIComponent(query)}`)])
+        buttons.push([Markup.button.callback('❌ Отмена', 'sale:cancel')])
+        await ctx.reply(`🔍 Найдено ${clients.length} клиентов:`, Markup.inlineKeyboard(buttons))
+        return true
+      }
+
+      // Not found — proceed with name as-is
+      salesState.set(userId, { flow: 'sale_nc', step: 'product_method', clientName: query })
       await ctx.reply(
-        `👤 Клиент: ${clientName}\n\nВыберите способ выбора товара:`,
+        `👤 Клиент: ${query} (новый)\n\nВыберите способ выбора товара:`,
         Markup.inlineKeyboard([
           [Markup.button.callback('📋 Из списка', 'sale_nc:list')],
           [Markup.button.callback('🔢 По SKU', 'sale_nc:sku')],
@@ -796,10 +866,36 @@ export async function handleSalesMessage(
 
   if (state.flow === 'reserve_nc') {
     if (state.step === 'ask_client') {
-      const clientName = text.trim()
-      salesState.set(userId, { flow: 'reserve_nc', step: 'product_method', clientName })
+      const query = text.trim()
+      // Search existing clients
+      const clients = await prisma.client.findMany({
+        where: {
+          OR: [
+            { name: { contains: query, mode: 'insensitive' } },
+            { phone: { contains: query } },
+            { telegramUsername: { contains: query, mode: 'insensitive' } },
+          ],
+        },
+        take: 5,
+      })
+
+      if (clients.length > 0) {
+        const buttons = clients.map(c => [
+          Markup.button.callback(
+            `${c.name}${c.phone ? ' • ' + c.phone : ''}`.slice(0, 64),
+            `res:pick_client:${c.id}`
+          ),
+        ])
+        buttons.push([Markup.button.callback(`➕ Новый: "${query}"`, `res_nc:use_name:${encodeURIComponent(query)}`)])
+        buttons.push([Markup.button.callback('❌ Отмена', 'res:cancel')])
+        await ctx.reply(`🔍 Найдено ${clients.length} клиентов:`, Markup.inlineKeyboard(buttons))
+        return true
+      }
+
+      // Not found — proceed with name as-is
+      salesState.set(userId, { flow: 'reserve_nc', step: 'product_method', clientName: query })
       await ctx.reply(
-        `👤 Клиент: ${clientName}\n\nВыберите способ выбора товара:`,
+        `👤 Клиент: ${query} (новый)\n\nВыберите способ выбора товара:`,
         Markup.inlineKeyboard([
           [Markup.button.callback('📋 Из списка', 'res_nc:list')],
           [Markup.button.callback('🔢 По SKU', 'res_nc:sku')],

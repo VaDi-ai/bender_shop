@@ -915,10 +915,14 @@ export function startApiServer(bot?: Telegraf): void {
         return order
       })
 
-      if (!res.headersSent) res.json({ success: true, orderId: order.id })
-      console.log(`[ORDER] #${order.id} by ${telegramId}: ${items.length} items, ${order.totalAmount}₽, ${paymentMethod}`)
+      // Ответ клиенту СРАЗУ — до уведомлений
+      console.log(`[ORDER] #${order.id} created by ${telegramId}: ${items.length} items, ${order.totalAmount}₽, ${paymentMethod}`)
+      if (!res.headersSent) {
+        res.json({ success: true, orderId: order.id })
+        console.log(`[ORDER] #${order.id} response sent to client`)
+      }
 
-      // ── Уведомление о заказе (не блокирует ответ) ────────────────────
+      // ── Уведомления в фоне (не блокируют ответ) ────────────────────
       const totalStr = order.totalAmount.toString()
       ;(async () => {
         try {
