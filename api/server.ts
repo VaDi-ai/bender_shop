@@ -765,14 +765,19 @@ export function startApiServer(bot?: Telegraf): void {
       return
     }
 
+    // Normalize item fields: frontend sends qty/price as string
     for (const item of items) {
-      if (!Number.isInteger(item.variantId) || item.variantId <= 0) {
+      item.variantId = parseInt(item.variantId) || 0
+      item.quantity = parseInt(item.quantity ?? item.qty) || 0
+      item.price = parseFloat(item.price) || 0
+
+      if (item.variantId <= 0) {
         console.log('[ORDER] Validation failed: invalid variantId:', item)
         await logSecurityEvent('invalid_order_data', { ip: req.ip, reason: 'invalid variantId', item, telegramId }, telegramId)
         res.status(400).json({ error: 'Неверный ID товара' })
         return
       }
-      if (!Number.isInteger(item.quantity) || item.quantity < 1 || item.quantity > 99) {
+      if (item.quantity < 1 || item.quantity > 99) {
         console.log('[ORDER] Validation failed: invalid quantity:', item)
         res.status(400).json({ error: 'Неверное количество товара' })
         return
@@ -799,7 +804,12 @@ export function startApiServer(bot?: Telegraf): void {
             include: { product: true },
           })
 
-          if (!variant || !variant.inStock || variant.quantity < item.quantity) {
+          const stockCheckEnabled = process.env.STOCK_WRITEOFF_ENABLED === 'true'
+          if (!variant) {
+            throw Object.assign(new Error('Товар не найден'), { isStockConflict: true })
+          }
+          if (stockCheckEnabled && (!variant.inStock || variant.quantity < item.quantity)) {
+            console.log('[ORDER] Stock conflict: variantId', item.variantId, 'available:', variant.quantity, 'requested:', item.quantity)
             throw Object.assign(new Error('Товар закончился или недоступен'), { isStockConflict: true })
           }
 
@@ -857,23 +867,26 @@ export function startApiServer(bot?: Telegraf): void {
           },
         })
 
-        // Списать со склада
+        // Списать со склада (только если складской учёт включён)
+        const doWriteoff = process.env.STOCK_WRITEOFF_ENABLED === 'true'
         for (const item of enrichedItems) {
-          await tx.productVariant.update({
-            where: { id: item.variantId },
-            data: {
-              quantity: { decrement: item.quantity },
-              inStock: item.newQty > 0,
-            },
-          })
-          // Decrement Product-level quantity/stock (mirrors atomicSale behavior)
-          await tx.product.update({
-            where: { id: item.productId },
-            data: {
-              quantity: { decrement: item.quantity },
-              stock: { decrement: item.quantity },
-            },
-          })
+          if (doWriteoff) {
+            await tx.productVariant.update({
+              where: { id: item.variantId },
+              data: {
+                quantity: { decrement: item.quantity },
+                inStock: item.newQty > 0,
+              },
+            })
+            // Decrement Product-level quantity/stock (mirrors atomicSale behavior)
+            await tx.product.update({
+              where: { id: item.productId },
+              data: {
+                quantity: { decrement: item.quantity },
+                stock: { decrement: item.quantity },
+              },
+            })
+          }
           await tx.stockMovement.create({
             data: {
               variantId: item.variantId,
