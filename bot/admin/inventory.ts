@@ -386,6 +386,7 @@ export async function showInventory(ctx: Context): Promise<void> {
     ],
     [
       Markup.button.callback('📤 Экспорт', 'inv:export'),
+      Markup.button.callback('⭐ Хиты продаж', 'inv:hits'),
     ],
     [Markup.button.callback('🏠 Главное меню', 'back:main')],
   ])
@@ -911,6 +912,45 @@ export function setupInventoryHandlers(bot: Telegraf): void {
       '➕ Добавление товара\n\nШаг 1 из 8 — введите название товара:',
       Markup.keyboard([['❌ Отмена']]).resize(),
     )
+  })
+
+  // ── Хиты продаж ──────────────────────────────────────────────────────────
+
+  bot.action('inv:hits', async (ctx) => {
+    try { await ctx.answerCbQuery() } catch { /* ignore */ }
+    const products = await prisma.product.findMany({
+      where: { isAvailable: true },
+      orderBy: { name: 'asc' },
+      take: 20,
+    })
+
+    const buttons = products.map(p => [
+      Markup.button.callback(
+        `${p.isFeatured ? '⭐' : '☆'} ${p.name}`.slice(0, 64),
+        `inv:hit_toggle:${p.id}`
+      )
+    ])
+    buttons.push([Markup.button.callback('🔙 Назад', 'inv:back')])
+
+    await ctx.reply('⭐ Нажмите чтобы добавить/убрать из хитов:', Markup.inlineKeyboard(buttons))
+  })
+
+  bot.action(/^inv:hit_toggle:(\d+)$/, async (ctx) => {
+    const id = parseInt((ctx.match as RegExpMatchArray)[1], 10)
+    const product = await prisma.product.findUnique({ where: { id } })
+    if (!product) {
+      try { await ctx.answerCbQuery('Товар не найден') } catch { /* ignore */ }
+      return
+    }
+
+    await prisma.product.update({
+      where: { id },
+      data: { isFeatured: !product.isFeatured },
+    })
+
+    try {
+      await ctx.answerCbQuery(product.isFeatured ? '☆ Убрано из хитов' : '⭐ Добавлено в хиты')
+    } catch { /* ignore */ }
   })
 
   // ── Раздел «Остатки» ──────────────────────────────────────────────────────

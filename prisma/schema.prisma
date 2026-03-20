@@ -225,6 +225,7 @@ model Product {
   photoUrl    String?   // URL главного фото (обратная совместимость)
   photos      String[]  // массив file_id фото товара
   isAvailable Boolean   @default(true)
+  isFeatured  Boolean   @default(false)
 
   // Торговые предложения
   attributes Json?     // { "Память": ["128GB","256GB"], "Цвет": ["Черный","Белый"] }

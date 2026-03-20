@@ -322,6 +322,7 @@ export function startApiServer(bot?: Telegraf): void {
           brand: true,
           attributes: true,
           specs: true,
+          isFeatured: true,
           category: { select: { id: true, name: true } },
           variants: {
             where: { inStock: true, quantity: { gt: 0 } },
@@ -354,6 +355,7 @@ export function startApiServer(bot?: Telegraf): void {
         brand: p.brand ?? null,
         attributes: p.attributes ?? null,
         specs: p.specs ?? null,
+        isFeatured: p.isFeatured,
         variants: p.variants.map((v) => ({
           id: v.id,
           sku: v.sku,

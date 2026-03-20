@@ -153,94 +153,171 @@
     .slider-nav-btn { width: 32px; height: 32px; background: rgba(10,10,10,0.6); border: 1px solid rgba(255,255,255,0.2); color: #ffffff; font-size: 18px; display: flex; align-items: center; justify-content: center; cursor: pointer; user-select: none; transition: border-color 0.2s; }
     .slider-nav-btn:hover { border-color: #a8ff3e; }
 
-    /* ── Category banners — rounded cards with spacing ─────────────── */
-    #banners-wrap { margin-top: 60px; scroll-margin-top: calc(var(--header-h) + var(--marquee-h)); }
-    .banners-title { font-family: 'Courier New', Courier, monospace; font-size: clamp(24px, 4vw, 48px); color: #ffffff; border-left: 3px solid #a8ff3e; padding-left: 16px; margin-bottom: 32px; margin-left: 20px; }
-    @media (max-width: 768px) { #banners-wrap { margin-top: 40px; } }
+    /* ── Category compact grid ──────────────────────────────────────── */
+    .cat-grid-section { padding: 16px 12px 8px; }
 
-    #banners {
-      padding: 16px;
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
+    .cat-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
     }
 
-    .banner {
-      position: relative;
-      height: 200px;
+    .cat-btn {
+      background: #111;
+      border: 1px solid #1a1a1a;
+      border-radius: 12px;
       overflow: hidden;
+      display: flex;
+      align-items: center;
+      height: 56px;
       cursor: pointer;
-      border-radius: 16px;
-      border: 1px solid #2a2a2a;
-      transition: border-color 0.3s, box-shadow 0.3s, transform 0.15s;
-      user-select: none;
+      transition: border-color 0.2s;
     }
 
-    @media (min-width: 768px) { .banner { height: 280px; } }
-
-    .banner:hover {
+    .cat-btn:hover, .cat-btn.active {
       border-color: var(--accent);
-      box-shadow: 0 0 20px rgba(168,255,62,0.15), 0 0 40px rgba(168,255,62,0.05);
     }
 
-    .banner:active {
-      transform: scale(0.98);
+    .cat-btn.active {
+      background: rgba(168,255,62,0.05);
     }
 
-    .banner.active-cat {
+    .cat-btn-text {
+      padding: 0 12px;
+      flex: 1;
+      min-width: 0;
+    }
+
+    .cat-btn-name {
+      font-size: 12px;
+      color: #e5e5e5;
+      font-weight: 500;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .cat-btn-count {
+      font-size: 9px;
+      color: #555;
+      margin-top: 1px;
+    }
+
+    .cat-btn-img {
+      height: 56px;
+      width: 56px;
+      object-fit: cover;
+      object-position: center;
+      border-radius: 0 12px 12px 0;
+      opacity: 0.85;
+      flex-shrink: 0;
+    }
+
+    .cat-btn.hidden { display: none; }
+
+    .cat-more-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      width: 100%;
+      margin-top: 8px;
+      padding: 10px;
+      background: transparent;
+      border: 1px dashed #333;
+      border-radius: 12px;
+      color: #555;
+      font-size: 12px;
+      cursor: pointer;
+      transition: border-color 0.2s, color 0.2s;
+    }
+
+    .cat-more-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+    .cat-more-btn svg { transition: transform 0.3s; }
+    .cat-more-btn.expanded svg { transform: rotate(180deg); }
+
+    /* ── Hits section ────────────────────────────────────────────────── */
+    .hits-section { padding: 12px 0; }
+
+    .hits-arrow {
+      width: 24px; height: 24px;
+      border: 1px solid #333;
+      border-radius: 50%;
+      background: transparent;
+      color: #666;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer;
+      transition: border-color 0.2s, color 0.2s;
+    }
+
+    .hits-arrow:hover, .hits-arrow-active {
       border-color: var(--accent);
-      border-width: 2px;
-      box-shadow: 0 0 30px rgba(168,255,62,0.12);
+      color: var(--accent);
     }
 
-    .banner-bg {
-      position: absolute;
-      inset: 0;
-      background-size: cover;
-      background-position: center;
-      border-radius: 16px;
-      transition: transform 0.7s ease;
+    .hits-scroll {
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+      scroll-behavior: smooth;
+      padding: 0 12px;
+      -ms-overflow-style: none;
+      scrollbar-width: none;
     }
 
-    .banner:hover .banner-bg { transform: scale(1.04); }
+    .hits-scroll::-webkit-scrollbar { display: none; }
 
-    .banner-overlay {
-      position: absolute;
-      inset: 0;
-      z-index: 1;
-      border-radius: 16px;
+    .hit-card {
+      min-width: 110px;
+      background: #111;
+      border: 1px solid #1a1a1a;
+      border-radius: 12px;
+      padding: 8px;
+      flex-shrink: 0;
+      cursor: pointer;
+      transition: border-color 0.2s;
     }
 
-    .banner-text { position: absolute; top: 50%; transform: translateY(-50%); max-width: 58%; z-index: 2; }
-    .banner-text--left  { left: 24px; }
-    .banner-text--right { right: 24px; text-align: right; }
+    .hit-card:hover { border-color: var(--accent); }
 
-    @media (max-width: 480px) {
-      .banner-text--left { left: 20px; }
-      .banner-text--right { right: 20px; }
-      .banner-text { max-width: 65%; }
+    .hit-card-img {
+      height: 55px;
+      background: #161616;
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      margin-bottom: 6px;
+      overflow: hidden;
     }
 
-    .banner-title {
-      font-family: 'Courier New', Courier, monospace;
-      font-size: clamp(24px, 5vw, 64px);
-      color: #fff;
-      text-transform: uppercase;
-      text-shadow: 0 0 10px #a8ff3e, 0 0 30px #a8ff3e, 0 0 60px rgba(168,255,62,0.5);
-      line-height: 1;
-      letter-spacing: 2px;
-      margin-bottom: 8px;
+    .hit-card-img img {
+      width: 100%; height: 100%;
+      object-fit: cover;
     }
 
-    .banner-count { font-size: 11px; color: var(--accent); letter-spacing: 2px; text-transform: uppercase; }
-
-    .banner-anim {
-      opacity: 0;
-      transition: opacity 600ms cubic-bezier(0.16, 1, 0.3, 1), transform 600ms cubic-bezier(0.16, 1, 0.3, 1);
+    .hit-card-name {
+      font-size: 10px;
+      color: #e5e5e5;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
-    .banner-anim[data-dir="left"]  { transform: translateX(-40px); }
-    .banner-anim[data-dir="right"] { transform: translateX(40px); }
-    .banner-anim.in-view { opacity: 1; transform: translateX(0); }
+
+    .hit-card-price {
+      font-size: 10px;
+      color: var(--accent);
+      margin-top: 2px;
+    }
+
+    /* ── Sort button ─────────────────────────────────────────────────── */
+    .sort-btn {
+      display: flex; align-items: center; gap: 4px;
+      font-size: 10px; color: #666;
+      border: 1px solid #222; padding: 4px 10px; border-radius: 14px;
+      cursor: pointer; white-space: nowrap; flex-shrink: 0;
+      transition: border-color 0.2s, color 0.2s;
+    }
+    .sort-btn:hover { border-color: var(--accent); color: var(--accent); }
 
     /* ── Catalog section ──────────────────────────────────────────────────── */
     #catalog { scroll-margin-top: calc(var(--header-h) + var(--marquee-h)); padding-bottom: 120px; }
@@ -557,7 +634,6 @@
       .modal-body { padding: 16px 16px 12px; }
     }
     @media (max-width: 480px) {
-      .products { grid-template-columns: 1fr; }
       .hero-slider { height: 40vh; }
     }
 
@@ -791,9 +867,28 @@
       </div>
     </div>
 
-    <div id="banners-wrap">
-      <h2 class="banners-title">КАТЕГОРИИ</h2>
-      <section id="banners"></section>
+    <div class="cat-grid-section" id="catGridSection">
+      <div class="section-label" style="padding: 0 16px;">КАТЕГОРИИ</div>
+      <div class="cat-grid" id="catGrid"></div>
+      <button class="cat-more-btn" id="catMoreBtn" onclick="toggleMoreCats()">
+        <span id="catMoreText">Ещё категории</span>
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+      </button>
+    </div>
+
+    <div class="hits-section" id="hitsSection" style="display:none">
+      <div style="display: flex; align-items: center; justify-content: space-between; padding: 0 16px; margin-bottom: 10px;">
+        <div class="section-label" style="margin-bottom: 0;">HIT ПРОДАЖ</div>
+        <div style="display: flex; gap: 6px;">
+          <button class="hits-arrow" onclick="scrollHits(-1)" aria-label="Назад">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
+          </button>
+          <button class="hits-arrow hits-arrow-active" onclick="scrollHits(1)" aria-label="Вперёд">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
+          </button>
+        </div>
+      </div>
+      <div class="hits-scroll" id="hitsScroll"></div>
     </div>
 
     <section id="catalog">
@@ -802,7 +897,14 @@
         <p class="catalog-sub" id="catalogSub">Все товары</p>
       </div>
       <div class="brand-filter-wrap">
-        <div class="brand-filter-label">БРЕНДЫ</div>
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 16px 0;">
+          <div class="brand-filter-label" style="padding:0;">БРЕНДЫ</div>
+          <div class="sort-btn" onclick="toggleSort()">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h10M4 18h7"/></svg>
+            <span id="sortLabel">По умолчанию</span>
+            <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+          </div>
+        </div>
         <div class="brand-filter-bar" id="brandFilterBar"></div>
       </div>
       <div class="products" id="grid">
@@ -1077,7 +1179,7 @@
       try {
         const res  = await fetch('/api/categories')
         categories = await res.json()
-        renderBanners()
+        renderCategoryGrid(categories)
         renderNavList()
       } catch (e) { console.error('[categories]', e) }
     }
@@ -1145,50 +1247,131 @@
       renderGrid()
     }
 
-    function renderBanners() {
-      const section = document.getElementById('banners')
-      if (!categories.length) { section.innerHTML = ''; return }
+    // ── Category images ──────────────────────────────────────────────────────
+    const CATEGORY_IMAGES = {
+      'Телефоны':      '/categories/phones.png',
+      'Планшеты':      '/categories/tablets.png',
+      'Ноутбуки':      '/categories/laptops.png',
+      'Часы':          '/categories/watches.png',
+      'Аудио':         '/categories/audio.png',
+      'Консоли':       '/categories/consoles.png',
+      'Умный дом':     '/categories/smarthome.png',
+      'Фототехника':   '/categories/photo.png',
+      'Desktop':       '/categories/desktop.png',
+      'Аксессуары':    '/categories/accessories.png',
+      'Услуги':        '/categories/services.png',
+    }
 
-      section.innerHTML = categories.map((cat, i) => {
-        const side    = cat.textSide === 'right' ? 'right' : 'left'
-        const dir     = i % 2 === 0 ? 'left' : 'right'
-        const gradDir = side === 'left' ? 'to right' : 'to left'
-        const grad    = `linear-gradient(${gradDir}, rgba(10,10,10,0.92) 0%, rgba(10,10,10,0.92) 45%, rgba(10,10,10,0.1) 100%)`
-        const bgImg   = cat.imageUrl ? `url('${esc(cat.imageUrl)}')` : 'linear-gradient(135deg, #1a1a1a 0%, #0d0d0d 100%)'
-        const count   = cat.productCount
-        const countTxt = count === 0 ? 'Нет товаров' : count === 1 ? '1 товар' : count + ' товаров'
-        return `
-<div class="banner banner-anim${activeCat === cat.name ? ' active-cat' : ''}" data-cat="${esc(cat.name)}" data-dir="${dir}" data-index="${i}">
-  <div class="banner-bg" style="background-image:${bgImg};"></div>
-  <div class="banner-overlay" style="background:${grad};"></div>
-  <div class="banner-text banner-text--${side}">
-    <div class="banner-title">${esc(cat.name)}</div>
-    <div class="banner-count">${esc(countTxt)}</div>
-  </div>
-</div>`
-      }).join('')
+    const TOP_CATEGORIES = ['Телефоны', 'Планшеты', 'Ноутбуки', 'Часы', 'Аудио', 'Консоли']
+    const MAX_VISIBLE = 6
+    let catsExpanded = false
 
-      section.querySelectorAll('.banner').forEach(el => {
-        el.addEventListener('click', () => selectCategory(el.dataset.cat))
+    function pluralize(n, one, few, many) {
+      const mod10 = n % 10, mod100 = n % 100
+      if (mod10 === 1 && mod100 !== 11) return one
+      if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return few
+      return many
+    }
+
+    function renderCategoryGrid(cats) {
+      const grid = document.getElementById('catGrid')
+      if (!grid) return
+
+      const sorted = [...cats].sort((a, b) => {
+        const ai = TOP_CATEGORIES.indexOf(a.name)
+        const bi = TOP_CATEGORIES.indexOf(b.name)
+        if (ai !== -1 && bi !== -1) return ai - bi
+        if (ai !== -1) return -1
+        if (bi !== -1) return 1
+        return (b.productCount || 0) - (a.productCount || 0)
       })
 
-      const io = new IntersectionObserver(entries => {
-        entries.forEach(entry => {
-          if (entry.isIntersecting) {
-            const delay = Math.min(parseInt(entry.target.dataset.index) * 80, 400)
-            setTimeout(() => entry.target.classList.add('in-view'), delay)
-            io.unobserve(entry.target)
-          }
-        })
-      }, { threshold: 0.12 })
-      section.querySelectorAll('.banner-anim').forEach(el => io.observe(el))
+      grid.innerHTML = sorted.map((cat, i) => {
+        const img = CATEGORY_IMAGES[cat.name] || ''
+        const hiddenClass = i >= MAX_VISIBLE && !catsExpanded ? ' hidden' : ''
+        const count = cat.productCount || 0
+        return `
+      <div class="cat-btn${hiddenClass}${activeCat === cat.name ? ' active' : ''}" data-cat="${esc(cat.name)}" onclick="selectCategory('${esc(cat.name)}')">
+        <div class="cat-btn-text">
+          <div class="cat-btn-name">${esc(cat.name)}</div>
+          <div class="cat-btn-count">${count} ${pluralize(count, 'товар', 'товара', 'товаров')}</div>
+        </div>
+        ${img ? `<img class="cat-btn-img" src="${img}" alt="" onerror="this.style.display='none'">` : ''}
+      </div>
+    `
+      }).join('')
+
+      const moreBtn = document.getElementById('catMoreBtn')
+      if (moreBtn) {
+        moreBtn.style.display = sorted.length > MAX_VISIBLE ? 'flex' : 'none'
+      }
+    }
+
+    function toggleMoreCats() {
+      catsExpanded = !catsExpanded
+      const btn = document.getElementById('catMoreBtn')
+      btn.classList.toggle('expanded', catsExpanded)
+      document.getElementById('catMoreText').textContent = catsExpanded ? 'Свернуть' : 'Ещё категории'
+
+      document.querySelectorAll('.cat-btn').forEach((el, i) => {
+        if (i >= MAX_VISIBLE) {
+          el.classList.toggle('hidden', !catsExpanded)
+        }
+      })
+    }
+
+    // ── Hits ──────────────────────────────────────────────────────────────────
+    function renderHits(products) {
+      const hits = products.filter(p => p.isFeatured).slice(0, 10)
+      const section = document.getElementById('hitsSection')
+      const scroll = document.getElementById('hitsScroll')
+      if (!hits.length || !section || !scroll) {
+        if (section) section.style.display = 'none'
+        return
+      }
+
+      section.style.display = 'block'
+      scroll.innerHTML = hits.map(p => {
+        const photo = p.photos && p.photos[0] ? photoUrl(p.photos[0]) : null
+        const imgHtml = photo
+          ? `<img src="${photo}" alt="">`
+          : `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#444" stroke-width="1.5"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>`
+
+        const minPrice = p.variants && p.variants.length ? minVariantPrice(p) : Number(p.price)
+        const priceText = minPrice === 0 ? 'Цена по запросу' : 'от ' + fmt(minPrice) + ' ₽'
+
+        return `
+      <div class="hit-card" onclick="openProductModal(${p.id})">
+        <div class="hit-card-img">${imgHtml}</div>
+        <div class="hit-card-name">${esc(p.name)}</div>
+        <div class="hit-card-price">${priceText}</div>
+      </div>
+    `
+      }).join('')
+    }
+
+    function scrollHits(dir) {
+      const el = document.getElementById('hitsScroll')
+      if (el) el.scrollBy({ left: dir * 240, behavior: 'smooth' })
+    }
+
+    // ── Sort ──────────────────────────────────────────────────────────────────
+    let sortMode = 'default'
+
+    function toggleSort() {
+      const modes  = ['default', 'price_asc', 'price_desc', 'name']
+      const labels = ['По умолчанию', 'Цена ↑', 'Цена ↓', 'По имени']
+      const idx = (modes.indexOf(sortMode) + 1) % modes.length
+      sortMode = modes[idx]
+      document.getElementById('sortLabel').textContent = labels[idx]
+      renderGrid()
     }
 
     // ── Select category ───────────────────────────────────────────────────────
     function selectCategory(cat) {
       activeCat = cat
-      document.querySelectorAll('.banner').forEach(el => {
-        el.classList.toggle('active-cat', cat !== '' && el.dataset.cat === cat)
+      document.querySelectorAll('.cat-btn').forEach(el => {
+        el.classList.toggle('active', cat !== '' && el.dataset.cat === cat)
       })
       document.querySelectorAll('.nav-item').forEach(el => {
         el.classList.toggle('active', el.dataset.cat === cat)
@@ -1216,6 +1399,7 @@
         allProducts = await res.json()
         computeBrands()
         renderBrandFilterBar()
+        renderHits(allProducts)
         renderGrid()
       } catch {
         grid.innerHTML = '<div class="state-msg">Не удалось загрузить товары</div>'
@@ -1245,6 +1429,11 @@
           return b === activeBrand
         })
       }
+
+      // Sort
+      if (sortMode === 'price_asc') products.sort((a, b) => minVariantPrice(a) - minVariantPrice(b))
+      else if (sortMode === 'price_desc') products.sort((a, b) => minVariantPrice(b) - minVariantPrice(a))
+      else if (sortMode === 'name') products.sort((a, b) => a.name.localeCompare(b.name))
 
       if (!products.length) {
         grid.innerHTML = searchQuery
