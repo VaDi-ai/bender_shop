@@ -547,12 +547,37 @@ function extractProductName(fullName: string, brand: string): string {
     name = name.replace(/\b(13|14|15|16)\b/g, '')
   }
 
-  // ─── Step 10b: Dyson — remove completions (→ attr) and model codes ───
+  // ─── Step 10b: Dyson — map article codes to model names, remove accessories ───
   if (isDyson) {
+    // Map article codes → readable model names
+    name = name.replace(/\bHD0[3-8]\b/g, 'Supersonic')
+    name = name.replace(/\bHD1[5-8]\b/g, 'Supersonic')
+    name = name.replace(/\bHS0[5-7]\b/g, 'Airwrap')
+    name = name.replace(/\bHS0[8-9]\b/g, 'Airwrap')
+    name = name.replace(/\bHT01\b/g, 'Airstrait')
+    name = name.replace(/\bPH05\b/g, 'Purifier Humidify')
+    name = name.replace(/\bSV4[0-9][A-Z]?\b/g, '')  // V12/V15 — model already in name
+    name = name.replace(/\bSV5[0-9][A-Z]?\b/g, '')  // V16
+    name = name.replace(/\bRB0[0-9]\b/g, '')         // 360 Robot — already in name
+    name = name.replace(/\bHU0[0-9]\b/g, '')         // hand dryer
+
+    // Remove completions → attributes
     for (const comp of DYSON_COMPLETIONS) {
       name = name.replace(new RegExp(`\\b${comp}\\b`, 'gi'), '')
     }
-    name = name.replace(/\b(HS|HD|HT|SV|PH|RB|HU)\d{2,3}[A-Z]?\b/g, '')  // HD15, SV46, PH05
+
+    // Remove accessories from name → go to attributes
+    name = name.replace(/\bбез кейса\b/gi, '')
+    name = name.replace(/\bс кейсом\b/gi, '')
+    name = name.replace(/\bдиффузор\b/gi, '')
+    name = name.replace(/\bCoanda\s*2x\b/gi, '')
+
+    // Remove Dyson-specific colors from name (already in COLORS arrays, but double-ensure)
+    name = name.replace(/\bCeramic\b/gi, '')
+    name = name.replace(/\bLite\b/gi, '')
+
+    // Deduplicate "Supersonic Supersonic" etc.
+    name = name.replace(/\b(Supersonic|Airwrap|Airstrait)\s+\1\b/gi, '$1')
   }
 
   // ─── Step 10c: TV — remove diagonal ───
@@ -700,14 +725,19 @@ function parseAttributes(fullName: string, brand: string, country: string): Reco
     if (diagMatch) attrs['Диагональ'] = diagMatch[1] + '"'
   }
 
-  // ─── Dyson: completion ───
+  // ─── Dyson: completion + accessories ───
   if (isDyson) {
     for (const comp of DYSON_COMPLETIONS) {
       if (new RegExp(`\\b${comp}\\b`, 'i').test(normalized)) {
-        attrs['Комплектация'] = comp
+        attrs['Серия'] = comp
         break
       }
     }
+    if (/без кейса/i.test(normalized)) attrs['Комплектация'] = 'Без кейса'
+    else if (/с кейсом/i.test(normalized)) attrs['Комплектация'] = 'С кейсом'
+    else if (/диффузор/i.test(normalized)) attrs['Комплектация'] = 'Диффузор'
+    if (/Coanda\s*2x/i.test(normalized)) attrs['Серия'] = 'Coanda 2x'
+    if (/\bLite\b/i.test(normalized)) attrs['Серия'] = 'Lite'
   }
 
   // ─── Camera: kit type ───
