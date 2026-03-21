@@ -46,7 +46,9 @@
       "Bash(git add:*)",
       "Bash(git commit:*)",
       "Bash(git push:*)",
-      "Bash(grep -n \"Series.*S$1\" lib/sheets-sync.ts)"
+      "Bash(grep -n \"Series.*S$1\" lib/sheets-sync.ts)",
+      "Bash(npx tsx:*)",
+      "Bash(ls:*)"
     ]
   }
 }

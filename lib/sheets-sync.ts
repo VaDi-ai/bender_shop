@@ -569,6 +569,11 @@ function extractProductName(fullName: string, brand: string): string {
   if (isiMac) {
     name = name.replace(/\b24\b/g, '')  // iMac 24" screen size
   }
+  // Normalize XL casing (Xl → XL) and remove for Pixel (size variant, not model)
+  name = name.replace(/\bXl\b/g, 'XL')
+  if (/\bPixel\b/i.test(name)) {
+    name = name.replace(/\bXL\b/g, '')
+  }
 
   // ─── Step 6: Remove SIM and 5G ───
   name = name.replace(/\b(2Sim|eSim|e-Sim|1Sim\+eSim|Dual\s*SIM|DS)\b/gi, '')
@@ -601,6 +606,7 @@ function extractProductName(fullName: string, brand: string): string {
     name = name.replace(/\b[SML]\/[SML]\b/g, '')
     name = name.replace(/\b(GPS|LTE|Cellular)\b/gi, '')
     name = name.replace(/\bLoop\b/gi, '')
+    name = name.replace(/\bBand\b/gi, '')
   }
 
   // ─── Step 8b: Garmin — remove bands, materials, article codes ───
