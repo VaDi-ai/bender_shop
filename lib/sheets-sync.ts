@@ -436,7 +436,7 @@ const COLORS_LONG = [
   'GHOST OF YOTEI',
   // Google Pixel / OnePlus / Garmin compounds
   'Jade Cyan', 'Arctic Dawn', 'Arctic Purple', 'Storm Grey',
-  'Astral Trail', 'Nebula Noir', 'Sand Storm',
+  'Astral Trail', 'Nebula Noir', 'Sand Storm', 'Ultra Violet',
 ]
 const COLORS_SHORT = [
   'Jetblack', 'Iceblue', 'Icyblue', 'Pinkgold', 'Silverblue', 'Whitesilver',
@@ -448,17 +448,19 @@ const COLORS_SHORT = [
   'Charcoal', 'Fuchsia', 'Obsidian', 'Porcelain', 'Hazel', 'Peony',
   'Wintergreen', 'Bay', 'Nickel', 'Topaz', 'Neon', 'Turquoise',
   'Camouflage', 'Cobalt', 'Chrome', 'Sterling', 'Volcanic', 'Pop',
-  // Additional colors (Beats, Pixel, Garmin, OnePlus, etc.)
+  // Additional colors (Beats, Pixel, Garmin, OnePlus, Dyson, etc.)
   'Sand', 'Brown', 'Squad', 'Frost', 'Jade', 'Rose', 'Aqua', 'Mist',
   'Berry', 'Dawn', 'Eclipse', 'Iris', 'Moonstone', 'Lemongrass',
   'Breeze', 'Cosmic', 'Arctic', 'Storm', 'Violet', 'Terracotta', 'Beige',
-  'Lunar', 'Lilac', 'Jasper', 'Spark', 'Slate',
+  'Lunar', 'Lilac', 'Jasper', 'Spark', 'Slate', 'Vinca',
+  'Metallic', 'Matte', 'Satin', 'Silk', 'Infinite', 'Ocean', 'Noir',
+  'Starlit', 'Brawn', 'Cinema',
 ]
 // Cyrillic colors — \b doesn't work with Cyrillic, handled separately
 const CYRILLIC_COLORS = [
   'Голубой', 'Черный', 'Чёрный', 'Белый', 'Серебристый', 'Золотой', 'Синий',
   'Красный', 'Зеленый', 'Зелёный', 'Оранжевый', 'Фиолетовый', 'Розовый',
-  'Серый', 'Бежевый',
+  'Серый', 'Бежевый', 'Горчичный',
 ]
 const ALL_COLORS = [...COLORS_LONG, ...COLORS_SHORT, ...CYRILLIC_COLORS]
 
@@ -542,11 +544,12 @@ function extractProductName(fullName: string, brand: string): string {
   const isMacBook = /MacBook/i.test(name)
   const isiPad = /iPad/i.test(name)
   const isDyson = /\bDyson\b/i.test(name)
-  const isTV = /\b(QE\d+|QN\d+|UE\d+|OLED|QLED|The Frame|Neo QLED)\b/i.test(name)
+  const isTV = /\b(QE\d|QN\d|UE\d|OLED|QLED|QNED|NANO\d|The Frame|Neo QLED)/i.test(name) || /\bHisense\b/i.test(name)
   const isCamera = /\b(Canon|Sony|Nikon|DJI|GoPro)\b/i.test(name)
   const isSonyAudio = /\bSony\b/i.test(name) && /\b(WH-|WF-|XM)\b/.test(name)
   const isConsole = /\b(DualSense|PlayStation|Xbox|Nintendo|Switch|Steam\s*Deck|Oculus|Quest)\b/i.test(name)
   const isRayBan = /\bRay-?Ban\b/i.test(name)
+  const isOakley = /\bOakley\b/i.test(name)
   const isYandex = /(Яндекс|Yandex|\bYNDX\b)/i.test(name)
   const isiMac = /\biMac\b/i.test(name)
 
@@ -559,8 +562,8 @@ function extractProductName(fullName: string, brand: string): string {
     name = name.replace(/\b\d+\s*(GB|TB)\b/gi, '')                // 256GB, 1TB
   }
 
-  // ─── Step 5b: Remove bare storage numbers for iPad, Apple TV, iMac ───
-  if (isiPad || /\bApple\s*TV\b/i.test(name)) {
+  // ─── Step 5b: Remove bare storage numbers for iPad, Apple TV, iMac, Pixel ───
+  if (isiPad || /\bApple\s*TV\b/i.test(name) || /\bPixel\b/i.test(name)) {
     name = name.replace(/\b(64|128|256|512|1024)\b/g, '')
   }
   if (isiMac) {
@@ -597,6 +600,7 @@ function extractProductName(fullName: string, brand: string): string {
     name = name.replace(/\bDenim\b/gi, '')
     name = name.replace(/\b[SML]\/[SML]\b/g, '')
     name = name.replace(/\b(GPS|LTE|Cellular)\b/gi, '')
+    name = name.replace(/\bLoop\b/gi, '')
   }
 
   // ─── Step 8b: Garmin — remove bands, materials, article codes ───
@@ -659,14 +663,23 @@ function extractProductName(fullName: string, brand: string): string {
     name = name.replace(/\b(Supersonic|Airwrap|Airstrait)\s+\1\b/gi, '$1')
   }
 
-  // ─── Step 10c: TV — remove diagonal, regional suffixes ───
+  // ─── Step 10c: TV — remove diagonal, regional suffixes, dedup model codes ───
   if (isTV) {
     name = name.replace(/\b\d{2}["″"]\s*/g, '')
     name = name.replace(/\b\d{2}\s*["″"]\s*/g, '')
-    // Inline regional suffixes in Samsung/LG TV model numbers
-    name = name.replace(/FAAUXRU|FAUXRU|FUXRU|FAEXRU|CBUXRU/gi, '')
+    // Samsung: inline regional suffixes (F...UXRU, F...EXRU, CBUXRU)
+    name = name.replace(/F[A-Z0-9]{0,3}UXRU/gi, '')
+    name = name.replace(/F[A-Z0-9]{0,3}EXRU/gi, '')
+    name = name.replace(/CBUXRU/gi, '')
+    // LG: RLA suffix
+    name = name.replace(/RLA\b/g, '')
+    // General regional
     name = name.replace(/\b[A-Z]{2,5}RU\b/g, '')
     name = name.replace(/\bARUG\b/g, '')
+    // LG/Hisense: remove ". duplicate" pattern
+    name = name.replace(/\.\s+.*$/, '')
+    // Hisense: dedup repeated model sequences ("100E7Q PRO 100E7Q PRO" → "100E7Q PRO")
+    name = name.replace(/(.{4,}?)\s+\1(?=\s|$)/g, '$1')
   }
 
   // ─── Step 10d: Camera — remove kit/body ───
@@ -723,8 +736,21 @@ function extractProductName(fullName: string, brand: string): string {
     name = name.replace(/\([^)]*$/g, '')
   }
 
-  // ─── Step 10j: OnePlus — remove article codes ───
+  // ─── Step 10j: Oakley — truncate after frame model name ───
+  if (isOakley) {
+    name = name.replace(/\b(HSTN|Vanguard)\b.*/gi, (_, model) => model)
+  }
+
+  // ─── Step 10k: OnePlus — remove article codes and trailing single chars ───
   name = name.replace(/\bCPH\d{4}\b/g, '')
+
+  // ─── Step 10l: Studio/Pro Display — remove glass type, mount, screen size ───
+  if (/\b(Studio|Pro)\s*Display\b/i.test(name)) {
+    name = name.replace(/\b(Standard|Nano)\s*Glass\b/gi, '')
+    name = name.replace(/\bTilt\s*Stand\b/gi, '')
+    name = name.replace(/\bVESA\s*Mount\s*Adapter\b/gi, '')
+    name = name.replace(/\b32\b/g, '')
+  }
 
   // ─── Step 11: Accessories/Комплектация — remove from name ───
   // NOTE: No \b around Cyrillic — \b doesn't work with Cyrillic in JS
@@ -738,10 +764,11 @@ function extractProductName(fullName: string, brand: string): string {
   name = name.replace(/распакованы/gi, '')
   name = name.replace(/с шумоподавлением/gi, '')
   name = name.replace(/без зарядки/gi, '')
+  name = name.replace(/\bGift\s*Edition\b/gi, '')
 
   // ─── Step 12: Remove display types ───
   name = name.replace(/\bNano\s*[-]?\s*[Tt]exture(\s*Display)?\b/gi, '')
-  name = name.replace(/\bStanda?r?d\s*Display\b/gi, '')
+  name = name.replace(/\bStanda?r?[dt]\s*Display\b/gi, '')
   name = name.replace(/\bNano\b(?=\s*$|\s+[^A-Za-z])/gi, '')  // orphaned "Nano"
 
   // ─── Step 13: Remove year ───
