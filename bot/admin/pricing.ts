@@ -787,8 +787,8 @@ export function setupPricingHandlers(bot: Telegraf): void {
               const recommendedPrice = Math.round(best.price * (1 + state.markup / 100))
               const rowNum = i + 1
 
-              await writeRange(sheetName, `F${rowNum}`, [[recommendedPrice]])
-              await writeRange(sheetName, `H${rowNum}:I${rowNum}`, [[best.supplierName, now]])
+              await writeRange(sheetName, `L${rowNum}`, [[recommendedPrice]])
+              await writeRange(sheetName, `N${rowNum}:O${rowNum}`, [[best.supplierName, now]])
               pricesUpdated++
             }
           }

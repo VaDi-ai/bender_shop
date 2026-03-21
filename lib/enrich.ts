@@ -147,6 +147,7 @@ export async function enrichProductCard(productId: number, force = false): Promi
 
     const specCount = updateData.specs ? Object.keys(updateData.specs as object).length : 0
     console.log(`[Enrich] ${product.name}: updated (description: ${!!updateData.description}, specs: ${specCount} fields)`)
+
     return true
   } catch (err) {
     console.error(`[Enrich] ${product.name}: error:`, err)

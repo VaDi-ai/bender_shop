@@ -12,21 +12,25 @@ import { readSheet, getSheetNames } from './google-sheets'
 
 const DEFAULT_QTY = parseInt(process.env.DEFAULT_STOCK_QTY || '3', 10) // если «В наличие» пусто
 
-// Column letters for writeback (supplier, date)
+// Column letters for writeback (supplier, date, description, specs)
 export const WRITEBACK_COLS = {
-  price: 'J',      // Рекомендованная стоимость
-  supplier: 'L',   // Лучший поставщик
-  date: 'M',       // Дата обновления
+  description: 'J',   // Описание
+  specs: 'K',         // Характеристики
+  price: 'L',         // Рекомендованная стоимость
+  supplier: 'N',      // Лучший поставщик
+  date: 'O',          // Дата обновления
 }
 
 export interface SheetRow {
   brand: string
-  category: string   // «Общая категория» (для сайта)
-  fullName: string   // «Название модели»
-  color: string      // из колонки F
-  memory: string     // из колонки G
-  size: string       // из колонки H
-  country: string
+  category: string      // «Общая категория» (для сайта)
+  fullName: string      // «Название модели»
+  color: string         // из колонки F
+  memory: string        // из колонки G
+  size: string          // из колонки H
+  country: string       // из колонки I
+  description: string   // из колонки J (бот заполняет)
+  specs: string         // из колонки K (бот заполняет)
   price: number
   quantity: number
   sheetName: string
@@ -47,15 +51,17 @@ export async function readAllProducts(): Promise<SheetRow[]> {
   for (let i = 1; i < data.length; i++) {
     const row = data[i]
 
-    const brand    = (row[1] ?? '').toString().trim()       // B: Бренд
-    const category = (row[3] ?? '').toString().trim()       // D: Общая категория (для сайта)
-    const fullName = (row[4] ?? '').toString().trim()       // E: Название модели
-    const color    = (row[5] ?? '').toString().trim()       // F: Цвет
-    const memory   = (row[6] ?? '').toString().trim()       // G: Память
-    const size     = (row[7] ?? '').toString().trim()       // H: Размер
-    const country  = (row[8] ?? '').toString().trim()       // I: Страна
-    const priceRaw = (row[9] ?? '').toString().replace(/\s/g, '').replace(',', '.')  // J: Цена
-    const qtyRaw   = (row[10] ?? '').toString().trim()      // K: В наличие
+    const brand       = (row[1] ?? '').toString().trim()       // B: Бренд
+    const category    = (row[3] ?? '').toString().trim()       // D: Общая категория (для сайта)
+    const fullName    = (row[4] ?? '').toString().trim()       // E: Название модели
+    const color       = (row[5] ?? '').toString().trim()       // F: Цвет
+    const memory      = (row[6] ?? '').toString().trim()       // G: Память
+    const size        = (row[7] ?? '').toString().trim()       // H: Размер
+    const country     = (row[8] ?? '').toString().trim()       // I: Страна
+    const description = (row[9] ?? '').toString().trim()       // J: Описание
+    const specs       = (row[10] ?? '').toString().trim()      // K: Характеристики
+    const priceRaw    = (row[11] ?? '').toString().replace(/\s/g, '').replace(',', '.')  // L: Цена
+    const qtyRaw      = (row[12] ?? '').toString().trim()      // M: В наличие
 
     if (!fullName || !priceRaw) continue
 
@@ -76,6 +82,8 @@ export async function readAllProducts(): Promise<SheetRow[]> {
       memory,
       size,
       country,
+      description,
+      specs,
       price,
       quantity,
       sheetName,
@@ -148,6 +156,8 @@ export async function syncProductsFromSheets(shouldAbort?: () => boolean): Promi
     productName: string
     brand: string
     category: string
+    sheetDescription: string
+    sheetSpecs: Record<string, string>
     variants: VariantData[]
   }
 
@@ -160,7 +170,20 @@ export async function syncProductsFromSheets(shouldAbort?: () => boolean): Promi
     const key = `${productName}|${row.category}`
 
     if (!groups.has(key)) {
-      groups.set(key, { productName, brand: row.brand, category: row.category, variants: [] })
+      // Parse specs string "key: val\nkey2: val2" → object
+      let sheetSpecs: Record<string, string> = {}
+      if (row.specs) {
+        for (const line of row.specs.split('\n')) {
+          const [k, ...rest] = line.split(':')
+          if (k && rest.length) sheetSpecs[k.trim()] = rest.join(':').trim()
+        }
+      }
+      groups.set(key, {
+        productName, brand: row.brand, category: row.category,
+        sheetDescription: row.description,
+        sheetSpecs: Object.keys(sheetSpecs).length > 0 ? sheetSpecs : {},
+        variants: [],
+      })
     }
 
     groups.get(key)!.variants.push({
@@ -266,7 +289,8 @@ export async function syncProductsFromSheets(shouldAbort?: () => boolean): Promi
             quantity: totalQty,
             isAvailable: totalQty > 0,
             attributes: productAttributes,
-            specs: {},
+            description: group.sheetDescription || null,
+            specs: Object.keys(group.sheetSpecs).length > 0 ? group.sheetSpecs : {},
             photos: [],
           },
         })
@@ -274,16 +298,25 @@ export async function syncProductsFromSheets(shouldAbort?: () => boolean): Promi
         created++
       } else {
         // Update existing product
+        const updateData: Record<string, any> = {
+          price: new Decimal(minPrice),
+          stock: totalQty,
+          quantity: totalQty,
+          isAvailable: totalQty > 0,
+          attributes: productAttributes,
+          brand: group.brand || undefined,
+        }
+        // Apply sheet description/specs only if product doesn't have them yet
+        if (group.sheetDescription && !product.description) {
+          updateData.description = group.sheetDescription
+        }
+        const hasSpecs = product.specs && typeof product.specs === 'object' && Object.keys(product.specs as object).length > 0
+        if (Object.keys(group.sheetSpecs).length > 0 && !hasSpecs) {
+          updateData.specs = group.sheetSpecs
+        }
         await prisma.product.update({
           where: { id: product.id },
-          data: {
-            price: new Decimal(minPrice),
-            stock: totalQty,
-            quantity: totalQty,
-            isAvailable: totalQty > 0,
-            attributes: productAttributes,
-            brand: group.brand || undefined,
-          },
+          data: updateData,
         })
         updated++
       }
@@ -436,7 +469,19 @@ function getAttributes(row: SheetRow): Record<string, string> {
   const attrs: Record<string, string> = {}
 
   // 1. Из колонок (приоритет)
-  if (row.color) attrs['Цвет'] = row.color
+  if (row.color) {
+    let colorVal = row.color
+    // Яндекс — цвет может содержать описание: "65Вт с голосовым помощником Алиса Black"
+    if (colorVal.length > 20) {
+      const words = colorVal.split(/\s+/)
+      const lastWord = words[words.length - 1]
+      const KNOWN_COLORS = ['Black','White','Grey','Beige','Red','Blue','Green','Turquose','Turquoise','Violet','Orange','Pink','Brown','Yellow','Silver','Gold']
+      if (KNOWN_COLORS.some(c => c.toLowerCase() === lastWord.toLowerCase())) {
+        colorVal = lastWord
+      }
+    }
+    attrs['Цвет'] = colorVal
+  }
   if (row.memory) attrs['Память'] = row.memory
   if (row.size) attrs['Размер'] = row.size
   if (row.country) attrs['Страна'] = row.country
@@ -449,6 +494,13 @@ function getAttributes(row: SheetRow): Record<string, string> {
 
   return attrs
 }
+
+// Words that start with M but are real product words, not Apple article codes
+const M_KEEP_WORDS = new Set([
+  'MacBook', 'Magic', 'MagSafe', 'Max', 'Mini', 'Midnight', 'Mint', 'Marshall',
+  'Meta', 'Monitor', 'Motif', 'Major', 'Middleton', 'Minor', 'Mark', 'MediaTek',
+  'Medicube', 'MiniLED', 'Milanese', 'Mars', 'Mavic', 'More',
+])
 
 /**
  * Извлекает базовое имя продукта из полного названия.
@@ -463,15 +515,15 @@ function extractProductName(fullName: string, brand: string): string {
   name = name.replace(/\s*\([А-Яа-яЁё/\s]+\)\s*/g, ' ')
 
   // ─── Step 2: Remove article codes in brackets ───
-  // Keep (RC 2) for DJI — handled in parseAttributes
   const isDJI = /\bDJI\b/i.test(name)
   if (isDJI) {
-    // Extract and remove (RC 2) etc. — goes to Комплектация attr
     name = name.replace(/\s*\(RC\s*\d*\)\s*/g, ' ')
   }
-  name = name.replace(/\s*\([A-Z0-9/-]+\)\s*/g, ' ')  // (SM-S948B)
-  name = name.replace(/\bSM-[A-Z0-9/]+\b/gi, '')       // SM-F741B
-  name = name.replace(/\(\s*\)/g, '')                    // empty ()
+  name = name.replace(/\(\d+CPU\/\d+GPU\/[^)]+\)/g, '')  // (10CPU/10GPU/32GB/512GB)
+  name = name.replace(/\s*\(SM-[A-Z0-9/]+\)\s*/g, ' ')   // (SM-S948B)
+  name = name.replace(/\s*\([A-Z0-9/-]+\)\s*/g, ' ')      // other codes in brackets
+  name = name.replace(/\bSM-[A-Z0-9/]+\b/gi, '')          // SM-F741B without brackets
+  name = name.replace(/\(\s*\)/g, '')                       // empty ()
 
   // ─── Step 3: Detect product type ───
   const isWatch = /\b(apple\s+)?watch\b/i.test(name)
@@ -484,6 +536,8 @@ function extractProductName(fullName: string, brand: string): string {
   const isCamera = /\b(Canon|Sony|Nikon|DJI|GoPro)\b/i.test(name)
   const isSonyAudio = /\bSony\b/i.test(name) && /\b(WH-|WF-|XM)\b/.test(name)
   const isConsole = /\b(DualSense|PlayStation|Xbox|Nintendo|Switch|Steam\s*Deck|Oculus|Quest)\b/i.test(name)
+  const isRayBan = /\bRay-?Ban\b/i.test(name)
+  const isYandex = /\b(Яндекс|Yandex|YNDX)\b/i.test(name)
 
   // ─── Step 4: Remove CPU config (Mac) ───
   name = name.replace(/\b\d+c\/\d+c\b/g, '')
@@ -499,7 +553,6 @@ function extractProductName(fullName: string, brand: string): string {
   name = name.replace(/\b5G\b/gi, '')
 
   // ─── Step 7: Remove colors ───
-  // Dyson slash-colors (Nickel/Copper, Blue/Copper) — remove whole compound
   if (isDyson) {
     name = name.replace(/\b\w+\/\w+\b/g, '')  // Nickel/Copper, Blue/Copper
   }
@@ -527,10 +580,11 @@ function extractProductName(fullName: string, brand: string): string {
     name = name.replace(/\b(GPS|LTE|Cellular)\b/gi, '')
   }
 
-  // ─── Step 8b: Garmin — remove size in mm, keep Solar/Sapphire in name ───
+  // ─── Step 8b: Garmin — remove size in mm, remove article codes ───
   if (isGarmin) {
     name = name.replace(/\b\d{2}mm\b/gi, '')
     name = name.replace(/\b\d{2}\s*mm\b/gi, '')
+    name = name.replace(/\b\d{3}-\d{5}-\d{2}\b/g, '')  // 010-03024-01
   }
 
   // ─── Step 9: iPad-specific cleanup ───
@@ -549,41 +603,34 @@ function extractProductName(fullName: string, brand: string): string {
 
   // ─── Step 10b: Dyson — map article codes to model names, remove accessories ───
   if (isDyson) {
-    // Map article codes → readable model names
-    name = name.replace(/\bHD0[3-8]\b/g, 'Supersonic')
-    name = name.replace(/\bHD1[5-8]\b/g, 'Supersonic')
-    name = name.replace(/\bHS0[5-7]\b/g, 'Airwrap')
-    name = name.replace(/\bHS0[8-9]\b/g, 'Airwrap')
-    name = name.replace(/\bHT01\b/g, 'Airstrait')
-    name = name.replace(/\bPH05\b/g, 'Purifier Humidify')
-    name = name.replace(/\bSV4[0-9][A-Z]?\b/g, '')  // V12/V15 — model already in name
-    name = name.replace(/\bSV5[0-9][A-Z]?\b/g, '')  // V16
-    name = name.replace(/\bRB0[0-9]\b/g, '')         // 360 Robot — already in name
-    name = name.replace(/\bHU0[0-9]\b/g, '')         // hand dryer
+    name = name.replace(/\b(HS|HD|HT|SV|PH|RB|HU)\d{2,3}[A-Z]?\b/g, (match) => {
+      // Map known article codes to model names
+      if (/^HD0[3-8]$/.test(match) || /^HD1[5-8]$/.test(match)) return 'Supersonic'
+      if (/^HS0[5-9]$/.test(match)) return 'Airwrap'
+      if (/^HT01$/.test(match)) return 'Airstrait'
+      if (/^PH05$/.test(match)) return 'Purifier Humidify'
+      return ''  // SV, RB, HU — model already in name
+    })
 
-    // Remove completions → attributes
     for (const comp of DYSON_COMPLETIONS) {
       name = name.replace(new RegExp(`\\b${comp}\\b`, 'gi'), '')
     }
 
-    // Remove accessories from name → go to attributes
     name = name.replace(/\bбез кейса\b/gi, '')
     name = name.replace(/\bс кейсом\b/gi, '')
     name = name.replace(/\bдиффузор\b/gi, '')
     name = name.replace(/\bCoanda\s*2x\b/gi, '')
-
-    // Remove Dyson-specific colors from name (already in COLORS arrays, but double-ensure)
     name = name.replace(/\bCeramic\b/gi, '')
     name = name.replace(/\bLite\b/gi, '')
-
-    // Deduplicate "Supersonic Supersonic" etc.
     name = name.replace(/\b(Supersonic|Airwrap|Airstrait)\s+\1\b/gi, '$1')
   }
 
-  // ─── Step 10c: TV — remove diagonal ───
+  // ─── Step 10c: TV — remove diagonal and regional suffixes ───
   if (isTV) {
-    name = name.replace(/\b\d{2}["″"]\s*/g, '')    // 55", 65"
+    name = name.replace(/\b\d{2}["″"]\s*/g, '')
     name = name.replace(/\b\d{2}\s*["″"]\s*/g, '')
+    name = name.replace(/\b[A-Z]{2,5}RU\b/g, '')  // FAAUXRU, FAUXRU, APRU
+    name = name.replace(/\bARUG\b/g, '')
   }
 
   // ─── Step 10d: Camera — remove kit/body ───
@@ -600,49 +647,89 @@ function extractProductName(fullName: string, brand: string): string {
     name = name.replace(/\b\d+\s*ревизия\b/gi, '')
   }
 
-  // ─── Step 10f: Accessories/Комплектация — remove from name ───
+  // ─── Step 10f: Ray-Ban — remove codes but keep RW model numbers ───
+  if (isRayBan) {
+    name = name.replace(/\b\d{3}\/[A-Z0-9]+\b/g, '')       // 601/7150
+    name = name.replace(/\b\d{3}[A-Z][A-Z0-9]{3,5}\b/g, '') // 601S1M50, 601ST350
+    name = name.replace(/\b\d{3}-\d{2}\b/g, '')              // 150-50, 155-53
+    name = name.replace(/\bSize\s*[SML]\s*\(\d+\)/gi, '')    // Size M (50)
+    name = name.replace(/\bSize\s*[SML]\b/gi, '')             // Size M
+    name = name.replace(/\bC\s+\d{3}/g, '')                   // C 601...
+  }
+
+  // ─── Step 10g: Yandex — remove descriptions from name ───
+  if (isYandex) {
+    name = name.replace(/\bс голосовым помощником Алиса\b/gi, '')
+    name = name.replace(/\bна YaGPT\b/gi, '')
+    name = name.replace(/\bZigbee?\b/gi, '')
+    name = name.replace(/\bYNDX-\d+\b/g, '')
+  }
+
+  // ─── Step 10h: Sony Audio — normalize model spacing ───
+  if (isSonyAudio) {
+    name = name.replace(/\b(WF|WH)-(\d+)\s+(XM\d+)/g, '$1-$2$3')
+  }
+
+  // ─── Step 11: Accessories/Комплектация — remove from name ───
   name = name.replace(/\bбез кейса\b/gi, '')
   name = name.replace(/\bс кейсом\b/gi, '')
   name = name.replace(/\bдиффузор\b/gi, '')
   name = name.replace(/\bCoanda\s*2x\b/gi, '')
   name = name.replace(/\+?\s*Touch\s*ID\b/gi, '')
+  name = name.replace(/\bкейс MagSafe\b/gi, '')
+  name = name.replace(/\bмятая коробка\b/gi, '')
+  name = name.replace(/\bраспакованы\b/gi, '')
+  name = name.replace(/\bс шумоподавлением\b/gi, '')
+
+  // ─── Step 12: Remove display types ───
+  name = name.replace(/\b(Standard|Nano[- ]?[Tt]exture|Standa?rt)\s*Display\b/gi, '')
   name = name.replace(/\bNano\s*Texture\s*Display\b/gi, '')
 
-  // ─── Step 11: Remove year ───
+  // ─── Step 13: Remove year ───
   name = name.replace(/\s*\(20[2-3]\d\)\s*/g, ' ')
   name = name.replace(/\b20[2-3]\d\b/g, '')
 
-  // ─── Step 12: Remove Apple article codes (but not Sony WH-/WF- model names) ───
-  if (!isSonyAudio) {
-    name = name.replace(/\bM[A-Z0-9]{3,5}\b/g, '')    // Apple: MWWF3, MEH94, MX5R3
-    name = name.replace(/\b[A-Z]\d[A-Z]{2}\b/g, '')    // Apple: U3LW, T3LW
-  }
+  // ─── Step 14: Remove article codes ───
   // Apple Z-артикулы: Z1EH000V5, Z1CY0019Z, Z1FD0000N
-  name = name.replace(/\bZ1[A-Z]{2}[A-Z0-9]{3,6}\b/g, '')
+  name = name.replace(/\bZ1[A-Z]{1,3}[A-Z0-9]{3,7}\b/g, '')
 
-  // ─── Step 12b: RAM numbers without GB after Max/Pro/Ultra (48, 64, 96) ───
-  name = name.replace(/\b(Max|Pro|Ultra)\s+\d{2,3}\b/g, (m) => m.replace(/\s+\d{2,3}$/, ''))
+  // Apple M-артикулы (with safelist)
+  if (!isSonyAudio) {
+    name = name.replace(/\b(M[A-Z][A-Z0-9]{2,5})\b/g, (match) => M_KEEP_WORDS.has(match) ? match : '')
+    name = name.replace(/\b[A-Z]\d[A-Z]{2}\b/g, '')  // Apple: U3LW, T3LW
+  }
 
-  // ─── Step 13: Remove USB-C, display types, misc ───
+  // YNDX-артикулы (Яндекс)
+  name = name.replace(/\bYNDX-\d+\b/g, '')
+
+  // TV/Xiaomi regional suffixes (not already handled)
+  if (!isTV) {
+    name = name.replace(/\b[A-Z]{2,5}RU\b/g, '')
+    name = name.replace(/\bARUG\b/g, '')
+  }
+
+  // ─── Step 15: RAM numbers after Max/Pro/Ultra ───
+  name = name.replace(/\b(Max|Pro|Ultra)\s+(16|24|32|48|64|96|128)\b/g, '$1')
+
+  // ─── Step 16: Remove USB-C, misc ───
   name = name.replace(/\bUSB-C\b/gi, '')
-  name = name.replace(/\bStandard Display\b/gi, '')
-  name = name.replace(/\bNano Texture Display\b/gi, '')
-  name = name.replace(/\bкейс MagSafe\b/gi, '')
 
-  // ─── Step 14: Remove strap sizes & misc ───
+  // ─── Step 17: Remove strap sizes & misc ───
   if (!isWatch || isGarmin) {
     name = name.replace(/\b[SML]\/[SML]\b/g, '')
   }
   name = name.replace(/\b[SML]\b(?![\w])/g, '')
   name = name.replace(/\bmm\b/gi, '')
 
-  // ─── Step 15: Remove emoji ───
+  // ─── Step 18: Remove emoji ───
   name = name.replace(/[\u{1F1E0}-\u{1F1FF}]{2}/gu, '')
   name = name.replace(/[\u{1F300}-\u{1FAFF}]/gu, '')
 
-  // ─── Step 16: Final cleanup ───
-  name = name.replace(/\(\s*\/?\s*\)/g, '')       // empty () or (/)
-  name = name.replace(/\s*\/\s*(?=\s|$)/g, '')    // trailing /
+  // ─── Step 19: Final cleanup ───
+  name = name.replace(/\(\s*\/?\s*\)/g, '')           // empty () or (/)
+  name = name.replace(/\s*\/\s*(?=\s|$)/g, '')        // trailing /
+  name = name.replace(/\s*\/\s*(?=Touch)/g, ' ')      // /Touch ID → Touch ID
+  name = name.replace(/[\s,.\-]+$/, '')                // trailing punctuation
   name = name.replace(/\s+/g, ' ').trim()
 
   return name || fullName.slice(0, 60)
@@ -806,6 +893,10 @@ function parseAttributes(fullName: string, brand: string, country: string): Reco
     }
   }
 
+  // ─── Yandex: smart home / AI attrs ───
+  if (/Zigbee/i.test(normalized)) attrs['Умный дом'] = 'Zigbee'
+  if (/YaGPT/i.test(normalized)) attrs['AI'] = 'YaGPT'
+
   // ─── Country (from sheet column) ───
   if (country) attrs['Страна'] = country
 
@@ -821,9 +912,9 @@ export interface StaleItem {
 }
 
 // New single-sheet column indices for stale price check
-const STALE_NAME_COL = 4   // E: Название модели
-const STALE_PRICE_COL = 9  // J: Рекомендованная стоимость
-const STALE_DATE_COL = 12  // M: Дата обновления
+const STALE_NAME_COL = 4    // E: Название модели
+const STALE_PRICE_COL = 11  // L: Рекомендованная стоимость
+const STALE_DATE_COL = 14   // O: Дата обновления
 
 /**
  * Проверяет устаревшие цены (>6 часов без обновления) по колонке «Дата обновления» в Google Sheets.
