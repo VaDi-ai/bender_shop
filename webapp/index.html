@@ -842,7 +842,7 @@
       <button class="modal-close-btn" id="modalCloseBtn" aria-label="Закрыть">✕</button>
       <div class="modal-carousel" id="modalCarousel">
         <div class="modal-badge" id="modalBadge" style="display:none"></div>
-        <div class="modal-carousel-ph" id="modalCarouselPh">📦</div>
+        <div class="modal-carousel-ph" id="modalCarouselPh"><img src="/no-photo.webp" alt="" style="width:100%;height:100%;object-fit:cover;opacity:0.6;" onerror="this.onerror=null;this.src='/no-photo.png'"></div>
         <img class="modal-carousel-img" id="modalCarouselImg" src="" alt="" style="display:none;background-color:#1a1a1a" loading="lazy">
         <button class="modal-carousel-arrow modal-carousel-prev hidden" id="modalCarouselPrev">‹</button>
         <button class="modal-carousel-arrow modal-carousel-next hidden" id="modalCarouselNext">›</button>
@@ -1573,7 +1573,7 @@
   ${badgeHtml}
   ${mainPhoto
     ? `<img class="product-photo" src="${esc(mainPhoto)}" alt="" loading="lazy" style="background-color:#1a1a1a">`
-    : '<div class="product-photo-ph">📦</div>'}
+    : '<div class="product-photo-ph"><img src="/no-photo.webp" alt="" style="width:100%;height:100%;object-fit:cover;opacity:0.6;" onerror="this.onerror=null;this.src=\'/no-photo.png\'"></div>'}
   ${photos.length > 1
     ? `<div class="product-hover-dots">${photos.slice(0, 3).map((_, j) => `<span class="${j === 0 ? 'active' : ''}"></span>`).join('')}</div>`
     : ''}
@@ -2094,7 +2094,7 @@
         const thumb = item.photoUrl
           ? `<img class="cart-item-thumb" src="${esc(item.photoUrl)}" alt="" style="background-color:#1a1a1a" onerror="this.style.display='none';this.parentNode.querySelector('.cart-item-ph').style.display='flex'">`
           : ''
-        const ph = `<div class="cart-item-ph"${item.photoUrl ? ' style="display:none"' : ''}>📦</div>`
+        const ph = `<div class="cart-item-ph"${item.photoUrl ? ' style="display:none"' : ''}><img src="/no-photo.webp" alt="" style="width:100%;height:100%;object-fit:cover;opacity:0.6;" onerror="this.onerror=null;this.src='/no-photo.png'"></div>`
         return `<div class="cart-item">
   ${thumb}${ph}
   <div class="cart-item-info">

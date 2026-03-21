@@ -255,6 +255,9 @@ export function startApiServer(bot?: Telegraf): void {
     res.redirect('/shop')
   })
 
+  // Static: public assets (no-photo placeholder, etc.)
+  app.use(express.static(path.join(__dirname, '../../public')))
+
   // Static: category images
   app.use('/categories', express.static(path.join(__dirname, '../../public/categories')))
 

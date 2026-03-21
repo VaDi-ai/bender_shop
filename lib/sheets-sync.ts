@@ -620,6 +620,9 @@ function extractProductName(fullName: string, brand: string): string {
   // Apple Z-артикулы: Z1EH000V5, Z1CY0019Z, Z1FD0000N
   name = name.replace(/\bZ1[A-Z]{2}[A-Z0-9]{3,6}\b/g, '')
 
+  // ─── Step 12b: RAM numbers without GB after Max/Pro/Ultra (48, 64, 96) ───
+  name = name.replace(/\b(Max|Pro|Ultra)\s+\d{2,3}\b/g, (m) => m.replace(/\s+\d{2,3}$/, ''))
+
   // ─── Step 13: Remove USB-C, display types, misc ───
   name = name.replace(/\bUSB-C\b/gi, '')
   name = name.replace(/\bStandard Display\b/gi, '')
