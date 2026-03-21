@@ -1,100 +1,86 @@
 /**
  * lib/sheets-sync.ts — Синхронизация товаров из Google Sheets в БД
  *
- * Читает все листы с товарами, создаёт/обновляет товары и варианты в БД.
+ * Один лист, атрибуты в отдельных колонках (Цвет, Память, Размер, Страна).
  * Каждая строка таблицы = один ProductVariant.
- * «Название модели» содержит все атрибуты — парсим regex.
+ * Колонки приоритетны, парсинг названия — fallback.
  */
 
 import { Decimal } from '@prisma/client/runtime/client'
 import { prisma } from './prisma'
 import { readSheet, getSheetNames } from './google-sheets'
 
-// Листы с товарами
-const MAIN_SHEET = 'Товарное наличие вариант 1'
-const PRODUCT_SHEETS = [MAIN_SHEET, 'Аксессуары', 'Услуги']
 const DEFAULT_QTY = parseInt(process.env.DEFAULT_STOCK_QTY || '3', 10) // если «В наличие» пусто
 
-// Column indices for writeback (supplier, date) — per sheet type
-// Main sheet: G=price(6), I=supplier(8), J=date(9)
-// Accessories/Services: F=price(5), H=supplier(7), I=date(8)
+// Column letters for writeback (supplier, date)
 export const WRITEBACK_COLS = {
-  [MAIN_SHEET]:  { price: 'G', supplier: 'I', date: 'J' },
-  'Аксессуары':  { price: 'F', supplier: 'H', date: 'I' },
-  'Услуги':      { price: 'F', supplier: 'H', date: 'I' },
-} as Record<string, { price: string; supplier: string; date: string }>
+  price: 'J',      // Рекомендованная стоимость
+  supplier: 'L',   // Лучший поставщик
+  date: 'M',       // Дата обновления
+}
 
 export interface SheetRow {
   brand: string
-  category: string
-  fullName: string  // «Название модели» — полная строка
+  category: string   // «Общая категория» (для сайта)
+  fullName: string   // «Название модели»
+  color: string      // из колонки F
+  memory: string     // из колонки G
+  size: string       // из колонки H
   country: string
   price: number
-  quantity: number  // из «В наличие» или DEFAULT_QTY
+  quantity: number
   sheetName: string
-  rowIndex: number  // номер строки в таблице (для обратной записи)
+  rowIndex: number
 }
 
 /**
- * Читает все товарные листы и возвращает массив строк.
+ * Читает первый лист таблицы и возвращает массив строк.
  */
 export async function readAllProducts(): Promise<SheetRow[]> {
   const allSheets = await getSheetNames()
+  const sheetName = allSheets[0] // Первый лист
+  if (!sheetName) return []
+
+  const data = await readSheet(sheetName)
   const rows: SheetRow[] = []
 
-  for (const sheetName of PRODUCT_SHEETS) {
-    if (!allSheets.includes(sheetName)) continue
+  for (let i = 1; i < data.length; i++) {
+    const row = data[i]
 
-    const data = await readSheet(sheetName)
-    const isMain = sheetName === MAIN_SHEET
+    const brand    = (row[1] ?? '').toString().trim()       // B: Бренд
+    const category = (row[3] ?? '').toString().trim()       // D: Общая категория (для сайта)
+    const fullName = (row[4] ?? '').toString().trim()       // E: Название модели
+    const color    = (row[5] ?? '').toString().trim()       // F: Цвет
+    const memory   = (row[6] ?? '').toString().trim()       // G: Память
+    const size     = (row[7] ?? '').toString().trim()       // H: Размер
+    const country  = (row[8] ?? '').toString().trim()       // I: Страна
+    const priceRaw = (row[9] ?? '').toString().replace(/\s/g, '').replace(',', '.')  // J: Цена
+    const qtyRaw   = (row[10] ?? '').toString().trim()      // K: В наличие
 
-    // Пропускаем заголовок (строка 1)
-    for (let i = 1; i < data.length; i++) {
-      const row = data[i]
+    if (!fullName || !priceRaw) continue
 
-      let brand: string, category: string, fullName: string, country: string, priceRaw: string, qtyRaw: string
+    const price = parseFloat(priceRaw)
+    if (isNaN(price) || price <= 0) continue
 
-      if (isMain) {
-        // Основной лист: B=бренд, D=категория/магазин, E=название, F=страна, G=цена, H=кол-во
-        brand    = (row[1] ?? '').trim()
-        category = (row[3] ?? '').trim()   // D: Категория/магазин (для сайта)
-        fullName = (row[4] ?? '').trim()   // E: Название модели
-        country  = (row[5] ?? '').trim()   // F: Страна
-        priceRaw = (row[6] ?? '').toString().replace(/\s/g, '').replace(',', '.')  // G: Цена
-        qtyRaw   = (row[7] ?? '').toString().trim()  // H: В наличие
-      } else {
-        // Аксессуары, Услуги: B=бренд, D=название, E=страна, F=цена, G=кол-во
-        brand    = (row[1] ?? '').trim()
-        category = sheetName               // имя листа = категория для сайта
-        fullName = (row[3] ?? '').trim()   // D: Название
-        country  = (row[4] ?? '').trim()   // E: Страна
-        priceRaw = (row[5] ?? '').toString().replace(/\s/g, '').replace(',', '.')  // F: Цена
-        qtyRaw   = (row[6] ?? '').toString().trim()  // G: В наличие
-      }
-
-      if (!category) category = sheetName
-      if (!fullName || !priceRaw) continue // пропуск пустых строк
-
-      const price = parseFloat(priceRaw)
-      if (isNaN(price) || price <= 0) continue
-
-      let quantity = DEFAULT_QTY
-      if (qtyRaw !== '') {
-        const q = parseInt(qtyRaw, 10)
-        if (!isNaN(q)) quantity = q
-      }
-
-      rows.push({
-        brand,
-        category: category || sheetName, // если нет категории — имя листа
-        fullName,
-        country,
-        price,
-        quantity,
-        sheetName,
-        rowIndex: i + 1, // +1 потому что Google Sheets 1-indexed
-      })
+    let quantity = DEFAULT_QTY
+    if (qtyRaw !== '') {
+      const q = parseInt(qtyRaw, 10)
+      if (!isNaN(q)) quantity = q
     }
+
+    rows.push({
+      brand,
+      category: category || 'Другое',
+      fullName,
+      color,
+      memory,
+      size,
+      country,
+      price,
+      quantity,
+      sheetName,
+      rowIndex: i + 1,
+    })
   }
 
   return rows
@@ -166,17 +152,10 @@ export async function syncProductsFromSheets(shouldAbort?: () => boolean): Promi
   }
 
   const groups = new Map<string, GroupedProduct>()
-  let samsungLogCount = 0
 
   for (const row of rows) {
     const productName = extractProductName(row.fullName, row.brand)
-    const attrs = parseAttributes(row.fullName, row.brand, row.country)
-
-    if (row.brand === 'Samsung' && samsungLogCount < 20) {
-      console.log(`[Sheets Sync] Samsung extract: "${row.fullName}" → "${productName}"`)
-      samsungLogCount++
-    }
-    if (row.country) attrs['Страна'] = row.country
+    const attrs = getAttributes(row)
 
     const key = `${productName}|${row.category}`
 
@@ -449,6 +428,27 @@ const DYSON_COMPLETIONS = [
 
 // ─── Photo/Video kit types ──────────────────────────────────────────────────
 const CAMERA_KITS = ['Body', 'Kit', 'Fly More Combo']
+
+/**
+ * Собирает атрибуты: колонки таблицы (приоритет) + парсинг названия (fallback).
+ */
+function getAttributes(row: SheetRow): Record<string, string> {
+  const attrs: Record<string, string> = {}
+
+  // 1. Из колонок (приоритет)
+  if (row.color) attrs['Цвет'] = row.color
+  if (row.memory) attrs['Память'] = row.memory
+  if (row.size) attrs['Размер'] = row.size
+  if (row.country) attrs['Страна'] = row.country
+
+  // 2. Fallback: парсинг из названия (если колонка пуста)
+  const parsed = parseAttributes(row.fullName, row.brand, row.country)
+  for (const key of ['Цвет', 'Память', 'RAM', 'Размер', 'SIM', 'Связь', 'Чип', 'Ремешок', 'Комплектация', 'Экран', 'Серия', 'Диагональ', 'Разъём', 'Touch ID', 'Дисплей', 'Ревизия'] as const) {
+    if (!attrs[key] && parsed[key]) attrs[key] = parsed[key]
+  }
+
+  return attrs
+}
 
 /**
  * Извлекает базовое имя продукта из полного названия.
@@ -810,17 +810,10 @@ export interface StaleItem {
   lastUpdate: string
 }
 
-const SHEETS_DATE_COL: Record<string, { nameCol: number; dateCol: number }> = {
-  [MAIN_SHEET]:  { nameCol: 4, dateCol: 9 },   // E=name, J=date
-  'Аксессуары':  { nameCol: 3, dateCol: 8 },   // D=name, I=date
-  'Услуги':      { nameCol: 3, dateCol: 8 },
-}
-
-const SHEETS_PRICE_COL: Record<string, number> = {
-  [MAIN_SHEET]: 6,  // G
-  'Аксессуары': 5,  // F
-  'Услуги': 5,
-}
+// New single-sheet column indices for stale price check
+const STALE_NAME_COL = 4   // E: Название модели
+const STALE_PRICE_COL = 9  // J: Рекомендованная стоимость
+const STALE_DATE_COL = 12  // M: Дата обновления
 
 /**
  * Проверяет устаревшие цены (>6 часов без обновления) по колонке «Дата обновления» в Google Sheets.
@@ -830,18 +823,17 @@ export async function checkStalePrices(): Promise<StaleItem[]> {
   const now = Date.now()
   const staleItems: StaleItem[] = []
 
-  for (const sheetName of PRODUCT_SHEETS) {
-    const cfg = SHEETS_DATE_COL[sheetName]
-    const priceCol = SHEETS_PRICE_COL[sheetName]
-    if (!cfg) continue
+  const allSheets = await getSheetNames()
+  const sheetName = allSheets[0]
+  if (!sheetName) return staleItems
 
-    try {
-      const data = await readSheet(sheetName)
-      for (let i = 1; i < data.length; i++) {
-        const row = data[i]
-        const name = (row[cfg.nameCol] ?? '').trim()
-        const price = (row[priceCol] ?? '').toString().trim()
-        const dateStr = (row[cfg.dateCol] ?? '').toString().trim()
+  try {
+    const data = await readSheet(sheetName)
+    for (let i = 1; i < data.length; i++) {
+      const row = data[i]
+      const name = (row[STALE_NAME_COL] ?? '').toString().trim()
+      const price = (row[STALE_PRICE_COL] ?? '').toString().trim()
+      const dateStr = (row[STALE_DATE_COL] ?? '').toString().trim()
 
         if (!name || !price) continue
 
@@ -871,9 +863,8 @@ export async function checkStalePrices(): Promise<StaleItem[]> {
           staleItems.push({ name, sheetName, lastUpdate: dateStr || 'никогда' })
         }
       }
-    } catch (err) {
-      console.error(`[Stale Prices] Error reading ${sheetName}: ${err}`)
-    }
+  } catch (err) {
+    console.error(`[Stale Prices] Error reading ${sheetName}: ${err}`)
   }
 
   return staleItems
