@@ -29,7 +29,9 @@ export async function enrichProductCard(productId: number, force = false): Promi
   const product = await prisma.product.findUnique({ where: { id: productId } })
   if (!product) return false
 
-  if (!force && product.description && product.specs) {
+  const hasDescription = !!product.description
+  const hasSpecs = product.specs && typeof product.specs === 'object' && Object.keys(product.specs as object).length > 0
+  if (!force && hasDescription && hasSpecs) {
     console.log(`[Enrich] ${product.name}: already enriched, skipping`)
     return false
   }
@@ -77,11 +79,22 @@ export async function enrichProductCard(productId: number, force = false): Promi
     let parsed: { description?: string; specs?: Record<string, string> }
     let cleaned = rawText.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim()
 
-    // Fix truncated JSON — trim to last closing brace
+    // Fix truncated JSON — trim to last value end and close braces
     if (!cleaned.endsWith('}')) {
-      const lastBrace = cleaned.lastIndexOf('}')
-      if (lastBrace > 0) {
-        cleaned = cleaned.slice(0, lastBrace + 1)
+      // Remove trailing incomplete key-value (after last comma or quote)
+      const lastQuote = cleaned.lastIndexOf('"')
+      const lastComma = cleaned.lastIndexOf(',')
+      const cutAt = Math.max(lastQuote, lastComma)
+      if (cutAt > 0) {
+        // Find the last complete key:value pair
+        let trimmed = cleaned.slice(0, cutAt)
+        // Remove trailing comma if present
+        trimmed = trimmed.replace(/,\s*$/, '')
+        // Count open vs close braces and add missing ones
+        const openBraces = (trimmed.match(/{/g) || []).length
+        const closeBraces = (trimmed.match(/}/g) || []).length
+        const missing = openBraces - closeBraces
+        cleaned = trimmed + '}'.repeat(Math.max(0, missing))
       }
     }
 

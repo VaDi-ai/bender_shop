@@ -166,10 +166,16 @@ export async function syncProductsFromSheets(): Promise<{
   }
 
   const groups = new Map<string, GroupedProduct>()
+  let samsungLogCount = 0
 
   for (const row of rows) {
     const productName = extractProductName(row.fullName, row.brand)
     const attrs = parseAttributes(row.fullName, row.brand, row.country)
+
+    if (row.brand === 'Samsung' && samsungLogCount < 20) {
+      console.log(`[Sheets Sync] Samsung extract: "${row.fullName}" → "${productName}"`)
+      samsungLogCount++
+    }
     if (row.country) attrs['Страна'] = row.country
 
     const key = `${productName}|${row.category}`

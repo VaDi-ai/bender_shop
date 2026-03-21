@@ -745,21 +745,31 @@ bot.action('maint:restore_info', async (ctx) => {
 
 bot.action('maint:enrich_all', async (ctx) => {
   try { await ctx.answerCbQuery() } catch { /* ignore */ }
-  await ctx.reply('⏳ Запускаю обогащение карточек товаров... Это может занять несколько минут.')
+  await ctx.reply('✨ Обогащение запущено в фоне. Это займёт 5-15 минут. Я сообщу когда закончу.')
 
-  try {
-    const { enrichAllProducts } = await import('../lib/enrich')
-    const result = await enrichAllProducts()
-    await ctx.reply([
-      '✨ Обогащение завершено:',
-      `📦 Обработано: ${result.total}`,
-      `✅ Обогащено: ${result.enriched}`,
-      result.failed > 0 ? `❌ Не удалось: ${result.failed}` : '',
-    ].filter(Boolean).join('\n'))
-  } catch (err) {
-    console.error('[Enrich] Batch error:', err)
-    await ctx.reply('❌ Ошибка при обогащении.')
-  }
+  // Запуск в фоне — НЕ await!
+  const userId = ctx.from?.id
+  ;(async () => {
+    try {
+      const { enrichAllProducts } = await import('../lib/enrich')
+      const result = await enrichAllProducts()
+      if (userId) {
+        await bot.telegram.sendMessage(userId, [
+          '✨ Обогащение завершено!',
+          '',
+          `✅ Обогащено: ${result.enriched}`,
+          `⏭️ Пропущено: ${result.total - result.enriched - result.failed}`,
+          `❌ Ошибок: ${result.failed}`,
+          `📦 Всего: ${result.total}`,
+        ].join('\n'))
+      }
+    } catch (err) {
+      console.error('[Enrich] Background error:', err)
+      if (userId) {
+        await bot.telegram.sendMessage(userId, `❌ Ошибка обогащения: ${err}`).catch(() => {})
+      }
+    }
+  })()
 })
 
 bot.action('maint:api_keys', async (ctx) => {
