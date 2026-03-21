@@ -569,11 +569,8 @@ function extractProductName(fullName: string, brand: string): string {
   if (isiMac) {
     name = name.replace(/\b24\b/g, '')  // iMac 24" screen size
   }
-  // Normalize XL casing (Xl → XL) and remove for Pixel (size variant, not model)
+  // Normalize XL casing (Xl → XL) — Pixel XL is a separate model, keep it
   name = name.replace(/\bXl\b/g, 'XL')
-  if (/\bPixel\b/i.test(name)) {
-    name = name.replace(/\bXL\b/g, '')
-  }
 
   // ─── Step 6: Remove SIM and 5G ───
   name = name.replace(/\b(2Sim|eSim|e-Sim|1Sim\+eSim|Dual\s*SIM|DS)\b/gi, '')
@@ -1050,11 +1047,6 @@ function parseAttributes(fullName: string, brand: string, country: string): Reco
 
     if (/\bCarbon\s*DLC\b/i.test(normalized)) attrs['Материал'] = 'Carbon DLC'
     else if (/\bDamascus\s*STEEL/i.test(normalized)) attrs['Материал'] = 'Damascus Steel'
-  }
-
-  // ─── Pixel: XL variant ───
-  if (/\bPixel\b/i.test(normalized) && /\bXL\b/i.test(normalized)) {
-    attrs['Размер'] = 'XL'
   }
 
   // ─── iMac: screen size ───
