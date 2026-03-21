@@ -572,6 +572,7 @@ bot.hears('🔧 Техработы', async (ctx) => {
       [Markup.button.callback('🔑 API Ключи', 'maint:api_keys')],
       [Markup.button.callback('🗑️ Удалить все товары', 'maint:clear_products')],
       [Markup.button.callback('🧹 Удалить тестовые заказы', 'maint:clear_orders')],
+      [Markup.button.callback('🧪 Тест обогащения → Sheets', 'maint:test_enrich')],
       [Markup.button.callback('📖 Как восстановить', 'maint:restore_info')],
       [Markup.button.callback('🏠 Главное меню', 'back:main')],
     ]),
@@ -646,6 +647,105 @@ bot.action('maint:clear_products', async (ctx) => {
       prisma.product.deleteMany(),
     ])
     await ctx.reply('✅ Все товары удалены. Категории сохранены.')
+  } catch (err) {
+    await ctx.reply(`❌ Ошибка: ${err instanceof Error ? err.message : err}`)
+  }
+})
+
+bot.action('maint:test_enrich', async (ctx) => {
+  try { await ctx.answerCbQuery() } catch { /* ignore */ }
+  await ctx.reply('🧪 Запускаю тестовое обогащение 5 товаров + запись в Sheets...')
+
+  const TARGETS = [
+    { search: 'Iphone 17 Pro', type: 'телефон' },
+    { search: 'Macbook Air M5', type: 'ноутбук' },
+    { search: 'Apple Watch S11', type: 'часы' },
+    { search: 'Dyson Airwrap', type: 'красота' },
+    { search: 'JBL Flip 6', type: 'аудио' },
+  ]
+
+  try {
+    const { enrichProductCard } = await import('../lib/enrich')
+    const { readSheet, writeCell, getSheetNames } = await import('../lib/google-sheets')
+
+    const allSheets = await getSheetNames()
+    const sheetName = allSheets[0]
+    if (!sheetName) { await ctx.reply('❌ Листы не найдены'); return }
+
+    const data = await readSheet(sheetName)
+    const results: string[] = []
+
+    for (const target of TARGETS) {
+      const product = await prisma.product.findFirst({
+        where: { name: target.search },
+        include: { variants: { select: { id: true, attributes: true }, take: 5 } },
+      })
+
+      if (!product) {
+        results.push(`❌ ${target.type}: "${target.search}" — не найден`)
+        continue
+      }
+
+      // Enrich
+      const success = await enrichProductCard(product.id, true)
+      if (!success) {
+        results.push(`❌ ${target.type}: "${target.search}" — обогащение не удалось`)
+        continue
+      }
+
+      const updated = await prisma.product.findUnique({ where: { id: product.id } })
+      if (!updated) continue
+
+      const description = updated.description || ''
+      const specs = updated.specs as Record<string, string> | null
+      const specsText = specs
+        ? Object.entries(specs).map(([k, v]) => `${k}: ${v}`).join('\n')
+        : ''
+
+      // Find row in sheet
+      const variantFullNames = product.variants
+        .map(v => {
+          const a = v.attributes as Record<string, unknown> | null
+          return a && typeof a.fullName === 'string' ? a.fullName : null
+        })
+        .filter(Boolean) as string[]
+
+      let matchedRow = -1
+      for (let i = 1; i < data.length; i++) {
+        const sheetFullName = (data[i]?.[4] ?? '').toString().trim()
+        if (variantFullNames.includes(sheetFullName)) {
+          matchedRow = i + 1
+          break
+        }
+      }
+      // Fallback
+      if (matchedRow === -1) {
+        const searchLower = target.search.toLowerCase()
+        for (let i = 1; i < data.length; i++) {
+          const sheetFullName = (data[i]?.[4] ?? '').toString().trim().toLowerCase()
+          if (sheetFullName.includes(searchLower.split(' ').slice(0, 2).join(' '))) {
+            matchedRow = i + 1
+            break
+          }
+        }
+      }
+
+      if (matchedRow === -1) {
+        results.push(`⚠️ ${target.type}: "${target.search}" — обогащён, строка в Sheets не найдена`)
+        continue
+      }
+
+      // Write to Sheets
+      if (description) await writeCell(sheetName, `J${matchedRow}`, description)
+      if (specsText) await writeCell(sheetName, `K${matchedRow}`, specsText)
+
+      const specCount = specs ? Object.keys(specs).length : 0
+      results.push(`✅ ${target.type}: "${target.search}" → строка ${matchedRow}\n   J: ${description.slice(0, 60)}...\n   K: ${specCount} полей`)
+
+      await new Promise(r => setTimeout(r, 2000))
+    }
+
+    await ctx.reply(`🧪 Результат:\n\n${results.join('\n\n')}`)
   } catch (err) {
     await ctx.reply(`❌ Ошибка: ${err instanceof Error ? err.message : err}`)
   }
