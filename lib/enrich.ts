@@ -158,7 +158,7 @@ export async function enrichProductCard(productId: number, force = false): Promi
  * Обогащает все товары без description или specs.
  * Обрабатывает батчами с паузой чтобы не перегрузить API.
  */
-export async function enrichAllProducts(force = false): Promise<{ total: number; enriched: number; failed: number }> {
+export async function enrichAllProducts(shouldAbort?: () => boolean, force = false): Promise<{ total: number; enriched: number; failed: number }> {
   const where = force
     ? {}
     : { OR: [{ description: null }, { description: '' }, { specs: { equals: null as any } }] }
@@ -175,6 +175,10 @@ export async function enrichAllProducts(force = false): Promise<{ total: number;
   let failed = 0
 
   for (const product of products) {
+    if (shouldAbort?.()) {
+      console.log('[Enrich] Aborted by user')
+      break
+    }
     try {
       const success = await enrichProductCard(product.id, force)
       if (success) enriched++

@@ -1220,29 +1220,47 @@ export function setupInventoryHandlers(bot: Telegraf): void {
 
   // ── Синхронизация из Google Sheets ───────────────────────────────────────
 
+  let syncAbortFlag = false
+
   bot.action('inv:sheets_sync', async (ctx) => {
     try { await ctx.answerCbQuery() } catch { /* ignore */ }
-    await ctx.reply('⏳ Синхронизация с Google Sheets...')
+    syncAbortFlag = false
+    await ctx.reply('⏳ Синхронизация запущена в фоне...', Markup.inlineKeyboard([
+      [Markup.button.callback('⏹️ Остановить синхронизацию', 'sync:stop')],
+    ]))
 
-    try {
-      const { syncProductsFromSheets } = await import('../../lib/sheets-sync')
-      const result = await syncProductsFromSheets()
+    const userId = ctx.from?.id
+    ;(async () => {
+      try {
+        const { syncProductsFromSheets } = await import('../../lib/sheets-sync')
+        const result = await syncProductsFromSheets(() => syncAbortFlag)
 
-      const lines = [
-        '✅ Синхронизация завершена:',
-        `📦 Всего строк: ${result.total}`,
-        `➕ Создано: ${result.created}`,
-        `🔄 Обновлено: ${result.updated}`,
-        result.disabled > 0 ? `🔴 Снято с витрины: ${result.disabled}` : '',
-        result.errors.length > 0 ? `⚠️ Ошибок: ${result.errors.length}` : '',
-        ...result.errors.slice(0, 5),
-      ].filter(Boolean)
+        if (syncAbortFlag) {
+          if (userId) await bot.telegram.sendMessage(userId, '⏹️ Синхронизация остановлена.')
+          return
+        }
 
-      await ctx.reply(lines.join('\n'))
-    } catch (err) {
-      console.error('[Sheets Sync] Error:', err)
-      await ctx.reply(`❌ Ошибка синхронизации: ${err instanceof Error ? err.message : 'Неизвестная ошибка'}`)
-    }
+        const lines = [
+          '✅ Синхронизация завершена:',
+          `📦 Всего строк: ${result.total}`,
+          `➕ Создано: ${result.created}`,
+          `🔄 Обновлено: ${result.updated}`,
+          result.disabled > 0 ? `🔴 Снято с витрины: ${result.disabled}` : '',
+          result.errors.length > 0 ? `⚠️ Ошибок: ${result.errors.length}` : '',
+          ...result.errors.slice(0, 5),
+        ].filter(Boolean)
+
+        if (userId) await bot.telegram.sendMessage(userId, lines.join('\n'))
+      } catch (err) {
+        console.error('[Sheets Sync] Error:', err)
+        if (userId) await bot.telegram.sendMessage(userId, `❌ Ошибка синхронизации: ${err instanceof Error ? err.message : 'Неизвестная ошибка'}`).catch(() => {})
+      }
+    })()
+  })
+
+  bot.action('sync:stop', async (ctx) => {
+    try { await ctx.answerCbQuery('Останавливаю...') } catch { /* ignore */ }
+    syncAbortFlag = true
   })
 
   bot.action('inv:export', async (ctx) => {

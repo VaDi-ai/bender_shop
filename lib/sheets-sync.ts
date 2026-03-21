@@ -109,7 +109,7 @@ export async function readAllProducts(): Promise<SheetRow[]> {
  * - Product.attributes = агрегированные уникальные значения из всех вариантов (для chips)
  * - Product.price = минимальная цена среди вариантов
  */
-export async function syncProductsFromSheets(): Promise<{
+export async function syncProductsFromSheets(shouldAbort?: () => boolean): Promise<{
   created: number
   updated: number
   disabled: number
@@ -223,6 +223,10 @@ export async function syncProductsFromSheets(): Promise<{
   let groupIdx = 0
 
   for (const [key, group] of groups) {
+    if (shouldAbort?.()) {
+      console.log('[Sheets Sync] Aborted by user')
+      break
+    }
     groupIdx++
     if (groupIdx % 20 === 0) {
       console.log(`[Sheets Sync] Processing product ${groupIdx}/${groups.size}...`)
@@ -270,8 +274,7 @@ export async function syncProductsFromSheets(): Promise<{
       if (!product) {
         // Create new product
         const catNum = String(category.id).padStart(2, '0')
-        const count = await prisma.product.count({ where: { categoryId: category.id } })
-        const productSku = `${catNum}-${String(count + 1).padStart(4, '0')}`
+        const productSku = `${catNum}-${Date.now().toString(36).slice(-4)}-${Math.random().toString(36).slice(-3)}`
 
         product = await prisma.product.create({
           data: {
@@ -323,8 +326,7 @@ export async function syncProductsFromSheets(): Promise<{
             })
             seenVariantIds.add(existing.id)
           } else {
-            const variantCount = await prisma.productVariant.count({ where: { productId: product.id } })
-            const variantSku = `${product.sku}-${String(variantCount + 1).padStart(3, '0')}`
+            const variantSku = `${product.sku}-${Date.now().toString(36).slice(-3)}${Math.random().toString(36).slice(-2)}`
 
             const newVariant = await prisma.productVariant.create({
               data: {
@@ -431,11 +433,14 @@ const COLORS_SHORT = [
   'Charcoal', 'Fuchsia', 'Obsidian', 'Porcelain', 'Hazel', 'Peony',
   'Wintergreen', 'Bay', 'Nickel', 'Topaz', 'Neon', 'Turquoise',
   'Camouflage', 'Cobalt', 'Chrome', 'Sterling', 'Volcanic', 'Pop',
-  'Голубой', 'Черный', 'Белый', 'Серебристый', 'Золотой', 'Синий',
+]
+// Cyrillic colors — \b doesn't work with Cyrillic, handled separately
+const CYRILLIC_COLORS = [
+  'Голубой', 'Черный', 'Чёрный', 'Белый', 'Серебристый', 'Золотой', 'Синий',
   'Красный', 'Зеленый', 'Зелёный', 'Оранжевый', 'Фиолетовый', 'Розовый',
   'Серый',
 ]
-const ALL_COLORS = [...COLORS_LONG, ...COLORS_SHORT]
+const ALL_COLORS = [...COLORS_LONG, ...COLORS_SHORT, ...CYRILLIC_COLORS]
 
 // ─── Dyson completions (part of product name vs attribute) ──────────────────
 const DYSON_COMPLETIONS = [
@@ -500,6 +505,7 @@ function extractProductName(fullName: string, brand: string): string {
   }
   for (const c of COLORS_LONG) name = name.replace(new RegExp(c.replace('/', '\\/'), 'gi'), '')
   for (const c of COLORS_SHORT) name = name.replace(new RegExp(`\\b${c}\\b`, 'gi'), '')
+  for (const c of CYRILLIC_COLORS) name = name.replace(new RegExp(c, 'gi'), '')
 
   // ─── Step 8: Watch-specific cleanup (Apple Watch) ───
   if (isWatch && !isGarmin) {

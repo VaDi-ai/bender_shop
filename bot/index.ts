@@ -743,25 +743,33 @@ bot.action('maint:restore_info', async (ctx) => {
   ].join('\n'))
 })
 
+let enrichAbortFlag = false
+
 bot.action('maint:enrich_all', async (ctx) => {
   try { await ctx.answerCbQuery() } catch { /* ignore */ }
-  await ctx.reply('✨ Обогащение запущено в фоне. Это займёт 5-15 минут. Я сообщу когда закончу.')
+  enrichAbortFlag = false
+  await ctx.reply('✨ Обогащение запущено в фоне (5-15 мин)...', Markup.inlineKeyboard([
+    [Markup.button.callback('⏹️ Остановить обогащение', 'enrich:stop')],
+  ]))
 
-  // Запуск в фоне — НЕ await!
   const userId = ctx.from?.id
   ;(async () => {
     try {
       const { enrichAllProducts } = await import('../lib/enrich')
-      const result = await enrichAllProducts()
+      const result = await enrichAllProducts(() => enrichAbortFlag)
       if (userId) {
-        await bot.telegram.sendMessage(userId, [
-          '✨ Обогащение завершено!',
-          '',
-          `✅ Обогащено: ${result.enriched}`,
-          `⏭️ Пропущено: ${result.total - result.enriched - result.failed}`,
-          `❌ Ошибок: ${result.failed}`,
-          `📦 Всего: ${result.total}`,
-        ].join('\n'))
+        if (enrichAbortFlag) {
+          await bot.telegram.sendMessage(userId, `⏹️ Обогащение остановлено. Обогащено: ${result.enriched} из ${result.total}`)
+        } else {
+          await bot.telegram.sendMessage(userId, [
+            '✨ Обогащение завершено!',
+            '',
+            `✅ Обогащено: ${result.enriched}`,
+            `⏭️ Пропущено: ${result.total - result.enriched - result.failed}`,
+            `❌ Ошибок: ${result.failed}`,
+            `📦 Всего: ${result.total}`,
+          ].join('\n'))
+        }
       }
     } catch (err) {
       console.error('[Enrich] Background error:', err)
@@ -770,6 +778,11 @@ bot.action('maint:enrich_all', async (ctx) => {
       }
     }
   })()
+})
+
+bot.action('enrich:stop', async (ctx) => {
+  try { await ctx.answerCbQuery('Останавливаю...') } catch { /* ignore */ }
+  enrichAbortFlag = true
 })
 
 bot.action('maint:api_keys', async (ctx) => {
