@@ -37,9 +37,15 @@ async function optimizeDirectory(dir: string, maxWidth: number, quality: number)
   }
 }
 
+const PUBLIC_DIR = path.join(__dirname, '..', 'public')
+
 async function main() {
   console.log('=== Optimizing category images (256x256, q80) ===')
   await optimizeDirectory(CATEGORIES_DIR, 256, 80)
+
+  console.log('\n=== Optimizing public root images (512x512, q80) ===')
+  await optimizeDirectory(PUBLIC_DIR, 512, 80)
+
   console.log('\nDone!')
 }
 

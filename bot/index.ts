@@ -571,6 +571,7 @@ bot.hears('🔧 Техработы', async (ctx) => {
       [Markup.button.callback('✨ Обогатить все карточки', 'maint:enrich_all')],
       [Markup.button.callback('🔑 API Ключи', 'maint:api_keys')],
       [Markup.button.callback('🗑️ Удалить все товары', 'maint:clear_products')],
+      [Markup.button.callback('🧹 Удалить тестовые заказы', 'maint:clear_orders')],
       [Markup.button.callback('📖 Как восстановить', 'maint:restore_info')],
       [Markup.button.callback('🏠 Главное меню', 'back:main')],
     ]),
@@ -645,6 +646,22 @@ bot.action('maint:clear_products', async (ctx) => {
       prisma.product.deleteMany(),
     ])
     await ctx.reply('✅ Все товары удалены. Категории сохранены.')
+  } catch (err) {
+    await ctx.reply(`❌ Ошибка: ${err instanceof Error ? err.message : err}`)
+  }
+})
+
+bot.action('maint:clear_orders', async (ctx) => {
+  try { await ctx.answerCbQuery() } catch { /* ignore */ }
+  await ctx.reply('⚠️ Удаление тестовых заказов...')
+  try {
+    const orderCount = await prisma.order.count()
+    await prisma.$transaction([
+      prisma.orderItem.deleteMany(),
+      prisma.order.deleteMany(),
+      prisma.reservation.deleteMany(),
+    ])
+    await ctx.reply(`✅ Удалено ${orderCount} заказов, все резервы сняты.`)
   } catch (err) {
     await ctx.reply(`❌ Ошибка: ${err instanceof Error ? err.message : err}`)
   }

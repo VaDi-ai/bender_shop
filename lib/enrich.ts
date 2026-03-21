@@ -41,6 +41,11 @@ export async function enrichProductCard(productId: number, force = false): Promi
   try {
     const client = await getEnrichClient()
 
+    const existingAttrKeys = product.attributes ? Object.keys(product.attributes as Record<string, any>) : []
+    const attrHint = existingAttrKeys.length > 0
+      ? `\nНЕ включай в specs характеристики которые уже есть как атрибуты выбора: ${existingAttrKeys.join(', ')}.`
+      : ''
+
     const specsResponse = await client.chat.completions.create({
       model: 'perplexity/sonar',
       messages: [{
@@ -65,7 +70,7 @@ export async function enrichProductCard(productId: number, force = false): Promi
   }
 }
 Если характеристика неизвестна — не включай её. Для не-телефонов адаптируй поля (ноутбуки — CPU/GPU/RAM/SSD/Экран/Вес, наушники — тип/драйверы/автономность, часы — экран/чипсет/автономность/водозащита и т.д.).
-Описание пиши как для карточки товара — коротко, информативно, по-русски.`,
+Описание пиши как для карточки товара — коротко, информативно, по-русски.${attrHint}`,
       }],
       max_tokens: 2000,
     })
@@ -130,8 +135,30 @@ export async function enrichProductCard(productId: number, force = false): Promi
           cleanSpecs[key] = val.trim()
         }
       }
-      if (Object.keys(cleanSpecs).length > 0) {
-        updateData.specs = cleanSpecs
+
+      // Remove specs that overlap with existing product attributes
+      const ATTR_OVERLAP: Record<string, string[]> = {
+        'Оперативная память': ['RAM', 'Память'],
+        'Встроенная память': ['Память'],
+        'Память': ['Память', 'RAM'],
+        'Цвет': ['Цвет'],
+        'Размер': ['Размер'],
+        'Размер экрана': ['Размер', 'Экран', 'Диагональ'],
+        'Диагональ': ['Диагональ', 'Размер'],
+        'Связь': ['Связь'],
+        'SIM': ['SIM'],
+        'Дисплей': ['Дисплей'],
+        'Материал': ['Материал'],
+      }
+      const filteredSpecs: Record<string, string> = {}
+      for (const [key, val] of Object.entries(cleanSpecs)) {
+        const overlaps = ATTR_OVERLAP[key] || []
+        const isDuplicate = overlaps.some(attrKey => existingAttrKeys.includes(attrKey))
+        if (!isDuplicate) filteredSpecs[key] = val
+      }
+
+      if (Object.keys(filteredSpecs).length > 0) {
+        updateData.specs = filteredSpecs
       }
     }
 
