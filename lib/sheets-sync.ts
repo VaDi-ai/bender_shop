@@ -434,23 +434,31 @@ const COLORS_LONG = [
   'Blush', 'Citrus', 'Indigo',
   // Ghost special edition
   'GHOST OF YOTEI',
+  // Google Pixel / OnePlus / Garmin compounds
+  'Jade Cyan', 'Arctic Dawn', 'Arctic Purple', 'Storm Grey',
+  'Astral Trail', 'Nebula Noir', 'Sand Storm',
 ]
 const COLORS_SHORT = [
   'Jetblack', 'Iceblue', 'Icyblue', 'Pinkgold', 'Silverblue', 'Whitesilver',
   'Black', 'White', 'Silver', 'Gold', 'Blue', 'Red', 'Green',
   'Orange', 'Purple', 'Midnight', 'Starlight', 'Pink', 'Yellow', 'Cream',
   'Mint', 'Lavender', 'Coral', 'Graphite', 'Natural', 'Titanium',
-  'Desert', 'Navy', 'Denim', 'Gray', 'Teal', 'Bronze', 'Shadow',
+  'Desert', 'Navy', 'Denim', 'Gray', 'Grey', 'Teal', 'Bronze', 'Shadow',
   'Burgundy', 'Copper', 'Ivory', 'Sage', 'Stone', 'Ultramarine',
   'Charcoal', 'Fuchsia', 'Obsidian', 'Porcelain', 'Hazel', 'Peony',
   'Wintergreen', 'Bay', 'Nickel', 'Topaz', 'Neon', 'Turquoise',
   'Camouflage', 'Cobalt', 'Chrome', 'Sterling', 'Volcanic', 'Pop',
+  // Additional colors (Beats, Pixel, Garmin, OnePlus, etc.)
+  'Sand', 'Brown', 'Squad', 'Frost', 'Jade', 'Rose', 'Aqua', 'Mist',
+  'Berry', 'Dawn', 'Eclipse', 'Iris', 'Moonstone', 'Lemongrass',
+  'Breeze', 'Cosmic', 'Arctic', 'Storm', 'Violet', 'Terracotta', 'Beige',
+  'Lunar', 'Lilac', 'Jasper', 'Spark', 'Slate',
 ]
 // Cyrillic colors — \b doesn't work with Cyrillic, handled separately
 const CYRILLIC_COLORS = [
   'Голубой', 'Черный', 'Чёрный', 'Белый', 'Серебристый', 'Золотой', 'Синий',
   'Красный', 'Зеленый', 'Зелёный', 'Оранжевый', 'Фиолетовый', 'Розовый',
-  'Серый',
+  'Серый', 'Бежевый',
 ]
 const ALL_COLORS = [...COLORS_LONG, ...COLORS_SHORT, ...CYRILLIC_COLORS]
 
@@ -488,7 +496,7 @@ function getAttributes(row: SheetRow): Record<string, string> {
 
   // 2. Fallback: парсинг из названия (если колонка пуста)
   const parsed = parseAttributes(row.fullName, row.brand, row.country)
-  for (const key of ['Цвет', 'Память', 'RAM', 'Размер', 'SIM', 'Связь', 'Чип', 'Ремешок', 'Комплектация', 'Экран', 'Серия', 'Диагональ', 'Разъём', 'Touch ID', 'Дисплей', 'Ревизия'] as const) {
+  for (const key of ['Цвет', 'Память', 'RAM', 'Размер', 'SIM', 'Связь', 'Чип', 'Ремешок', 'Комплектация', 'Экран', 'Серия', 'Диагональ', 'Разъём', 'Touch ID', 'Дисплей', 'Ревизия', 'Умный дом', 'AI'] as const) {
     if (!attrs[key] && parsed[key]) attrs[key] = parsed[key]
   }
 
@@ -499,7 +507,9 @@ function getAttributes(row: SheetRow): Record<string, string> {
 const M_KEEP_WORDS = new Set([
   'MacBook', 'Magic', 'MagSafe', 'Max', 'Mini', 'Midnight', 'Mint', 'Marshall',
   'Meta', 'Monitor', 'Motif', 'Major', 'Middleton', 'Minor', 'Mark', 'MediaTek',
-  'Medicube', 'MiniLED', 'Milanese', 'Mars', 'Mavic', 'More',
+  'Medicube', 'MiniLED', 'Milanese', 'Mars', 'Mavic', 'More', 'Music',
+  // uppercase variants (before Title Case)
+  'MAGIC', 'MAX', 'MINI',
 ])
 
 /**
@@ -532,12 +542,13 @@ function extractProductName(fullName: string, brand: string): string {
   const isMacBook = /MacBook/i.test(name)
   const isiPad = /iPad/i.test(name)
   const isDyson = /\bDyson\b/i.test(name)
-  const isTV = /\b(QN\d+|OLED|QLED|The Frame|Neo QLED)\b/i.test(name)
+  const isTV = /\b(QE\d+|QN\d+|UE\d+|OLED|QLED|The Frame|Neo QLED)\b/i.test(name)
   const isCamera = /\b(Canon|Sony|Nikon|DJI|GoPro)\b/i.test(name)
   const isSonyAudio = /\bSony\b/i.test(name) && /\b(WH-|WF-|XM)\b/.test(name)
   const isConsole = /\b(DualSense|PlayStation|Xbox|Nintendo|Switch|Steam\s*Deck|Oculus|Quest)\b/i.test(name)
   const isRayBan = /\bRay-?Ban\b/i.test(name)
-  const isYandex = /\b(Яндекс|Yandex|YNDX)\b/i.test(name)
+  const isYandex = /(Яндекс|Yandex|\bYNDX\b)/i.test(name)
+  const isiMac = /\biMac\b/i.test(name)
 
   // ─── Step 4: Remove CPU config (Mac) ───
   name = name.replace(/\b\d+c\/\d+c\b/g, '')
@@ -548,13 +559,21 @@ function extractProductName(fullName: string, brand: string): string {
     name = name.replace(/\b\d+\s*(GB|TB)\b/gi, '')                // 256GB, 1TB
   }
 
+  // ─── Step 5b: Remove bare storage numbers for iPad, Apple TV, iMac ───
+  if (isiPad || /\bApple\s*TV\b/i.test(name)) {
+    name = name.replace(/\b(64|128|256|512|1024)\b/g, '')
+  }
+  if (isiMac) {
+    name = name.replace(/\b24\b/g, '')  // iMac 24" screen size
+  }
+
   // ─── Step 6: Remove SIM and 5G ───
   name = name.replace(/\b(2Sim|eSim|e-Sim|1Sim\+eSim|Dual\s*SIM|DS)\b/gi, '')
   name = name.replace(/\b5G\b/gi, '')
 
   // ─── Step 7: Remove colors ───
-  if (isDyson) {
-    name = name.replace(/\b\w+\/\w+\b/g, '')  // Nickel/Copper, Blue/Copper
+  if (isDyson || isGarmin) {
+    name = name.replace(/\b\w+\/\w+\b/g, '')  // Nickel/Copper, Berry/lilac
   }
   for (const c of COLORS_LONG) name = name.replace(new RegExp(c.replace('/', '\\/'), 'gi'), '')
   for (const c of COLORS_SHORT) name = name.replace(new RegExp(`\\b${c}\\b`, 'gi'), '')
@@ -580,11 +599,26 @@ function extractProductName(fullName: string, brand: string): string {
     name = name.replace(/\b(GPS|LTE|Cellular)\b/gi, '')
   }
 
-  // ─── Step 8b: Garmin — remove size in mm, remove article codes ───
+  // ─── Step 8b: Garmin — remove bands, materials, article codes ───
   if (isGarmin) {
-    name = name.replace(/\b\d{2}mm\b/gi, '')
     name = name.replace(/\b\d{2}\s*mm\b/gi, '')
     name = name.replace(/\b\d{3}-\d{5}-\d{2}\b/g, '')  // 010-03024-01
+    // Remove everything from "With/Includes" onwards
+    name = name.replace(/\b(With|Includes)\b.*/gi, '')
+    // Remove band/case/material descriptors
+    name = name.replace(/\b(Silicone|Nylon|Leather|Comfortfit)\s*(Band)?\b/gi, '')
+    name = name.replace(/\bBand\b/gi, '')
+    name = name.replace(/\bBEZEL\b/gi, '')
+    name = name.replace(/\bCaseback\b/gi, '')
+    name = name.replace(/\bCarbon\s*(DLC|Edition)?\b/gi, '')
+    name = name.replace(/\bDamascus\s*STEEL\s*Edition\b/gi, '')
+    name = name.replace(/\bApplied\s*Ballistics\b/gi, '')
+    // Remove slash-prefixed colors
+    name = name.replace(/\/\w+/g, '')
+    // Remove size suffixes
+    name = name.replace(/\b-?(XS|XL)\b/gi, '')
+    // Remove Garmin-specific descriptor words
+    name = name.replace(/\b(Pebble|Whitestone|Bone|Cloud|Raspberry|French|Soft|Amp|Translucent)\b/gi, '')
   }
 
   // ─── Step 9: iPad-specific cleanup ───
@@ -596,40 +630,42 @@ function extractProductName(fullName: string, brand: string): string {
     name = name.replace(/\b(A\d+|M\d+)\b/g, '')
   }
 
-  // ─── Step 10: MacBook — remove screen size ───
+  // ─── Step 10: MacBook — remove screen size, article remnants ───
   if (isMacBook) {
     name = name.replace(/\b(13|14|15|16)\b/g, '')
+    name = name.replace(/\bMHF\s*D\d\b/gi, '')  // MacBook NEO article codes
   }
 
   // ─── Step 10b: Dyson — map article codes to model names, remove accessories ───
   if (isDyson) {
     name = name.replace(/\b(HS|HD|HT|SV|PH|RB|HU)\d{2,3}[A-Z]?\b/g, (match) => {
-      // Map known article codes to model names
       if (/^HD0[3-8]$/.test(match) || /^HD1[5-8]$/.test(match)) return 'Supersonic'
       if (/^HS0[5-9]$/.test(match)) return 'Airwrap'
       if (/^HT01$/.test(match)) return 'Airstrait'
       if (/^PH05$/.test(match)) return 'Purifier Humidify'
-      return ''  // SV, RB, HU — model already in name
+      return ''
     })
 
     for (const comp of DYSON_COMPLETIONS) {
       name = name.replace(new RegExp(`\\b${comp}\\b`, 'gi'), '')
     }
 
-    name = name.replace(/\bбез кейса\b/gi, '')
-    name = name.replace(/\bс кейсом\b/gi, '')
-    name = name.replace(/\bдиффузор\b/gi, '')
+    name = name.replace(/без кейса/gi, '')
+    name = name.replace(/с кейсом/gi, '')
+    name = name.replace(/диффузор/gi, '')
     name = name.replace(/\bCoanda\s*2x\b/gi, '')
     name = name.replace(/\bCeramic\b/gi, '')
     name = name.replace(/\bLite\b/gi, '')
     name = name.replace(/\b(Supersonic|Airwrap|Airstrait)\s+\1\b/gi, '$1')
   }
 
-  // ─── Step 10c: TV — remove diagonal and regional suffixes ───
+  // ─── Step 10c: TV — remove diagonal, regional suffixes ───
   if (isTV) {
     name = name.replace(/\b\d{2}["″"]\s*/g, '')
     name = name.replace(/\b\d{2}\s*["″"]\s*/g, '')
-    name = name.replace(/\b[A-Z]{2,5}RU\b/g, '')  // FAAUXRU, FAUXRU, APRU
+    // Inline regional suffixes in Samsung/LG TV model numbers
+    name = name.replace(/FAAUXRU|FAUXRU|FUXRU|FAEXRU|CBUXRU/gi, '')
+    name = name.replace(/\b[A-Z]{2,5}RU\b/g, '')
     name = name.replace(/\bARUG\b/g, '')
   }
 
@@ -644,23 +680,30 @@ function extractProductName(fullName: string, brand: string): string {
   if (isConsole) {
     name = name.replace(/\bGHOST\s+OF\s+YOTEI\b/gi, '')
     name = name.replace(/\bAstro\s*Bot\b/gi, '')
-    name = name.replace(/\b\d+\s*ревизия\b/gi, '')
+    name = name.replace(/\d+\s*ревизия/gi, '')
   }
 
-  // ─── Step 10f: Ray-Ban — remove codes but keep RW model numbers ───
+  // ─── Step 10f: Ray-Ban — remove lens/frame descriptions after RW model ───
   if (isRayBan) {
-    name = name.replace(/\b\d{3}\/[A-Z0-9]+\b/g, '')       // 601/7150
-    name = name.replace(/\b\d{3}[A-Z][A-Z0-9]{3,5}\b/g, '') // 601S1M50, 601ST350
-    name = name.replace(/\b\d{3}-\d{2}\b/g, '')              // 150-50, 155-53
-    name = name.replace(/\bSize\s*[SML]\s*\(\d+\)/gi, '')    // Size M (50)
-    name = name.replace(/\bSize\s*[SML]\b/gi, '')             // Size M
-    name = name.replace(/\bC\s+\d{3}/g, '')                   // C 601...
+    // Keep everything up to and including RW model number, remove the rest
+    name = name.replace(/(\bRW\d{4})\b.*/g, '$1')
+    // Fallback: remove codes if no RW pattern
+    name = name.replace(/\b\d{3}\/[A-Z0-9]+\b/g, '')
+    name = name.replace(/\b\d{3}[A-Z][A-Z0-9]{3,5}\b/g, '')
+    name = name.replace(/\b\d{3}-\d{2}\b/g, '')
+    name = name.replace(/\bSize\s*[SML]\s*\(\d+\)/gi, '')
+    name = name.replace(/\bSize\s*[SML]\b/gi, '')
+    name = name.replace(/\bC\s+\d{3}/g, '')
+    // Remove lens descriptions
+    name = name.replace(/\b(Matte|Shiny|Clear|Polar|Gradient|Lenses|Transitions)\b/gi, '')
+    name = name.replace(/распакованы/gi, '')
   }
 
   // ─── Step 10g: Yandex — remove descriptions from name ───
   if (isYandex) {
-    name = name.replace(/\bс голосовым помощником Алиса\b/gi, '')
-    name = name.replace(/\bна YaGPT\b/gi, '')
+    name = name.replace(/с голосовым помощником Алиса/gi, '')
+    name = name.replace(/с Алисой/gi, '')
+    name = name.replace(/на YaGPT/gi, '')
     name = name.replace(/\bZigbee?\b/gi, '')
     name = name.replace(/\bYNDX-\d+\b/g, '')
   }
@@ -670,37 +713,56 @@ function extractProductName(fullName: string, brand: string): string {
     name = name.replace(/\b(WF|WH)-(\d+)\s+(XM\d+)/g, '$1-$2$3')
   }
 
+  // ─── Step 10i: DJI — remove combo descriptions ───
+  if (isDJI) {
+    name = name.replace(/\b(Motion|Premium|Creator|Adventure)\s*Combo\b/gi, '')
+    name = name.replace(/Базовая Версия/gi, '')
+    name = name.replace(/базовая версия/gi, '')
+    // Remove parenthetical content (including unclosed)
+    name = name.replace(/\([^)]*\)/g, '')
+    name = name.replace(/\([^)]*$/g, '')
+  }
+
+  // ─── Step 10j: OnePlus — remove article codes ───
+  name = name.replace(/\bCPH\d{4}\b/g, '')
+
   // ─── Step 11: Accessories/Комплектация — remove from name ───
-  name = name.replace(/\bбез кейса\b/gi, '')
-  name = name.replace(/\bс кейсом\b/gi, '')
-  name = name.replace(/\bдиффузор\b/gi, '')
+  // NOTE: No \b around Cyrillic — \b doesn't work with Cyrillic in JS
+  name = name.replace(/без кейса/gi, '')
+  name = name.replace(/с кейсом/gi, '')
+  name = name.replace(/диффузор/gi, '')
   name = name.replace(/\bCoanda\s*2x\b/gi, '')
   name = name.replace(/\+?\s*Touch\s*ID\b/gi, '')
-  name = name.replace(/\bкейс MagSafe\b/gi, '')
-  name = name.replace(/\bмятая коробка\b/gi, '')
-  name = name.replace(/\bраспакованы\b/gi, '')
-  name = name.replace(/\bс шумоподавлением\b/gi, '')
+  name = name.replace(/кейс MagSafe/gi, '')
+  name = name.replace(/мятая коробка/gi, '')
+  name = name.replace(/распакованы/gi, '')
+  name = name.replace(/с шумоподавлением/gi, '')
+  name = name.replace(/без зарядки/gi, '')
 
   // ─── Step 12: Remove display types ───
-  name = name.replace(/\b(Standard|Nano[- ]?[Tt]exture|Standa?rt)\s*Display\b/gi, '')
-  name = name.replace(/\bNano\s*Texture\s*Display\b/gi, '')
+  name = name.replace(/\bNano\s*[-]?\s*[Tt]exture(\s*Display)?\b/gi, '')
+  name = name.replace(/\bStanda?r?d\s*Display\b/gi, '')
+  name = name.replace(/\bNano\b(?=\s*$|\s+[^A-Za-z])/gi, '')  // orphaned "Nano"
 
   // ─── Step 13: Remove year ───
   name = name.replace(/\s*\(20[2-3]\d\)\s*/g, ' ')
   name = name.replace(/\b20[2-3]\d\b/g, '')
 
   // ─── Step 14: Remove article codes ───
-  // Apple Z-артикулы: Z1EH000V5, Z1CY0019Z, Z1FD0000N
+  // Apple Z-артикулы
   name = name.replace(/\bZ1[A-Z]{1,3}[A-Z0-9]{3,7}\b/g, '')
 
   // Apple M-артикулы (with safelist)
   if (!isSonyAudio) {
-    name = name.replace(/\b(M[A-Z][A-Z0-9]{2,5})\b/g, (match) => M_KEEP_WORDS.has(match) ? match : '')
+    name = name.replace(/\b(M[A-Z][A-Z0-9]{1,5})\b/g, (match) => M_KEEP_WORDS.has(match) ? match : '')
     name = name.replace(/\b[A-Z]\d[A-Z]{2}\b/g, '')  // Apple: U3LW, T3LW
   }
 
   // YNDX-артикулы (Яндекс)
   name = name.replace(/\bYNDX-\d+\b/g, '')
+
+  // OnePlus CPH codes (backup)
+  name = name.replace(/\bCPH\d{4}\b/g, '')
 
   // TV/Xiaomi regional suffixes (not already handled)
   if (!isTV) {
@@ -711,8 +773,9 @@ function extractProductName(fullName: string, brand: string): string {
   // ─── Step 15: RAM numbers after Max/Pro/Ultra ───
   name = name.replace(/\b(Max|Pro|Ultra)\s+(16|24|32|48|64|96|128)\b/g, '$1')
 
-  // ─── Step 16: Remove USB-C, misc ───
+  // ─── Step 16: Remove USB-C, Lightning, misc ───
   name = name.replace(/\bUSB-C\b/gi, '')
+  name = name.replace(/\bLightning\b/gi, '')
 
   // ─── Step 17: Remove strap sizes & misc ───
   if (!isWatch || isGarmin) {
@@ -732,7 +795,17 @@ function extractProductName(fullName: string, brand: string): string {
   name = name.replace(/[\s,.\-]+$/, '')                // trailing punctuation
   name = name.replace(/\s+/g, ' ').trim()
 
-  // ─── Step 20: Title Case ───
+  // ─── Step 20: Deduplicate consecutive tokens ───
+  const tokens = name.split(' ')
+  const deduped: string[] = []
+  for (const t of tokens) {
+    if (deduped.length === 0 || deduped[deduped.length - 1] !== t) {
+      deduped.push(t)
+    }
+  }
+  name = deduped.join(' ')
+
+  // ─── Step 21: Title Case ───
   name = name.split(' ').map(word => {
     if (!word) return ''
     // Не трогать аббревиатуры полностью заглавными (JBL, DJI, LTE, USB, OLED)
