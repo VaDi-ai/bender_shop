@@ -498,7 +498,7 @@ function getAttributes(row: SheetRow): Record<string, string> {
 
   // 2. Fallback: парсинг из названия (если колонка пуста)
   const parsed = parseAttributes(row.fullName, row.brand, row.country)
-  for (const key of ['Цвет', 'Память', 'RAM', 'Размер', 'SIM', 'Связь', 'Чип', 'Ремешок', 'Комплектация', 'Экран', 'Серия', 'Диагональ', 'Разъём', 'Touch ID', 'Дисплей', 'Ревизия', 'Умный дом', 'AI'] as const) {
+  for (const key of ['Цвет', 'Память', 'RAM', 'Размер', 'SIM', 'Связь', 'Чип', 'Ремешок', 'Комплектация', 'Экран', 'Серия', 'Диагональ', 'Разъём', 'Touch ID', 'Дисплей', 'Ревизия', 'Умный дом', 'AI', 'Материал', 'Состояние', 'Линзы', 'Крепление', 'Шумоподавление'] as const) {
     if (!attrs[key] && parsed[key]) attrs[key] = parsed[key]
   }
 
@@ -988,8 +988,9 @@ function parseAttributes(fullName: string, brand: string, country: string): Reco
     }
   }
 
-  // ─── USB-C (AirPods) ───
+  // ─── Connector ───
   if (/USB-C/i.test(normalized)) attrs['Разъём'] = 'USB-C'
+  else if (/\bLightning\b/i.test(normalized)) attrs['Разъём'] = 'Lightning'
 
   // ─── Console: PS5 revision ───
   const revMatch = normalized.match(/(\d+)\s*ревизия/i)
@@ -999,9 +1000,109 @@ function parseAttributes(fullName: string, brand: string, country: string): Reco
   if (/без кейса/i.test(normalized)) attrs['Комплектация'] = 'Без кейса'
   else if (/с кейсом/i.test(normalized)) attrs['Комплектация'] = 'С кейсом'
   else if (/диффузор/i.test(normalized)) attrs['Комплектация'] = 'Диффузор'
+  else if (/кейс MagSafe/i.test(normalized)) attrs['Комплектация'] = 'Кейс MagSafe'
+  else if (/\bGift\s*Edition\b/i.test(normalized)) attrs['Комплектация'] = 'Gift Edition'
+  else if (/без зарядки/i.test(normalized)) attrs['Комплектация'] = 'Без зарядки'
   if (/\+?\s*Touch\s*ID/i.test(normalized)) attrs['Touch ID'] = 'Да'
   if (/Nano\s*Texture/i.test(normalized)) attrs['Дисплей'] = 'Nano Texture'
+  else if (/\bStanda?r?[dt]\s*Display\b/i.test(normalized)) attrs['Дисплей'] = 'Standard'
   if (/Coanda\s*2x/i.test(normalized)) attrs['Серия'] = 'Coanda 2x'
+
+  // ─── Condition notes ───
+  if (/мятая коробка/i.test(normalized)) attrs['Состояние'] = 'Мятая коробка'
+  else if (/распакованы/i.test(normalized)) attrs['Состояние'] = 'Распакован'
+
+  // ─── 5G ───
+  if (/\b5G\b/i.test(normalized)) attrs['Связь'] = '5G'
+
+  // ─── Apple Watch: material + band type + GPS/LTE ───
+  if (isWatch && !isGarmin) {
+    if (/\b(Titanium|Ti)\b/i.test(normalized)) attrs['Материал'] = 'Titanium'
+    else if (/\b(Aluminum|Al)\b/i.test(normalized)) attrs['Материал'] = 'Aluminum'
+
+    // Band type
+    const bandTypes: [RegExp, string][] = [
+      [/\bSport\s*Band\b/i, 'Sport Band'],
+      [/\bOcean\s*Band\b/i, 'Ocean Band'],
+      [/\bAlpine\s*Loop\b/i, 'Alpine Loop'],
+      [/\bTrail\s*Loop\b/i, 'Trail Loop'],
+      [/\bMilanese\s*Loop?\b/i, 'Milanese Loop'],
+      [/\bLink\s*Bracelet\b/i, 'Link Bracelet'],
+      [/\bCharcoal\s*Loop\b/i, 'Charcoal Loop'],
+      [/\bBraided\s*Solo\s*Loop\b/i, 'Braided Solo Loop'],
+    ]
+    for (const [re, label] of bandTypes) {
+      if (re.test(normalized)) { attrs['Ремешок'] = label; break }
+    }
+
+    if (/\bCellular\b/i.test(normalized) || /\bLTE\b/i.test(normalized)) attrs['Связь'] = 'Cellular'
+    else if (/\bGPS\b/i.test(normalized)) attrs['Связь'] = 'GPS'
+  }
+
+  // ─── Garmin: band material + size ───
+  if (isGarmin) {
+    if (/\b-?(XS)\b/i.test(normalized)) attrs['Размер'] = 'XS'
+    else if (/\b-?(XL)\b/i.test(normalized)) attrs['Размер'] = 'XL'
+
+    if (/\bSilicone\b/i.test(normalized)) attrs['Ремешок'] = 'Silicone'
+    else if (/\bNylon\b/i.test(normalized)) attrs['Ремешок'] = 'Nylon'
+    else if (/\bLeather\b/i.test(normalized)) attrs['Ремешок'] = 'Leather'
+
+    if (/\bCarbon\s*DLC\b/i.test(normalized)) attrs['Материал'] = 'Carbon DLC'
+    else if (/\bDamascus\s*STEEL/i.test(normalized)) attrs['Материал'] = 'Damascus Steel'
+  }
+
+  // ─── Pixel: XL variant ───
+  if (/\bPixel\b/i.test(normalized) && /\bXL\b/i.test(normalized)) {
+    attrs['Размер'] = 'XL'
+  }
+
+  // ─── iMac: screen size ───
+  if (/\biMac\b/i.test(normalized)) {
+    if (/\b24\b/.test(normalized)) attrs['Экран'] = '24"'
+  }
+
+  // ─── Bare storage for iPad/Pixel/Apple TV (fallback when no GB suffix) ───
+  if (!attrs['Память'] && (isiPad || /\bPixel\b/i.test(normalized) || /\bApple\s*TV\b/i.test(normalized))) {
+    const bareStorage = normalized.match(/\b(64|128|256|512|1024)\b/)
+    if (bareStorage) attrs['Память'] = bareStorage[1] + 'GB'
+  }
+
+  // ─── RAM after Max/Pro/Ultra ───
+  if (!attrs['RAM'] && (isMac || isMacBook)) {
+    const ramMatch = normalized.match(/\b(?:Max|Pro|Ultra)\s+(16|24|32|48|64|96|128)\b/)
+    if (ramMatch) attrs['RAM'] = ramMatch[1] + 'GB'
+  }
+
+  // ─── DJI: combo type ───
+  if (/\bDJI\b/i.test(normalized)) {
+    const comboMatch = normalized.match(/\b(Motion|Premium|Creator|Adventure)\s*Combo\b/i)
+    if (comboMatch) attrs['Комплектация'] = comboMatch[1] + ' Combo'
+    else if (/Базовая Версия/i.test(normalized) || /базовая версия/i.test(normalized)) attrs['Комплектация'] = 'Базовая'
+  }
+
+  // ─── Ray-Ban / Oakley: lens attributes ───
+  if (/\bRay-?Ban\b/i.test(normalized) || /\bOakley\b/i.test(normalized)) {
+    const lensProps: string[] = []
+    if (/\bMatte\b/i.test(normalized)) lensProps.push('Matte')
+    else if (/\bShiny\b/i.test(normalized)) lensProps.push('Shiny')
+    if (/\bPolar/i.test(normalized)) lensProps.push('Polarized')
+    if (/\bTransitions\b/i.test(normalized)) lensProps.push('Transitions')
+    if (/\bPrizm\b/i.test(normalized)) lensProps.push('Prizm')
+    if (/\bClear\b/i.test(normalized) && !lensProps.includes('Transitions')) lensProps.push('Clear')
+    if (lensProps.length) attrs['Линзы'] = lensProps.join(' ')
+  }
+
+  // ─── Studio/Pro Display: glass + mount ───
+  if (/\b(Studio|Pro)\s*Display\b/i.test(normalized)) {
+    if (/\bNano\s*Glass\b/i.test(normalized)) attrs['Дисплей'] = 'Nano Glass'
+    else if (/\bStandard\s*Glass\b/i.test(normalized)) attrs['Дисплей'] = 'Standard Glass'
+    if (/\bTilt\s*Stand\b/i.test(normalized)) attrs['Крепление'] = 'Tilt Stand'
+    else if (/\bVESA/i.test(normalized)) attrs['Крепление'] = 'VESA Mount'
+  }
+
+  // ─── Noise cancellation ───
+  if (/с шумоподавлением/i.test(normalized)) attrs['Шумоподавление'] = 'Да'
 
   // ─── iPad: WIFI ───
   if (/iPad/i.test(normalized)) {
