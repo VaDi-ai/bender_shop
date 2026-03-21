@@ -614,12 +614,17 @@ function extractProductName(fullName: string, brand: string): string {
 
   // ─── Step 12: Remove Apple article codes (but not Sony WH-/WF- model names) ───
   if (!isSonyAudio) {
-    name = name.replace(/\bM[A-Z0-9]{3,5}\b/g, '')   // Apple: MWWF3, MEH94, MX5R3
-    name = name.replace(/\b[A-Z]\d[A-Z]{2}\b/g, '')   // Apple: U3LW, T3LW
+    name = name.replace(/\bM[A-Z0-9]{3,5}\b/g, '')    // Apple: MWWF3, MEH94, MX5R3
+    name = name.replace(/\b[A-Z]\d[A-Z]{2}\b/g, '')    // Apple: U3LW, T3LW
   }
+  // Apple Z-артикулы: Z1EH000V5, Z1CY0019Z, Z1FD0000N
+  name = name.replace(/\bZ1[A-Z]{2}[A-Z0-9]{3,6}\b/g, '')
 
-  // ─── Step 13: Remove USB-C ───
+  // ─── Step 13: Remove USB-C, display types, misc ───
   name = name.replace(/\bUSB-C\b/gi, '')
+  name = name.replace(/\bStandard Display\b/gi, '')
+  name = name.replace(/\bNano Texture Display\b/gi, '')
+  name = name.replace(/\bкейс MagSafe\b/gi, '')
 
   // ─── Step 14: Remove strap sizes & misc ───
   if (!isWatch || isGarmin) {
@@ -633,6 +638,8 @@ function extractProductName(fullName: string, brand: string): string {
   name = name.replace(/[\u{1F300}-\u{1FAFF}]/gu, '')
 
   // ─── Step 16: Final cleanup ───
+  name = name.replace(/\(\s*\/?\s*\)/g, '')       // empty () or (/)
+  name = name.replace(/\s*\/\s*(?=\s|$)/g, '')    // trailing /
   name = name.replace(/\s+/g, ' ').trim()
 
   return name || fullName.slice(0, 60)
