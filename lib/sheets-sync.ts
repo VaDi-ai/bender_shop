@@ -390,22 +390,41 @@ export async function syncProductsFromSheets(): Promise<{
 // ─── Color dictionary (long first for greedy match) ─────────────────────────
 
 const COLORS_LONG = [
-  'Cobalt Violet', 'Sky Blue', 'Rose Gold', 'Space Gray', 'Space Black',
+  // Samsung Titanium compounds
+  'Titanium Silverblue', 'Titanium Whitesilver', 'Titanium Pinkgold',
+  'Titanium Black', 'Titanium Gray',
+  // Standard compounds
+  'Cobalt Violet', 'Cobalt Blue', 'Sky Blue', 'Rose Gold', 'Space Gray', 'Space Black',
   'Jet Black', 'Alpine Green', 'Deep Purple', 'Dark Green', 'Sierra Blue',
   'Pur Fog', 'Anchor Blue', 'Prussian Blue', 'Vinca Blue', 'Icy Blue',
-  'Ice Blue', 'Ceramic White', 'Phantom Black', 'Phantom White', 'Cream Gold',
+  'Ice Blue', 'Ceramic White', 'Ceramic Pink', 'Ceramic Patina',
+  'Phantom Black', 'Phantom White', 'Cream Gold', 'White Gold',
   'Lunar Silver', 'Mars Orange', 'Almond Green', 'Rock Gray',
-  'Nickel/Copper', 'Blue/Copper',
+  // Dyson slash-colors & compounds
+  'Nickel/Copper', 'Nickel/Fuchsia', 'Blue/Copper', 'Black/Teal',
+  'White/Silver', 'Black/Nickel', 'Gold/Gold',
+  'Midnight Blue/Copper', 'Red Velvet Gold', 'Vinca Blue/Topaz',
+  'MatBlack/Copp', 'Yell/Nick', 'Yellow/Nickel',
+  // Dyson named colors
+  'Amber Silk', 'Jasper Plum', 'Red Velvet', 'Nickel Cooper',
+  // DualSense / Console compounds
+  'Chrome Teal', 'Chrome Indigo', 'Chrome Pearl',
+  'Sterling Silver', 'Volcanic Red',
+  // MacBook NEO
+  'Blush', 'Citrus', 'Indigo',
+  // Ghost special edition
+  'GHOST OF YOTEI',
 ]
 const COLORS_SHORT = [
-  'Jetblack', 'Iceblue', 'Icyblue',
+  'Jetblack', 'Iceblue', 'Icyblue', 'Pinkgold', 'Silverblue', 'Whitesilver',
   'Black', 'White', 'Silver', 'Gold', 'Blue', 'Red', 'Green',
   'Orange', 'Purple', 'Midnight', 'Starlight', 'Pink', 'Yellow', 'Cream',
   'Mint', 'Lavender', 'Coral', 'Graphite', 'Natural', 'Titanium',
   'Desert', 'Navy', 'Denim', 'Gray', 'Teal', 'Bronze', 'Shadow',
   'Burgundy', 'Copper', 'Ivory', 'Sage', 'Stone', 'Ultramarine',
   'Charcoal', 'Fuchsia', 'Obsidian', 'Porcelain', 'Hazel', 'Peony',
-  'Wintergreen', 'Bay', 'Nickel',
+  'Wintergreen', 'Bay', 'Nickel', 'Topaz', 'Neon', 'Turquoise',
+  'Camouflage', 'Cobalt', 'Chrome', 'Sterling', 'Volcanic', 'Pop',
   'Голубой', 'Черный', 'Белый', 'Серебристый', 'Золотой', 'Синий',
   'Красный', 'Зеленый', 'Зелёный', 'Оранжевый', 'Фиолетовый', 'Розовый',
   'Серый',
@@ -452,6 +471,8 @@ function extractProductName(fullName: string, brand: string): string {
   const isDyson = /\bDyson\b/i.test(name)
   const isTV = /\b(QN\d+|OLED|QLED|The Frame|Neo QLED)\b/i.test(name)
   const isCamera = /\b(Canon|Sony|Nikon|DJI|GoPro)\b/i.test(name)
+  const isSonyAudio = /\bSony\b/i.test(name) && /\b(WH-|WF-|XM)\b/.test(name)
+  const isConsole = /\b(DualSense|PlayStation|Xbox|Nintendo|Switch|Steam\s*Deck|Oculus|Quest)\b/i.test(name)
 
   // ─── Step 4: Remove CPU config (Mac) ───
   name = name.replace(/\b\d+c\/\d+c\b/g, '')
@@ -503,7 +524,8 @@ function extractProductName(fullName: string, brand: string): string {
   // ─── Step 9: iPad-specific cleanup ───
   if (isiPad) {
     name = name.replace(/\bWi-Fi\s*\+?\s*Cellular\b/gi, '')
-    name = name.replace(/\bWi-Fi\b/gi, '')
+    name = name.replace(/\bWi-?Fi\b/gi, '')
+    name = name.replace(/\bWIFI\b/gi, '')
     name = name.replace(/\bLTE\b/gi, '')
     name = name.replace(/\b(A\d+|M\d+)\b/g, '')
   }
@@ -518,7 +540,7 @@ function extractProductName(fullName: string, brand: string): string {
     for (const comp of DYSON_COMPLETIONS) {
       name = name.replace(new RegExp(`\\b${comp}\\b`, 'gi'), '')
     }
-    name = name.replace(/\b[A-Z]{2}\d{2}\b/g, '')  // HD15, HT01
+    name = name.replace(/\b(HS|HD|HT|SV|PH|RB|HU)\d{2,3}[A-Z]?\b/g, '')  // HD15, SV46, PH05
   }
 
   // ─── Step 10c: TV — remove diagonal ───
@@ -534,13 +556,30 @@ function extractProductName(fullName: string, brand: string): string {
     }
   }
 
+  // ─── Step 10e: Console-specific cleanup ───
+  if (isConsole) {
+    name = name.replace(/\bGHOST\s+OF\s+YOTEI\b/gi, '')
+    name = name.replace(/\bAstro\s*Bot\b/gi, '')
+    name = name.replace(/\b\d+\s*ревизия\b/gi, '')
+  }
+
+  // ─── Step 10f: Accessories/Комплектация — remove from name ───
+  name = name.replace(/\bбез кейса\b/gi, '')
+  name = name.replace(/\bс кейсом\b/gi, '')
+  name = name.replace(/\bдиффузор\b/gi, '')
+  name = name.replace(/\bCoanda\s*2x\b/gi, '')
+  name = name.replace(/\+?\s*Touch\s*ID\b/gi, '')
+  name = name.replace(/\bNano\s*Texture\s*Display\b/gi, '')
+
   // ─── Step 11: Remove year ───
   name = name.replace(/\s*\(20[2-3]\d\)\s*/g, ' ')
   name = name.replace(/\b20[2-3]\d\b/g, '')
 
-  // ─── Step 12: Remove Apple article codes ───
-  name = name.replace(/\b[A-Z]{1,2}[A-Z0-9]{2,5}[0-9][A-Z0-9]?\b/g, '')
-  name = name.replace(/\b[A-Z]\d[A-Z]{2}\b/g, '')
+  // ─── Step 12: Remove Apple article codes (but not Sony WH-/WF- model names) ───
+  if (!isSonyAudio) {
+    name = name.replace(/\bM[A-Z0-9]{3,5}\b/g, '')   // Apple: MWWF3, MEH94, MX5R3
+    name = name.replace(/\b[A-Z]\d[A-Z]{2}\b/g, '')   // Apple: U3LW, T3LW
+  }
 
   // ─── Step 13: Remove USB-C ───
   name = name.replace(/\bUSB-C\b/gi, '')
@@ -695,6 +734,25 @@ function parseAttributes(fullName: string, brand: string, country: string): Reco
 
   // ─── USB-C (AirPods) ───
   if (/USB-C/i.test(normalized)) attrs['Разъём'] = 'USB-C'
+
+  // ─── Console: PS5 revision ───
+  const revMatch = normalized.match(/(\d+)\s*ревизия/i)
+  if (revMatch) attrs['Ревизия'] = revMatch[1]
+
+  // ─── Accessories / Комплектация ───
+  if (/без кейса/i.test(normalized)) attrs['Комплектация'] = 'Без кейса'
+  else if (/с кейсом/i.test(normalized)) attrs['Комплектация'] = 'С кейсом'
+  else if (/диффузор/i.test(normalized)) attrs['Комплектация'] = 'Диффузор'
+  if (/\+?\s*Touch\s*ID/i.test(normalized)) attrs['Touch ID'] = 'Да'
+  if (/Nano\s*Texture/i.test(normalized)) attrs['Дисплей'] = 'Nano Texture'
+  if (/Coanda\s*2x/i.test(normalized)) attrs['Серия'] = 'Coanda 2x'
+
+  // ─── iPad: WIFI ───
+  if (/iPad/i.test(normalized)) {
+    if (/WIFI|Wi-?Fi/i.test(normalized) && !/Cellular/i.test(normalized)) {
+      if (!attrs['Связь']) attrs['Связь'] = 'Wi-Fi'
+    }
+  }
 
   // ─── Country (from sheet column) ───
   if (country) attrs['Страна'] = country
