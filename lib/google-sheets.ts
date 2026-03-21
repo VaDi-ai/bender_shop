@@ -82,6 +82,21 @@ export async function appendRows(sheetName: string, values: (string | number)[][
 }
 
 /**
+ * Batch update: записать несколько диапазонов за один API-вызов.
+ */
+export async function batchUpdate(data: { range: string; values: (string | number)[][] }[]): Promise<void> {
+  if (data.length === 0) return
+  const sheets = await getSheets()
+  await sheets.spreadsheets.values.batchUpdate({
+    spreadsheetId: SHEET_ID,
+    requestBody: {
+      valueInputOption: 'USER_ENTERED',
+      data: data.map(d => ({ range: d.range, values: d.values })),
+    },
+  })
+}
+
+/**
  * Получить список всех листов в таблице.
  */
 export async function getSheetNames(): Promise<string[]> {

@@ -654,7 +654,7 @@ bot.action('maint:clear_products', async (ctx) => {
 
 bot.action('maint:test_enrich', async (ctx) => {
   try { await ctx.answerCbQuery() } catch { /* ignore */ }
-  await ctx.reply('🧪 Запускаю тестовое обогащение 5 товаров + запись в Sheets...')
+  await ctx.reply('🧪 Запускаю тестовое обогащение 5 товаров + запись во ВСЕ строки Sheets...')
 
   const TARGETS = [
     { search: 'Iphone 17 Pro', type: 'телефон' },
@@ -666,19 +666,12 @@ bot.action('maint:test_enrich', async (ctx) => {
 
   try {
     const { enrichProductCard } = await import('../lib/enrich')
-    const { readSheet, writeCell, getSheetNames } = await import('../lib/google-sheets')
-
-    const allSheets = await getSheetNames()
-    const sheetName = allSheets[0]
-    if (!sheetName) { await ctx.reply('❌ Листы не найдены'); return }
-
-    const data = await readSheet(sheetName)
     const results: string[] = []
 
     for (const target of TARGETS) {
       const product = await prisma.product.findFirst({
         where: { name: target.search },
-        include: { variants: { select: { id: true, attributes: true }, take: 5 } },
+        select: { id: true, name: true, _count: { select: { variants: true } } },
       })
 
       if (!product) {
@@ -686,7 +679,7 @@ bot.action('maint:test_enrich', async (ctx) => {
         continue
       }
 
-      // Enrich
+      // enrichProductCard now writes to ALL sheet rows internally
       const success = await enrichProductCard(product.id, true)
       if (!success) {
         results.push(`❌ ${target.type}: "${target.search}" — обогащение не удалось`)
@@ -698,49 +691,9 @@ bot.action('maint:test_enrich', async (ctx) => {
 
       const description = updated.description || ''
       const specs = updated.specs as Record<string, string> | null
-      const specsText = specs
-        ? Object.entries(specs).map(([k, v]) => `${k}: ${v}`).join('\n')
-        : ''
-
-      // Find row in sheet
-      const variantFullNames = product.variants
-        .map(v => {
-          const a = v.attributes as Record<string, unknown> | null
-          return a && typeof a.fullName === 'string' ? a.fullName : null
-        })
-        .filter(Boolean) as string[]
-
-      let matchedRow = -1
-      for (let i = 1; i < data.length; i++) {
-        const sheetFullName = (data[i]?.[4] ?? '').toString().trim()
-        if (variantFullNames.includes(sheetFullName)) {
-          matchedRow = i + 1
-          break
-        }
-      }
-      // Fallback
-      if (matchedRow === -1) {
-        const searchLower = target.search.toLowerCase()
-        for (let i = 1; i < data.length; i++) {
-          const sheetFullName = (data[i]?.[4] ?? '').toString().trim().toLowerCase()
-          if (sheetFullName.includes(searchLower.split(' ').slice(0, 2).join(' '))) {
-            matchedRow = i + 1
-            break
-          }
-        }
-      }
-
-      if (matchedRow === -1) {
-        results.push(`⚠️ ${target.type}: "${target.search}" — обогащён, строка в Sheets не найдена`)
-        continue
-      }
-
-      // Write to Sheets
-      if (description) await writeCell(sheetName, `J${matchedRow}`, description)
-      if (specsText) await writeCell(sheetName, `K${matchedRow}`, specsText)
-
       const specCount = specs ? Object.keys(specs).length : 0
-      results.push(`✅ ${target.type}: "${target.search}" → строка ${matchedRow}\n   J: ${description.slice(0, 60)}...\n   K: ${specCount} полей`)
+
+      results.push(`✅ ${target.type}: "${target.search}" (${product._count.variants} вариантов)\n   Desc: ${description.slice(0, 60)}...\n   Specs: ${specCount} полей → записано во все строки`)
 
       await new Promise(r => setTimeout(r, 2000))
     }

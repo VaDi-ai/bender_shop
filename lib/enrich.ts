@@ -175,6 +175,9 @@ export async function enrichProductCard(productId: number, force = false): Promi
     const specCount = updateData.specs ? Object.keys(updateData.specs as object).length : 0
     console.log(`[Enrich] ${product.name}: updated (description: ${!!updateData.description}, specs: ${specCount} fields)`)
 
+    // Write to Google Sheets (all variant rows)
+    await writeEnrichToSheets(product.id, updateData.description as string | undefined, updateData.specs as Record<string, string> | undefined)
+
     return true
   } catch (err) {
     console.error(`[Enrich] ${product.name}: error:`, err)
@@ -221,4 +224,72 @@ export async function enrichAllProducts(shouldAbort?: () => boolean, force = fal
 
   console.log(`[Enrich] Done: ${enriched} enriched, ${failed} failed out of ${products.length}`)
   return { total: products.length, enriched, failed }
+}
+
+/**
+ * Записывает description и specs во ВСЕ строки продукта в Google Sheets.
+ * Находит строки по fullName из variant attributes, пишет batch-update.
+ */
+async function writeEnrichToSheets(
+  productId: number,
+  description: string | undefined,
+  specs: Record<string, string> | undefined,
+): Promise<number> {
+  if (!description && !specs) return 0
+
+  try {
+    const { readSheet, getSheetNames, batchUpdate } = await import('./google-sheets')
+
+    const allSheets = await getSheetNames()
+    const sheetName = allSheets[0]
+    if (!sheetName) return 0
+
+    // Collect all fullNames from product variants
+    const variants = await prisma.productVariant.findMany({
+      where: { productId },
+      select: { attributes: true },
+    })
+    const fullNames = new Set<string>()
+    for (const v of variants) {
+      const a = v.attributes as Record<string, unknown> | null
+      if (a && typeof a.fullName === 'string') fullNames.add(a.fullName)
+    }
+    if (fullNames.size === 0) return 0
+
+    // Read sheet and find matching rows
+    const data = await readSheet(sheetName)
+    const matchedRows: number[] = []
+    for (let i = 1; i < data.length; i++) {
+      const sheetFullName = (data[i]?.[4] ?? '').toString().trim()  // Column E (index 4)
+      if (fullNames.has(sheetFullName)) {
+        matchedRows.push(i + 1)  // 1-indexed for Sheets API
+      }
+    }
+    if (matchedRows.length === 0) return 0
+
+    // Build batch update data
+    const specsText = specs
+      ? Object.entries(specs).map(([k, v]) => `${k}: ${v}`).join('\n')
+      : ''
+
+    const batchData: { range: string; values: (string | number)[][] }[] = []
+    for (const row of matchedRows) {
+      if (description) {
+        batchData.push({ range: `'${sheetName}'!J${row}`, values: [[description]] })
+      }
+      if (specsText) {
+        batchData.push({ range: `'${sheetName}'!K${row}`, values: [[specsText]] })
+      }
+    }
+
+    if (batchData.length > 0) {
+      await batchUpdate(batchData)
+    }
+
+    console.log(`[Enrich] Wrote to ${matchedRows.length} sheet rows: ${matchedRows.join(', ')}`)
+    return matchedRows.length
+  } catch (err) {
+    console.warn(`[Enrich] Failed to write to Sheets:`, err)
+    return 0
+  }
 }
