@@ -65,7 +65,7 @@ export async function enrichProductCard(productId: number, force = false): Promi
 Если характеристика неизвестна — не включай её. Для не-телефонов адаптируй поля (ноутбуки — CPU/GPU/RAM/SSD/Экран/Вес, наушники — тип/драйверы/автономность, часы — экран/чипсет/автономность/водозащита и т.д.).
 Описание пиши как для карточки товара — коротко, информативно, по-русски.`,
       }],
-      max_tokens: 500,
+      max_tokens: 2000,
     })
 
     const rawText = specsResponse.choices[0]?.message?.content?.trim() ?? ''
@@ -75,12 +75,27 @@ export async function enrichProductCard(productId: number, force = false): Promi
     }
 
     let parsed: { description?: string; specs?: Record<string, string> }
+    let cleaned = rawText.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim()
+
+    // Fix truncated JSON — trim to last closing brace
+    if (!cleaned.endsWith('}')) {
+      const lastBrace = cleaned.lastIndexOf('}')
+      if (lastBrace > 0) {
+        cleaned = cleaned.slice(0, lastBrace + 1)
+      }
+    }
+
     try {
-      const cleaned = rawText.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim()
       parsed = JSON.parse(cleaned)
     } catch {
-      console.warn(`[Enrich] ${product.name}: failed to parse JSON, raw: ${rawText.slice(0, 200)}`)
-      return false
+      console.warn(`[Enrich] ${product.name}: failed to parse JSON, raw: ${rawText.slice(0, 300)}`)
+      // Try to extract at least description
+      const descMatch = cleaned.match(/"description"\s*:\s*"([^"]+)/)
+      if (descMatch) {
+        parsed = { description: descMatch[1] }
+      } else {
+        return false
+      }
     }
 
     const description = typeof parsed.description === 'string' ? parsed.description.slice(0, 1000) : null

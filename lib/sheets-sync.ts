@@ -393,12 +393,13 @@ const COLORS_LONG = [
   'Cobalt Violet', 'Sky Blue', 'Rose Gold', 'Space Gray', 'Space Black',
   'Jet Black', 'Alpine Green', 'Deep Purple', 'Dark Green', 'Sierra Blue',
   'Pur Fog', 'Anchor Blue', 'Prussian Blue', 'Vinca Blue', 'Icy Blue',
-  'Ceramic White', 'Phantom Black', 'Phantom White', 'Cream Gold',
+  'Ice Blue', 'Ceramic White', 'Phantom Black', 'Phantom White', 'Cream Gold',
   'Lunar Silver', 'Mars Orange', 'Almond Green', 'Rock Gray',
   'Nickel/Copper', 'Blue/Copper',
 ]
 const COLORS_SHORT = [
-  'Jetblack', 'Black', 'White', 'Silver', 'Gold', 'Blue', 'Red', 'Green',
+  'Jetblack', 'Iceblue', 'Icyblue',
+  'Black', 'White', 'Silver', 'Gold', 'Blue', 'Red', 'Green',
   'Orange', 'Purple', 'Midnight', 'Starlight', 'Pink', 'Yellow', 'Cream',
   'Mint', 'Lavender', 'Coral', 'Graphite', 'Natural', 'Titanium',
   'Desert', 'Navy', 'Denim', 'Gray', 'Teal', 'Bronze', 'Shadow',
@@ -406,7 +407,8 @@ const COLORS_SHORT = [
   'Charcoal', 'Fuchsia', 'Obsidian', 'Porcelain', 'Hazel', 'Peony',
   'Wintergreen', 'Bay', 'Nickel',
   'Голубой', 'Черный', 'Белый', 'Серебристый', 'Золотой', 'Синий',
-  'Красный', 'Зеленый', 'Оранжевый', 'Фиолетовый', 'Розовый',
+  'Красный', 'Зеленый', 'Зелёный', 'Оранжевый', 'Фиолетовый', 'Розовый',
+  'Серый',
 ]
 const ALL_COLORS = [...COLORS_LONG, ...COLORS_SHORT]
 
@@ -460,8 +462,9 @@ function extractProductName(fullName: string, brand: string): string {
     name = name.replace(/\b\d+\s*(GB|TB)\b/gi, '')                // 256GB, 1TB
   }
 
-  // ─── Step 6: Remove SIM ───
+  // ─── Step 6: Remove SIM and 5G ───
   name = name.replace(/\b(2Sim|eSim|e-Sim|1Sim\+eSim|Dual\s*SIM|DS)\b/gi, '')
+  name = name.replace(/\b5G\b/gi, '')
 
   // ─── Step 7: Remove colors ───
   // Dyson slash-colors (Nickel/Copper, Blue/Copper) — remove whole compound
