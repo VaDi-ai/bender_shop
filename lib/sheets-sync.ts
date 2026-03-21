@@ -732,6 +732,17 @@ function extractProductName(fullName: string, brand: string): string {
   name = name.replace(/[\s,.\-]+$/, '')                // trailing punctuation
   name = name.replace(/\s+/g, ' ').trim()
 
+  // ─── Step 20: Title Case ───
+  name = name.split(' ').map(word => {
+    if (!word) return ''
+    // Не трогать аббревиатуры полностью заглавными (JBL, DJI, LTE, USB, OLED)
+    if (word === word.toUpperCase() && word.length <= 5) return word
+    // Не трогать слова с цифрами (M4, S26, XM5)
+    if (/\d/.test(word)) return word
+    // Capitalize
+    return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+  }).join(' ')
+
   return name || fullName.slice(0, 60)
 }
 
