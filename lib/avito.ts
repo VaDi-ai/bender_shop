@@ -119,7 +119,7 @@ export async function sendAvitoMessage(chatId: string, text: string): Promise<vo
 
   console.log('[Avito] Sending to chat:', chatId, 'user:', userId, 'text:', text.slice(0, 50))
 
-  const url = `${AVITO_API}/messenger/v2/accounts/${userId}/chats/${chatId}/messages`
+  const url = `${AVITO_API}/messenger/v1/accounts/${userId}/chats/${chatId}/messages`
   const body = JSON.stringify({ message: { text } })
 
   const res = await fetch(url, {
