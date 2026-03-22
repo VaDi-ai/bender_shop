@@ -255,8 +255,25 @@ async function pollAvitoMessages(telegram: Telegram): Promise<void> {
           `💬 [Avito] ${name}:${itemLine}\n${text}`,
           { message_thread_id: client.telegramTopicId },
         )
-      } catch (err) {
-        console.error(`[Avito] Failed to forward message:`, err)
+      } catch (err: any) {
+        // Topic deleted — recreate
+        if (err?.message?.includes('thread not found') || err?.message?.includes('message thread not found')) {
+          try {
+            const topic = await telegram.createForumTopic(CRM_GROUP_ID, `[Avito] ${name}`)
+            client = await prisma.client.update({
+              where: { id: client.id },
+              data: { telegramTopicId: topic.message_thread_id },
+            })
+            await (telegram.sendMessage as any)(CRM_GROUP_ID,
+              `👤 Топик пересоздан\n💬 [Avito] ${name}:${itemLine}\n${text}`,
+              { message_thread_id: topic.message_thread_id },
+            )
+          } catch (err2) {
+            console.error(`[Avito] Failed to recreate topic for ${name}:`, err2)
+          }
+        } else {
+          console.error(`[Avito] Failed to forward message:`, err)
+        }
       }
     }
 

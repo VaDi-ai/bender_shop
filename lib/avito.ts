@@ -118,17 +118,21 @@ export async function sendAvitoMessage(chatId: string, text: string): Promise<vo
 
   console.log('[Avito] Sending to chat:', chatId, 'user:', userId, 'text:', text.slice(0, 50))
 
-  const res = await fetch(`${AVITO_API}/messenger/v1/accounts/${userId}/chats/${chatId}/messages`, {
+  const url = `${AVITO_API}/messenger/v2/accounts/${userId}/chats/${chatId}/messages`
+  const body = JSON.stringify({ message: { text } })
+
+  const res = await fetch(url, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${token}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ message: { text } }),
+    body,
   })
   if (!res.ok) {
     const errBody = await res.text()
-    console.error('[Avito] Send failed:', res.status, errBody)
+    console.error('[Avito] Send error body:', errBody)
+    console.error('[Avito] Send request:', { url, chatId, userId, textLength: text.length })
     throw new Error(`Avito send failed: ${res.status} ${errBody}`)
   }
 }
