@@ -226,6 +226,28 @@ export async function mapAvitoToProducts(): Promise<AvitoMapping[]> {
   const result: AvitoMapping[] = []
 
   for (const item of avitoItems) {
+    // DEBUG: логирование для MacBook NEO
+    if (/neo/i.test(item.title)) {
+      const normTitle = normalize(item.title)
+      const anchorsAvito = extractAnchorTokens(item.title)
+      const configAvito = extractConfigTokens(item.title)
+      console.log('[DEBUG NEO] Avito title:', item.title)
+      console.log('[DEBUG NEO] Normalized:', normTitle)
+      console.log('[DEBUG NEO] Anchors:', anchorsAvito)
+      console.log('[DEBUG NEO] Config:', configAvito)
+
+      for (const sp of sheetProducts) {
+        if (/neo/i.test(sp.fullName)) {
+          const normSheet = normalize(sp.fullName)
+          const anchorsSheet = extractAnchorTokens(sp.fullName)
+          const configSheet = extractConfigTokens(sp.fullName)
+          const score = matchScoreWeighted(item.title, sp.fullName)
+          const extendedScore = matchScoreWeighted(item.title, [sp.fullName, sp.color, sp.memory, sp.size].filter(Boolean).join(' '))
+          console.log('[DEBUG NEO] Sheet:', sp.fullName, '| norm:', normSheet, '| anchors:', anchorsSheet, '| config:', configSheet, '| score:', score, '| extScore:', extendedScore)
+        }
+      }
+    }
+
     // 1. Уже смаплен в БД?
     const dbMatch = dbProducts.find(p => p.avitoItemId && p.avitoItemId === BigInt(item.id))
     if (dbMatch) {
