@@ -13,7 +13,7 @@
 
 import { Telegraf, Telegram } from 'telegraf'
 import { prisma } from '../lib/prisma'
-import { isAvitoConfigured, getAvitoChats, getAvitoUserId, sendAvitoMessage } from '../lib/avito'
+import { isAvitoConfigured, getAvitoChats, getAvitoUserId, sendAvitoMessage, type AvitoChat } from '../lib/avito'
 
 const INTERVAL_MS = 10 * 60 * 1000 // 10 минут
 
@@ -149,6 +149,18 @@ async function executeTask(
 // ─── Avito Messenger Polling ──────────────────────────────────────────────────
 
 const lastProcessedMsg = new Map<string, string>()
+let initialPollDone = false
+
+function extractMessageText(msg: { text?: string; content?: { text?: string }; body?: string }): string {
+  return msg.text || msg.content?.text || msg.body || ''
+}
+
+function buildItemInfo(chat: AvitoChat): { title: string; url: string } {
+  const item = chat.context?.value
+  const title = item?.title || ''
+  const url = item?.id ? `https://www.avito.ru/${item.id}` : ''
+  return { title, url }
+}
 
 async function pollAvitoMessages(telegram: Telegram): Promise<void> {
   console.log('[Avito] Client ID:', process.env.AVITO_CLIENT_ID ? 'set' : 'NOT SET')
@@ -161,6 +173,18 @@ async function pollAvitoMessages(telegram: Telegram): Promise<void> {
   const userId = await getAvitoUserId()
   const chats = await getAvitoChats()
 
+  // First poll after restart: cache all current messages, don't process
+  if (!initialPollDone) {
+    for (const chat of chats) {
+      if (chat.last_message) {
+        lastProcessedMsg.set(chat.id, chat.last_message.id)
+      }
+    }
+    initialPollDone = true
+    console.log('[Avito] Initial poll: cached', chats.length, 'chats')
+    return
+  }
+
   for (const chat of chats) {
     const lastMsg = chat.last_message
     if (!lastMsg || lastMsg.direction === 'out') continue
@@ -168,11 +192,15 @@ async function pollAvitoMessages(telegram: Telegram): Promise<void> {
 
     lastProcessedMsg.set(chat.id, lastMsg.id)
 
+    // Debug: log raw message object
+    console.log('[Avito] Message object:', JSON.stringify(lastMsg).slice(0, 500))
+
     const buyer = chat.users?.find(u => u.id !== userId)
     if (!buyer) continue
 
     const name = buyer.name || 'Avito покупатель'
-    const text = lastMsg.text || '(без текста)'
+    const text = extractMessageText(lastMsg) || '(без текста)'
+    const { title: itemTitle, url: itemUrl } = buildItemInfo(chat)
     // externalId = "buyerId:chatId"
     const externalId = `${buyer.id}:${chat.id}`
 
@@ -187,7 +215,6 @@ async function pollAvitoMessages(telegram: Telegram): Promise<void> {
         where: { source: 'avito', externalId: String(buyer.id) },
       })
       if (client) {
-        // Upgrade externalId to include chatId
         client = await prisma.client.update({
           where: { id: client.id },
           data: { externalId },
@@ -202,6 +229,10 @@ async function pollAvitoMessages(telegram: Telegram): Promise<void> {
       })
     }
 
+    // Build CRM message with item info
+    const itemLine = itemTitle ? `\n📦 ${itemTitle}` : ''
+    const urlLine = itemUrl ? `\n🔗 ${itemUrl}` : ''
+
     // Create CRM topic if needed
     if (!client.telegramTopicId) {
       try {
@@ -211,7 +242,7 @@ async function pollAvitoMessages(telegram: Telegram): Promise<void> {
           data: { telegramTopicId: topic.message_thread_id },
         })
         await (telegram.sendMessage as any)(CRM_GROUP_ID,
-          `👤 Новый клиент с Avito: ${name}\n💬 ${text}`,
+          `👤 Новый клиент с Avito: ${name}${itemLine}${urlLine}\n💬 ${text}`,
           { message_thread_id: topic.message_thread_id },
         )
       } catch (err) {
@@ -221,7 +252,7 @@ async function pollAvitoMessages(telegram: Telegram): Promise<void> {
     } else {
       try {
         await (telegram.sendMessage as any)(CRM_GROUP_ID,
-          `💬 [Avito] ${name}: ${text}`,
+          `💬 [Avito] ${name}:${itemLine}\n${text}`,
           { message_thread_id: client.telegramTopicId },
         )
       } catch (err) {

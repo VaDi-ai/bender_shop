@@ -75,15 +75,27 @@ export async function getAvitoUserId(): Promise<number> {
 interface AvitoLastMessage {
   id: string
   text?: string
+  content?: { text?: string }
+  body?: string
   created: number
   author_id: number
   direction: 'in' | 'out'
 }
 
-interface AvitoChat {
+interface AvitoContext {
+  value?: {
+    id?: string
+    title?: string
+    url?: string
+    images?: string[]
+  }
+}
+
+export interface AvitoChat {
   id: string
   users: Array<{ id: number; name: string }>
   last_message?: AvitoLastMessage
+  context?: AvitoContext
 }
 
 export async function getAvitoChats(): Promise<AvitoChat[]> {
@@ -104,6 +116,8 @@ export async function sendAvitoMessage(chatId: string, text: string): Promise<vo
   const token = await getAvitoToken()
   const userId = await getAvitoUserId()
 
+  console.log('[Avito] Sending to chat:', chatId, 'user:', userId, 'text:', text.slice(0, 50))
+
   const res = await fetch(`${AVITO_API}/messenger/v1/accounts/${userId}/chats/${chatId}/messages`, {
     method: 'POST',
     headers: {
@@ -113,8 +127,9 @@ export async function sendAvitoMessage(chatId: string, text: string): Promise<vo
     body: JSON.stringify({ message: { text } }),
   })
   if (!res.ok) {
-    const err = await res.text()
-    throw new Error(`Avito send failed: ${res.status} ${err}`)
+    const errBody = await res.text()
+    console.error('[Avito] Send failed:', res.status, errBody)
+    throw new Error(`Avito send failed: ${res.status} ${errBody}`)
   }
 }
 
