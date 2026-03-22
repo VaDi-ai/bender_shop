@@ -49,12 +49,7 @@ export async function fetchTrendsFromAI(): Promise<TrendsData | null> {
     .map(([name, count]) => `${name} (${count} вариантов)`)
     .join('\n')
 
-  try {
-    const response = await client.chat.completions.create({
-      model: 'perplexity/sonar',
-      messages: [{
-        role: 'user',
-        content: `Вот модели в нашем магазине электроники Bender Shop (Москва, ТЦ Горбушка) с количеством вариантов:
+  const promptText = `Вот модели в нашем магазине электроники Bender Shop (Москва, ТЦ Горбушка) с количеством вариантов:
 ${modelsList}
 
 Наши категории: ${ourCategories.join(', ')}
@@ -73,14 +68,46 @@ ${modelsList}
 - Названия ТОЧНО как в нашем списке (без добавления цвета/памяти)
 
 Ответь СТРОГО в JSON без markdown:
-{"categories": [...все наши категории в порядке популярности...], "brands": [...все наши бренды...], "featuredProducts": ["точное название модели 1", ...], "reasoning": "краткое объяснение на русском"}`,
-      }],
+{"categories": [...все наши категории в порядке популярности...], "brands": [...все наши бренды...], "featuredProducts": ["точное название модели 1", ...], "reasoning": "краткое объяснение на русском"}`
+
+  const systemMsg = 'You are a JSON API. You MUST respond with valid JSON only. No markdown, no explanations, no preamble. Only a JSON object.'
+
+  function parseResponse(text: string) {
+    const jsonStr = text.replace(/```json\s*|```/g, '').trim()
+    return JSON.parse(jsonStr)
+  }
+
+  try {
+    // Attempt 1: Perplexity Sonar
+    const response = await client.chat.completions.create({
+      model: 'perplexity/sonar',
+      messages: [
+        { role: 'system', content: systemMsg },
+        { role: 'user', content: promptText },
+      ],
       max_tokens: 800,
     })
 
     const text = response.choices[0]?.message?.content?.trim() ?? ''
-    const jsonStr = text.replace(/```json\s*|```/g, '').trim()
-    const parsed = JSON.parse(jsonStr)
+    let parsed: { categories?: string[]; brands?: string[]; featuredProducts?: string[]; reasoning?: string }
+
+    try {
+      parsed = parseResponse(text)
+    } catch {
+      console.warn('[Trends] Perplexity returned non-JSON, retrying with Claude:', text.slice(0, 100))
+
+      // Attempt 2: Claude Sonnet (more reliable for JSON)
+      const retryResponse = await client.chat.completions.create({
+        model: 'anthropic/claude-sonnet-4',
+        messages: [
+          { role: 'system', content: systemMsg },
+          { role: 'user', content: promptText },
+        ],
+        max_tokens: 800,
+      })
+      const retryText = retryResponse.choices[0]?.message?.content?.trim() ?? ''
+      parsed = parseResponse(retryText)
+    }
 
     return {
       categories: parsed.categories || ourCategories,
