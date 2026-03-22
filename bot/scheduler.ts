@@ -188,6 +188,7 @@ async function pollAvitoMessages(telegram: Telegram): Promise<void> {
   for (const chat of chats) {
     const lastMsg = chat.last_message
     if (!lastMsg || lastMsg.direction === 'out') continue
+    if (lastMsg.type && lastMsg.type !== 'text') continue  // only text messages
     if (lastProcessedMsg.get(chat.id) === lastMsg.id) continue
 
     lastProcessedMsg.set(chat.id, lastMsg.id)

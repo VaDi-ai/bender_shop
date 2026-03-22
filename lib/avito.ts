@@ -74,6 +74,7 @@ export async function getAvitoUserId(): Promise<number> {
 
 interface AvitoLastMessage {
   id: string
+  type?: string  // text, appCall, image, system, item
   text?: string
   content?: { text?: string }
   body?: string
