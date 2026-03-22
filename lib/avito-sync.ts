@@ -54,12 +54,117 @@ function extractTokens(s: string): string[] {
     .filter(t => !['new', 'новый', 'sim', 'esim', 'strap', 'silicon', 'band', 'the', 'and'].includes(t))
 }
 
-function matchScore(a: string, b: string): number {
-  const tokensA = extractTokens(a)
-  const tokensB = extractTokens(b)
-  if (tokensA.length === 0 || tokensB.length === 0) return 0
-  const overlap = tokensA.filter(t => tokensB.includes(t)).length
-  return overlap / Math.min(tokensA.length, tokensB.length)
+/** Извлечь якорные токены — бренд + модель + модификация + чип */
+function extractAnchorTokens(s: string): string[] {
+  const norm = normalize(s)
+  const anchors: string[] = []
+
+  const brandPatterns = [
+    /iphone\s*\d+\w*/i,
+    /ipad\s*(pro|air|mini)?\s*\d*/i,
+    /macbook\s*(air|pro|neo)\s*\d*/i,
+    /mac\s*(mini|studio)\s*\w*/i,
+    /imac/i,
+    /airpods\s*(pro|max)?\s*\d*/i,
+    /apple\s*watch\s*(se|ultra|s\d+|series\s*\d+)\s*\d*/i,
+    /apple\s*tv/i,
+    /samsung\s*galaxy\s*z\s*(fold|flip)\s*\d*/i,
+    /samsung\s*galaxy\s*[szaf]\d+\s*(ultra|plus|\+|fe)?/i,
+    /xiaomi\s*(mi\s*)?\d+\w*/i,
+    /poco\s*\w+/i,
+    /redmi\s*\w+/i,
+    /honor\s*\w+/i,
+    /huawei\s*(mate|nova|pura|matepad)\w*/i,
+    /google\s*pixel\s*\d+\w*/i,
+    /oneplus\s*\d+\w*/i,
+    /sony\s*(playstation|ps\d|wh-?\d|wf-?\d)\w*/i,
+    /nintendo\s*switch/i,
+    /steam\s*deck/i,
+    /dyson\s*(airwrap|supersonic|airstrait|purifier|v\d+)\w*/i,
+    /garmin\s*(fenix|venu|forerunner|lily|tactix|index)\s*\w*/i,
+    /dji\s*(mavic|osmo|avata|mini|air|lito|mic)\s*\w*/i,
+    /jbl\s*(charge|clip|flip|go|xtreme|boombox|partybox)\s*\w*/i,
+    /oculus\s*quest\s*\w*/i,
+    /ray-?ban\s*\w*/i,
+    /oakley\s*\w*/i,
+    /beats\s*(solo|studio|powerbeats|fit|flex)\w*/i,
+    /gopro\s*hero\s*\d*/i,
+    /marshall\s*(emberton|kilburn|acton|major|minor|monitor|motif|middleton|tufton|willen)\w*/i,
+    /whoop\s*\d*/i,
+    /bowers\s*&?\s*wilkins/i,
+    /medicube\s*\w*/i,
+    /insta360\s*\w*/i,
+    /fujifilm\s*instax\s*\w*/i,
+    /hisense\s*\w*/i,
+    /plaud\s*\w*/i,
+  ]
+
+  for (const pat of brandPatterns) {
+    const match = norm.match(pat)
+    if (match) {
+      anchors.push(...match[0].trim().split(/\s+/).filter(t => t.length > 0))
+      break
+    }
+  }
+
+  // Fallback — первые 2-3 слова
+  if (anchors.length === 0) {
+    anchors.push(...norm.split(/\s+/).slice(0, 3).filter(t => t.length > 1))
+  }
+
+  // Чип/процессор — обязательный якорь (m3, m4, m5, a16, a18)
+  const chipMatch = norm.match(/\b(m\d+|a\d+)\b/i)
+  if (chipMatch) anchors.push(chipMatch[1].toLowerCase())
+
+  return [...new Set(anchors)]
+}
+
+/** Извлечь конфигурационные токены — память, объём, размер экрана */
+function extractConfigTokens(s: string): string[] {
+  const norm = normalize(s)
+  const config: string[] = []
+
+  // Память: 128gb, 256gb, 512gb, 1tb, 12/256gb
+  const memMatches = norm.match(/\b\d+(?:\/\d+)?\s*(?:gb|tb)\b/gi)
+  if (memMatches) config.push(...memMatches.map(m => m.replace(/\s/g, '').toLowerCase()))
+
+  // Размер экрана (для iPad/MacBook): 11, 13, 14, 15, 16
+  if (/ipad|macbook/i.test(norm)) {
+    const sizeMatch = norm.match(/\b(11|13|14|15|16)\b/)
+    if (sizeMatch) config.push(sizeMatch[1])
+  }
+
+  return config
+}
+
+/** Weighted match score: 50% anchors + 30% config + 20% general tokens */
+function matchScoreWeighted(avitoTitle: string, sheetName: string): number {
+  const avitoAnchors = extractAnchorTokens(avitoTitle)
+  const sheetAnchors = extractAnchorTokens(sheetName)
+
+  // Якоря должны совпадать — иначе это разные товары
+  const anchorMin = Math.min(avitoAnchors.length, sheetAnchors.length)
+  if (anchorMin === 0) return 0
+  const anchorOverlap = avitoAnchors.filter(t => sheetAnchors.includes(t)).length
+  const anchorScore = anchorOverlap / anchorMin
+  if (anchorScore < 0.7) return 0  // MacBook ≠ AirPods
+
+  // Конфигурация (память, размер) — различает 128gb vs 256gb
+  const avitoConfig = extractConfigTokens(avitoTitle)
+  const sheetConfig = extractConfigTokens(sheetName)
+  let configScore = 1.0
+  if (avitoConfig.length > 0 && sheetConfig.length > 0) {
+    const configOverlap = avitoConfig.filter(t => sheetConfig.includes(t)).length
+    configScore = configOverlap / Math.max(avitoConfig.length, sheetConfig.length)
+  }
+
+  // Общие токены — цвет, страна, год (бонус)
+  const allAvito = extractTokens(avitoTitle)
+  const allSheet = extractTokens(sheetName)
+  const allOverlap = allAvito.filter(t => allSheet.includes(t)).length
+  const allScore = allOverlap / Math.max(allAvito.length, allSheet.length)
+
+  return anchorScore * 0.5 + configScore * 0.3 + allScore * 0.2
 }
 
 // ─── Load sheet data ──────────────────────────────────────────────────────────
@@ -124,20 +229,19 @@ export async function mapAvitoToProducts(): Promise<AvitoMapping[]> {
       continue
     }
 
-    // 2. Token-based scoring по Google Sheets (полные названия)
+    // 2. Weighted scoring по Google Sheets (полные названия)
     let bestScore = 0
     let bestSheet: SheetProduct | null = null
 
     for (const sp of sheetProducts) {
-      // Сравнение с полным названием
-      const score1 = matchScore(item.title, sp.fullName)
+      const score1 = matchScoreWeighted(item.title, sp.fullName)
       if (score1 > bestScore) {
         bestScore = score1
         bestSheet = sp
       }
       // Расширенное: fullName + color + memory + size
       const extended = [sp.fullName, sp.color, sp.memory, sp.size].filter(Boolean).join(' ')
-      const score2 = matchScore(item.title, extended)
+      const score2 = matchScoreWeighted(item.title, extended)
       if (score2 > bestScore) {
         bestScore = score2
         bestSheet = sp
@@ -145,8 +249,8 @@ export async function mapAvitoToProducts(): Promise<AvitoMapping[]> {
     }
 
     let confidence: 'exact' | 'fuzzy' | 'none' = 'none'
-    if (bestSheet && bestScore >= 0.85) confidence = 'exact'
-    else if (bestSheet && bestScore >= 0.5) confidence = 'fuzzy'
+    if (bestSheet && bestScore >= 0.80) confidence = 'exact'
+    else if (bestSheet && bestScore >= 0.50) confidence = 'fuzzy'
 
     result.push({
       avitoId: item.id,
