@@ -38,29 +38,39 @@ export async function fetchTrendsFromAI(): Promise<TrendsData | null> {
     where: { isAvailable: true },
     select: { name: true },
   })
-  const modelSet = new Set<string>()
+  // Группируем по модели с количеством вариантов
+  const modelCount = new Map<string, number>()
   for (const p of products) {
-    modelSet.add(p.name)
+    modelCount.set(p.name, (modelCount.get(p.name) || 0) + 1)
   }
-  const modelsList = [...modelSet].sort().slice(0, 200).join('\n')
+  const modelsList = [...modelCount.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 150)
+    .map(([name, count]) => `${name} (${count} вариантов)`)
+    .join('\n')
 
   try {
     const response = await client.chat.completions.create({
       model: 'perplexity/sonar',
       messages: [{
         role: 'user',
-        content: `Проанализируй текущие тренды продаж электроники в России.
+        content: `Вот модели в нашем магазине электроники Bender Shop (Москва, ТЦ Горбушка) с количеством вариантов:
+${modelsList}
 
 Наши категории: ${ourCategories.join(', ')}
 Наши бренды: ${ourBrands.join(', ')}
 
-Наши модели:
-${modelsList}
-
 Задачи:
 1. Отсортируй категории по актуальному спросу в России
-2. Отсортируй бренды по актуальной популярности в России (по выручке, не по количеству)
-3. Выбери 10 самых востребованных моделей из НАШЕГО списка для блока "Хит продаж" — флагманы и бестселлеры
+2. Отсортируй бренды по актуальной популярности в России (по выручке)
+3. Выбери РОВНО 10 самых востребованных моделей для блока "Хит продаж"
+
+ПРАВИЛА:
+- Выбирай ТОЛЬКО из нашего списка выше — не придумывай модели
+- Предпочитай НОВЕЙШИЕ версии: iPhone 17 Pro Max вместо iPhone 16, AirPods Pro 3 вместо Pro 2, Galaxy S26 вместо S25
+- Выбирай ФЛАГМАНЫ и БЕСТСЕЛЛЕРЫ — то что люди чаще всего ищут
+- Разнообразие: не больше 3 товаров одного бренда
+- Названия ТОЧНО как в нашем списке (без добавления цвета/памяти)
 
 Ответь СТРОГО в JSON без markdown:
 {"categories": [...все наши категории в порядке популярности...], "brands": [...все наши бренды...], "featuredProducts": ["точное название модели 1", ...], "reasoning": "краткое объяснение на русском"}`,
