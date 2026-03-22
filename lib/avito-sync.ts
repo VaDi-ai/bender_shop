@@ -44,6 +44,8 @@ function normalize(s: string): string {
     .replace(/sim\s*\+\s*esim?/gi, '')
     .replace(/wi\s*-?\s*fi/gi, 'wifi')
     .replace(/\s*(ревизия|rev)\s*/gi, ' ')
+    .replace(/go\s*pro/gi, 'gopro')
+    .replace(/ray[\s-]*ban/gi, 'rayban')
     .trim()
 }
 
@@ -60,7 +62,7 @@ function extractAnchorTokens(s: string): string[] {
   const anchors: string[] = []
 
   const brandPatterns = [
-    /iphone\s*\d+\w*/i,
+    /iphone\s*(\d+\s*)?(air|pro|max|plus|e|se|mini)?\w*/i,
     /ipad\s*(pro|air|mini)?\s*\d*/i,
     /macbook\s*(air|pro|neo)\s*\d*/i,
     /mac\s*(mini|studio)\s*\w*/i,
@@ -80,12 +82,12 @@ function extractAnchorTokens(s: string): string[] {
     /sony\s*(playstation|ps\d|wh-?\d|wf-?\d)\w*/i,
     /nintendo\s*switch/i,
     /steam\s*deck/i,
-    /dyson\s*(airwrap|supersonic|airstrait|purifier|v\d+)\w*/i,
+    /dyson\s*(airwrap|supersonic|airstrait|purifier|hs\d+|hd\d+|sv\d+|v\d+)\w*/i,
     /garmin\s*(fenix|venu|forerunner|lily|tactix|index)\s*\w*/i,
     /dji\s*(mavic|osmo|avata|mini|air|lito|mic)\s*\w*/i,
     /jbl\s*(charge|clip|flip|go|xtreme|boombox|partybox)\s*\w*/i,
     /oculus\s*quest\s*\w*/i,
-    /ray-?ban\s*\w*/i,
+    /rayban\s*\w*/i,
     /oakley\s*\w*/i,
     /beats\s*(solo|studio|powerbeats|fit|flex)\w*/i,
     /gopro\s*hero\s*\d*/i,
@@ -115,6 +117,10 @@ function extractAnchorTokens(s: string): string[] {
   // Чип/процессор — обязательный якорь (m3, m4, m5, a16, a18)
   const chipMatch = norm.match(/\b(m\d+|a\d+)\b/i)
   if (chipMatch) anchors.push(chipMatch[1].toLowerCase())
+
+  // Модификатор чипа (Pro/Max после m4/m5) — различает M4 vs M4 Pro vs M4 Max
+  const chipMod = norm.match(/\bm\d+\s+(pro|max)\b/i)
+  if (chipMod) anchors.push(chipMod[1].toLowerCase())
 
   return [...new Set(anchors)]
 }
