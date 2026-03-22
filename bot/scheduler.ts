@@ -150,8 +150,10 @@ async function executeTask(
 const lastProcessedMsg = new Map<string, string>()
 
 async function pollAvitoMessages(telegram: Telegram): Promise<void> {
-  if (!isAvitoConfigured()) return
+  console.log('[Avito] Client ID:', process.env.AVITO_CLIENT_ID ? 'set' : 'NOT SET')
+  if (!isAvitoConfigured()) { console.log('[Avito] Not configured, skipping'); return }
 
+  console.log('[Avito] Polling started...')
   const CRM_GROUP_ID = Number(process.env.CRM_GROUP_ID)
   if (!CRM_GROUP_ID) return
 
@@ -233,4 +235,5 @@ async function pollAvitoMessages(telegram: Telegram): Promise<void> {
 
     console.log(`[Avito] New message from ${name}: ${text.slice(0, 50)}`)
   }
+  console.log(`[Avito] Polling done, processed ${chats.length} chats`)
 }
