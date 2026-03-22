@@ -500,3 +500,16 @@ model SecurityLog {
   @@index([createdAt])
   @@index([adminTelegramId])
 }
+
+model PriceAlias {
+  id        Int      @id @default(autoincrement())
+  alias     String   @unique
+  productId Int?
+  variantId Int?
+  isIgnored Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([alias])
+  @@index([productId])
+}

@@ -1555,6 +1555,16 @@ async function handleWebAppOrder(
       where: { id: orderId },
       data: { clientId: client.id },
     }).catch((err) => console.error('[webhook] order.update clientId:', err))
+
+    // Обновить статистику клиента
+    await prisma.client.update({
+      where: { id: client.id },
+      data: {
+        totalPurchases: { increment: 1 },
+        totalRevenue: { increment: verifiedTotal },
+        lastPurchaseDate: new Date(),
+      },
+    }).catch((err) => console.error('[webhook] client stats update:', err))
   }
 
   if (client.telegramTopicId == null) {

@@ -842,15 +842,29 @@ export function startApiServer(bot?: Telegraf): void {
           })
         }
 
-        // Найти клиента по telegramId
-        const client = await tx.client.findUnique({
-          where: { source_externalId: { source: 'telegram', externalId: telegramId } },
+        // Найти или создать клиента
+        const isRealTelegram = telegramId && !telegramId.startsWith('web_')
+        const clientSource = isRealTelegram ? 'telegram' as const : 'shop' as const
+        let client = await tx.client.findUnique({
+          where: { source_externalId: { source: clientSource, externalId: telegramId } },
         })
+        if (!client) {
+          const defaultSeg = await tx.segment.findFirst({ where: { isDefault: true } })
+          client = await tx.client.create({
+            data: {
+              name: customerName.trim(),
+              source: clientSource,
+              externalId: telegramId,
+              segmentId: defaultSeg?.id ?? null,
+              phone: customerPhone?.trim() || null,
+            },
+          })
+        }
 
         // Создать заказ
         const order = await tx.order.create({
           data: {
-            clientId: client?.id ?? null,
+            clientId: client.id,
             telegramId,
             items: {
               create: enrichedItems.map((i) => ({
@@ -915,6 +929,16 @@ export function startApiServer(bot?: Telegraf): void {
           }
         }
 
+        // Обновить статистику клиента
+        await tx.client.update({
+          where: { id: client.id },
+          data: {
+            totalPurchases: { increment: 1 },
+            totalRevenue: { increment: totalDecimal },
+            lastPurchaseDate: new Date(),
+          },
+        })
+
         return order
       })
 
@@ -951,10 +975,22 @@ export function startApiServer(bot?: Telegraf): void {
             : `🚚 Доставка: ${deliveryAddress}`
           const commentLine = customerComment ? `\n💬 Комментарий: ${String(customerComment).slice(0, 200)}` : ''
 
-          // Получить telegram username клиента
-          const client = await prisma.client.findUnique({
-            where: { source_externalId: { source: 'telegram', externalId: telegramId } },
+          // Получить клиента (telegram или shop)
+          const isRealTg = telegramId && !telegramId.startsWith('web_')
+          let client = await prisma.client.findUnique({
+            where: { source_externalId: { source: isRealTg ? 'telegram' : 'shop', externalId: telegramId } },
           })
+
+          // Создать CRM топик если его нет
+          if (client && !client.telegramTopicId && CRM_GROUP_ID && isRealTg) {
+            try {
+              const topic = await telegram.createForumTopic(CRM_GROUP_ID, `${client.name}`)
+              client = await prisma.client.update({
+                where: { id: client.id },
+                data: { telegramTopicId: topic.message_thread_id },
+              })
+            } catch { /* ignore topic creation errors */ }
+          }
           const tgUsername = client?.telegramUsername ?? null
           const tgLink = tgUsername
             ? `https://t.me/${tgUsername.replace('@', '')}`
