@@ -11,20 +11,42 @@ export interface AvitoMapping {
   productId: number | null
   productName: string | null
   confidence: 'exact' | 'fuzzy' | 'none'
+  score: number  // 0-1, процент совпадения токенов
 }
 
 /** Нормализация названия для сравнения */
 function normalize(s: string): string {
   return s
     .toLowerCase()
-    .replace(/[()[\]]/g, '')
+    .replace(/[()[\].,]/g, ' ')
     .replace(/\s+/g, ' ')
     .replace(/гб|gb/gi, 'gb')
     .replace(/тб|tb/gi, 'tb')
+    .replace(/sim\s*\+\s*esim?/gi, '')
+    .replace(/wi\s*-?\s*fi/gi, 'wifi')
+    .replace(/\s*(ревизия|rev)\s*/gi, ' ')
     .trim()
 }
 
-/** Маппинг объявлений Avito → Product по названию */
+/** Извлечь ключевые токены из названия для сравнения */
+function extractTokens(s: string): string[] {
+  return normalize(s)
+    .split(' ')
+    .filter(t => t.length > 1)
+    .filter(t => !['new', 'новый', 'sim', 'esim', 'strap', 'silicon', 'band', 'the', 'and'].includes(t))
+}
+
+/** Процент совпадения токенов */
+function matchScore(avitoTitle: string, productName: string): number {
+  const tokensA = extractTokens(avitoTitle)
+  const tokensB = extractTokens(productName)
+  if (tokensA.length === 0 || tokensB.length === 0) return 0
+  const overlap = tokensA.filter(t => tokensB.includes(t)).length
+  // Нормализуем по меньшему набору (короткое название в БД не штрафуется)
+  return overlap / Math.min(tokensA.length, tokensB.length)
+}
+
+/** Маппинг объявлений Avito → Product по названию (read-only) */
 export async function mapAvitoToProducts(): Promise<AvitoMapping[]> {
   const avitoItems = await getAvitoItems()
   const products = await prisma.product.findMany({
@@ -35,27 +57,37 @@ export async function mapAvitoToProducts(): Promise<AvitoMapping[]> {
   const result: AvitoMapping[] = []
 
   for (const item of avitoItems) {
-    const normTitle = normalize(item.title)
-
     // 1. Уже смаплен в БД?
     let match = products.find(p => p.avitoItemId === BigInt(item.id))
+    let confidence: 'exact' | 'fuzzy' | 'none' = match ? 'exact' : 'none'
+    let score = match ? 1 : 0
 
-    // 2. Точное совпадение по названию
     if (!match) {
+      // 2. Точное совпадение нормализованных названий
+      const normTitle = normalize(item.title)
       match = products.find(p => normalize(p.name) === normTitle)
+      if (match) { confidence = 'exact'; score = 1 }
     }
 
-    // 3. Один содержит другой
     if (!match) {
-      match = products.find(p => {
-        const normName = normalize(p.name)
-        return normTitle.includes(normName) || normName.includes(normTitle)
-      })
-    }
+      // 3. Token-based scoring — найти лучшее совпадение
+      let bestScore = 0
+      let bestProduct: typeof products[0] | null = null
 
-    let confidence: 'exact' | 'fuzzy' | 'none' = 'none'
-    if (match) {
-      confidence = normalize(match.name) === normTitle ? 'exact' : 'fuzzy'
+      for (const p of products) {
+        const s = matchScore(item.title, p.name)
+        if (s > bestScore) {
+          bestScore = s
+          bestProduct = p
+        }
+      }
+
+      // Порог: минимум 60% токенов совпадает
+      if (bestProduct && bestScore >= 0.6) {
+        match = bestProduct
+        confidence = bestScore >= 0.9 ? 'exact' : 'fuzzy'
+        score = bestScore
+      }
     }
 
     result.push({
@@ -65,6 +97,7 @@ export async function mapAvitoToProducts(): Promise<AvitoMapping[]> {
       productId: match?.id ?? null,
       productName: match?.name ?? null,
       confidence,
+      score,
     })
   }
   return result

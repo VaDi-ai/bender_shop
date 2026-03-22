@@ -722,31 +722,45 @@ bot.command('avito', async (ctx) => {
 
     // /avito map
     if (sub === 'map') {
-      await ctx.reply('⏳ Маппинг Avito → Каталог...')
-      const { mapAvitoToProducts, applyAvitoMapping } = await import('../lib/avito-sync')
+      await ctx.reply('⏳ Маппинг Avito → Каталог (read-only)...')
+      const { mapAvitoToProducts } = await import('../lib/avito-sync')
       const mappings = await mapAvitoToProducts()
 
-      const exact = mappings.filter(m => m.confidence === 'exact')
-      const fuzzy = mappings.filter(m => m.confidence === 'fuzzy')
-      const none = mappings.filter(m => m.confidence === 'none')
+      const exact = mappings.filter(m => m.confidence === 'exact').length
+      const fuzzy = mappings.filter(m => m.confidence === 'fuzzy').length
+      const none = mappings.filter(m => m.confidence === 'none').length
 
-      const lines: string[] = [`🔗 Маппинг (${mappings.length} объявлений):\n`]
-      for (const m of exact.slice(0, 10)) lines.push(`✅ ${m.avitoTitle.slice(0, 40)} → ${m.productName}`)
-      for (const m of fuzzy.slice(0, 5)) lines.push(`⚠️ ${m.avitoTitle.slice(0, 40)} → ${m.productName}`)
-      for (const m of none.slice(0, 5)) lines.push(`❌ ${m.avitoTitle.slice(0, 50)} → не найдено`)
-      if (mappings.length > 20) lines.push(`\n...и ещё ${mappings.length - 20}`)
-      lines.push(`\nИтого: ${exact.length} точных, ${fuzzy.length} нечётких, ${none.length} не найдено`)
+      // Полный отчёт — сортировка: exact → fuzzy → none, внутри по score desc
+      const order = { exact: 0, fuzzy: 1, none: 2 }
+      const sorted = [...mappings].sort((a, b) =>
+        (order[a.confidence] - order[b.confidence]) || (b.score - a.score)
+      )
 
-      const matchCount = exact.length + fuzzy.length
-      // Store mappings for apply
-      ;(globalThis as any).__avitoMappings = mappings
+      const reportLines = sorted.map(m => {
+        const icon = m.confidence === 'exact' ? '✅' : m.confidence === 'fuzzy' ? '⚠️' : '❌'
+        const match = m.productName
+          ? `→ ${m.productName} (${Math.round(m.score * 100)}%)`
+          : '→ НЕТ СОВПАДЕНИЯ'
+        const pricePart = m.avitoPrice ? ` [Avito: ${m.avitoPrice.toLocaleString('ru-RU')}₽]` : ''
+        return `${icon} ${m.avitoTitle} ${match}${pricePart}`
+      })
 
-      await ctx.reply(lines.join('\n'), matchCount > 0
-        ? Markup.inlineKeyboard([[
-            Markup.button.callback(`✅ Применить (${matchCount} шт)`, 'avito:apply_map'),
-            Markup.button.callback('❌ Отмена', 'avito:cancel_map'),
-          ]])
-        : undefined)
+      await ctx.reply([
+        `🔗 Маппинг Avito → Каталог (${mappings.length} объявлений):`,
+        '',
+        `✅ Точных: ${exact}`,
+        `⚠️ Нечётких: ${fuzzy}`,
+        `❌ Не найдено: ${none}`,
+        '',
+        '📄 Полный отчёт в файле ниже',
+        '⚠️ READ-ONLY — ничего не применяется',
+      ].join('\n'))
+
+      const buffer = Buffer.from(reportLines.join('\n'), 'utf-8')
+      await ctx.replyWithDocument({
+        source: buffer,
+        filename: `avito-mapping-${new Date().toISOString().slice(0, 10)}.txt`,
+      })
       return
     }
 
