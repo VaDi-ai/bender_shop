@@ -46,6 +46,10 @@ function normalize(s: string): string {
     .replace(/\s*(ревизия|rev)\s*/gi, ' ')
     .replace(/go\s*pro/gi, 'gopro')
     .replace(/ray[\s-]*ban/gi, 'rayban')
+    .replace(/умные\s*очки/gi, '')
+    // Dyson model aliases: commercial name → article code
+    .replace(/\bairwrap\b/gi, 'hs09')
+    .replace(/\bsupersonic\b/gi, 'hd15')
     .trim()
 }
 
@@ -87,7 +91,7 @@ function extractAnchorTokens(s: string): string[] {
     /dji\s*(mavic|osmo|avata|mini|air|lito|mic)\s*\w*/i,
     /jbl\s*(charge|clip|flip|go|xtreme|boombox|partybox)\s*\w*/i,
     /oculus\s*quest\s*\w*/i,
-    /rayban\s*\w*/i,
+    /rayban\s*(meta\s*)?(wayfarer|skyler|headliner)?\w*/i,
     /oakley\s*\w*/i,
     /beats\s*(solo|studio|powerbeats|fit|flex)\w*/i,
     /gopro\s*hero\s*\d*/i,
@@ -119,8 +123,10 @@ function extractAnchorTokens(s: string): string[] {
   if (chipMatch) anchors.push(chipMatch[1].toLowerCase())
 
   // Модификатор чипа (Pro/Max после m4/m5) — различает M4 vs M4 Pro vs M4 Max
+  // НЕ для MacBook NEO — там "A18 Pro" это чип, не линейка
+  const isNeo = /macbook\s*neo/i.test(norm)
   const chipMod = norm.match(/\bm\d+\s+(pro|max)\b/i)
-  if (chipMod) anchors.push(chipMod[1].toLowerCase())
+  if (chipMod && !isNeo) anchors.push(chipMod[1].toLowerCase())
 
   return [...new Set(anchors)]
 }
