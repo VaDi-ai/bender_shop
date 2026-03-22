@@ -493,7 +493,13 @@ function getAttributes(row: SheetRow): Record<string, string> {
     attrs['Цвет'] = colorVal
   }
   if (row.memory) attrs['Память'] = row.memory
-  if (row.size) attrs['Размер'] = row.size
+  // Для ноутбуков размер = экран, не дублировать
+  const isLaptop = row.category === 'Ноутбуки' || /macbook/i.test(row.fullName)
+  if (isLaptop && row.size) {
+    attrs['Экран'] = row.size
+  } else if (row.size) {
+    attrs['Размер'] = row.size
+  }
   if (row.country) attrs['Страна'] = row.country
 
   // 2. Fallback: парсинг из названия (если колонка пуста)

@@ -31,8 +31,8 @@ export async function enrichProductCard(productId: number, force = false): Promi
 
   const hasDescription = !!product.description
   const hasSpecs = product.specs && typeof product.specs === 'object' && Object.keys(product.specs as object).length > 0
-  if (!force && hasDescription && hasSpecs) {
-    console.log(`[Enrich] ${product.name}: already enriched, skipping`)
+  if (!force && hasSpecs) {
+    console.log(`[Enrich] ${product.name}: specs already filled, skipping`)
     return false
   }
 
@@ -128,7 +128,7 @@ export async function enrichProductCard(productId: number, force = false): Promi
     if (description && (force || !product.description)) {
       updateData.description = description
     }
-    if (specs && (force || !product.specs)) {
+    if (specs && (force || !hasSpecs)) {
       const cleanSpecs: Record<string, string> = {}
       for (const [key, val] of Object.entries(specs)) {
         if (val && typeof val === 'string' && val.trim().length > 0) {
@@ -144,6 +144,7 @@ export async function enrichProductCard(productId: number, force = false): Promi
         'Цвет': ['Цвет'],
         'Размер': ['Размер'],
         'Размер экрана': ['Размер', 'Экран', 'Диагональ'],
+        'Экран': ['Экран', 'Размер'],
         'Диагональ': ['Диагональ', 'Размер'],
         'Связь': ['Связь'],
         'SIM': ['SIM'],
@@ -192,7 +193,12 @@ export async function enrichProductCard(productId: number, force = false): Promi
 export async function enrichAllProducts(shouldAbort?: () => boolean, force = false): Promise<{ total: number; enriched: number; failed: number }> {
   const where = force
     ? {}
-    : { OR: [{ description: null }, { description: '' }, { specs: { equals: null as any } }] }
+    : { OR: [
+        { specs: { equals: null as any } },
+        { specs: { equals: {} } },
+        { description: null },
+        { description: '' },
+      ] }
 
   const products = await prisma.product.findMany({
     where,
@@ -256,38 +262,39 @@ async function writeEnrichToSheets(
     }
     if (fullNames.size === 0) return 0
 
-    // Read sheet and find matching rows
+    // Read sheet and find matching rows (skip already-filled cells)
     const data = await readSheet(sheetName)
-    const matchedRows: number[] = []
-    for (let i = 1; i < data.length; i++) {
-      const sheetFullName = (data[i]?.[4] ?? '').toString().trim()  // Column E (index 4)
-      if (fullNames.has(sheetFullName)) {
-        matchedRows.push(i + 1)  // 1-indexed for Sheets API
-      }
-    }
-    if (matchedRows.length === 0) return 0
-
-    // Build batch update data
     const specsText = specs
       ? Object.entries(specs).map(([k, v]) => `${k}: ${v}`).join('\n')
       : ''
 
     const batchData: { range: string; values: (string | number)[][] }[] = []
-    for (const row of matchedRows) {
-      if (description) {
+    let matchCount = 0
+
+    for (let i = 1; i < data.length; i++) {
+      const sheetFullName = (data[i]?.[4] ?? '').toString().trim()  // Column E (index 4)
+      if (!fullNames.has(sheetFullName)) continue
+
+      matchCount++
+      const row = i + 1  // 1-indexed for Sheets API
+      const existingDesc = (data[i]?.[9] ?? '').toString().trim()   // Column J (index 9)
+      const existingSpecs = (data[i]?.[10] ?? '').toString().trim() // Column K (index 10)
+
+      if (description && !existingDesc) {
         batchData.push({ range: `'${sheetName}'!J${row}`, values: [[description]] })
       }
-      if (specsText) {
+      if (specsText && !existingSpecs) {
         batchData.push({ range: `'${sheetName}'!K${row}`, values: [[specsText]] })
       }
     }
+    if (matchCount === 0) return 0
 
     if (batchData.length > 0) {
       await batchUpdate(batchData)
     }
 
-    console.log(`[Enrich] Wrote to ${matchedRows.length} sheet rows: ${matchedRows.join(', ')}`)
-    return matchedRows.length
+    console.log(`[Enrich] ${matchCount} rows matched, ${batchData.length} cells written to Sheets`)
+    return matchCount
   } catch (err) {
     console.warn(`[Enrich] Failed to write to Sheets:`, err)
     return 0
