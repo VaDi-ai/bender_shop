@@ -6,6 +6,7 @@
   <title>Bender Shop</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <style>
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap');
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     img { background-color: #1a1a1a; }
 
@@ -60,7 +61,7 @@
     }
     #loader.fade-out { opacity: 0; pointer-events: none; }
     .loader-title {
-      font-family: 'Courier New', Courier, monospace;
+      font-family: 'JetBrains Mono', monospace;
       font-size: clamp(38px, 9vw, 80px); color: var(--accent);
       text-shadow: var(--neon); letter-spacing: 6px; animation: flicker 4s infinite;
     }
@@ -83,7 +84,7 @@
       border-bottom: 1px solid rgba(255,255,255,0.05); padding: 0 20px;
       display: flex; align-items: center; justify-content: space-between;
     }
-    .header-logo { font-family: 'Courier New', Courier, monospace; font-size: 20px; color: var(--accent); text-shadow: var(--neon); letter-spacing: 3px; cursor: pointer; user-select: none; }
+    .header-logo { font-family: 'JetBrains Mono', monospace; font-size: 20px; color: var(--accent); text-shadow: var(--neon); letter-spacing: 3px; cursor: pointer; user-select: none; }
     .header-right { display: flex; align-items: center; gap: 10px; }
     .search-toggle { background: transparent; border: 1px solid #2a2a2a; color: var(--text); width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: border-color 0.2s, color 0.2s; }
     .search-toggle:hover, .search-toggle.active { border-color: var(--accent); color: var(--accent); }
@@ -94,14 +95,14 @@
     .search-bar-inner { display: flex; align-items: center; gap: 10px; background: rgba(255,255,255,0.05); border: 1px solid #2a2a2a; border-radius: 10px; padding: 0 12px; transition: border-color 0.2s; }
     .search-bar-inner:focus-within { border-color: var(--accent); }
     .search-bar-icon { flex-shrink: 0; }
-    .search-bar-input { flex: 1; background: transparent; border: none; color: #e5e5e5; font-family: 'Courier New', monospace; font-size: 14px; padding: 10px 0; outline: none; }
+    .search-bar-input { flex: 1; background: transparent; border: none; color: #e5e5e5; font-family: 'JetBrains Mono', monospace; font-size: 14px; padding: 10px 0; outline: none; }
     .search-bar-input::placeholder { color: #555; }
     .search-bar-clear { background: none; border: none; color: #555; font-size: 16px; cursor: pointer; padding: 4px; display: none; }
     .search-bar-clear.visible { display: block; }
     .search-bar-clear:hover { color: var(--accent); }
     .cart-btn { display: flex; align-items: center; gap: 8px; background: transparent; color: var(--text); border: 1px solid #2a2a2a; padding: 8px 14px; font-size: 15px; cursor: pointer; transition: border-color 0.2s; }
     .cart-btn:hover { border-color: var(--accent); }
-    .cart-badge { font-family: 'Courier New', Courier, monospace; background: var(--accent); color: var(--accent-fg); min-width: 20px; height: 20px; padding: 0 4px; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; }
+    .cart-badge { font-family: 'JetBrains Mono', monospace; background: var(--accent); color: var(--accent-fg); min-width: 20px; height: 20px; padding: 0 4px; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; }
     .cart-badge[data-count="0"] { display: none; }
     .menu-btn { background: transparent; border: 1px solid #2a2a2a; color: var(--text); width: 40px; height: 40px; font-size: 19px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: border-color 0.2s, color 0.2s; }
     .menu-btn:hover { border-color: var(--accent); color: var(--accent); }
@@ -114,13 +115,13 @@
     .nav-sidebar { position: fixed; top: 0; right: 0; width: 280px; height: 100%; z-index: 400; background: #0a0a0a; border-left: 2px solid var(--accent); box-shadow: -4px 0 40px rgba(168,255,62,0.08); transform: translateX(100%); transition: transform 400ms cubic-bezier(0.16, 1, 0.3, 1); display: flex; flex-direction: column; overflow: hidden; }
     .nav-sidebar.open { transform: translateX(0); }
     .nav-header { padding: 18px 20px; border-bottom: 1px solid #161616; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
-    .nav-title { font-family: 'Courier New', Courier, monospace; color: var(--accent); font-size: 17px; text-shadow: 0 0 12px rgba(168,255,62,0.4); letter-spacing: 3px; }
+    .nav-title { font-family: 'JetBrains Mono', monospace; color: var(--accent); font-size: 17px; text-shadow: 0 0 12px rgba(168,255,62,0.4); letter-spacing: 3px; }
     .nav-close, .cart-close { background: transparent; border: 1px solid #2a2a2a; color: var(--text); width: 32px; height: 32px; font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: border-color 0.2s, color 0.2s; }
     .nav-close:hover, .cart-close:hover { border-color: var(--accent); color: var(--accent); }
     .nav-list { flex: 1; overflow-y: auto; padding: 8px 0; }
     .nav-list::-webkit-scrollbar { width: 3px; }
     .nav-list::-webkit-scrollbar-thumb { background: #222; }
-    .nav-item { display: flex; align-items: center; padding: 15px 20px; font-family: 'Courier New', Courier, monospace; font-size: 14px; color: var(--text); cursor: pointer; border-bottom: 1px solid #0f0f0f; transition: color 0.2s, padding-left 0.25s, background 0.2s; letter-spacing: 1.5px; user-select: none; }
+    .nav-item { display: flex; align-items: center; padding: 15px 20px; font-family: 'JetBrains Mono', monospace; font-size: 14px; color: var(--text); cursor: pointer; border-bottom: 1px solid #0f0f0f; transition: color 0.2s, padding-left 0.25s, background 0.2s; letter-spacing: 1.5px; user-select: none; }
     .nav-item:hover { color: var(--accent); padding-left: 28px; background: rgba(168,255,62,0.03); }
     .nav-item.active { color: var(--accent); border-left: 3px solid var(--accent); padding-left: 17px; }
     .nav-item-all { color: var(--hint); }
@@ -129,19 +130,19 @@
     /* ── Marquee bar ──────────────────────────────────────────────────────── */
     .marquee-bar { position: sticky; top: var(--header-h); z-index: 490; height: var(--marquee-h); background: #0d0d0d; border-bottom: 1px solid #1a1a1a; display: flex; align-items: center; overflow: hidden; }
     .marquee-track { display: flex; animation: marquee 20s linear infinite; flex-shrink: 0; }
-    .marquee-track span { font-family: 'Courier New', monospace; font-size: 14px; color: #a8ff3e; text-shadow: 0 0 8px rgba(168,255,62,0.6); white-space: nowrap; padding-right: 80px; letter-spacing: 2px; }
+    .marquee-track span { font-family: 'JetBrains Mono', monospace; font-size: 14px; color: #a8ff3e; text-shadow: 0 0 8px rgba(168,255,62,0.6); white-space: nowrap; padding-right: 80px; letter-spacing: 2px; }
     @keyframes marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
 
     /* ── Hero slider ──────────────────────────────────────────────────────── */
     .hero-slider { position: relative; width: 100%; height: 60vh; overflow: hidden; background: #0a0a0a; }
     .hero-slider::after { content: ''; position: absolute; inset: 0; background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.05) 2px, rgba(0,0,0,0.05) 4px); pointer-events: none; z-index: 3; }
     .hero-slider-fallback { position: absolute; inset: 0; background: linear-gradient(135deg, #0a0a0a 0%, #111111 100%); display: flex; align-items: center; justify-content: center; z-index: 1; }
-    .hero-slider-fallback-text { font-family: 'Courier New', Courier, monospace; font-size: clamp(32px, 8vw, 90px); color: #fff; text-shadow: 0 0 40px rgba(168,255,62,0.15); letter-spacing: 6px; }
+    .hero-slider-fallback-text { font-family: 'JetBrains Mono', monospace; font-size: clamp(32px, 8vw, 90px); color: #fff; text-shadow: 0 0 40px rgba(168,255,62,0.15); letter-spacing: 6px; }
     .hero-slider-fallback-text span { color: var(--accent); text-shadow: var(--neon); }
     .hero-slide { position: absolute; inset: 0; opacity: 0; transition: opacity 800ms ease; background-size: cover; background-position: center; display: flex; align-items: flex-end; z-index: 1; }
     .hero-slide.active { opacity: 1; }
     .hero-slide-caption { position: relative; z-index: 2; width: 100%; padding: 32px 36px; background: linear-gradient(to top, rgba(0,0,0,0.75) 0%, transparent 100%); }
-    .hero-slide-title { font-family: 'Courier New', Courier, monospace; font-size: clamp(20px, 4vw, 52px); color: #fff; text-shadow: 0 0 10px #a8ff3e, 0 0 30px rgba(168,255,62,0.4); letter-spacing: 2px; line-height: 1.1; }
+    .hero-slide-title { font-family: 'JetBrains Mono', monospace; font-size: clamp(20px, 4vw, 52px); color: #fff; text-shadow: 0 0 10px #a8ff3e, 0 0 30px rgba(168,255,62,0.4); letter-spacing: 2px; line-height: 1.1; }
     .hero-slide-subtitle { font-size: clamp(11px, 2vw, 15px); color: rgba(255,255,255,0.7); letter-spacing: 2px; margin-top: 6px; }
     .slider-bottom-fade { position: absolute; bottom: 0; left: 0; right: 0; height: 80px; background: linear-gradient(to top, rgba(10,10,10,0.85) 0%, transparent 100%); z-index: 5; pointer-events: none; }
     .slider-controls { position: absolute; bottom: 14px; right: 16px; display: flex; align-items: center; gap: 8px; pointer-events: all; }
@@ -387,12 +388,12 @@
     /* ── Catalog section ──────────────────────────────────────────────────── */
     #catalog { scroll-margin-top: calc(var(--header-h) + var(--marquee-h)); padding-bottom: 120px; }
     .catalog-header { padding: 36px 20px 20px; border-bottom: 1px solid #161616; }
-    .catalog-title { font-family: 'Courier New', Courier, monospace; font-size: 28px; color: var(--text); letter-spacing: 3px; }
+    .catalog-title { font-family: 'JetBrains Mono', monospace; font-size: 28px; color: var(--text); letter-spacing: 3px; }
     .catalog-sub { font-size: 12px; color: var(--hint); margin-top: 4px; letter-spacing: 2px; text-transform: uppercase; }
 
     /* ── Brand filter bar ─────────────────────────────────────────────────── */
     .brand-filter-wrap { border-bottom: 1px solid #1a1a1a; }
-    .brand-filter-label { padding: 10px 16px 0; font-size: 10px; color: #555; letter-spacing: 2px; font-family: 'Courier New', Courier, monospace; }
+    .brand-filter-label { padding: 10px 16px 0; font-size: 10px; color: #555; letter-spacing: 2px; font-family: 'JetBrains Mono', monospace; }
     .brand-filter-bar {
       display: flex; overflow-x: auto; gap: 8px;
       padding: 8px 16px 12px;
@@ -402,7 +403,7 @@
     .brand-filter-tab {
       flex-shrink: 0; padding: 6px 14px; background: transparent;
       border: 1px solid #2a2a2a; color: #555;
-      font-family: 'Courier New', Courier, monospace; font-size: 12px;
+      font-family: 'JetBrains Mono', monospace; font-size: 12px;
       letter-spacing: 1px; cursor: pointer; white-space: nowrap;
       transition: border-color 0.2s, color 0.2s, background 0.2s; user-select: none;
     }
@@ -430,7 +431,7 @@
     .product-badge {
       position: absolute; top: 8px; left: 8px; z-index: 2;
       background: #0a0a0a; color: var(--accent);
-      font-family: 'Courier New', Courier, monospace; font-size: 9px; font-weight: 700;
+      font-family: 'JetBrains Mono', monospace; font-size: 9px; font-weight: 700;
       padding: 3px 8px; letter-spacing: 1.5px;
       border: 1px solid var(--accent);
     }
@@ -445,7 +446,7 @@
 
     .product-info { padding: 10px; flex: 1; display: flex; flex-direction: column; gap: 5px; }
     .product-name { font-size: 12px; font-weight: 500; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; color: var(--text); }
-    .product-price { font-family: 'Courier New', Courier, monospace; font-size: 16px; color: var(--accent); margin-top: auto; }
+    .product-price { font-family: 'JetBrains Mono', monospace; font-size: 16px; color: var(--accent); margin-top: auto; }
     .product-price.ask-manager { font-family: inherit; font-size: 12px; color: #ff9500; }
     .product-attr-chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
     .product-attr-chip {
@@ -465,7 +466,7 @@
 
     .box-button { cursor: pointer; border: 4px solid #333; background-color: #555; padding-bottom: 8px; transition: 0.1s ease-in-out; user-select: none; width: 100%; display: block; text-align: center; }
     .box-button .button { background-color: #dddddd; border: 4px solid #ffffff; padding: 10px 16px; width: 100%; display: flex; align-items: center; justify-content: center; box-sizing: border-box; }
-    .box-button .button span { font-family: 'Courier New', Courier, monospace; font-size: 0.95em; letter-spacing: 2px; color: #111111; text-transform: uppercase; display: block; text-align: center; }
+    .box-button .button span { font-family: 'JetBrains Mono', monospace; font-size: 0.95em; letter-spacing: 2px; color: #111111; text-transform: uppercase; display: block; text-align: center; }
     .box-button:active { padding: 0; margin-bottom: 8px; transform: translateY(8px); }
     .box-button.disabled { opacity: 0.3; cursor: default; pointer-events: none; }
     .product-info .box-button { margin-top: 0; }
@@ -516,15 +517,15 @@
     .modal-badge {
       position: absolute; top: 12px; left: 12px; z-index: 6;
       background: #0a0a0a; color: var(--accent);
-      font-family: 'Courier New', Courier, monospace; font-size: 11px; font-weight: 700;
+      font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 700;
       padding: 4px 12px; letter-spacing: 2px;
       border: 1px solid var(--accent);
     }
 
     /* Modal body */
     .modal-body { padding: 20px 20px 16px; }
-    .modal-product-name { font-family: 'Courier New', Courier, monospace; font-size: clamp(20px, 5vw, 36px); color: #fff; letter-spacing: 2px; line-height: 1.1; margin-bottom: 8px; }
-    .modal-product-price { font-family: 'Courier New', Courier, monospace; font-size: 26px; color: var(--accent); text-shadow: var(--neon); margin-bottom: 8px; }
+    .modal-product-name { font-family: 'JetBrains Mono', monospace; font-size: clamp(20px, 5vw, 36px); color: #fff; letter-spacing: 2px; line-height: 1.1; margin-bottom: 8px; }
+    .modal-product-price { font-family: 'JetBrains Mono', monospace; font-size: 26px; color: var(--accent); text-shadow: var(--neon); margin-bottom: 8px; }
 
     /* Attrs section */
     .modal-attrs-section { margin: 16px 0 8px; }
@@ -545,7 +546,7 @@
     .modal-delivery-block { border: 1px solid #222; padding: 12px; margin: 16px 0; }
     .modal-delivery-row { display: flex; gap: 10px; align-items: flex-start; }
     .modal-delivery-row + .modal-delivery-row { margin-top: 10px; border-top: 1px solid #1a1a1a; padding-top: 10px; }
-    .modal-delivery-label { font-family: 'Courier New', Courier, monospace; font-size: 10px; color: var(--accent); letter-spacing: 1.5px; min-width: 90px; flex-shrink: 0; padding-top: 2px; }
+    .modal-delivery-label { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--accent); letter-spacing: 1.5px; min-width: 90px; flex-shrink: 0; padding-top: 2px; }
     .modal-delivery-desc { font-size: 11px; color: var(--hint); line-height: 1.5; }
 
     /* Attr selection hint */
@@ -562,7 +563,7 @@
     .modal-accordion-header {
       display: flex; justify-content: space-between; align-items: center;
       padding: 14px 0; cursor: pointer; user-select: none;
-      font-family: 'Courier New', Courier, monospace; font-size: 12px; color: var(--hint);
+      font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--hint);
       letter-spacing: 2px; transition: color 0.2s;
     }
     .modal-accordion-header:hover { color: var(--text); }
@@ -584,7 +585,7 @@
     .cart-sidebar { position: fixed; top: 0; right: 0; width: min(400px, 100vw); height: 100%; z-index: 400; background: #0a0a0a; border-left: 2px solid var(--accent); box-shadow: -4px 0 40px rgba(168,255,62,0.08); transform: translateX(100%); transition: transform 400ms cubic-bezier(0.16, 1, 0.3, 1); display: flex; flex-direction: column; padding-top: var(--header-h); }
     .cart-sidebar.open { transform: translateX(0); }
     .cart-head { padding: 18px 20px; border-bottom: 1px solid #161616; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; position: sticky; top: 0; z-index: 10; background: var(--bg); }
-    .cart-head-title { font-family: 'Courier New', Courier, monospace; font-size: 18px; color: var(--accent); text-shadow: 0 0 12px rgba(168,255,62,0.4); letter-spacing: 3px; }
+    .cart-head-title { font-family: 'JetBrains Mono', monospace; font-size: 18px; color: var(--accent); text-shadow: 0 0 12px rgba(168,255,62,0.4); letter-spacing: 3px; }
     .cart-body { flex: 1; overflow-y: auto; padding: 16px 20px; }
     .cart-body::-webkit-scrollbar { width: 3px; }
     .cart-body::-webkit-scrollbar-thumb { background: #222; }
@@ -605,7 +606,7 @@
     .qty-val { font-size: 14px; font-weight: 600; min-width: 20px; text-align: center; }
     .section-label { font-size: 10px; font-weight: 600; letter-spacing: 3px; color: var(--hint); text-transform: uppercase; margin-bottom: 10px; }
     .pay-group { display: flex; gap: 8px; margin-bottom: 16px; }
-    .pay-btn { flex: 1; padding: 10px 4px; border: 1px solid #2a2a2a; background: var(--surface); color: var(--text); font-family: 'Courier New', Courier, monospace; font-size: 10px; cursor: pointer; text-align: center; letter-spacing: 0.5px; line-height: 1.4; transition: border-color 0.15s, background 0.15s, color 0.15s; }
+    .pay-btn { flex: 1; padding: 10px 4px; border: 1px solid #2a2a2a; background: var(--surface); color: var(--text); font-family: 'JetBrains Mono', monospace; font-size: 10px; cursor: pointer; text-align: center; letter-spacing: 0.5px; line-height: 1.4; transition: border-color 0.15s, background 0.15s, color 0.15s; }
     .pay-btn:active { transform: scale(0.97); }
     .pay-btn.sel { border-color: var(--accent); background: var(--accent); color: var(--accent-fg); }
     .pay-icon { display: block; font-size: 17px; margin-bottom: 4px; }
@@ -617,7 +618,7 @@
     .total-row { display: flex; justify-content: space-between; padding: 3px 0; font-size: 12px; color: var(--hint); }
     .total-row.main { border-top: 1px solid #2a2a2a; margin-top: 8px; padding-top: 10px; color: var(--text); }
     .total-row.main span { font-size: 14px; font-weight: 600; }
-    .total-amount { font-family: 'Courier New', Courier, monospace; color: var(--accent); font-size: 20px !important; }
+    .total-amount { font-family: 'JetBrains Mono', monospace; color: var(--accent); font-size: 20px !important; }
     .cart-footer { padding: 16px 20px; border-top: 1px solid #161616; flex-shrink: 0; position: sticky; bottom: 0; background: var(--bg); }
 
     /* ── Toast ────────────────────────────────────────────────────────────── */
@@ -629,14 +630,14 @@
     .customer-form { margin-bottom: 20px; }
     .cform-title { font-size: 10px; font-weight: 600; letter-spacing: 3px; color: var(--hint); text-transform: uppercase; margin-bottom: 14px; }
     .cform-field { position: relative; margin-bottom: 24px; }
-    .cform-field input, .cform-field textarea { width: 100%; background: transparent; border: none; border-bottom: 2px solid rgba(168,255,62,0.3); padding: 8px 0 6px; color: #e5e5e5; font-family: 'Courier New', monospace; font-size: 14px; outline: none; resize: none; transition: border-bottom-color 0.2s; }
+    .cform-field input, .cform-field textarea { width: 100%; background: transparent; border: none; border-bottom: 2px solid rgba(168,255,62,0.3); padding: 8px 0 6px; color: #e5e5e5; font-family: 'JetBrains Mono', monospace; font-size: 14px; outline: none; resize: none; transition: border-bottom-color 0.2s; }
     .cform-field input:focus, .cform-field textarea:focus { border-bottom-color: #a8ff3e; }
     .cform-field input.cform-error, .cform-field textarea.cform-error { border-bottom-color: #ff4444; }
-    .cform-field label { position: absolute; left: 0; top: 8px; color: rgba(168,255,62,0.6); font-family: 'Courier New', monospace; font-size: 12px; letter-spacing: 1.5px; text-transform: uppercase; pointer-events: none; transition: top 0.2s ease, font-size 0.2s ease; }
+    .cform-field label { position: absolute; left: 0; top: 8px; color: rgba(168,255,62,0.6); font-family: 'JetBrains Mono', monospace; font-size: 12px; letter-spacing: 1.5px; text-transform: uppercase; pointer-events: none; transition: top 0.2s ease, font-size 0.2s ease; }
     .cform-field input:focus ~ label, .cform-field input:not(:placeholder-shown) ~ label, .cform-field textarea:focus ~ label, .cform-field textarea:not(:placeholder-shown) ~ label { top: -14px; font-size: 10px; }
     .cform-field input:focus ~ label, .cform-field textarea:focus ~ label { animation: glitch-label 0.25s steps(3) 1; }
     .delivery-toggle { display: flex; gap: 8px; margin-bottom: 14px; }
-    .dtoggle-btn { flex: 1; padding: 10px 8px; background: transparent; border: 1px solid #333; color: #555; font-family: 'Courier New', monospace; font-size: 11px; letter-spacing: 2px; cursor: pointer; transition: border-color 0.2s, color 0.2s, text-shadow 0.2s; }
+    .dtoggle-btn { flex: 1; padding: 10px 8px; background: transparent; border: 1px solid #333; color: #555; font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: 2px; cursor: pointer; transition: border-color 0.2s, color 0.2s, text-shadow 0.2s; }
     .dtoggle-btn.active { border-color: #a8ff3e; color: #a8ff3e; text-shadow: 0 0 8px rgba(168,255,62,0.5); }
     .delivery-addr-wrap { overflow: hidden; max-height: 0; opacity: 0; transition: max-height 0.3s ease, opacity 0.3s ease; }
     .delivery-addr-wrap.show { max-height: 130px; opacity: 1; }
@@ -646,10 +647,10 @@
     /* ── Site footer ──────────────────────────────────────────────────────── */
     .site-footer { background: #0a0a0a; border-top: 1px solid #1a1a1a; padding: 40px 20px; }
     .footer-top { display: flex; flex-direction: column; gap: 6px; margin-bottom: 28px; }
-    .footer-logo { font-family: 'Courier New', Courier, monospace; font-size: 22px; color: #a8ff3e; letter-spacing: 4px; text-shadow: 0 0 12px rgba(168,255,62,0.4); }
+    .footer-logo { font-family: 'JetBrains Mono', monospace; font-size: 22px; color: #a8ff3e; letter-spacing: 4px; text-shadow: 0 0 12px rgba(168,255,62,0.4); }
     .footer-address { color: #555; font-size: 12px; letter-spacing: 1px; line-height: 1.7; }
     .footer-map { margin-bottom: 28px; }
-    .footer-map-title { font-family: 'Courier New', monospace; font-size: 11px; color: var(--accent); letter-spacing: 3px; margin-bottom: 12px; }
+    .footer-map-title { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--accent); letter-spacing: 3px; margin-bottom: 12px; }
     .footer-map-frame { border-radius: 12px; overflow: hidden; border: 1px solid #2a2a2a; }
     .footer-map-address { font-size: 12px; color: #777; margin-top: 8px; }
     .footer-links { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 16px; margin-bottom: 28px; }
@@ -665,9 +666,9 @@
     .fmodal::-webkit-scrollbar { width: 3px; }
     .fmodal::-webkit-scrollbar-thumb { background: #222; }
     .fmodal-backdrop.show .fmodal { transform: translateY(0); }
-    .fmodal-title { font-family: 'Courier New', Courier, monospace; font-size: 18px; color: #a8ff3e; letter-spacing: 3px; margin-bottom: 16px; border-bottom: 1px solid #1a1a1a; padding-bottom: 12px; padding-right: 32px; }
+    .fmodal-title { font-family: 'JetBrains Mono', monospace; font-size: 18px; color: #a8ff3e; letter-spacing: 3px; margin-bottom: 16px; border-bottom: 1px solid #1a1a1a; padding-bottom: 12px; padding-right: 32px; }
     .fmodal-body { color: #888; font-size: 13px; line-height: 1.7; }
-    .fmodal-body h3 { font-family: 'Courier New', monospace; font-size: 13px; color: var(--accent); letter-spacing: 1px; text-transform: uppercase; margin: 18px 0 8px; }
+    .fmodal-body h3 { font-family: 'JetBrains Mono', monospace; font-size: 13px; color: var(--accent); letter-spacing: 1px; text-transform: uppercase; margin: 18px 0 8px; }
     .fmodal-body h3:first-child { margin-top: 0; }
     .fmodal-body p { font-size: 13px; color: #bbb; line-height: 1.7; margin: 0 0 10px; }
     .fmodal-body strong { color: #e5e5e5; }
@@ -675,7 +676,7 @@
     .fmodal-close:hover { border-color: #a8ff3e; color: #a8ff3e; }
     .faq-list { display: flex; flex-direction: column; gap: 4px; }
     .faq-item { border: 1px solid #222; border-radius: 8px; overflow: hidden; }
-    .faq-item summary { padding: 12px 16px; font-family: 'Courier New', monospace; font-size: 13px; color: #e5e5e5; cursor: pointer; list-style: none; display: flex; align-items: center; justify-content: space-between; }
+    .faq-item summary { padding: 12px 16px; font-family: 'JetBrains Mono', monospace; font-size: 13px; color: #e5e5e5; cursor: pointer; list-style: none; display: flex; align-items: center; justify-content: space-between; }
     .faq-item summary::after { content: '+'; color: #a8ff3e; font-size: 16px; flex-shrink: 0; margin-left: 8px; transition: transform 0.2s; }
     .faq-item[open] summary::after { content: '−'; }
     .faq-item summary::-webkit-details-marker { display: none; }
@@ -719,13 +720,13 @@
     @keyframes orScaleIn { from { transform: scale(0); opacity: 0; } to { transform: scale(1); opacity: 1; } }
     .success-icon { border: 3px solid #a8ff3e; color: #a8ff3e; box-shadow: 0 0 30px rgba(168,255,62,0.3), 0 0 60px rgba(168,255,62,0.1); }
     .error-icon { border: 3px solid #ff4444; color: #ff4444; box-shadow: 0 0 30px rgba(255,68,68,0.3), 0 0 60px rgba(255,68,68,0.1); }
-    .order-result-title { font-family: 'Courier New', Courier, monospace; font-size: 24px; color: #fff; letter-spacing: 4px; text-transform: uppercase; margin-bottom: 8px; }
-    .order-result-number { font-family: 'Courier New', Courier, monospace; font-size: 18px; color: #a8ff3e; text-shadow: 0 0 10px rgba(168,255,62,0.5); letter-spacing: 2px; margin-bottom: 24px; }
+    .order-result-title { font-family: 'JetBrains Mono', monospace; font-size: 24px; color: #fff; letter-spacing: 4px; text-transform: uppercase; margin-bottom: 8px; }
+    .order-result-number { font-family: 'JetBrains Mono', monospace; font-size: 18px; color: #a8ff3e; text-shadow: 0 0 10px rgba(168,255,62,0.5); letter-spacing: 2px; margin-bottom: 24px; }
     .order-result-details { font-size: 13px; color: #888; line-height: 1.8; margin-bottom: 20px; text-align: left; padding: 16px; background: #111; border: 1px solid #222; border-radius: 12px; }
     .order-result-msg { font-size: 14px; color: #aaa; margin-bottom: 32px; line-height: 1.6; }
     .order-result-actions { display: flex; flex-direction: column; gap: 10px; }
     .order-result-btn {
-      width: 100%; padding: 14px; font-family: 'Courier New', Courier, monospace; font-size: 13px;
+      width: 100%; padding: 14px; font-family: 'JetBrains Mono', monospace; font-size: 13px;
       letter-spacing: 2px; text-transform: uppercase; border: none; cursor: pointer; border-radius: 8px;
       transition: transform 0.15s, box-shadow 0.3s;
     }

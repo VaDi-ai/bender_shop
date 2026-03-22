@@ -307,17 +307,32 @@ export async function generateAIResponse(
 
   const client = getClient()
 
-  // Загружаем товары в наличии
+  // Загружаем товары в наличии (с вариантами)
   const products = await prisma.product.findMany({
     where: { isAvailable: true },
-    select: { name: true, sku: true, price: true, quantity: true, reserved: true, description: true },
+    select: {
+      name: true, sku: true, price: true, quantity: true, description: true, brand: true,
+      variants: {
+        where: { inStock: true },
+        select: { sku: true, price: true, quantity: true, attributes: true },
+      },
+    },
     orderBy: { name: 'asc' },
   })
 
   const productsText = products.length > 0
     ? products.map((p) => {
         const desc = p.description ? ', ' + sanitizeProductDescription(p.description) : ''
-        return `• ${p.name} (${p.sku}) — ${Number(p.price).toLocaleString('ru-RU')} ₽${desc}`
+        const variantLines = p.variants.length > 0
+          ? p.variants.map((v) => {
+              const attrs = v.attributes as Record<string, string> | null
+              const attrStr = attrs
+                ? Object.entries(attrs).filter(([k]) => k !== 'fullName' && k !== 'Страна').map(([k, val]) => `${k}: ${val}`).join(', ')
+                : ''
+              return `  → ${v.sku} ${attrStr} — ${Number(v.price).toLocaleString('ru-RU')} ₽ (${v.quantity > 0 ? 'в наличии' : 'нет'})`
+            }).join('\n')
+          : ''
+        return `• ${p.name} (${p.sku}) — от ${Number(p.price).toLocaleString('ru-RU')} ₽${desc}${variantLines ? '\n' + variantLines : ''}`
       }).join('\n')
     : 'Товары не найдены'
 
