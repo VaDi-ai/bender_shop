@@ -1272,7 +1272,7 @@
       })
     }
 
-    const BRAND_POPULARITY = [
+    let BRAND_POPULARITY = [
       'Apple', 'Samsung', 'Sony', 'Xiaomi', 'JBL', 'Dyson',
       'LG', 'Garmin', 'DJI', 'Google', 'Huawei', 'Beats',
       'Marshall', 'Honor', 'Poco', 'OnePlus', 'Yandex',
@@ -1360,7 +1360,7 @@
       'Экшн-камеры':     '/categories/action_camera.webp',
     }
 
-    const TOP_CATEGORIES = ['Телефоны', 'Ноутбуки', 'Планшеты', 'Аудио', 'Часы', 'Телевизоры']
+    let TOP_CATEGORIES = ['Телефоны', 'Ноутбуки', 'Планшеты', 'Аудио', 'Часы', 'Телевизоры']
     const MAX_VISIBLE = 6
     let catsExpanded = false
 
@@ -1556,17 +1556,28 @@
       else if (sortMode === 'newest') products.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
       else if (sortMode === 'name') products.sort((a, b) => a.name.localeCompare(b.name, 'ru'))
       else {
+        const CATEGORY_POPULARITY = [
+          'Телефоны', 'Планшеты', 'Ноутбуки', 'Аудио', 'Часы',
+          'Телевизоры', 'Desktop', 'Игровые консоли', 'Умный дом',
+          'Гаджеты', 'Аксессуары', 'Красота и уход', 'Фототехника',
+          'Экшн-камеры', 'Дисплеи', 'Дроны'
+        ]
         products.sort((a, b) => {
           if (a.isFeatured && !b.isFeatured) return -1
           if (!a.isFeatured && b.isFeatured) return 1
           const ba = (a.brand && a.brand.trim()) ? a.brand.trim() : (a.name || '').split(' ')[0]
           const bb = (b.brand && b.brand.trim()) ? b.brand.trim() : (b.name || '').split(' ')[0]
-          const ai = BRAND_POPULARITY.indexOf(ba)
-          const bi = BRAND_POPULARITY.indexOf(bb)
-          const pa = ai !== -1 ? ai : 999
-          const pb = bi !== -1 ? bi : 999
+          const brandA = BRAND_POPULARITY.indexOf(ba)
+          const brandB = BRAND_POPULARITY.indexOf(bb)
+          const pa = brandA !== -1 ? brandA : 999
+          const pb = brandB !== -1 ? brandB : 999
           if (pa !== pb) return pa - pb
-          return minVariantPrice(b) - minVariantPrice(a)
+          const catA = CATEGORY_POPULARITY.indexOf(a.category || '')
+          const catB = CATEGORY_POPULARITY.indexOf(b.category || '')
+          const ca = catA !== -1 ? catA : 999
+          const cb = catB !== -1 ? catB : 999
+          if (ca !== cb) return ca - cb
+          return minVariantPrice(a) - minVariantPrice(b)
         })
       }
 
@@ -2538,8 +2549,14 @@
     checkCacheVersion()
     loadMarquee()
     loadHeroSlider()
-    loadCategories()
-    loadProducts('')
+    // Load trends before categories/products to apply AI ordering
+    fetch('/api/trends').then(r => r.ok ? r.json() : null).then(t => {
+      if (t && t.categories && t.categories.length > 0) TOP_CATEGORIES = t.categories.slice(0, 6)
+      if (t && t.brands && t.brands.length > 0) BRAND_POPULARITY = t.brands
+    }).catch(() => {}).finally(() => {
+      loadCategories()
+      loadProducts('')
+    })
     initPhoneMask()
     initSearch()
     document.getElementById('consentCheckbox')?.addEventListener('change', function() {

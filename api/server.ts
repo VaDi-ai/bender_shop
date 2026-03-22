@@ -446,6 +446,16 @@ export function startApiServer(bot?: Telegraf): void {
     }
   })
 
+  // ── GET /api/trends ───────────────────────────────────────────────────────
+  app.get('/api/trends', async (_req, res, next) => {
+    try {
+      const { getCurrentTrends } = await import('../lib/trends')
+      const trends = await getCurrentTrends()
+      res.setHeader('Cache-Control', 'public, max-age=3600')
+      res.json(trends || { categories: [], brands: [], featuredProducts: [] })
+    } catch (err) { if (!res.headersSent) next(err) }
+  })
+
   // ── GET /api/settings ──────────────────────────────────────────────────────
   app.get('/api/settings', async (req, res, next) => {
     try {

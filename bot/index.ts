@@ -556,6 +556,128 @@ bot.hears('🏷️ Акции', async (ctx) => {
   await showPromotionsMenu(ctx)
 })
 
+// ─── /hits — управление блоком "Хит продаж" ──────────────────────────────────
+
+bot.command('hits', async (ctx) => {
+  const userId = getUserId(ctx)
+  if (!ADMIN_IDS.includes(userId)) return
+
+  const args = (ctx.message.text || '').split(/\s+/).slice(1)
+  const sub = args[0]
+
+  try {
+    // /hits — показать текущие
+    if (!sub) {
+      const featured = await prisma.product.findMany({
+        where: { isFeatured: true },
+        select: { name: true, price: true },
+        orderBy: { name: 'asc' },
+      })
+      if (featured.length === 0) {
+        await ctx.reply('🔥 Хит продаж: пусто\n\nДобавить: /hits add <название>\nAI: /hits auto')
+        return
+      }
+      const lines = featured.map(p => `• ${p.name} — ${Number(p.price).toLocaleString('ru-RU')}₽`)
+      await ctx.reply(`🔥 Хит продаж (${featured.length}):\n\n${lines.join('\n')}`,
+        Markup.inlineKeyboard([
+          [Markup.button.callback('🤖 Обновить AI', 'hits:refresh')],
+          [Markup.button.callback('❌ Очистить все', 'hits:clear')],
+        ]))
+      return
+    }
+
+    // /hits add <текст>
+    if (sub === 'add') {
+      const search = args.slice(1).join(' ')
+      if (!search) { await ctx.reply('Укажите название: /hits add iPhone 16 Pro'); return }
+      const product = await prisma.product.findFirst({
+        where: { isAvailable: true, name: { contains: search, mode: 'insensitive' } },
+      })
+      if (!product) { await ctx.reply(`❌ Товар "${search}" не найден`); return }
+      await prisma.product.update({ where: { id: product.id }, data: { isFeatured: true } })
+      await ctx.reply(`✅ ${product.name} добавлен в хиты`)
+      return
+    }
+
+    // /hits remove <текст>
+    if (sub === 'remove') {
+      const search = args.slice(1).join(' ')
+      if (!search) { await ctx.reply('Укажите название: /hits remove iPhone 16 Pro'); return }
+      const product = await prisma.product.findFirst({
+        where: { isFeatured: true, name: { contains: search, mode: 'insensitive' } },
+      })
+      if (!product) { await ctx.reply(`❌ Товар "${search}" не найден в хитах`); return }
+      await prisma.product.update({ where: { id: product.id }, data: { isFeatured: false } })
+      await ctx.reply(`✅ ${product.name} убран из хитов`)
+      return
+    }
+
+    // /hits auto
+    if (sub === 'auto') {
+      await ctx.reply('⏳ AI анализирует тренды...')
+      const { fetchTrendsFromAI, saveTrends } = await import('../lib/trends')
+      const trends = await fetchTrendsFromAI()
+      if (!trends) { await ctx.reply('❌ Не удалось получить тренды от AI'); return }
+      await saveTrends(trends)
+
+      await prisma.product.updateMany({ where: { isFeatured: true }, data: { isFeatured: false } })
+      let count = 0
+      for (const name of trends.featuredProducts.slice(0, 10)) {
+        const p = await prisma.product.findFirst({
+          where: { isAvailable: true, name: { contains: name, mode: 'insensitive' } },
+        })
+        if (p) { await prisma.product.update({ where: { id: p.id }, data: { isFeatured: true } }); count++ }
+      }
+      await ctx.reply([
+        `✅ AI обновил хиты (${count} товаров)`,
+        '',
+        `🏷 Категории: ${trends.categories.slice(0, 6).join(' → ')}`,
+        `🏭 Бренды: ${trends.brands.slice(0, 6).join(' → ')}`,
+        `💡 ${trends.reasoning}`,
+      ].join('\n'))
+      return
+    }
+
+    // /hits clear
+    if (sub === 'clear') {
+      const { count } = await prisma.product.updateMany({ where: { isFeatured: true }, data: { isFeatured: false } })
+      await ctx.reply(`✅ Все хиты сброшены (${count})`)
+      return
+    }
+
+    await ctx.reply('Команды: /hits, /hits add, /hits remove, /hits auto, /hits clear')
+  } catch (err) {
+    await ctx.reply(`❌ Ошибка: ${err instanceof Error ? err.message : err}`)
+  }
+})
+
+bot.action('hits:refresh', async (ctx) => {
+  try { await ctx.answerCbQuery('⏳ Запускаю AI...') } catch { /* ignore */ }
+  try {
+    const { fetchTrendsFromAI, saveTrends } = await import('../lib/trends')
+    const trends = await fetchTrendsFromAI()
+    if (!trends) { await ctx.reply('❌ AI недоступен'); return }
+    await saveTrends(trends)
+    await prisma.product.updateMany({ where: { isFeatured: true }, data: { isFeatured: false } })
+    let count = 0
+    for (const name of trends.featuredProducts.slice(0, 10)) {
+      const p = await prisma.product.findFirst({
+        where: { isAvailable: true, name: { contains: name, mode: 'insensitive' } },
+      })
+      if (p) { await prisma.product.update({ where: { id: p.id }, data: { isFeatured: true } }); count++ }
+    }
+    await ctx.reply(`✅ AI обновил хиты (${count})\n💡 ${trends.reasoning}`)
+  } catch (err) {
+    await ctx.reply(`❌ ${err instanceof Error ? err.message : err}`)
+  }
+})
+
+bot.action('hits:clear', async (ctx) => {
+  try { await ctx.answerCbQuery() } catch { /* ignore */ }
+  const { count } = await prisma.product.updateMany({ where: { isFeatured: true }, data: { isFeatured: false } })
+  await ctx.reply(`✅ Все хиты сброшены (${count})`)
+})
+
 // ─── Avito команды ───────────────────────────────────────────────────────────
 
 bot.command('avito', async (ctx) => {
@@ -1572,6 +1694,63 @@ setInterval(async () => {
     }
 
     await notifyNightClients()
+
+    // AI-анализ трендов + обновление хитов
+    try {
+      const { fetchTrendsFromAI, saveTrends, getCurrentTrends } = await import('../lib/trends')
+      const newTrends = await fetchTrendsFromAI()
+      if (newTrends) {
+        const oldTrends = await getCurrentTrends()
+        await saveTrends(newTrends)
+
+        const changed = !oldTrends ||
+          JSON.stringify(oldTrends.categories.slice(0, 6)) !== JSON.stringify(newTrends.categories.slice(0, 6)) ||
+          JSON.stringify(oldTrends.brands.slice(0, 6)) !== JSON.stringify(newTrends.brands.slice(0, 6))
+
+        if (changed) {
+          for (const adminId of ADMIN_IDS) {
+            try {
+              await bot.telegram.sendMessage(adminId, [
+                '📊 AI обновил фильтрацию витрины:',
+                '',
+                `🏷 Топ категории: ${newTrends.categories.slice(0, 6).join(' → ')}`,
+                `🏭 Топ бренды: ${newTrends.brands.slice(0, 6).join(' → ')}`,
+                '',
+                `💡 ${newTrends.reasoning}`,
+              ].join('\n'))
+            } catch { /* ignore */ }
+          }
+        }
+
+        // Обновить блок "Хит продаж" (isFeatured)
+        if (newTrends.featuredProducts && newTrends.featuredProducts.length > 0) {
+          await prisma.product.updateMany({ where: { isFeatured: true }, data: { isFeatured: false } })
+
+          let featuredCount = 0
+          for (const name of newTrends.featuredProducts.slice(0, 10)) {
+            const product = await prisma.product.findFirst({
+              where: { isAvailable: true, name: { contains: name, mode: 'insensitive' } },
+            })
+            if (product) {
+              await prisma.product.update({ where: { id: product.id }, data: { isFeatured: true } })
+              featuredCount++
+            }
+          }
+
+          if (featuredCount > 0) {
+            const featuredList = newTrends.featuredProducts.slice(0, featuredCount).join('\n• ')
+            for (const adminId of ADMIN_IDS) {
+              try {
+                await bot.telegram.sendMessage(adminId, `🔥 AI обновил "Хит продаж" (${featuredCount}):\n• ${featuredList}`)
+              } catch { /* ignore */ }
+            }
+          }
+        }
+        console.log('[Trends] Updated:', newTrends.reasoning?.slice(0, 100))
+      }
+    } catch (err) {
+      console.error('[Trends] Error:', err)
+    }
   } catch (err) {
     console.error('[Morning summary] Error:', err)
   }
