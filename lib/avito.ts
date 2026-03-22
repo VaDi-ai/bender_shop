@@ -35,6 +35,7 @@ export async function getAvitoToken(): Promise<string> {
       grant_type: 'client_credentials',
       client_id: AVITO_CLIENT_ID,
       client_secret: AVITO_CLIENT_SECRET,
+      scope: 'messenger:read,messenger:write',
     }),
   })
 
@@ -49,7 +50,7 @@ export async function getAvitoToken(): Promise<string> {
     expiresAt: Date.now() + (data.expires_in - 60) * 1000,
   }
 
-  console.log('[Avito] Token obtained, expires in', data.expires_in, 'sec')
+  console.log('[Avito] Token obtained (scope: messenger:read,write), expires in', data.expires_in, 'sec')
   return cachedToken.token
 }
 
@@ -119,8 +120,11 @@ export async function sendAvitoMessage(chatId: string, text: string): Promise<vo
 
   console.log('[Avito] Sending to chat:', chatId, 'user:', userId, 'text:', text.slice(0, 50))
 
+  // Force token refresh on first send attempt (scope may have changed)
   const url = `${AVITO_API}/messenger/v1/accounts/${userId}/chats/${chatId}/messages`
   const body = JSON.stringify({ message: { text } })
+
+  console.log('[Avito] Send body:', body.slice(0, 200))
 
   const res = await fetch(url, {
     method: 'POST',
@@ -132,7 +136,9 @@ export async function sendAvitoMessage(chatId: string, text: string): Promise<vo
   })
   if (!res.ok) {
     const errBody = await res.text()
-    console.error('[Avito] Send error body:', errBody)
+    console.error('[Avito] Send response status:', res.status)
+    console.error('[Avito] Send response headers:', JSON.stringify(Object.fromEntries(res.headers.entries())))
+    console.error('[Avito] Send response body:', errBody)
     console.error('[Avito] Send request:', { url, chatId, userId, textLength: text.length })
     throw new Error(`Avito send failed: ${res.status} ${errBody}`)
   }
