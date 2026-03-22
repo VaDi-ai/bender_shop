@@ -11,8 +11,9 @@
  *                     модуль акций обновляет scheduledAt при старте акции
  */
 
-import { Telegraf } from 'telegraf'
+import { Telegraf, Telegram } from 'telegraf'
 import { prisma } from '../lib/prisma'
+import { isAvitoConfigured, getAvitoChats, getAvitoUserId, sendAvitoMessage } from '../lib/avito'
 
 const INTERVAL_MS = 10 * 60 * 1000 // 10 минут
 
@@ -72,6 +73,9 @@ async function runTick(bot: Telegraf): Promise<void> {
         }
       }
     }
+    // Polling Avito Messenger
+    await pollAvitoMessages(bot.telegram).catch(err => console.error('[Scheduler] Avito poll error:', err))
+
     // Деактивация устаревших цен поставщиков (старше 24ч)
     try {
       const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000)
@@ -118,9 +122,16 @@ async function executeTask(
       return
     }
 
-    // TODO: каналы avito / instagram — реализовать при подключении webhooks.
-    // Паттерн: аналогично telegram — отправить через соответствующий API
-    // (Avito Messenger API / Instagram Graph API).
+    if (client.source === 'avito' && client.externalId) {
+      // externalId = "buyerId:chatId"
+      const chatId = client.externalId.split(':')[1]
+      if (chatId) {
+        await sendAvitoMessage(chatId, text)
+        console.log(`[Scheduler] Задача #${task.id}: сообщение отправлено клиенту #${client.id} (Avito)`)
+        return
+      }
+    }
+
     console.warn(
       `[Scheduler] Задача #${task.id}: канал ${client.source} не поддерживается, пропускаем`,
     )
@@ -132,4 +143,94 @@ async function executeTask(
     return
   }
   console.warn(`[Scheduler] Задача #${task.id}: неизвестный action="${action}"`)
+}
+
+// ─── Avito Messenger Polling ──────────────────────────────────────────────────
+
+const lastProcessedMsg = new Map<string, string>()
+
+async function pollAvitoMessages(telegram: Telegram): Promise<void> {
+  if (!isAvitoConfigured()) return
+
+  const CRM_GROUP_ID = Number(process.env.CRM_GROUP_ID)
+  if (!CRM_GROUP_ID) return
+
+  const userId = await getAvitoUserId()
+  const chats = await getAvitoChats()
+
+  for (const chat of chats) {
+    const lastMsg = chat.last_message
+    if (!lastMsg || lastMsg.direction === 'out') continue
+    if (lastProcessedMsg.get(chat.id) === lastMsg.id) continue
+
+    lastProcessedMsg.set(chat.id, lastMsg.id)
+
+    const buyer = chat.users?.find(u => u.id !== userId)
+    if (!buyer) continue
+
+    const name = buyer.name || 'Avito покупатель'
+    const text = lastMsg.text || '(без текста)'
+    // externalId = "buyerId:chatId"
+    const externalId = `${buyer.id}:${chat.id}`
+
+    // Find or create client
+    let client = await prisma.client.findFirst({
+      where: { source: 'avito', externalId },
+    })
+
+    if (!client) {
+      // Also try matching by just buyerId (old format without chatId)
+      client = await prisma.client.findFirst({
+        where: { source: 'avito', externalId: String(buyer.id) },
+      })
+      if (client) {
+        // Upgrade externalId to include chatId
+        client = await prisma.client.update({
+          where: { id: client.id },
+          data: { externalId },
+        })
+      }
+    }
+
+    if (!client) {
+      const defaultSeg = await prisma.segment.findFirst({ where: { isDefault: true } })
+      client = await prisma.client.create({
+        data: { name, source: 'avito', externalId, segmentId: defaultSeg?.id ?? null },
+      })
+    }
+
+    // Create CRM topic if needed
+    if (!client.telegramTopicId) {
+      try {
+        const topic = await telegram.createForumTopic(CRM_GROUP_ID, `[Avito] ${name}`)
+        client = await prisma.client.update({
+          where: { id: client.id },
+          data: { telegramTopicId: topic.message_thread_id },
+        })
+        await (telegram.sendMessage as any)(CRM_GROUP_ID,
+          `👤 Новый клиент с Avito: ${name}\n💬 ${text}`,
+          { message_thread_id: topic.message_thread_id },
+        )
+      } catch (err) {
+        console.error(`[Avito] Failed to create topic for ${name}:`, err)
+        continue
+      }
+    } else {
+      try {
+        await (telegram.sendMessage as any)(CRM_GROUP_ID,
+          `💬 [Avito] ${name}: ${text}`,
+          { message_thread_id: client.telegramTopicId },
+        )
+      } catch (err) {
+        console.error(`[Avito] Failed to forward message:`, err)
+      }
+    }
+
+    // Save message
+    await prisma.message.create({
+      data: { clientId: client.id, direction: 'in', text, source: 'avito' },
+    })
+
+    console.log(`[Avito] New message from ${name}: ${text.slice(0, 50)}`)
+  }
 }

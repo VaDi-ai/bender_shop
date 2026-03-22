@@ -702,9 +702,13 @@ export function setupClientHandlers(bot: Telegraf): void {
 
         if (client.source === 'telegram' && client.externalId) {
           await ctx.telegram.sendMessage(client.externalId, text)
+        } else if (client.source === 'avito' && client.externalId) {
+          const { sendAvitoMessage } = await import('../lib/avito')
+          const avitoChatId = client.externalId.split(':')[1]
+          if (avitoChatId) await sendAvitoMessage(avitoChatId, text)
         }
         await prisma.message.create({
-          data: { clientId, direction: 'out', text, source: 'telegram' },
+          data: { clientId, direction: 'out', text, source: client.source },
         })
 
         incrementStat('approved')
@@ -1439,10 +1443,22 @@ async function handleManagerReply(
 
   if (client.source === 'telegram' && client.externalId) {
     await ctx.telegram.sendMessage(client.externalId, text)
+  } else if (client.source === 'avito' && client.externalId) {
+    try {
+      const { sendAvitoMessage } = await import('../lib/avito')
+      // externalId = "buyerId:chatId"
+      const chatId = client.externalId.split(':')[1]
+      if (chatId) {
+        await sendAvitoMessage(chatId, text)
+      }
+    } catch (err) {
+      console.error('[CRM] Avito reply error:', err)
+      await sendToTopic(ctx.telegram, CRM_GROUP_ID, threadId, `⚠️ Не удалось отправить в Avito: ${err instanceof Error ? err.message : err}`)
+    }
   }
 
   await prisma.message.create({
-    data: { clientId: client.id, direction: 'out', text, source: 'telegram' },
+    data: { clientId: client.id, direction: 'out', text, source: client.source },
   })
 }
 
