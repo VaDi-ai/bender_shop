@@ -1272,6 +1272,15 @@
       })
     }
 
+    const BRAND_POPULARITY = [
+      'Apple', 'Samsung', 'Sony', 'Xiaomi', 'JBL', 'Dyson',
+      'LG', 'Garmin', 'DJI', 'Google', 'Huawei', 'Beats',
+      'Marshall', 'Honor', 'Poco', 'OnePlus', 'Yandex',
+      'Ray-Ban', 'Nintendo', 'Fujifilm', 'Hisense', 'Insta360',
+      'Oakley', 'Canon', 'GoPro', 'Meta', 'Bowers & Wilkins',
+      'Medicube', 'Plaud', 'Whoop', 'Microsoft', 'Valve', 'Asus'
+    ]
+
     function computeBrands() {
       const map = {}
       allProducts.forEach(p => {
@@ -1281,7 +1290,11 @@
       })
       brands = Object.entries(map)
         .map(([name, count]) => ({ name, count }))
-        .sort((a, b) => b.count - a.count)
+        .sort((a, b) => {
+          const ai = BRAND_POPULARITY.indexOf(a.name)
+          const bi = BRAND_POPULARITY.indexOf(b.name)
+          return (ai !== -1 ? ai : 999) - (bi !== -1 ? bi : 999)
+        })
     }
 
     function renderBrandFilterBar() {
@@ -1347,7 +1360,7 @@
       'Экшн-камеры':     '/categories/action_camera.webp',
     }
 
-    const TOP_CATEGORIES = ['Телефоны', 'Планшеты', 'Ноутбуки', 'Часы', 'Аудио', 'Консоли']
+    const TOP_CATEGORIES = ['Телефоны', 'Ноутбуки', 'Планшеты', 'Аудио', 'Часы', 'Телевизоры']
     const MAX_VISIBLE = 6
     let catsExpanded = false
 
@@ -1542,6 +1555,20 @@
       else if (sortMode === 'popular') products.sort((a, b) => (b.salesCount || 0) - (a.salesCount || 0))
       else if (sortMode === 'newest') products.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
       else if (sortMode === 'name') products.sort((a, b) => a.name.localeCompare(b.name, 'ru'))
+      else {
+        products.sort((a, b) => {
+          if (a.isFeatured && !b.isFeatured) return -1
+          if (!a.isFeatured && b.isFeatured) return 1
+          const ba = (a.brand && a.brand.trim()) ? a.brand.trim() : (a.name || '').split(' ')[0]
+          const bb = (b.brand && b.brand.trim()) ? b.brand.trim() : (b.name || '').split(' ')[0]
+          const ai = BRAND_POPULARITY.indexOf(ba)
+          const bi = BRAND_POPULARITY.indexOf(bb)
+          const pa = ai !== -1 ? ai : 999
+          const pb = bi !== -1 ? bi : 999
+          if (pa !== pb) return pa - pb
+          return minVariantPrice(b) - minVariantPrice(a)
+        })
+      }
 
       if (searchQuery) {
         const countText = products.length

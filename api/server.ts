@@ -425,9 +425,21 @@ export function startApiServer(bot?: Telegraf): void {
         if (!b) continue
         map.set(b, (map.get(b) ?? 0) + 1)
       }
+      const BRAND_POPULARITY = [
+        'Apple', 'Samsung', 'Sony', 'Xiaomi', 'JBL', 'Dyson',
+        'LG', 'Garmin', 'DJI', 'Google', 'Huawei', 'Beats',
+        'Marshall', 'Honor', 'Poco', 'OnePlus', 'Yandex',
+        'Ray-Ban', 'Nintendo', 'Fujifilm', 'Hisense', 'Insta360',
+        'Oakley', 'Canon', 'GoPro', 'Meta', 'Bowers & Wilkins',
+        'Medicube', 'Plaud', 'Whoop', 'Microsoft', 'Valve', 'Asus',
+      ]
       const payload = [...map.entries()]
         .map(([name, count]) => ({ name, count }))
-        .sort((a, b) => b.count - a.count)
+        .sort((a, b) => {
+          const ai = BRAND_POPULARITY.indexOf(a.name)
+          const bi = BRAND_POPULARITY.indexOf(b.name)
+          return (ai !== -1 ? ai : 999) - (bi !== -1 ? bi : 999)
+        })
       res.json(payload)
     } catch (err) {
       if (!res.headersSent) next(err)
