@@ -118,15 +118,16 @@ function extractAnchorTokens(s: string): string[] {
     anchors.push(...norm.split(/\s+/).slice(0, 3).filter(t => t.length > 1))
   }
 
-  // Чип/процессор — обязательный якорь (m3, m4, m5, a16, a18)
-  const chipMatch = norm.match(/\b(m\d+|a\d+)\b/i)
-  if (chipMatch) anchors.push(chipMatch[1].toLowerCase())
-
-  // Модификатор чипа (Pro/Max после m4/m5) — различает M4 vs M4 Pro vs M4 Max
-  // НЕ для MacBook NEO — там "A18 Pro" это чип, не линейка
+  // MacBook NEO: якорь только ["macbook", "neo"], чипы/модификаторы — характеристики, не модель
   const isNeo = /macbook\s*neo/i.test(norm)
-  const chipMod = norm.match(/\bm\d+\s+(pro|max)\b/i)
-  if (chipMod && !isNeo) anchors.push(chipMod[1].toLowerCase())
+  if (!isNeo) {
+    // Чип/процессор — обязательный якорь (m3, m4, m5, a16, a18)
+    const chipMatch = norm.match(/\b(m\d+|a\d+)\b/i)
+    if (chipMatch) anchors.push(chipMatch[1].toLowerCase())
+    // Модификатор чипа (Pro/Max после m4/m5) — различает M4 vs M4 Pro vs M4 Max
+    const chipMod = norm.match(/\bm\d+\s+(pro|max)\b/i)
+    if (chipMod) anchors.push(chipMod[1].toLowerCase())
+  }
 
   return [...new Set(anchors)]
 }
