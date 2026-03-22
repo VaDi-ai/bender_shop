@@ -29,6 +29,10 @@ type RemindPayload = {
 export function startScheduler(bot: Telegraf): void {
   console.log('Планировщик запущен (интервал: 10 мин)')
   setInterval(() => { runTick(bot).catch(err => console.error('[Scheduler]', err)) }, INTERVAL_MS)
+
+  // Avito polling: отдельный таймер, каждые 2 минуты
+  setTimeout(() => pollAvitoMessages(bot.telegram).catch(e => console.error('[Avito]', e)), 30_000)
+  setInterval(() => { pollAvitoMessages(bot.telegram).catch(e => console.error('[Avito]', e)) }, 2 * 60 * 1000)
 }
 
 // ─── Один «тик» — проверяем и выполняем задачи ───────────────────────────────
@@ -73,9 +77,6 @@ async function runTick(bot: Telegraf): Promise<void> {
         }
       }
     }
-    // Polling Avito Messenger
-    await pollAvitoMessages(bot.telegram).catch(err => console.error('[Scheduler] Avito poll error:', err))
-
     // Деактивация устаревших цен поставщиков (старше 24ч)
     try {
       const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000)
