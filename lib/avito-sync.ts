@@ -1,8 +1,21 @@
 /**
- * lib/avito-sync.ts — Маппинг Avito объявлений ↔ Product и синхронизация цен
+ * lib/avito-sync.ts — Маппинг Avito объявлений ↔ Google Sheets и синхронизация цен
  */
 import { prisma } from './prisma'
 import { getAvitoItems, updateAvitoPrice, isAvitoConfigured } from './avito'
+import { readSheet, getSheetNames } from './google-sheets'
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+interface SheetProduct {
+  rowIndex: number
+  sheetName: string
+  fullName: string   // колонка E (index 4)
+  color: string      // колонка F (index 5)
+  memory: string     // колонка G (index 6)
+  size: string       // колонка H (index 7)
+  price: number      // колонка L (index 11)
+}
 
 export interface AvitoMapping {
   avitoId: number
@@ -11,10 +24,16 @@ export interface AvitoMapping {
   productId: number | null
   productName: string | null
   confidence: 'exact' | 'fuzzy' | 'none'
-  score: number  // 0-1, процент совпадения токенов
+  score: number
+  sheetMatch: {
+    rowIndex: number
+    sheetName: string
+    price: number
+  } | null
 }
 
-/** Нормализация названия для сравнения */
+// ─── Normalization & scoring ──────────────────────────────────────────────────
+
 function normalize(s: string): string {
   return s
     .toLowerCase()
@@ -28,7 +47,6 @@ function normalize(s: string): string {
     .trim()
 }
 
-/** Извлечь ключевые токены из названия для сравнения */
 function extractTokens(s: string): string[] {
   return normalize(s)
     .split(' ')
@@ -36,20 +54,53 @@ function extractTokens(s: string): string[] {
     .filter(t => !['new', 'новый', 'sim', 'esim', 'strap', 'silicon', 'band', 'the', 'and'].includes(t))
 }
 
-/** Процент совпадения токенов */
-function matchScore(avitoTitle: string, productName: string): number {
-  const tokensA = extractTokens(avitoTitle)
-  const tokensB = extractTokens(productName)
+function matchScore(a: string, b: string): number {
+  const tokensA = extractTokens(a)
+  const tokensB = extractTokens(b)
   if (tokensA.length === 0 || tokensB.length === 0) return 0
   const overlap = tokensA.filter(t => tokensB.includes(t)).length
-  // Нормализуем по меньшему набору (короткое название в БД не штрафуется)
   return overlap / Math.min(tokensA.length, tokensB.length)
 }
 
-/** Маппинг объявлений Avito → Product по названию (read-only) */
+// ─── Load sheet data ──────────────────────────────────────────────────────────
+
+async function loadSheetProducts(): Promise<SheetProduct[]> {
+  const allSheets = await getSheetNames()
+  const sheetName = allSheets[0]
+  if (!sheetName) return []
+
+  const data = await readSheet(sheetName)
+  const items: SheetProduct[] = []
+
+  for (let i = 1; i < data.length; i++) {
+    const row = data[i]
+    const fullName = (row[4] ?? '').toString().trim()    // E: Название модели
+    const priceRaw = (row[11] ?? '').toString().replace(/\s/g, '')  // L: Цена
+    const price = parseFloat(priceRaw)
+    if (!fullName || isNaN(price) || price <= 0) continue
+
+    items.push({
+      rowIndex: i + 1,
+      sheetName,
+      fullName,
+      color: (row[5] ?? '').toString().trim(),
+      memory: (row[6] ?? '').toString().trim(),
+      size: (row[7] ?? '').toString().trim(),
+      price,
+    })
+  }
+  return items
+}
+
+// ─── Mapping ──────────────────────────────────────────────────────────────────
+
+/** Маппинг объявлений Avito → Google Sheets строки (read-only) */
 export async function mapAvitoToProducts(): Promise<AvitoMapping[]> {
   const avitoItems = await getAvitoItems()
-  const products = await prisma.product.findMany({
+  const sheetProducts = await loadSheetProducts()
+
+  // DB products — для проверки уже смапленных
+  const dbProducts = await prisma.product.findMany({
     where: { isAvailable: true },
     select: { id: true, name: true, avitoItemId: true },
   })
@@ -58,50 +109,64 @@ export async function mapAvitoToProducts(): Promise<AvitoMapping[]> {
 
   for (const item of avitoItems) {
     // 1. Уже смаплен в БД?
-    let match = products.find(p => p.avitoItemId === BigInt(item.id))
-    let confidence: 'exact' | 'fuzzy' | 'none' = match ? 'exact' : 'none'
-    let score = match ? 1 : 0
-
-    if (!match) {
-      // 2. Точное совпадение нормализованных названий
-      const normTitle = normalize(item.title)
-      match = products.find(p => normalize(p.name) === normTitle)
-      if (match) { confidence = 'exact'; score = 1 }
+    const dbMatch = dbProducts.find(p => p.avitoItemId && p.avitoItemId === BigInt(item.id))
+    if (dbMatch) {
+      result.push({
+        avitoId: item.id,
+        avitoTitle: item.title,
+        avitoPrice: item.price,
+        productId: dbMatch.id,
+        productName: dbMatch.name,
+        confidence: 'exact',
+        score: 1,
+        sheetMatch: null,
+      })
+      continue
     }
 
-    if (!match) {
-      // 3. Token-based scoring — найти лучшее совпадение
-      let bestScore = 0
-      let bestProduct: typeof products[0] | null = null
+    // 2. Token-based scoring по Google Sheets (полные названия)
+    let bestScore = 0
+    let bestSheet: SheetProduct | null = null
 
-      for (const p of products) {
-        const s = matchScore(item.title, p.name)
-        if (s > bestScore) {
-          bestScore = s
-          bestProduct = p
-        }
+    for (const sp of sheetProducts) {
+      // Сравнение с полным названием
+      const score1 = matchScore(item.title, sp.fullName)
+      if (score1 > bestScore) {
+        bestScore = score1
+        bestSheet = sp
       }
-
-      // Порог: минимум 60% токенов совпадает
-      if (bestProduct && bestScore >= 0.6) {
-        match = bestProduct
-        confidence = bestScore >= 0.9 ? 'exact' : 'fuzzy'
-        score = bestScore
+      // Расширенное: fullName + color + memory + size
+      const extended = [sp.fullName, sp.color, sp.memory, sp.size].filter(Boolean).join(' ')
+      const score2 = matchScore(item.title, extended)
+      if (score2 > bestScore) {
+        bestScore = score2
+        bestSheet = sp
       }
     }
+
+    let confidence: 'exact' | 'fuzzy' | 'none' = 'none'
+    if (bestSheet && bestScore >= 0.85) confidence = 'exact'
+    else if (bestSheet && bestScore >= 0.5) confidence = 'fuzzy'
 
     result.push({
       avitoId: item.id,
       avitoTitle: item.title,
       avitoPrice: item.price,
-      productId: match?.id ?? null,
-      productName: match?.name ?? null,
+      productId: null,
+      productName: bestSheet?.fullName ?? null,
       confidence,
-      score,
+      score: bestScore,
+      sheetMatch: bestSheet ? {
+        rowIndex: bestSheet.rowIndex,
+        sheetName: bestSheet.sheetName,
+        price: bestSheet.price,
+      } : null,
     })
   }
   return result
 }
+
+// ─── Apply & sync (for future use) ───────────────────────────────────────────
 
 /** Применить маппинг — записать avitoItemId + avitoEnabled в Product */
 export async function applyAvitoMapping(mappings: AvitoMapping[]): Promise<number> {
@@ -139,7 +204,6 @@ export async function syncPricesToAvito(): Promise<{ updated: number; failed: nu
     if (!p.avitoItemId) { skipped++; continue }
     const price = Number(p.price)
     if (price <= 0) { skipped++; continue }
-    // Задержка 500ms между запросами (rate limit 150/мин = 2.5/сек)
     await new Promise(r => setTimeout(r, 500))
     const ok = await updateAvitoPrice(Number(p.avitoItemId), price)
     if (ok) updated++; else failed++

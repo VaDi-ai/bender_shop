@@ -741,18 +741,29 @@ bot.command('avito', async (ctx) => {
         const match = m.productName
           ? `→ ${m.productName} (${Math.round(m.score * 100)}%)`
           : '→ НЕТ СОВПАДЕНИЯ'
-        const pricePart = m.avitoPrice ? ` [Avito: ${m.avitoPrice.toLocaleString('ru-RU')}₽]` : ''
-        return `${icon} ${m.avitoTitle} ${match}${pricePart}`
+        let priceDiff = ''
+        if (m.sheetMatch && m.avitoPrice) {
+          const diff = m.avitoPrice - m.sheetMatch.price
+          if (Math.abs(diff) >= 100) {
+            const sign = diff > 0 ? '+' : ''
+            priceDiff = ` [Avito: ${m.avitoPrice.toLocaleString('ru-RU')}₽ / Таблица: ${m.sheetMatch.price.toLocaleString('ru-RU')}₽, ${sign}${diff.toLocaleString('ru-RU')}₽]`
+          } else {
+            priceDiff = ` [${m.avitoPrice.toLocaleString('ru-RU')}₽ ✓]`
+          }
+        } else if (m.avitoPrice) {
+          priceDiff = ` [Avito: ${m.avitoPrice.toLocaleString('ru-RU')}₽]`
+        }
+        return `${icon} ${m.avitoTitle} ${match}${priceDiff}`
       })
 
       await ctx.reply([
-        `🔗 Маппинг Avito → Каталог (${mappings.length} объявлений):`,
+        `🔗 Маппинг Avito → Google Sheets (${mappings.length} объявлений):`,
         '',
-        `✅ Точных: ${exact}`,
-        `⚠️ Нечётких: ${fuzzy}`,
+        `✅ Точных (≥85%): ${exact}`,
+        `⚠️ Нечётких (≥50%): ${fuzzy}`,
         `❌ Не найдено: ${none}`,
         '',
-        '📄 Полный отчёт в файле ниже',
+        '📄 Полный отчёт с ценами в файле ниже',
         '⚠️ READ-ONLY — ничего не применяется',
       ].join('\n'))
 
