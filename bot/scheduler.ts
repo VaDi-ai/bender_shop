@@ -11,9 +11,11 @@
  *                     модуль акций обновляет scheduledAt при старте акции
  */
 
-import { Telegraf, Telegram } from 'telegraf'
+import { Telegraf, Telegram, Markup } from 'telegraf'
 import { prisma } from '../lib/prisma'
 import { isAvitoConfigured, getAvitoChats, getAvitoUserId, sendAvitoMessage, type AvitoChat } from '../lib/avito'
+import { getAIMode, generateAIResponse, storeSuggestion, incrementStat } from './ai/agent'
+import { moderateAIOutput } from '../webhooks/telegram'
 
 const INTERVAL_MS = 10 * 60 * 1000 // 10 минут
 
@@ -285,6 +287,45 @@ async function pollAvitoMessages(telegram: Telegram): Promise<void> {
     })
 
     console.log(`[Avito] New message from ${name}: ${text.slice(0, 50)}`)
+
+    // AI agent processing
+    if (client.telegramTopicId) {
+      try {
+        const aiMode = await getAIMode()
+        if (aiMode === 'auto' || aiMode === 'semi') {
+          const aiText = await generateAIResponse(client.id, text)
+          incrementStat('total')
+          const safeText = moderateAIOutput(aiText)
+
+          if (aiMode === 'auto') {
+            await sendAvitoMessage(chat.id, safeText)
+            await prisma.message.create({
+              data: { clientId: client.id, direction: 'out', text: safeText, source: 'avito' },
+            })
+            incrementStat('approved')
+            await (telegram.sendMessage as any)(CRM_GROUP_ID,
+              `🤖 Бендер → [Avito] ${name}:\n${safeText}`,
+              { message_thread_id: client.telegramTopicId },
+            )
+          } else {
+            // semi — предложение менеджеру с кнопками
+            const suggestionId = storeSuggestion(client.id, safeText, client.telegramTopicId)
+            await (telegram.sendMessage as any)(CRM_GROUP_ID, `🤖 Предложение AI:\n\n${safeText}`, {
+              message_thread_id: client.telegramTopicId,
+              reply_markup: Markup.inlineKeyboard([
+                [
+                  Markup.button.callback('✅ Отправить', `ai:send:${suggestionId}`),
+                  Markup.button.callback('✏️ Редактировать', `ai:edit:${suggestionId}`),
+                  Markup.button.callback('❌ Пропустить', `ai:skip:${suggestionId}`),
+                ],
+              ]).reply_markup,
+            })
+          }
+        }
+      } catch (err) {
+        console.error(`[Avito] AI error for ${name}:`, err)
+      }
+    }
   }
   console.log(`[Avito] Polling done, processed ${chats.length} chats`)
 }

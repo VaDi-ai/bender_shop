@@ -1202,7 +1202,7 @@ async function handleClientMessage(
 // ─── AI: обработка входящего сообщения ────────────────────────────────────────
 
 /** Модерирует вывод AI: обрезает до 2000 символов, фильтрует утечки промпта, редактирует PII */
-function moderateAIOutput(text: string): string {
+export function moderateAIOutput(text: string): string {
   const leakPatterns = [
     /system prompt/gi,
     /you are an ai/gi,

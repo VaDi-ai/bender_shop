@@ -1440,9 +1440,9 @@ async function checkAISchedule(): Promise<void> {
     const isWorkHours = hour >= WORK_START && hour < WORK_END
 
     if (!isWorkHours && currentMode !== 'auto' && currentMode !== 'off') {
+      await setApiKeyValue('ai_mode_before_night', currentMode)
       await setAIMode('auto')
-      await setApiKeyValue('ai_auto_by_schedule', 'true')
-      console.log(`[AI Schedule] ${hour}:00 MSK → AUTO (after hours)`)
+      console.log(`[AI Schedule] ${hour}:00 MSK → AUTO (was ${currentMode}, after hours)`)
       for (const adminId of ADMIN_IDS) {
         try {
           await bot.telegram.sendMessage(adminId,
@@ -1450,15 +1450,16 @@ async function checkAISchedule(): Promise<void> {
         } catch { /* ignore */ }
       }
     } else if (isWorkHours && currentMode === 'auto') {
-      const wasAutoScheduled = await getApiKeyValue('ai_auto_by_schedule')
-      if (wasAutoScheduled === 'true') {
-        await setAIMode('semi')
-        await setApiKeyValue('ai_auto_by_schedule', 'false')
-        console.log(`[AI Schedule] ${hour}:00 MSK → SEMI (work hours)`)
+      const prevMode = await getApiKeyValue('ai_mode_before_night')
+      if (prevMode) {
+        const restoreMode = (['manual', 'semi', 'auto', 'off'].includes(prevMode) ? prevMode : 'semi') as 'manual' | 'semi' | 'auto' | 'off'
+        await setAIMode(restoreMode)
+        await setApiKeyValue('ai_mode_before_night', '')
+        console.log(`[AI Schedule] ${hour}:00 MSK → ${restoreMode.toUpperCase()} (restored, work hours)`)
         for (const adminId of ADMIN_IDS) {
           try {
             await bot.telegram.sendMessage(adminId,
-              `👤 AI переключён в полуавтомат (рабочее время ${hour}:00 МСК).`)
+              `👤 AI переключён в ${restoreMode} (рабочее время ${hour}:00 МСК).`)
           } catch { /* ignore */ }
         }
       }

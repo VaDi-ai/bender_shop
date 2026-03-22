@@ -340,9 +340,9 @@ export function setupAIScheduleHandlers(bot: Telegraf): void {
     const currentMode = await getAIMode()
 
     if (!isWorkHours && currentMode !== 'auto' && currentMode !== 'off') {
+      await setApiKeyValue('ai_mode_before_night', currentMode)
       await setAIMode('auto')
-      await setApiKeyValue('ai_auto_by_schedule', 'true')
-      await ctx.reply(`✅ Расписание включено.\n🤖 Сейчас нерабочее время (${mskHour}:00 МСК) — Бендер переключён в автомат!`)
+      await ctx.reply(`✅ Расписание включено.\n🤖 Сейчас нерабочее время (${mskHour}:00 МСК) — Бендер переключён в автомат! (был ${currentMode})`)
     } else if (isWorkHours) {
       await ctx.reply(`✅ Расписание включено.\n👤 Сейчас рабочее время — режим не изменён (${currentMode}).`)
     } else {
