@@ -193,7 +193,8 @@ async function pollAvitoMessages(telegram: Telegram): Promise<void> {
 
     lastProcessedMsg.set(chat.id, lastMsg.id)
 
-    // Debug: log raw message object
+    // Debug: log chat and message structure
+    console.log('[Avito] Chat id:', chat.id, 'type:', typeof chat.id, 'keys:', Object.keys(chat).join(','))
     console.log('[Avito] Message object:', JSON.stringify(lastMsg).slice(0, 500))
 
     const buyer = chat.users?.find(u => u.id !== userId)

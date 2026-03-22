@@ -118,30 +118,30 @@ export async function sendAvitoMessage(chatId: string, text: string): Promise<vo
   const token = await getAvitoToken()
   const userId = await getAvitoUserId()
 
-  console.log('[Avito] Sending to chat:', chatId, 'user:', userId, 'text:', text.slice(0, 50))
+  console.log('[Avito] Sending to chat:', chatId, 'type:', typeof chatId, 'user:', userId, 'text:', text.slice(0, 50))
 
-  // Force token refresh on first send attempt (scope may have changed)
-  const url = `${AVITO_API}/messenger/v1/accounts/${userId}/chats/${chatId}/messages`
+  const headers = {
+    Authorization: `Bearer ${token}`,
+    'Content-Type': 'application/json',
+  }
   const body = JSON.stringify({ message: { text } })
 
-  console.log('[Avito] Send body:', body.slice(0, 200))
+  // Try all API versions — Avito docs are inconsistent
+  for (const ver of ['v1', 'v2', 'v3']) {
+    const url = `${AVITO_API}/messenger/${ver}/accounts/${userId}/chats/${chatId}/messages`
+    console.log(`[Avito] Trying ${ver}: ${url}`)
 
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
-    body,
-  })
-  if (!res.ok) {
-    const errBody = await res.text()
-    console.error('[Avito] Send response status:', res.status)
-    console.error('[Avito] Send response headers:', JSON.stringify(Object.fromEntries(res.headers.entries())))
-    console.error('[Avito] Send response body:', errBody)
-    console.error('[Avito] Send request:', { url, chatId, userId, textLength: text.length })
-    throw new Error(`Avito send failed: ${res.status} ${errBody}`)
+    const res = await fetch(url, { method: 'POST', headers, body })
+    if (res.ok) {
+      console.log(`[Avito] Send success with ${ver}!`)
+      return
+    }
+
+    const errText = await res.text()
+    console.log(`[Avito] ${ver} response: ${res.status} ${errText.slice(0, 300)}`)
   }
+
+  throw new Error(`Avito send failed: all API versions returned errors for chat ${chatId}`)
 }
 
 // ─── Проверка доступности ─────────────────────────────────────────────────────
