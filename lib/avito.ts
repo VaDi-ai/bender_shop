@@ -124,10 +124,10 @@ export async function sendAvitoMessage(chatId: string, text: string): Promise<vo
     Authorization: `Bearer ${token}`,
     'Content-Type': 'application/json',
   }
-  const body = JSON.stringify({ message: { text } })
+  const body = JSON.stringify({ message: { text }, type: 'text' })
 
-  // Try all API versions — Avito docs are inconsistent
-  for (const ver of ['v1', 'v2', 'v3']) {
+  // v1 is the correct endpoint per Avito docs
+  for (const ver of ['v1']) {
     const url = `${AVITO_API}/messenger/${ver}/accounts/${userId}/chats/${chatId}/messages`
     console.log(`[Avito] Trying ${ver}: ${url}`)
 
