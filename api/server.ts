@@ -555,6 +555,123 @@ export function startApiServer(bot?: Telegraf): void {
     }
   })
 
+  // ── GET /api/photo/:fileId — прокси фото товаров для Avito XML ─────────────
+  app.get('/api/photo/:fileId', async (req, res) => {
+    const fileId = String(req.params.fileId ?? '')
+    const FILE_ID_RE_PHOTO = /^[A-Za-z0-9_\-]{10,200}$/
+    if (!fileId || !FILE_ID_RE_PHOTO.test(fileId)) { res.status(400).send('Invalid'); return }
+
+    try {
+      const filePath = await new Promise<string>((resolve, reject) => {
+        const tgUrl = `https://api.telegram.org/bot${BOT_TOKEN}/getFile?file_id=${encodeURIComponent(fileId)}`
+        const request = https
+          .get(tgUrl, (tgRes) => {
+            let data = ''
+            tgRes.on('data', (chunk: string) => (data += chunk))
+            tgRes.on('end', () => {
+              try {
+                const json = JSON.parse(data)
+                if (!json.ok) return reject(new Error('Telegram getFile failed'))
+                resolve(json.result.file_path as string)
+              } catch (e) { reject(e) }
+            })
+          })
+          .on('error', reject)
+        request.setTimeout(10_000, () => { request.destroy(new Error('timeout')) })
+      })
+
+      const downloadUrl = `https://api.telegram.org/file/bot${BOT_TOKEN}/${filePath}`
+      await new Promise<void>((resolve, reject) => {
+        const request = https
+          .get(downloadUrl, (tgRes) => {
+            res.setHeader('Content-Type', getImageContentType(filePath))
+            res.setHeader('Cache-Control', 'public, max-age=604800')
+            tgRes.pipe(res)
+            tgRes.on('end', resolve)
+            tgRes.on('error', reject)
+          })
+          .on('error', reject)
+        request.setTimeout(10_000, () => { request.destroy(new Error('timeout')) })
+      })
+    } catch {
+      if (!res.headersSent) res.status(404).json({ error: 'File not available' })
+    }
+  })
+
+  // ── GET /api/avito-feed.xml — XML Autoload для Avito ──────────────────────
+  app.get('/api/avito-feed.xml', async (_req, res) => {
+    try {
+      const products = await prisma.product.findMany({
+        where: { isAvailable: true, avitoEnabled: true },
+        include: { category: true },
+      })
+
+      const AVITO_CAT: Record<string, { category: string; goodsType?: string }> = {
+        'Телефоны': { category: 'Телефоны', goodsType: 'Смартфоны' },
+        'Планшеты': { category: 'Планшеты и электронные книги', goodsType: 'Планшеты' },
+        'Ноутбуки': { category: 'Ноутбуки' },
+        'Аудио': { category: 'Аудио и видео', goodsType: 'Наушники' },
+        'Часы': { category: 'Часы и украшения', goodsType: 'Наручные часы' },
+        'Desktop': { category: 'Настольные компьютеры' },
+        'Компьютеры': { category: 'Настольные компьютеры' },
+        'Игровые консоли': { category: 'Игры, приставки и программы', goodsType: 'Игровые приставки' },
+        'Телевизоры': { category: 'Телевизоры и проекторы', goodsType: 'Телевизоры' },
+        'Умный дом': { category: 'Бытовая электроника' },
+        'Красота и уход': { category: 'Бытовая техника', goodsType: 'Красота и здоровье' },
+        'Фототехника': { category: 'Фототехника' },
+        'Экшн-камеры': { category: 'Фототехника', goodsType: 'Экшн-камеры' },
+        'Дроны': { category: 'Фототехника', goodsType: 'Квадрокоптеры' },
+        'Гаджеты': { category: 'Бытовая электроника' },
+        'Аксессуары': { category: 'Аксессуары' },
+        'Дисплеи': { category: 'Мониторы' },
+      }
+
+      const escXml = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+      const address = process.env.AVITO_ADDRESS || 'Москва, ул. Барклая, д. 8, ТЦ Горбушка, Павильон 211/1'
+      const phone = process.env.AVITO_PHONE || ''
+      const manager = process.env.AVITO_MANAGER || 'Bender Shop'
+      const baseUrl = process.env.WEBAPP_URL || 'https://bendershop.store'
+
+      let xml = '<?xml version="1.0" encoding="UTF-8"?>\n<Ads formatVersion="3" target="Avito.ru">\n'
+
+      for (const p of products) {
+        const catName = p.category?.name || ''
+        const mapping = AVITO_CAT[catName]
+        if (!mapping) continue
+
+        xml += '  <Ad>\n'
+        xml += `    <Id>bshop-${p.id}</Id>\n`
+        xml += `    <Title>${escXml(p.name)}</Title>\n`
+        xml += `    <Description>${escXml(p.description || p.name)}</Description>\n`
+        xml += `    <Price>${Math.round(Number(p.price))}</Price>\n`
+        xml += `    <Category>${escXml(mapping.category)}</Category>\n`
+        if (mapping.goodsType) xml += `    <GoodsType>${escXml(mapping.goodsType)}</GoodsType>\n`
+        xml += `    <Condition>Новое</Condition>\n`
+        xml += `    <Address>${escXml(address)}</Address>\n`
+        if (phone) xml += `    <ContactPhone>${escXml(phone)}</ContactPhone>\n`
+        xml += `    <ManagerName>${escXml(manager)}</ManagerName>\n`
+
+        if (p.photos.length > 0) {
+          xml += '    <Images>\n'
+          for (const fid of p.photos.slice(0, 10)) {
+            xml += `      <Image url="${baseUrl}/api/photo/${fid}"/>\n`
+          }
+          xml += '    </Images>\n'
+        }
+
+        xml += '  </Ad>\n'
+      }
+
+      xml += '</Ads>'
+      res.setHeader('Content-Type', 'application/xml; charset=utf-8')
+      res.setHeader('Cache-Control', 'public, max-age=1800')
+      res.send(xml)
+    } catch (err) {
+      console.error('[Avito XML] Error:', err)
+      if (!res.headersSent) res.status(500).send('Internal error')
+    }
+  })
+
   // ── GET /api/download/price-list ───────────────────────────────────────────
   app.get('/api/download/price-list', downloadLimiter, requireTelegramAuth, async (_req, res, next) => {
     try {

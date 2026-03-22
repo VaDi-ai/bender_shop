@@ -556,6 +556,159 @@ bot.hears('🏷️ Акции', async (ctx) => {
   await showPromotionsMenu(ctx)
 })
 
+// ─── Avito команды ───────────────────────────────────────────────────────────
+
+bot.command('avito', async (ctx) => {
+  const userId = getUserId(ctx)
+  if (!ADMIN_IDS.includes(userId)) return
+
+  const args = (ctx.message.text || '').split(/\s+/).slice(1)
+  const sub = args[0]
+
+  try {
+    const { isAvitoConfigured } = await import('../lib/avito')
+
+    // /avito — статус
+    if (!sub) {
+      const configured = isAvitoConfigured()
+      const mapped = await prisma.product.count({ where: { avitoItemId: { not: null } } })
+      const enabled = await prisma.product.count({ where: { avitoEnabled: true } })
+      let avitoCount = '—'
+      if (configured) {
+        try {
+          const { getAvitoItems } = await import('../lib/avito')
+          const items = await getAvitoItems()
+          avitoCount = String(items.length)
+        } catch { avitoCount = 'ошибка' }
+      }
+      await ctx.reply([
+        '📊 Avito интеграция:',
+        `🔗 Подключено: ${configured ? '✅' : '❌'}`,
+        `📦 Объявлений на Avito: ${avitoCount}`,
+        `🔗 Смаплено с каталогом: ${mapped}`,
+        `✅ avitoEnabled: ${enabled}`,
+        '',
+        'Команды:',
+        '/avito map — автоматический маппинг',
+        '/avito sync — синхронизация цен',
+        '/avito enable_cat <Категория>',
+        '/avito disable_cat <Категория>',
+        '/avito list — смапленные товары',
+      ].join('\n'))
+      return
+    }
+
+    // /avito map
+    if (sub === 'map') {
+      await ctx.reply('⏳ Маппинг Avito → Каталог...')
+      const { mapAvitoToProducts, applyAvitoMapping } = await import('../lib/avito-sync')
+      const mappings = await mapAvitoToProducts()
+
+      const exact = mappings.filter(m => m.confidence === 'exact')
+      const fuzzy = mappings.filter(m => m.confidence === 'fuzzy')
+      const none = mappings.filter(m => m.confidence === 'none')
+
+      const lines: string[] = [`🔗 Маппинг (${mappings.length} объявлений):\n`]
+      for (const m of exact.slice(0, 10)) lines.push(`✅ ${m.avitoTitle.slice(0, 40)} → ${m.productName}`)
+      for (const m of fuzzy.slice(0, 5)) lines.push(`⚠️ ${m.avitoTitle.slice(0, 40)} → ${m.productName}`)
+      for (const m of none.slice(0, 5)) lines.push(`❌ ${m.avitoTitle.slice(0, 50)} → не найдено`)
+      if (mappings.length > 20) lines.push(`\n...и ещё ${mappings.length - 20}`)
+      lines.push(`\nИтого: ${exact.length} точных, ${fuzzy.length} нечётких, ${none.length} не найдено`)
+
+      const matchCount = exact.length + fuzzy.length
+      // Store mappings for apply
+      ;(globalThis as any).__avitoMappings = mappings
+
+      await ctx.reply(lines.join('\n'), matchCount > 0
+        ? Markup.inlineKeyboard([[
+            Markup.button.callback(`✅ Применить (${matchCount} шт)`, 'avito:apply_map'),
+            Markup.button.callback('❌ Отмена', 'avito:cancel_map'),
+          ]])
+        : undefined)
+      return
+    }
+
+    // /avito sync
+    if (sub === 'sync') {
+      await ctx.reply('⏳ Синхронизация цен...')
+      const { syncPricesToAvito } = await import('../lib/avito-sync')
+      const result = await syncPricesToAvito()
+      await ctx.reply(`✅ Avito: ${result.updated} цен обновлено, ${result.failed} ошибок, ${result.skipped} пропущено`)
+      return
+    }
+
+    // /avito enable_cat <Категория>
+    if (sub === 'enable_cat') {
+      const catName = args.slice(1).join(' ')
+      if (!catName) { await ctx.reply('Укажите категорию: /avito enable_cat Телефоны'); return }
+      const cat = await prisma.category.findFirst({ where: { name: catName } })
+      if (!cat) { await ctx.reply(`❌ Категория "${catName}" не найдена`); return }
+      const { count } = await prisma.product.updateMany({
+        where: { categoryId: cat.id },
+        data: { avitoEnabled: true },
+      })
+      await ctx.reply(`✅ Включено ${count} товаров категории "${catName}" для Avito`)
+      return
+    }
+
+    // /avito disable_cat <Категория>
+    if (sub === 'disable_cat') {
+      const catName = args.slice(1).join(' ')
+      if (!catName) { await ctx.reply('Укажите категорию: /avito disable_cat Телефоны'); return }
+      const cat = await prisma.category.findFirst({ where: { name: catName } })
+      if (!cat) { await ctx.reply(`❌ Категория "${catName}" не найдена`); return }
+      const { count } = await prisma.product.updateMany({
+        where: { categoryId: cat.id },
+        data: { avitoEnabled: false },
+      })
+      await ctx.reply(`✅ Выключено ${count} товаров категории "${catName}" для Avito`)
+      return
+    }
+
+    // /avito list
+    if (sub === 'list') {
+      const mapped = await prisma.product.findMany({
+        where: { avitoItemId: { not: null } },
+        select: { id: true, name: true, avitoItemId: true, avitoEnabled: true, price: true },
+        orderBy: { name: 'asc' },
+        take: 20,
+      })
+      if (mapped.length === 0) { await ctx.reply('Нет смапленных товаров'); return }
+      const total = await prisma.product.count({ where: { avitoItemId: { not: null } } })
+      const lines = mapped.map(p =>
+        `${p.avitoEnabled ? '✅' : '⬜'} ${p.name} → avito:${p.avitoItemId} (${Number(p.price).toLocaleString('ru-RU')}₽)`
+      )
+      lines.push(`\nПоказано ${mapped.length} из ${total}`)
+      await ctx.reply(lines.join('\n'))
+      return
+    }
+
+    await ctx.reply('Неизвестная подкоманда. Используйте /avito')
+  } catch (err) {
+    await ctx.reply(`❌ Ошибка: ${err instanceof Error ? err.message : err}`)
+  }
+})
+
+bot.action('avito:apply_map', async (ctx) => {
+  try { await ctx.answerCbQuery() } catch { /* ignore */ }
+  const mappings = (globalThis as any).__avitoMappings
+  if (!mappings) { await ctx.reply('Маппинг не найден, запустите /avito map заново'); return }
+  try {
+    const { applyAvitoMapping } = await import('../lib/avito-sync')
+    const applied = await applyAvitoMapping(mappings)
+    ;(globalThis as any).__avitoMappings = null
+    await ctx.reply(`✅ Применено: ${applied} товаров смаплено с Avito`)
+  } catch (err) {
+    await ctx.reply(`❌ Ошибка: ${err instanceof Error ? err.message : err}`)
+  }
+})
+
+bot.action('avito:cancel_map', async (ctx) => {
+  try { await ctx.answerCbQuery() } catch { /* ignore */ }
+  ;(globalThis as any).__avitoMappings = null
+  await ctx.reply('❌ Маппинг отменён')
+})
+
 // ─── 🔧 Техработы ────────────────────────────────────────────────────────────
 
 bot.hears('🔧 Техработы', async (ctx) => {

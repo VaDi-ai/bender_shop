@@ -799,6 +799,18 @@ export function setupPricingHandlers(bot: Telegraf): void {
 
       const syncResult = await syncProductsFromSheets()
 
+      // Мгновенная синхронизация цен с Avito
+      let avitoLine = ''
+      try {
+        const { syncPricesToAvito } = await import('../../lib/avito-sync')
+        const avitoResult = await syncPricesToAvito()
+        if (avitoResult.updated > 0 || avitoResult.failed > 0) {
+          avitoLine = `\n📢 Avito: ${avitoResult.updated} цен обновлено${avitoResult.failed > 0 ? `, ${avitoResult.failed} ошибок` : ''}`
+        }
+      } catch (e) {
+        console.error('[Pricing] Avito sync error:', e)
+      }
+
       pricingState.delete(userId)
 
       await ctx.reply([
@@ -808,7 +820,8 @@ export function setupPricingHandlers(bot: Telegraf): void {
         `🔄 Синхронизация: ${syncResult.updated} обновлено в БД`,
         `📈 Наценка: ${state.markup}%`,
         `🏭 На основе прайса: ${state.supplierName}`,
-      ].join('\n'))
+        avitoLine,
+      ].filter(Boolean).join('\n'))
 
     } catch (err) {
       console.error('[Pricing] apply_sheets error:', err)

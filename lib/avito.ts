@@ -35,7 +35,7 @@ export async function getAvitoToken(): Promise<string> {
       grant_type: 'client_credentials',
       client_id: AVITO_CLIENT_ID,
       client_secret: AVITO_CLIENT_SECRET,
-      scope: 'messenger:read,messenger:write',
+      scope: 'messenger:read,messenger:write,items:info',
     }),
   })
 
@@ -148,4 +148,46 @@ export async function sendAvitoMessage(chatId: string, text: string): Promise<vo
 
 export function isAvitoConfigured(): boolean {
   return !!(AVITO_CLIENT_ID && AVITO_CLIENT_SECRET)
+}
+
+// ─── Items API (объявления) ───────────────────────────────────────────────────
+
+/** Получить все активные объявления с Avito (пагинация) */
+export async function getAvitoItems(): Promise<Array<{ id: number; title: string; price: number | null; status: string; url: string | null }>> {
+  const token = await getAvitoToken()
+  const all: Array<{ id: number; title: string; price: number | null; status: string; url: string | null }> = []
+  let page = 1
+  while (true) {
+    const res = await fetch(`${AVITO_API}/core/v1/items?status=active&per_page=50&page=${page}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    if (!res.ok) break
+    const data = await res.json() as { resources?: Array<{ id: number; title: string; price?: number; status: string; url?: string }> }
+    if (!data.resources || data.resources.length === 0) break
+    all.push(...data.resources.map(r => ({ id: r.id, title: r.title, price: r.price ?? null, status: r.status, url: r.url ?? null })))
+    if (data.resources.length < 50) break
+    page++
+  }
+  return all
+}
+
+/** Обновить цену объявления. Rate limit: 150 req/min */
+export async function updateAvitoPrice(itemId: number, price: number): Promise<boolean> {
+  try {
+    const token = await getAvitoToken()
+    const res = await fetch(`${AVITO_API}/core/v1/items/${itemId}/update_price`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ price: Math.round(price) }),
+    })
+    if (!res.ok) {
+      console.error(`[Avito] updatePrice ${itemId}: ${res.status} ${await res.text()}`)
+      return false
+    }
+    console.log(`[Avito] Price updated: item ${itemId} → ${Math.round(price)}₽`)
+    return true
+  } catch (err) {
+    console.error(`[Avito] updatePrice error:`, err)
+    return false
+  }
 }
