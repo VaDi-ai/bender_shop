@@ -1410,6 +1410,15 @@ export function setupInventoryHandlers(bot: Telegraf): void {
     const m = ctx.match as RegExpMatchArray
     const variantId = parseInt(m[1], 10)
     const productId = parseInt(m[2], 10)
+    const hasOrders = await prisma.orderItem.count({ where: { variantId } })
+    if (hasOrders > 0) {
+      await ctx.reply(`❌ Нельзя удалить вариант — есть ${hasOrders} заказов. Можно только скрыть с витрины.`)
+      await showVariantsList(ctx, productId)
+      return
+    }
+    await prisma.stockMovement.deleteMany({ where: { variantId } })
+    await prisma.priceChange.deleteMany({ where: { variantId } })
+    await prisma.reservation.updateMany({ where: { variantId }, data: { variantId: null } })
     await prisma.productVariant.delete({ where: { id: variantId } })
     await ctx.reply('✅ Вариант удалён.')
     await showVariantsList(ctx, productId)

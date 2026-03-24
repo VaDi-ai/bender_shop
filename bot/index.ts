@@ -1,4 +1,27 @@
 import 'dotenv/config'
+
+// ─── Typed temp storage with TTL (replaces globalThis hacks) ─────────────────
+interface TimedData<T> { data: T; expires: number }
+const tempStorage = new Map<string, TimedData<any>>()
+
+function setTemp<T>(key: string, data: T, ttlMs = 5 * 60 * 1000): void {
+  tempStorage.set(key, { data, expires: Date.now() + ttlMs })
+}
+
+function getTemp<T>(key: string): T | null {
+  const entry = tempStorage.get(key)
+  if (!entry) return null
+  if (Date.now() > entry.expires) {
+    tempStorage.delete(key)
+    return null
+  }
+  return entry.data as T
+}
+
+function deleteTemp(key: string): void {
+  tempStorage.delete(key)
+}
+
 import { Telegraf, Markup } from 'telegraf'
 import { message } from 'telegraf/filters'
 import { setupClientHandlers } from '../webhooks/telegram'
@@ -1032,7 +1055,7 @@ bot.action('maint:clear_orders', async (ctx) => {
 
 bot.action('stale:hide', async (ctx) => {
   try { await ctx.answerCbQuery() } catch { /* ignore */ }
-  const items = (globalThis as any).__staleItems as Array<{ name: string }> | undefined
+  const items = getTemp<Array<{ name: string }>>('staleItems')
   if (!items?.length) { await ctx.reply('Нет устаревших позиций.'); return }
 
   const allVariants = await prisma.productVariant.findMany({ select: { id: true, productId: true, attributes: true } })
@@ -1065,12 +1088,12 @@ bot.action('stale:hide', async (ctx) => {
   }
 
   await ctx.reply(`🔴 Скрыто с витрины: ${toHide.length} вариантов. После обновления цен нажмите «🔄 Синхронизировать».`)
-  delete (globalThis as any).__staleItems
+  deleteTemp('staleItems')
 })
 
 bot.action('stale:ask_manager', async (ctx) => {
   try { await ctx.answerCbQuery() } catch { /* ignore */ }
-  const items = (globalThis as any).__staleItems as Array<{ name: string }> | undefined
+  const items = getTemp<Array<{ name: string }>>('staleItems')
   if (!items?.length) { await ctx.reply('Нет устаревших позиций.'); return }
 
   const allVariants = await prisma.productVariant.findMany({ select: { id: true, attributes: true } })
@@ -1093,13 +1116,13 @@ bot.action('stale:ask_manager', async (ctx) => {
   }
 
   await ctx.reply(`💬 Обновлено ${toUpdate.length} вариантов — цена «уточняйте у менеджера». После обновления цен нажмите «🔄 Синхронизировать».`)
-  delete (globalThis as any).__staleItems
+  deleteTemp('staleItems')
 })
 
 bot.action('stale:skip', async (ctx) => {
   try { await ctx.answerCbQuery() } catch { /* ignore */ }
   await ctx.reply('⏭️ Позиции оставлены без изменений. Рекомендуем обновить цены как можно скорее.')
-  delete (globalThis as any).__staleItems
+  deleteTemp('staleItems')
 })
 
 bot.action('maint:restore_info', async (ctx) => {
@@ -1977,7 +2000,7 @@ setInterval(async () => {
             } catch (err) { console.error('[Stale] Failed to notify admin:', err instanceof Error ? err.message : err) }
           }
         } else {
-          ;(globalThis as any).__staleItems = staleItems
+          setTemp('staleItems', staleItems)
           for (const adminId of ADMIN_IDS) {
             try {
               await bot.telegram.sendMessage(adminId, [

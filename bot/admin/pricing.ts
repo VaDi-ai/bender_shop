@@ -587,7 +587,7 @@ async function processSupplierPrice(
   await ctx.reply(`⏳ Обрабатываю прайс от «${supplierName}»...`)
 
   try {
-    const { createSheetIfNotExists, readSheet, writeRange, appendRows } = await import('../../lib/google-sheets')
+    const { createSheetIfNotExists, readSheet, writeRange, appendRows, batchUpdate } = await import('../../lib/google-sheets')
 
     // 1. Создать лист поставщика если нет
     const sheetName = `Поставщик: ${supplierName}`
@@ -611,6 +611,7 @@ async function processSupplierPrice(
 
     const newRows: (string | number)[][] = []
     let updatedCount = 0
+    const batchUpdates: { range: string; values: (string | number)[][] }[] = []
 
     for (const p of parsed) {
       const fullName = [p.model, p.storage, p.color].filter(Boolean).join(' ')
@@ -619,11 +620,15 @@ async function processSupplierPrice(
       const existingRow = existingModels.get(fullName.toLowerCase())
 
       if (existingRow) {
-        await writeRange(sheetName, `D${existingRow}:E${existingRow}`, [[p.price, now]])
+        batchUpdates.push({ range: `'${sheetName}'!D${existingRow}:E${existingRow}`, values: [[p.price, now]] })
         updatedCount++
       } else {
         newRows.push([brand, category, fullName, p.price, now])
       }
+    }
+
+    if (batchUpdates.length > 0) {
+      await batchUpdate(batchUpdates)
     }
 
     if (newRows.length > 0) {
@@ -766,7 +771,7 @@ export function setupPricingHandlers(bot: Telegraf): void {
     await ctx.reply('⏳ Обновляю цены в таблице и на витрине...')
 
     try {
-      const { readSheet, writeRange } = await import('../../lib/google-sheets')
+      const { readSheet, batchUpdate: batchUpdateSheets } = await import('../../lib/google-sheets')
       const { syncProductsFromSheets } = await import('../../lib/sheets-sync')
 
       const bestPrices = await findBestPricesFromSheets()
@@ -778,6 +783,8 @@ export function setupPricingHandlers(bot: Telegraf): void {
       for (const sheetName of PRODUCT_SHEETS) {
         try {
           const data = await readSheet(sheetName)
+          const sheetUpdates: { range: string; values: (string | number)[][] }[] = []
+
           for (let i = 1; i < data.length; i++) {
             const fullName = (data[i]?.[3] ?? '').trim().toLowerCase()
             if (!fullName) continue
@@ -787,10 +794,14 @@ export function setupPricingHandlers(bot: Telegraf): void {
               const recommendedPrice = Math.round(best.price * (1 + state.markup / 100))
               const rowNum = i + 1
 
-              await writeRange(sheetName, `L${rowNum}`, [[recommendedPrice]])
-              await writeRange(sheetName, `N${rowNum}:O${rowNum}`, [[best.supplierName, now]])
+              sheetUpdates.push({ range: `'${sheetName}'!L${rowNum}`, values: [[recommendedPrice]] })
+              sheetUpdates.push({ range: `'${sheetName}'!N${rowNum}:O${rowNum}`, values: [[best.supplierName, now]] })
               pricesUpdated++
             }
+          }
+
+          if (sheetUpdates.length > 0) {
+            await batchUpdateSheets(sheetUpdates)
           }
         } catch (err) {
           console.error(`[Pricing] Error updating sheet ${sheetName}:`, err)

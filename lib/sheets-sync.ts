@@ -330,42 +330,61 @@ export async function syncProductsFromSheets(shouldAbort?: () => boolean): Promi
         updated++
       }
 
-      // Create/update variants
-      for (const v of group.variants) {
-        try {
-          const existing = variantsByFullName.get(v.fullName)
-          if (existing) {
-            await prisma.productVariant.update({
-              where: { id: existing.id },
-              data: {
-                productId: product.id,
-                price: new Decimal(v.price),
-                quantity: v.quantity,
-                inStock: v.quantity > 0,
-                attributes: { ...v.attrs, fullName: v.fullName },
-              },
-            })
-            seenVariantIds.add(existing.id)
-          } else {
-            const variantSku = `${product.sku}-${Date.now().toString(36).slice(-3)}${Math.random().toString(36).slice(-2)}`
+      // Create/update variants (batched in transactions with sequential fallback)
+      type VariantOp = { variant: typeof group.variants[0]; existing: typeof existingVariants[0] | undefined }
+      const variantOps: VariantOp[] = group.variants.map(v => ({
+        variant: v,
+        existing: variantsByFullName.get(v.fullName),
+      }))
 
-            const newVariant = await prisma.productVariant.create({
-              data: {
-                productId: product.id,
-                sku: variantSku,
-                price: new Decimal(v.price),
-                quantity: v.quantity,
-                inStock: v.quantity > 0,
-                attributes: { ...v.attrs, fullName: v.fullName },
-                photos: [],
-              },
-            })
-            seenVariantIds.add(newVariant.id)
+      function buildPrismaOp(entry: VariantOp) {
+        const v = entry.variant
+        if (entry.existing) {
+          return prisma.productVariant.update({
+            where: { id: entry.existing.id },
+            data: {
+              productId: product.id,
+              price: new Decimal(v.price),
+              quantity: v.quantity,
+              inStock: v.quantity > 0,
+              attributes: { ...v.attrs, fullName: v.fullName },
+            },
+          })
+        }
+        const variantSku = `${product.sku}-${Date.now().toString(36).slice(-3)}${Math.random().toString(36).slice(-2)}`
+        return prisma.productVariant.create({
+          data: {
+            productId: product.id,
+            sku: variantSku,
+            price: new Decimal(v.price),
+            quantity: v.quantity,
+            inStock: v.quantity > 0,
+            attributes: { ...v.attrs, fullName: v.fullName },
+            photos: [],
+          },
+        })
+      }
+
+      const BATCH_SIZE = 10
+      for (let i = 0; i < variantOps.length; i += BATCH_SIZE) {
+        const batch = variantOps.slice(i, i + BATCH_SIZE)
+        try {
+          const results = await prisma.$transaction(batch.map(buildPrismaOp))
+          for (let j = 0; j < batch.length; j++) {
+            seenVariantIds.add(batch[j].existing?.id ?? (results[j] as any).id)
           }
-        } catch (err) {
-          const msg = `Row ${v.rowIndex} (${v.sheetName}): ${v.fullName} — ${err}`
-          errors.push(msg)
-          console.error(`[Sheets Sync] Error row ${v.rowIndex}: ${err}`)
+        } catch (batchErr) {
+          console.warn('[Sync] Batch upsert failed, falling back to sequential:', batchErr instanceof Error ? batchErr.message : batchErr)
+          for (const entry of batch) {
+            try {
+              const result = await buildPrismaOp(entry)
+              seenVariantIds.add(entry.existing?.id ?? (result as any).id)
+            } catch (err) {
+              const msg = `Row ${entry.variant.rowIndex} (${entry.variant.sheetName}): ${entry.variant.fullName} — ${err}`
+              errors.push(msg)
+              console.error(`[Sheets Sync] Error row ${entry.variant.rowIndex}: ${err}`)
+            }
+          }
         }
       }
     } catch (err) {

@@ -932,10 +932,12 @@ export function setupClientHandlers(bot: Telegraf): void {
             if (fwdErr?.response?.description?.includes('message thread not found')) {
               await prisma.client.update({ where: { id: client.id }, data: { telegramTopicId: null } })
               const threadId = await createClientTopic(ctx.telegram, client.id, name)
-              await (ctx.telegram.forwardMessage as any)(
-                CRM_GROUP_ID, chatId, messageId,
-                { message_thread_id: threadId },
-              )
+              if (threadId) {
+                await (ctx.telegram.forwardMessage as any)(
+                  CRM_GROUP_ID, chatId, messageId,
+                  { message_thread_id: threadId },
+                )
+              }
             } else {
               throw fwdErr
             }
@@ -1079,9 +1081,24 @@ async function createClientTopic(
   telegram: Telegram,
   clientId: number,
   name: string,
-): Promise<number> {
-  const topic = await telegram.createForumTopic(CRM_GROUP_ID, name)
-  const threadId = topic.message_thread_id
+): Promise<number | null> {
+  let threadId: number | null = null
+
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      const topic = await telegram.createForumTopic(CRM_GROUP_ID, name)
+      threadId = topic.message_thread_id
+      break
+    } catch (err) {
+      console.error(`[CRM] Topic creation attempt ${attempt}/2:`, err instanceof Error ? err.message : err)
+      if (attempt < 2) await new Promise(r => setTimeout(r, 1000))
+    }
+  }
+
+  if (!threadId) {
+    console.error('[CRM] Topic creation failed, message will go to general chat')
+    return null
+  }
 
   await prisma.client.update({
     where: { id: clientId },
@@ -1168,7 +1185,11 @@ async function handleClientMessage(
     // Создать топик форума, если его ещё нет
     if (client.telegramTopicId == null) {
       const threadId = await createClientTopic(telegram, client.id, name)
-      await sendToTopic(telegram, CRM_GROUP_ID, threadId, `💬 ${name}: ${text}`)
+      if (threadId) {
+        await sendToTopic(telegram, CRM_GROUP_ID, threadId, `💬 ${name}: ${text}`)
+      } else {
+        await telegram.sendMessage(CRM_GROUP_ID, `💬 ${name}: ${text}`)
+      }
     } else {
       // Топик уже существует — пересылаем сообщение; при ошибке пересоздаём
       try {
@@ -1178,7 +1199,11 @@ async function handleClientMessage(
           console.warn(`[handleClientMessage] Топик ${client.telegramTopicId} не найден — пересоздаём`)
           await prisma.client.update({ where: { id: client.id }, data: { telegramTopicId: null } })
           const threadId = await createClientTopic(telegram, client.id, name)
-          await sendToTopic(telegram, CRM_GROUP_ID, threadId, `💬 ${name}: ${text}`)
+          if (threadId) {
+            await sendToTopic(telegram, CRM_GROUP_ID, threadId, `💬 ${name}: ${text}`)
+          } else {
+            await telegram.sendMessage(CRM_GROUP_ID, `💬 ${name}: ${text}`)
+          }
         } else {
           throw e
         }
@@ -1579,7 +1604,11 @@ async function handleWebAppOrder(
     `💳 Оплата: ${PAYMENT_LABEL[payment] ?? payment}`,
   ].join('\n')
 
-  await sendToTopic(telegram, CRM_GROUP_ID, client.telegramTopicId!, notification)
+  if (client.telegramTopicId) {
+    await sendToTopic(telegram, CRM_GROUP_ID, client.telegramTopicId, notification)
+  } else {
+    await telegram.sendMessage(CRM_GROUP_ID, notification)
+  }
 
   await prisma.message.create({
     data: { clientId: client.id, direction: 'in', text: notification, source: 'shop' },
