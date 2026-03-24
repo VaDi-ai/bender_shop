@@ -1128,7 +1128,7 @@ export function startApiServer(bot?: Telegraf): void {
                 where: { id: client.id },
                 data: { telegramTopicId: topic.message_thread_id },
               })
-            } catch { /* ignore topic creation errors */ }
+            } catch (err) { console.error('[ORDER] Topic creation error:', err instanceof Error ? err.message : err) }
           }
           const tgUsername = client?.telegramUsername ?? null
           const tgLink = tgUsername
@@ -1183,7 +1183,7 @@ export function startApiServer(bot?: Telegraf): void {
               await telegram.sendMessage(CRM_GROUP_ID, `🛒 Клиент оформил заказ #${order.id} через сайт\n\n${itemLines}\n\n💵 ${totalStr}₽`, {
                 message_thread_id: client.telegramTopicId,
               })
-            } catch { /* ignore */ }
+            } catch (err) { console.error('[ORDER] CRM topic notify error:', err instanceof Error ? err.message : err) }
           }
 
           // 4. Подтверждение клиенту в личку

@@ -24,6 +24,7 @@
 import crypto from 'crypto'
 import { Telegram } from 'telegraf'
 import { prisma } from '../lib/prisma'
+import { sendToTopic } from '../lib/telegram-helpers'
 
 const CRM_GROUP_ID = Number(process.env.CRM_GROUP_ID)
 const AVITO_SECRET = process.env.AVITO_WEBHOOK_SECRET
@@ -173,14 +174,4 @@ async function processAvitoMessage(
   })
 }
 
-// ─── Хелпер ──────────────────────────────────────────────────────────────────
-
-async function sendToTopic(
-  telegram: Telegram,
-  chatId: number,
-  threadId: number,
-  text: string,
-): Promise<void> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  await (telegram.sendMessage as any)(chatId, text, { message_thread_id: threadId })
-}
+// sendToTopic imported from lib/telegram-helpers.ts

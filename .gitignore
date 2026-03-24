@@ -1,5 +1,29 @@
 node_modules
-# Keep environment variables out of version control
-.env
-
 /generated/prisma
+
+# Environment
+.env
+.env.*
+
+# Credentials
+*.pem
+*.key
+bendershop-*.json
+*-service-account.json
+
+# Backups with PII
+backup-*.json
+
+# Temp/debug files
+tmp-*.ts
+tmp-*.js
+tmp-*.mjs
+reset-*.mjs
+
+# Build
+dist/
+*.tsbuildinfo
+
+# OS
+.DS_Store
+Thumbs.db

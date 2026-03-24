@@ -331,7 +331,7 @@ export function setupSalesHandlers(bot: Telegraf): void {
       await ctx.reply(msg)
       await notifyToSalesTopic(ctx, msg, client.name)
       if (client.telegramTopicId) {
-        await sendToTopic(ctx, CRM_GROUP_ID, client.telegramTopicId, msg)
+        await sendToTopicCtx(ctx, CRM_GROUP_ID, client.telegramTopicId, msg)
       }
     } catch (err) {
       console.error('sale:confirm error:', err)
@@ -385,7 +385,7 @@ export function setupSalesHandlers(bot: Telegraf): void {
       )
       await notifyToSalesTopic(ctx, msg, client.name)
       if (client.telegramTopicId) {
-        await sendToTopic(ctx, CRM_GROUP_ID, client.telegramTopicId, msg)
+        await sendToTopicCtx(ctx, CRM_GROUP_ID, client.telegramTopicId, msg)
       }
     } catch (err) {
       console.error('res:confirm error:', err)
@@ -1008,9 +1008,9 @@ async function notifyToSalesTopic(ctx: Context, text: string, clientName: string
   }
 }
 
-async function sendToTopic(ctx: Context, chatId: number, threadId: number, text: string): Promise<void> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  await (ctx.telegram.sendMessage as any)(chatId, text, { message_thread_id: threadId })
+async function sendToTopicCtx(ctx: Context, chatId: number, threadId: number, text: string): Promise<void> {
+  const { sendToTopic: _send } = await import('../../lib/telegram-helpers')
+  await _send(ctx.telegram, chatId, threadId, text)
 }
 
 function fmtPrice(n: number): string {

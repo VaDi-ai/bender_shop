@@ -22,6 +22,7 @@
 import { Telegraf, Telegram, Markup, Context } from 'telegraf'
 import { message } from 'telegraf/filters'
 import { prisma } from '../lib/prisma'
+import { sendToTopic, sendToTopicWithMarkup } from '../lib/telegram-helpers'
 import type { SegmentModel } from '../generated/prisma/models'
 import { startSaleFlow, startReserveFlow, salesState } from '../bot/admin/sales'
 import {
@@ -1327,7 +1328,7 @@ async function handleAIResponse(
       ].join('\n')
       await sendToTopic(telegram, CRM_GROUP_ID, threadId, priceHint)
     }
-  } catch { /* ignore supplier price lookup errors */ }
+  } catch (err) { console.error('[CRM] Supplier price lookup error:', err instanceof Error ? err.message : err) }
 
   let aiText: string
   try {
@@ -1464,27 +1465,7 @@ async function handleManagerReply(
 
 // ─── Хелперы ─────────────────────────────────────────────────────────────────
 
-async function sendToTopic(
-  telegram: Telegram,
-  chatId: number,
-  threadId: number,
-  text: string,
-): Promise<void> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  await (telegram.sendMessage as any)(chatId, text, { message_thread_id: threadId })
-}
-
-async function sendToTopicWithMarkup(
-  telegram: Telegram,
-  chatId: number,
-  threadId: number,
-  text: string,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  reply_markup: any,
-): Promise<void> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  await (telegram.sendMessage as any)(chatId, text, { message_thread_id: threadId, reply_markup })
-}
+// sendToTopic and sendToTopicWithMarkup imported from lib/telegram-helpers.ts
 
 function getClientName(from: TgUser): string {
   return (
