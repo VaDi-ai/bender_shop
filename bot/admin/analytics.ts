@@ -270,7 +270,7 @@ async function sendClientReport(ctx: Context, clientId: number): Promise<void> {
 
   const lines = [
     `👤 ${client.fullName || client.name}`,
-    client.phone ? `📞 ${decryptClientField(client.phone)}` : null,
+    client.phone ? (() => { try { return `📞 ${decryptClientField(client.phone)}` } catch { return '📞 [данные недоступны]' } })() : null,
     `📌 Источник: ${SOURCE_LABEL[client.source] ?? client.source}`,
     `📊 Сегмент: ${client.segment ? `${client.segment.color} ${client.segment.name}` : '—'}`,
     SEP,

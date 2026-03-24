@@ -28,30 +28,38 @@ export async function getAvitoToken(): Promise<string> {
     throw new Error('AVITO_CLIENT_ID or AVITO_CLIENT_SECRET not set')
   }
 
-  const res = await fetch(`${AVITO_API}/token`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      grant_type: 'client_credentials',
-      client_id: AVITO_CLIENT_ID,
-      client_secret: AVITO_CLIENT_SECRET,
-      scope: 'messenger:read,messenger:write,items:info',
-    }),
-  })
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      const res = await fetch(`${AVITO_API}/token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          grant_type: 'client_credentials',
+          client_id: AVITO_CLIENT_ID,
+          client_secret: AVITO_CLIENT_SECRET,
+          scope: 'messenger:read,messenger:write,items:info',
+        }),
+      })
 
-  if (!res.ok) {
-    const err = await res.text()
-    throw new Error(`Avito auth failed: ${res.status} ${err}`)
+      if (!res.ok) {
+        const err = await res.text()
+        throw new Error(`Avito auth failed: ${res.status} ${err}`)
+      }
+
+      const data = await res.json() as AvitoToken
+      cachedToken = {
+        token: data.access_token,
+        expiresAt: Date.now() + (data.expires_in - 60) * 1000,
+      }
+
+      console.log('[Avito] Token obtained (scope: messenger:read,write), expires in', data.expires_in, 'sec')
+      return cachedToken.token
+    } catch (err) {
+      console.error(`[Avito] Token refresh attempt ${attempt}/3:`, err instanceof Error ? err.message : err)
+      if (attempt < 3) await new Promise(r => setTimeout(r, attempt * 1000))
+    }
   }
-
-  const data = await res.json() as AvitoToken
-  cachedToken = {
-    token: data.access_token,
-    expiresAt: Date.now() + (data.expires_in - 60) * 1000,
-  }
-
-  console.log('[Avito] Token obtained (scope: messenger:read,write), expires in', data.expires_in, 'sec')
-  return cachedToken.token
+  throw new Error('Avito OAuth: failed after 3 attempts')
 }
 
 // ─── Профиль продавца ─────────────────────────────────────────────────────────
@@ -150,6 +158,23 @@ export function isAvitoConfigured(): boolean {
   return !!(AVITO_CLIENT_ID && AVITO_CLIENT_SECRET)
 }
 
+// ─── Retry с обработкой 429 ──────────────────────────────────────────────────
+
+async function avitoFetchWithRetry(url: string, options: RequestInit, maxRetries = 3): Promise<Response> {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    const res = await fetch(url, options)
+    if (res.status === 429) {
+      const retryAfter = parseInt(res.headers.get('Retry-After') || '0', 10)
+      const delay = retryAfter > 0 ? retryAfter * 1000 : attempt * 2000
+      console.warn(`[Avito] 429 rate limited, retry in ${delay}ms (attempt ${attempt}/${maxRetries})`)
+      await new Promise(r => setTimeout(r, delay))
+      continue
+    }
+    return res
+  }
+  throw new Error('Avito API: max retries exceeded after 429')
+}
+
 // ─── Items API (объявления) ───────────────────────────────────────────────────
 
 /** Получить все активные объявления с Avito (пагинация) */
@@ -158,7 +183,7 @@ export async function getAvitoItems(): Promise<Array<{ id: number; title: string
   const all: Array<{ id: number; title: string; price: number | null; status: string; url: string | null }> = []
   let page = 1
   while (true) {
-    const res = await fetch(`${AVITO_API}/core/v1/items?status=active&per_page=50&page=${page}`, {
+    const res = await avitoFetchWithRetry(`${AVITO_API}/core/v1/items?status=active&per_page=50&page=${page}`, {
       headers: { Authorization: `Bearer ${token}` },
     })
     if (!res.ok) break
@@ -175,7 +200,7 @@ export async function getAvitoItems(): Promise<Array<{ id: number; title: string
 export async function updateAvitoPrice(itemId: number, price: number): Promise<boolean> {
   try {
     const token = await getAvitoToken()
-    const res = await fetch(`${AVITO_API}/core/v1/items/${itemId}/update_price`, {
+    const res = await avitoFetchWithRetry(`${AVITO_API}/core/v1/items/${itemId}/update_price`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ price: Math.round(price) }),

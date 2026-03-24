@@ -135,7 +135,8 @@ async function buildClientCard(clientId: number): Promise<string> {
   const lastContactStr =
     diffD > 0 ? `${diffD} дн. назад` : diffH > 0 ? `${diffH} ч. назад` : 'недавно'
 
-  const birthDate = decryptDate(client.birthDate)
+  let birthDate: Date | null = null
+  try { birthDate = decryptDate(client.birthDate) } catch { /* tampered or corrupted — treat as missing */ }
   const birthStr = birthDate
     ? birthDate.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' })
     : '—'
@@ -148,8 +149,10 @@ async function buildClientCard(clientId: number): Promise<string> {
   const lines: string[] = [
     `👤 ${client.fullName ?? client.name}`,
   ]
-  const phone = decryptClientField(client.phone)
-  const email = decryptClientField(client.email)
+  let phone: string | null = null
+  let email: string | null = null
+  try { phone = decryptClientField(client.phone) } catch { /* tampered or corrupted */ }
+  try { email = decryptClientField(client.email) } catch { /* tampered or corrupted */ }
   if (phone) lines.push(`📞 ${phone}`)
   if (client.telegramUsername) lines.push(`📱 Telegram: ${client.telegramUsername}`)
   if (email) lines.push(`📧 ${email}`)

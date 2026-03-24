@@ -110,6 +110,14 @@ export async function syncProductsFromSheets(shouldAbort?: () => boolean): Promi
   total: number
   errors: string[]
 }> {
+  // Prevent concurrent syncs via PostgreSQL advisory lock
+  const lockAcquired = await prisma.$queryRaw<[{pg_try_advisory_lock: boolean}]>`SELECT pg_try_advisory_lock(73001) as "pg_try_advisory_lock"`
+  if (!lockAcquired[0]?.pg_try_advisory_lock) {
+    console.warn('[Sheets Sync] Another sync is already running, skipping')
+    return { created: 0, updated: 0, disabled: 0, total: 0, errors: ['Sync already in progress'] }
+  }
+
+  try {
   // Full reset: clear all products if SHEETS_FULL_RESET=true and no real orders
   if (process.env.SHEETS_FULL_RESET === 'true') {
     const realOrders = await prisma.order.count()
@@ -441,6 +449,9 @@ export async function syncProductsFromSheets(shouldAbort?: () => boolean): Promi
   } catch { /* audit is non-critical */ }
 
   return { created, updated, disabled, total: rows.length, errors }
+  } finally {
+    await prisma.$queryRaw`SELECT pg_advisory_unlock(73001)`
+  }
 }
 
 // ─── Color dictionary (long first for greedy match) ─────────────────────────

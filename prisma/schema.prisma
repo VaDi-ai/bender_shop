@@ -244,6 +244,9 @@ model Product {
 
   @@index([categoryId])
   @@index([isAvailable])
+  @@index([isFeatured])
+  @@index([brand])
+  @@index([name])
   @@index([avitoItemId])
   @@index([avitoEnabled])
 }

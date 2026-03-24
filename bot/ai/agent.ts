@@ -221,6 +221,11 @@ function sanitizeProductDescription(text: string): string {
 
 // ─── Jailbreak detection ────────────────────────────────────────────────────
 
+function normalizeForJailbreakCheck(text: string): string {
+  const normalized = text.normalize('NFKC')
+  return normalized.replace(/[\u200B-\u200F\u2028-\u202F\uFEFF]/g, '')
+}
+
 const JAILBREAK_PATTERNS = [
   /ignore.*(?:previous|above|all).*instructions/i,
   /forget.*(?:rules|instructions|system)/i,
@@ -230,10 +235,14 @@ const JAILBREAK_PATTERNS = [
   /DAN\s|do anything now/i,
   /jailbreak/i,
   /bypass.*(?:filter|restriction|rule)/i,
+  /(?:override|reset|clear)\s.*(?:system|instructions|memory)/i,
+  /в роли|притворись|представь что ты/i,
+  /\[INST\]|\[\/INST\]|<<SYS>>|<\|im_start\|>/i,
 ]
 
 function containsJailbreakAttempt(text: string): boolean {
-  return JAILBREAK_PATTERNS.some(p => p.test(text))
+  const normalized = normalizeForJailbreakCheck(text)
+  return JAILBREAK_PATTERNS.some(p => p.test(normalized))
 }
 
 // ─── Night abuse counter ────────────────────────────────────────────────────
@@ -472,20 +481,40 @@ ${productsText}
 История переписки:
 ${historyText}${webSearchContext}${supplierPriceContext}${supplierPriceContext ? '\n\nВАЖНО: Закупочные цены — конфиденциальная информация. Клиенту называй только рекомендуемую цену с наценкой. Не упоминай наценку и поставщиков.' : ''}${afterHoursPrompt}`
 
-  try {
-    const response = await client.chat.completions.create({
-      model: 'anthropic/claude-sonnet-4',
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: safeNewMessage },
-      ],
-      max_tokens: 300,
-    })
-    const text = response.choices[0]?.message?.content?.trim()
-    if (!text) throw new Error('Пустой ответ от модели')
-    return text
-  } catch (err) {
-    notifyAdminsAboutApiError(err, 'AI ответ клиенту').catch((e) => console.error('[ai] notify error:', e))
-    throw err
+  let aiResponse: string | null = null
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      const response = await client.chat.completions.create({
+        model: 'anthropic/claude-sonnet-4',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: safeNewMessage },
+        ],
+        max_tokens: 600,
+      })
+      const usage = response.usage
+      if (usage) {
+        const cost = (usage.prompt_tokens * 3 + usage.completion_tokens * 15) / 1_000_000
+        console.log(`[AI] Tokens: ${usage.prompt_tokens}+${usage.completion_tokens}, cost: $${cost.toFixed(4)}`)
+      }
+      const text = response.choices[0]?.message?.content?.trim()
+      if (!text) throw new Error('Пустой ответ от модели')
+      aiResponse = text
+      break
+    } catch (err) {
+      console.error(`[AI] Attempt ${attempt}/3 failed:`, err instanceof Error ? err.message : err)
+      if (attempt === 3) {
+        notifyAdminsAboutApiError(err, 'AI ответ клиенту').catch((e) => console.error('[ai] notify error:', e))
+      }
+      if (attempt < 3) {
+        await new Promise(r => setTimeout(r, attempt * 1500))
+      }
+    }
   }
+
+  if (!aiResponse) {
+    aiResponse = 'Извините, AI-помощник временно недоступен. Менеджер ответит вам в ближайшее время. ⏳'
+  }
+
+  return aiResponse
 }

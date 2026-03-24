@@ -105,5 +105,5 @@ export async function handleInstagramWebhook(
   signature: string | undefined,
 ): Promise<void> {
   verifyInstagramSignature(rawBody, signature)
-  console.log('[Instagram] webhook получен, интеграция ещё не реализована:', body)
+  console.log('[Instagram] Webhook received, type:', body?.object ?? 'unknown')
 }

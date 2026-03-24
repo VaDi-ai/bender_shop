@@ -12,8 +12,8 @@ async function withSerializableRetry<T>(
   for (let attempt = 0; attempt < SERIALIZATION_MAX_RETRIES; attempt++) {
     try {
       return await fn()
-    } catch (err: any) {
-      const code = err?.code ?? err?.meta?.code ?? ''
+    } catch (err: unknown) {
+      const code = (err as any)?.code ?? (err as any)?.meta?.code ?? ''
       if (code === '40001' && attempt < SERIALIZATION_MAX_RETRIES - 1) {
         console.warn(`[stock] Serialization conflict, retry ${attempt + 1}/${SERIALIZATION_MAX_RETRIES}`)
         continue
@@ -217,7 +217,7 @@ export async function releaseReserve(
 }
 
 // История движения по варианту
-export async function getStockHistory(variantId: number) {
+export async function getStockHistory(variantId: number): Promise<import('../generated/prisma/client').StockMovement[]> {
   return prisma.stockMovement.findMany({
     where: { variantId },
     orderBy: { createdAt: 'desc' },

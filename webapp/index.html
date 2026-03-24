@@ -5,8 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Bender Shop</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap">
   <style>
-@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap');
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     img { background-color: #1a1a1a; }
 
@@ -301,7 +303,7 @@
 
     .hit-card-img {
       width: 100%;
-      height: 100px;
+      aspect-ratio: 4 / 3;
       background: #161616;
       border-radius: 8px;
       display: flex; align-items: center; justify-content: center;
@@ -312,7 +314,7 @@
     .hit-card-img img {
       width: 100%; height: 100%;
       object-fit: contain;
-      padding: 4px;
+      border-radius: 8px;
     }
 
     .hit-card-name {
@@ -444,7 +446,7 @@
     .product-card:active { box-shadow: 0 0 20px rgba(255,255,255,0.15); }
 
     /* Photo wrap with badge & hover dots */
-    .product-photo-wrap { position: relative; width: 100%; aspect-ratio: 1 / 1; background: #1a1a1a; overflow: hidden; border-radius: 16px 16px 0 0; }
+    .product-photo-wrap { position: relative; width: 100%; aspect-ratio: 4 / 3; background: #1a1a1a; overflow: hidden; border-radius: 16px 16px 0 0; }
     .product-photo { width: 100%; height: 100%; object-fit: contain; display: block; pointer-events: none; transition: opacity 0.15s; background: #1a1a1a; }
     .product-photo-ph { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 40px; pointer-events: none; background: #1a1a1a; }
     .product-badge {
@@ -573,8 +575,8 @@
     .modal-recs-grid::-webkit-scrollbar { display: none; }
     .modal-rec-card { min-width: 140px; max-width: 140px; background: #111; border: 1px solid #1a1a1a; border-radius: 10px; padding: 8px; cursor: pointer; flex-shrink: 0; transition: border-color 0.2s; }
     .modal-rec-card:hover { border-color: var(--accent); }
-    .modal-rec-img { width: 100%; height: 100px; background: #161616; border-radius: 8px; display: flex; align-items: center; justify-content: center; overflow: hidden; margin-bottom: 6px; }
-    .modal-rec-img img { width: 100%; height: 100%; object-fit: contain; padding: 4px; }
+    .modal-rec-img { width: 100%; aspect-ratio: 4 / 3; background: #161616; border-radius: 8px; display: flex; align-items: center; justify-content: center; overflow: hidden; margin-bottom: 6px; }
+    .modal-rec-img img { width: 100%; height: 100%; object-fit: contain; border-radius: 8px; }
     .modal-rec-name { font-size: 10px; color: #ccc; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; min-height: 26px; }
     .modal-rec-price { font-size: 11px; color: var(--accent); margin-top: 3px; font-weight: 600; }
 
@@ -820,15 +822,15 @@
         <p class="cform-title">Данные покупателя</p>
         <div class="customer-form">
           <div class="cform-field">
-            <input type="text" id="cfName" placeholder=" " autocomplete="name">
+            <input type="text" id="cfName" placeholder=" " autocomplete="name" maxlength="100">
             <label for="cfName">ФИО</label>
           </div>
           <div class="cform-field">
-            <input type="tel" id="cfPhone" placeholder=" " autocomplete="tel">
+            <input type="tel" id="cfPhone" placeholder=" " autocomplete="tel" maxlength="20">
             <label for="cfPhone">Телефон</label>
           </div>
           <div class="cform-field">
-            <textarea id="cfComment" rows="2" placeholder=" " maxlength="500"></textarea>
+            <textarea id="cfComment" rows="2" placeholder=" " maxlength="1000"></textarea>
             <label for="cfComment">Комментарий к заказу</label>
           </div>
           <p class="cform-title">Способ получения</p>
@@ -838,7 +840,7 @@
           </div>
           <div class="delivery-addr-wrap" id="deliveryAddrWrap">
             <div class="cform-field">
-              <textarea id="cfAddress" rows="2" placeholder=" "></textarea>
+              <textarea id="cfAddress" rows="2" placeholder=" " maxlength="500"></textarea>
               <label for="cfAddress">Адрес доставки</label>
             </div>
           </div>
@@ -1229,7 +1231,7 @@
         const json = await res.json()
         const text = (json.value && json.value.trim()) ? json.value : def
         const track = document.getElementById('marqueeTrack')
-        track.innerHTML = '<span>' + text + ' // </span><span>' + text + ' // </span>'
+        track.innerHTML = '<span>' + esc(text) + ' // </span><span>' + esc(text) + ' // </span>'
       } catch { /* keep defaults */ }
     }
 
@@ -1679,7 +1681,7 @@
         renderHits(allProducts)
         renderGrid()
       } catch {
-        grid.innerHTML = '<div class="state-msg">Не удалось загрузить товары</div>'
+        grid.innerHTML = '<div class="state-msg">Не удалось загрузить товары<br><button onclick="loadProducts()" style="margin-top:12px;padding:8px 24px;background:var(--accent);color:var(--accent-fg);border:none;border-radius:8px;font-weight:700;cursor:pointer">Попробовать снова</button></div>'
       }
     }
 
@@ -1781,7 +1783,7 @@
         const photoAreaHtml = `<div class="product-photo-wrap" data-photos="${photosData}" style="background-color:#1a1a1a">
   ${badgeHtml}
   ${mainPhoto
-    ? `<img class="product-photo" src="${esc(mainPhoto)}" alt="" loading="lazy" style="background-color:#1a1a1a">`
+    ? `<img class="product-photo" src="${esc(mainPhoto)}" alt=""${i >= 6 ? ' loading="lazy"' : ''} style="background-color:#1a1a1a">`
     : '<div class="product-photo-ph"><img src="/no-photo.webp" alt="" style="width:100%;height:100%;object-fit:cover;opacity:0.6;" onerror="this.onerror=null;this.src=\'/no-photo.png\'"></div>'}
   ${photos.length > 1
     ? `<div class="product-hover-dots">${photos.slice(0, 3).map((_, j) => `<span class="${j === 0 ? 'active' : ''}"></span>`).join('')}</div>`
@@ -2467,6 +2469,7 @@
 
     // ── Checkout ──────────────────────────────────────────────────────────────
     async function checkout() {
+      if (window.__isSubmitting) return
       if (!cart.length) return
       if (!payMethod) { showToast('Выберите способ оплаты'); return }
       const consentBox = document.getElementById('consentCheckbox')
@@ -2476,9 +2479,10 @@
         return
       }
       if (!validateCustomerForm()) return
+      window.__isSubmitting = true
       const btn     = document.getElementById('checkoutBtn')
       const btnSpan = btn.querySelector('span')
-      btn.classList.add('disabled'); btnSpan.textContent = 'ОФОРМЛЯЕМ…'
+      btn.classList.add('disabled'); btnSpan.textContent = 'ОФОРМЛЕНИЕ...'
 
       const tgUser         = tg?.initDataUnsafe?.user
       const totalAmt       = totalWithFee().toFixed(2)
@@ -2513,6 +2517,7 @@
         }
 
         if (!res.ok) {
+          window.__isSubmitting = false
           btn.classList.remove('disabled'); btnSpan.textContent = 'ОФОРМИТЬ'
           if (json.error && json.error.includes('Товар закончился')) {
             showOrderError('ТОВАР ЗАКОНЧИЛСЯ', 'К сожалению, «' + (json.product || 'товар') + '» уже закончился.')
@@ -2533,6 +2538,7 @@
         setTimeout(() => { if (tg && tg.close) tg.close() }, 3000)
       } catch(err) {
         console.error('[CHECKOUT] CATCH error:', err)
+        window.__isSubmitting = false
         btn.classList.remove('disabled'); btnSpan.textContent = 'ОФОРМИТЬ'
         showOrderError('НЕТ СВЯЗИ', 'Проверьте интернет-соединение и попробуйте ещё раз.')
       }
@@ -2674,11 +2680,11 @@
       const el = document.getElementById('orderSuccess')
       document.getElementById('successOrderNum').textContent = '#' + orderId
 
-      const itemLines = items.map(i => i.name + ' × ' + i.qty).join('<br>')
+      const itemLines = items.map(i => esc(i.name) + ' × ' + i.qty).join('<br>')
       const payText = payment === 'cash' ? '💵 Наличные' : '💳 Карта'
       const deliveryText = delivery === 'pickup'
         ? '📍 Самовывоз — ТЦ Горбушка, 211/1'
-        : '🚚 Доставка: ' + (address || '')
+        : '🚚 Доставка: ' + esc(address || '')
 
       document.getElementById('successDetails').innerHTML = [
         itemLines,

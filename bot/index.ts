@@ -77,7 +77,7 @@ import {
   showSuppliersMenu,
   handleSuppliersMessage,
 } from './admin/suppliers'
-import { handleSupplierMessage, findBestPrice, requestPriceFromAllSuppliers } from '../webhooks/supplier'
+import { handleSupplierMessage, requestPriceFromAllSuppliers } from '../webhooks/supplier'
 import { cancelPromotion } from '../lib/promotions'
 import { logSecurityEvent, initSecurityAlerts } from '../lib/security-log'
 import { createBackupBuffer } from '../lib/backup'
@@ -147,20 +147,6 @@ bot.use(async (ctx, next) => {
 
   return next()
 })
-
-// ─── Хелпер: только для администраторов ──────────────────────────────────────
-
-export async function adminOnly(ctx: any, next: any) {
-  const userId = ctx.from?.id
-  if (!ADMIN_IDS.includes(userId)) {
-    await logSecurityEvent('unauthorized_access', {
-      userId,
-      command: ctx.message?.text ?? ctx.callbackQuery?.data,
-    }, userId)
-    return ctx.reply('⛔ Нет доступа.')
-  }
-  return next()
-}
 
 // ─── Главное меню ─────────────────────────────────────────────────────────────
 
@@ -262,8 +248,8 @@ bot.on(message('new_chat_members'), async (ctx) => {
 
 // ─── Middleware: только для администраторов ────────────────────────────────────
 
-// Silent drop for non-admins: adminOnly() would reply "⛔ Нет доступа" to every
-// non-admin message, which is bad UX. Client messages are handled by setupClientHandlers
+// Silent drop for non-admins: replying "⛔ Нет доступа" to every
+// non-admin message would be bad UX. Client messages are handled by setupClientHandlers
 // registered above. This middleware only gates the admin panel below.
 bot.use((ctx, next) => {
   const userId = ctx.from?.id
@@ -273,6 +259,9 @@ bot.use((ctx, next) => {
   return next()
 })
 
+// ─── Подтверждение деструктивных команд ──────────────────────────────────────
+const pendingConfirmations = new Map<number, { action: string; expires: number }>()
+
 // ─── Перехватчик текста для пошаговых флоу ───────────────────────────────────
 // Должен быть зарегистрирован ДО bot.hears(), чтобы перехватывать ввод в активных флоу.
 
@@ -281,6 +270,52 @@ bot.on(message('text'), async (ctx, next) => {
   if (!userId) return next()
 
   const text = ctx.message.text
+
+  // Проверка подтверждения деструктивных команд
+  if (pendingConfirmations.has(userId)) {
+    const pending = pendingConfirmations.get(userId)!
+    pendingConfirmations.delete(userId)
+    if (Date.now() > pending.expires) {
+      await ctx.reply('⏰ Время подтверждения истекло.')
+      return
+    }
+    if (text.trim() === 'УДАЛИТЬ') {
+      if (pending.action === 'clear_products') {
+        await ctx.reply('⚠️ Удаление всех товаров...')
+        try {
+          await prisma.$transaction([
+            prisma.stockMovement.deleteMany(),
+            prisma.orderItem.deleteMany(),
+            prisma.order.deleteMany(),
+            prisma.reservation.deleteMany(),
+            prisma.supplierPrice.deleteMany(),
+            prisma.priceChange.deleteMany(),
+            prisma.productVariant.deleteMany(),
+            prisma.product.deleteMany(),
+          ])
+          await ctx.reply('✅ Все товары удалены. Категории сохранены.')
+        } catch (err) {
+          await ctx.reply(`❌ Ошибка: ${err instanceof Error ? err.message : err}`)
+        }
+      } else if (pending.action === 'clear_orders') {
+        await ctx.reply('⚠️ Удаление заказов...')
+        try {
+          const orderCount = await prisma.order.count()
+          await prisma.$transaction([
+            prisma.orderItem.deleteMany(),
+            prisma.order.deleteMany(),
+            prisma.reservation.deleteMany(),
+          ])
+          await ctx.reply(`✅ Удалено ${orderCount} заказов, все резервы сняты.`)
+        } catch (err) {
+          await ctx.reply(`❌ Ошибка: ${err instanceof Error ? err.message : err}`)
+        }
+      }
+    } else {
+      await ctx.reply('❌ Отменено. Для подтверждения нужно написать УДАЛИТЬ.')
+    }
+    return
+  }
 
   // Нажатие кнопки главного меню — сбрасываем любой активный флоу
   if (MENU_BUTTONS.has(text)) {
@@ -295,6 +330,7 @@ bot.on(message('text'), async (ctx, next) => {
     apiKeysState.delete(userId)
     securityState.delete(userId)
     suppliersState.delete(userId)
+    pendingConfirmations.delete(userId)
     return next()
   }
 
@@ -836,26 +872,6 @@ bot.command('avito', async (ctx) => {
   }
 })
 
-bot.action('avito:apply_map', async (ctx) => {
-  try { await ctx.answerCbQuery() } catch { /* ignore */ }
-  const mappings = (globalThis as any).__avitoMappings
-  if (!mappings) { await ctx.reply('Маппинг не найден, запустите /avito map заново'); return }
-  try {
-    const { applyAvitoMapping } = await import('../lib/avito-sync')
-    const applied = await applyAvitoMapping(mappings)
-    ;(globalThis as any).__avitoMappings = null
-    await ctx.reply(`✅ Применено: ${applied} товаров смаплено с Avito`)
-  } catch (err) {
-    await ctx.reply(`❌ Ошибка: ${err instanceof Error ? err.message : err}`)
-  }
-})
-
-bot.action('avito:cancel_map', async (ctx) => {
-  try { await ctx.answerCbQuery() } catch { /* ignore */ }
-  ;(globalThis as any).__avitoMappings = null
-  await ctx.reply('❌ Маппинг отменён')
-})
-
 // ─── 🔧 Техработы ────────────────────────────────────────────────────────────
 
 bot.hears('🔧 Техработы', async (ctx) => {
@@ -934,19 +950,13 @@ bot.action('maint:backup', async (ctx) => {
 
 bot.action('maint:clear_products', async (ctx) => {
   try { await ctx.answerCbQuery() } catch { /* ignore */ }
-  await ctx.reply('⚠️ Удаление всех товаров...')
   try {
-    await prisma.$transaction([
-      prisma.stockMovement.deleteMany(),
-      prisma.orderItem.deleteMany(),
-      prisma.order.deleteMany(),
-      prisma.reservation.deleteMany(),
-      prisma.supplierPrice.deleteMany(),
-      prisma.priceChange.deleteMany(),
-      prisma.productVariant.deleteMany(),
-      prisma.product.deleteMany(),
-    ])
-    await ctx.reply('✅ Все товары удалены. Категории сохранены.')
+    const count = await prisma.product.count()
+    await ctx.reply(
+      `⚠️ Вы уверены? Будет удалено ${count} товаров, все варианты, заказы и цены.\n\nНапишите УДАЛИТЬ для подтверждения:`,
+    )
+    const userId = ctx.from?.id
+    if (userId) pendingConfirmations.set(userId, { action: 'clear_products', expires: Date.now() + 60000 })
   } catch (err) {
     await ctx.reply(`❌ Ошибка: ${err instanceof Error ? err.message : err}`)
   }
@@ -1006,15 +1016,13 @@ bot.action('maint:test_enrich', async (ctx) => {
 
 bot.action('maint:clear_orders', async (ctx) => {
   try { await ctx.answerCbQuery() } catch { /* ignore */ }
-  await ctx.reply('⚠️ Удаление тестовых заказов...')
   try {
     const orderCount = await prisma.order.count()
-    await prisma.$transaction([
-      prisma.orderItem.deleteMany(),
-      prisma.order.deleteMany(),
-      prisma.reservation.deleteMany(),
-    ])
-    await ctx.reply(`✅ Удалено ${orderCount} заказов, все резервы сняты.`)
+    await ctx.reply(
+      `⚠️ Вы уверены? Будет удалено ${orderCount} заказов и все резервы.\n\nНапишите УДАЛИТЬ для подтверждения:`,
+    )
+    const userId = ctx.from?.id
+    if (userId) pendingConfirmations.set(userId, { action: 'clear_orders', expires: Date.now() + 60000 })
   } catch (err) {
     await ctx.reply(`❌ Ошибка: ${err instanceof Error ? err.message : err}`)
   }

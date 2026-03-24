@@ -27,7 +27,7 @@ import { DeliveryType } from '../generated/prisma/client'
 import { Decimal } from '@prisma/client/runtime/client'
 
 // BigInt → JSON serialization (avitoItemId etc.)
-;(BigInt.prototype as any).toJSON = function () { return Number(this) }
+;(BigInt.prototype as any).toJSON = function () { return this.toString() }
 
 if (!process.env.BOT_TOKEN) throw new Error('BOT_TOKEN is required')
 const BOT_TOKEN = process.env.BOT_TOKEN
@@ -205,6 +205,7 @@ export function startApiServer(bot?: Telegraf): void {
     max: 60,
   })
   app.use('/api/banner', photoLimiter)
+  app.use('/api/photo', photoLimiter)
 
   const downloadLimiter = rateLimit({
     windowMs: 60 * 1000,
@@ -460,11 +461,17 @@ export function startApiServer(bot?: Telegraf): void {
   })
 
   // ── GET /api/settings ──────────────────────────────────────────────────────
+  const PUBLIC_SETTINGS = new Set(['marquee', 'store_name', 'currency', 'cache_version', 'hero_banners', 'promo_banner'])
+
   app.get('/api/settings', async (req, res, next) => {
     try {
       const key = req.query.key as string
       if (!key) {
         res.status(400).json({ error: 'Missing key param' })
+        return
+      }
+      if (!PUBLIC_SETTINGS.has(key)) {
+        res.status(404).json({ error: 'Setting not found' })
         return
       }
       const value = await getApiKeyValue('setting_' + key)
@@ -612,7 +619,7 @@ export function startApiServer(bot?: Telegraf): void {
   })
 
   // ── GET /api/avito-feed.xml — XML Autoload для Avito ──────────────────────
-  app.get('/api/avito-feed.xml', async (_req, res) => {
+  app.get('/api/avito-feed.xml', downloadLimiter, async (_req, res) => {
     try {
       const products = await prisma.product.findMany({
         where: { isAvailable: true, avitoEnabled: true },
@@ -845,7 +852,12 @@ export function startApiServer(bot?: Telegraf): void {
     // Frontend sends "payment", accept both field names
     const paymentMethod: string | undefined = req.body.paymentMethod || req.body.payment
 
-    console.log('[API] POST /api/orders body:', JSON.stringify(req.body))
+    console.log('[API] POST /api/orders', {
+      items: req.body.items?.length ?? 0,
+      payment: req.body.paymentMethod || req.body.payment,
+      delivery: req.body.deliveryMethod || req.body.delivery,
+      hasTelegramAuth: !!req.headers['x-telegram-init-data'],
+    })
 
     // Telegram auth: optional — validate if header present, fallback to form data
     let telegramId = ''
@@ -857,9 +869,10 @@ export function startApiServer(bot?: Telegraf): void {
       }
     }
 
-    // Fallback: use telegramId from body if sent by frontend
+    // Fallback: use telegramId from body if sent by frontend (unverified)
     if (!telegramId && req.body.telegramId) {
-      telegramId = String(req.body.telegramId)
+      telegramId = 'unverified_' + String(req.body.telegramId)
+      console.warn('[ORDER] Unverified telegramId from body:', telegramId)
     }
 
     // If no Telegram auth, require name + phone from form
@@ -886,7 +899,7 @@ export function startApiServer(bot?: Telegraf): void {
     }
 
     if (!customerName || customerName.trim().length < 2) {
-      console.log('[ORDER] Validation failed: invalid customerName:', customerName)
+      console.log('[ORDER] Validation failed: invalid customerName, length:', (customerName || '').length)
       res.status(400).json({ error: 'Укажите ФИО' })
       return
     }
