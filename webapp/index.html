@@ -422,6 +422,13 @@
     .brand-filter-tab:hover { border-color: rgba(168,255,62,0.5); color: var(--accent); }
     .brand-filter-tab.active { border-color: #a8ff3e; color: #a8ff3e; background: rgba(168,255,62,0.05); }
 
+    .cat-filter-wrap { border-bottom: 1px solid #1a1a1a; padding: 0 0 0 16px; }
+    .cat-filter-bar { display: flex; gap: 6px; overflow-x: auto; padding: 10px 16px 10px 0; -ms-overflow-style: none; scrollbar-width: none; }
+    .cat-filter-bar::-webkit-scrollbar { display: none; }
+    .cat-filter-tab { flex-shrink: 0; padding: 6px 14px; border: 1px solid #2a2a2a; border-radius: 20px; background: transparent; color: #777; font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: 1px; cursor: pointer; white-space: nowrap; text-transform: uppercase; transition: border-color 0.15s, color 0.15s, background 0.15s; }
+    .cat-filter-tab:hover { border-color: rgba(168,255,62,0.5); color: var(--accent); }
+    .cat-filter-tab.active { border-color: #a8ff3e; color: #a8ff3e; background: rgba(168,255,62,0.05); }
+
     /* ── Product grid ─────────────────────────────────────────────────────── */
     .products { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 16px 16px 0; }
     .state-msg { grid-column: 1 / -1; text-align: center; padding: 48px 0; color: var(--hint); font-size: 14px; letter-spacing: 2px; }
@@ -969,13 +976,6 @@
       </button>
     </div>
 
-    <div class="brand-filter-wrap" id="brandSection">
-      <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 16px 0;">
-        <div class="brand-filter-label" style="padding:0;">КАТЕГОРИИ</div>
-      </div>
-      <div class="brand-filter-bar" id="brandFilterBar"></div>
-    </div>
-
     <div class="hits-section" id="hitsSection" style="display:none">
       <div style="display: flex; align-items: center; justify-content: space-between; padding: 0 16px; margin-bottom: 10px;">
         <div class="section-label" style="margin-bottom: 0;">HIT ПРОДАЖ</div>
@@ -1012,6 +1012,9 @@
             <div class="sort-option" data-sort="name" onclick="setSort('name')">По имени А-Я</div>
           </div>
         </div>
+      </div>
+      <div class="cat-filter-wrap" id="catFilterWrap">
+        <div class="cat-filter-bar" id="catFilterBar"></div>
       </div>
       <div class="products" id="grid">
         <div class="state-msg">Загрузка…</div>
@@ -1288,7 +1291,7 @@
         const res  = await fetch('/api/categories')
         if (!res.ok) throw new Error('HTTP ' + res.status)
         categories = await res.json()
-        renderCategoryFilterBar()
+        renderCatFilterBar()
         renderNavList()
       } catch (e) { console.error('[categories]', e) }
     }
@@ -1342,15 +1345,26 @@
         })
     }
 
-    function renderCategoryFilterBar() {
-      const bar = document.getElementById('brandFilterBar')
+    function renderCatFilterBar() {
+      const bar = document.getElementById('catFilterBar')
       if (!bar) return
-      let html = `<div class="brand-filter-tab${activeCat === '' ? ' active' : ''}" data-cat="">ВСЕ</div>`
-      html += categories.map(c =>
-        `<div class="brand-filter-tab${activeCat === c.name ? ' active' : ''}" data-cat="${esc(c.name)}">${esc(c.name).toUpperCase()}</div>`
+      const CATEGORY_POPULARITY = [
+        'Телефоны', 'Планшеты', 'Ноутбуки', 'Аудио', 'Часы',
+        'Телевизоры', 'Desktop', 'Игровые консоли', 'Умный дом',
+        'Гаджеты', 'Аксессуары', 'Красота и уход', 'Фототехника',
+        'Экшн-камеры', 'Дисплеи', 'Дроны'
+      ]
+      const sorted = [...categories].sort((a, b) => {
+        const ai = CATEGORY_POPULARITY.indexOf(a.name)
+        const bi = CATEGORY_POPULARITY.indexOf(b.name)
+        return (ai !== -1 ? ai : 999) - (bi !== -1 ? bi : 999)
+      })
+      let html = `<div class="cat-filter-tab${activeCat === '' ? ' active' : ''}" data-cat="">ВСЕ</div>`
+      html += sorted.map(c =>
+        `<div class="cat-filter-tab${activeCat === c.name ? ' active' : ''}" data-cat="${esc(c.name)}">${esc(c.name).toUpperCase()}</div>`
       ).join('')
       bar.innerHTML = html
-      bar.querySelectorAll('.brand-filter-tab').forEach(el => {
+      bar.querySelectorAll('.cat-filter-tab').forEach(el => {
         el.addEventListener('click', () => selectCategory(el.dataset.cat))
       })
       setupBrandDrag(bar)
@@ -1563,7 +1577,7 @@
     function selectCategory(cat) {
       activeCat = cat
       // Update category filter bar
-      document.querySelectorAll('.brand-filter-tab[data-cat]').forEach(el => {
+      document.querySelectorAll('.cat-filter-tab[data-cat]').forEach(el => {
         el.classList.toggle('active', el.dataset.cat === cat)
       })
       document.querySelectorAll('.nav-item').forEach(el => {
@@ -1593,7 +1607,7 @@
         allProducts = await res.json()
         computeBrands()
         renderBrandGrid()
-        renderCategoryFilterBar()
+        renderCatFilterBar()
         renderHits(allProducts)
         renderGrid()
       } catch {
