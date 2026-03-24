@@ -4,6 +4,7 @@
 import { prisma } from './prisma'
 import { getAvitoItems, updateAvitoPrice, isAvitoConfigured } from './avito'
 import { readSheet, getSheetNames } from './google-sheets'
+import { mapHeaders } from './sheets-sync'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -193,12 +194,15 @@ async function loadSheetProducts(): Promise<SheetProduct[]> {
   if (!sheetName) return []
 
   const data = await readSheet(sheetName)
+  if (data.length === 0) return []
+
+  const COL = mapHeaders(data[0])
   const items: SheetProduct[] = []
 
   for (let i = 1; i < data.length; i++) {
     const row = data[i]
-    const fullName = (row[4] ?? '').toString().trim()    // E: Название модели
-    const priceRaw = (row[11] ?? '').toString().replace(/\s/g, '')  // L: Цена
+    const fullName = (row[COL.fullName] ?? '').toString().trim()
+    const priceRaw = (row[COL.price] ?? '').toString().replace(/\s/g, '')
     const price = parseFloat(priceRaw)
     if (!fullName || isNaN(price) || price <= 0) continue
 
@@ -206,9 +210,9 @@ async function loadSheetProducts(): Promise<SheetProduct[]> {
       rowIndex: i + 1,
       sheetName,
       fullName,
-      color: (row[5] ?? '').toString().trim(),
-      memory: (row[6] ?? '').toString().trim(),
-      size: (row[7] ?? '').toString().trim(),
+      color: COL.color !== undefined ? (row[COL.color] ?? '').toString().trim() : '',
+      memory: COL.memory !== undefined ? (row[COL.memory] ?? '').toString().trim() : '',
+      size: COL.size !== undefined ? (row[COL.size] ?? '').toString().trim() : '',
       price,
     })
   }

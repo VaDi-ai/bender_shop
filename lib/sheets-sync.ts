@@ -21,6 +21,59 @@ export const WRITEBACK_COLS = {
   date: 'O',          // Дата обновления
 }
 
+// ─── Dynamic column mapping from header row ──────────────────────────────────
+
+const EXPECTED_HEADERS: Record<string, string[]> = {
+  brand:       ['Бренд', 'Brand'],
+  category:    ['Общая категория', 'Категория', 'Category'],
+  fullName:    ['Название модели', 'Название', 'Model'],
+  color:       ['Цвет', 'Color'],
+  memory:      ['Память', 'Memory', 'RAM/Storage'],
+  size:        ['Размер', 'Size', 'Экран'],
+  country:     ['Страна', 'Country'],
+  description: ['Описание', 'Description'],
+  specs:       ['Характеристики', 'Specs'],
+  price:       ['Рекомендованная стоимость', 'Цена', 'Price'],
+  quantity:    ['В наличие', 'Количество', 'Qty', 'Stock'],
+  updateDate:  ['Дата обновления', 'Updated'],
+}
+
+// Fallback indices matching the original hardcoded layout
+const FALLBACK_INDICES: Record<string, number> = {
+  brand: 1, category: 3, fullName: 4, color: 5, memory: 6, size: 7,
+  country: 8, description: 9, specs: 10, price: 11, quantity: 12, updateDate: 14,
+}
+
+export type ColumnMap = Record<string, number>
+
+export function mapHeaders(headerRow: any[]): ColumnMap {
+  const headers: ColumnMap = {}
+  const headerStrings = headerRow.map(h => (h ?? '').toString().trim())
+
+  for (const [key, variants] of Object.entries(EXPECTED_HEADERS)) {
+    const idx = headerStrings.findIndex(h =>
+      variants.some(v => h.toLowerCase().includes(v.toLowerCase()))
+    )
+    headers[key] = idx >= 0 ? idx : FALLBACK_INDICES[key]
+  }
+
+  // Validate required columns
+  if (headers.fullName === undefined || headers.fullName < 0) {
+    throw new Error(`Required column "fullName" not found. Headers: ${headerStrings.join(', ')}`)
+  }
+  if (headers.price === undefined || headers.price < 0) {
+    throw new Error(`Required column "price" not found. Headers: ${headerStrings.join(', ')}`)
+  }
+
+  console.log('[Sheets] Column mapping:', JSON.stringify(headers))
+  return headers
+}
+
+function col(row: any[], idx: number | undefined): string {
+  if (idx === undefined) return ''
+  return (row[idx] ?? '').toString().trim()
+}
+
 export interface SheetRow {
   brand: string
   category: string      // «Общая категория» (для сайта)
@@ -46,28 +99,23 @@ export async function readAllProducts(): Promise<SheetRow[]> {
   if (!sheetName) return []
 
   const data = await readSheet(sheetName)
+  if (data.length === 0) return []
+
+  const COL = mapHeaders(data[0])
   const rows: SheetRow[] = []
 
   for (let i = 1; i < data.length; i++) {
     const row = data[i]
 
-    const brand       = (row[1] ?? '').toString().trim()       // B: Бренд
-    const category    = (row[3] ?? '').toString().trim()       // D: Общая категория (для сайта)
-    const fullName    = (row[4] ?? '').toString().trim()       // E: Название модели
-    const color       = (row[5] ?? '').toString().trim()       // F: Цвет
-    const memory      = (row[6] ?? '').toString().trim()       // G: Память
-    const size        = (row[7] ?? '').toString().trim()       // H: Размер
-    const country     = (row[8] ?? '').toString().trim()       // I: Страна
-    const description = (row[9] ?? '').toString().trim()       // J: Описание
-    const specs       = (row[10] ?? '').toString().trim()      // K: Характеристики
-    const priceRaw    = (row[11] ?? '').toString().replace(/\s/g, '').replace(',', '.')  // L: Цена
-    const qtyRaw      = (row[12] ?? '').toString().trim()      // M: В наличие
+    const fullName    = col(row, COL.fullName)
+    const priceRaw    = col(row, COL.price).replace(/\s/g, '').replace(',', '.')
 
     if (!fullName || !priceRaw) continue
 
     const price = parseFloat(priceRaw)
     if (isNaN(price) || price <= 0) continue
 
+    const qtyRaw = col(row, COL.quantity)
     let quantity = DEFAULT_QTY
     if (qtyRaw !== '') {
       const q = parseInt(qtyRaw, 10)
@@ -75,15 +123,15 @@ export async function readAllProducts(): Promise<SheetRow[]> {
     }
 
     rows.push({
-      brand,
-      category: category || 'Другое',
+      brand:       col(row, COL.brand),
+      category:    col(row, COL.category) || 'Другое',
       fullName,
-      color,
-      memory,
-      size,
-      country,
-      description,
-      specs,
+      color:       col(row, COL.color),
+      memory:      col(row, COL.memory),
+      size:        col(row, COL.size),
+      country:     col(row, COL.country),
+      description: col(row, COL.description),
+      specs:       col(row, COL.specs),
       price,
       quantity,
       sheetName,
@@ -1225,11 +1273,6 @@ export interface StaleItem {
   lastUpdate: string
 }
 
-// New single-sheet column indices for stale price check
-const STALE_NAME_COL = 4    // E: Название модели
-const STALE_PRICE_COL = 11  // L: Рекомендованная стоимость
-const STALE_DATE_COL = 14   // O: Дата обновления
-
 /**
  * Проверяет устаревшие цены (>6 часов без обновления) по колонке «Дата обновления» в Google Sheets.
  */
@@ -1244,15 +1287,18 @@ export async function checkStalePrices(): Promise<StaleItem[]> {
 
   try {
     const data = await readSheet(sheetName)
+    if (data.length === 0) return staleItems
+
+    const COL = mapHeaders(data[0])
     for (let i = 1; i < data.length; i++) {
       const row = data[i]
-      const name = (row[STALE_NAME_COL] ?? '').toString().trim()
-      const price = (row[STALE_PRICE_COL] ?? '').toString().trim()
-      const dateStr = (row[STALE_DATE_COL] ?? '').toString().trim()
+      const name = col(row, COL.fullName)
+      const price = col(row, COL.price)
+      const dateStr = col(row, COL.updateDate)
 
         if (!name || !price) continue
         // Пропускаем категории не зависящие от курса
-        const category = (row[3] ?? '').toString().trim()
+        const category = col(row, COL.category)
         if (category === 'Услуги' || category === 'Аксессуары') continue
 
         let isStale = false
