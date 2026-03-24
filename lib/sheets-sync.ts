@@ -915,6 +915,24 @@ function parseAttributes(fullName: string, brand: string, country: string): Reco
   const simMatch = normalized.match(/\b(2Sim|eSim|e-Sim|1Sim\+eSim|Dual\s*SIM)\b/i)
   if (simMatch) attrs['SIM'] = simMatch[1]
 
+  // Fallback: SIM по стране для iPhone
+  if (!attrs['SIM'] && /iphone/i.test(normalized)) {
+    const countryMatch = fullName.match(/\((Индия|Япония|США|USA|India|Japan|Европа|Europe|ОАЭ|UAE|Таиланд|Thailand|Китай|China|Гонконг|Hong Kong)\)/i)
+    if (countryMatch) {
+      const c = countryMatch[1].toLowerCase()
+      if (['китай', 'china', 'гонконг', 'hong kong'].some(x => c.includes(x))) {
+        attrs['SIM'] = '2 SIM'
+      } else {
+        attrs['SIM'] = 'eSIM'
+      }
+    }
+  }
+
+  // Fallback: Samsung Galaxy — SIM + eSIM по умолчанию
+  if (!attrs['SIM'] && /samsung.*galaxy/i.test(normalized)) {
+    attrs['SIM'] = 'SIM + eSIM'
+  }
+
   // ─── Connectivity (iPad) ───
   if (isiPad) {
     if (/Wi-Fi\s*\+\s*Cellular/i.test(normalized)) attrs['Связь'] = 'Wi-Fi + Cellular'

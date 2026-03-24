@@ -1347,7 +1347,7 @@
       if (!bar) return
       let html = `<div class="brand-filter-tab${activeCat === '' ? ' active' : ''}" data-cat="">ВСЕ</div>`
       html += categories.map(c =>
-        `<div class="brand-filter-tab${activeCat === c.name ? ' active' : ''}" data-cat="${esc(c.name)}">${esc(c.name)}</div>`
+        `<div class="brand-filter-tab${activeCat === c.name ? ' active' : ''}" data-cat="${esc(c.name)}">${esc(c.name).toUpperCase()}</div>`
       ).join('')
       bar.innerHTML = html
       bar.querySelectorAll('.brand-filter-tab').forEach(el => {
@@ -1418,20 +1418,39 @@
     }
 
     const BRAND_IMAGES = {
-      'Apple':   '/categories/phones.webp',
-      'Samsung': '/categories/phones.webp',
-      'Sony':    '/categories/consoles.webp',
-      'Xiaomi':  '/categories/phones.webp',
-      'JBL':     '/categories/audio.webp',
-      'Dyson':   '/categories/beauty.webp',
-      'LG':      '/categories/tv.webp',
-      'Garmin':  '/categories/watches.webp',
-      'DJI':     '/categories/dron.webp',
-      'Google':  '/categories/phones.webp',
-      'Huawei':  '/categories/phones.webp',
-      'Beats':   '/categories/audio.webp',
-      'Marshall':'/categories/audio.webp',
-      'Honor':   '/categories/phones.webp',
+      'Apple':            '/categories/phones.webp',
+      'Samsung':          '/categories/tablets.webp',
+      'Xiaomi':           '/categories/smarthome.webp',
+      'Sony':             '/categories/consoles.webp',
+      'JBL':              '/categories/audio.webp',
+      'Dyson':            '/categories/beauty.webp',
+      'LG':               '/categories/tv.webp',
+      'Garmin':           '/categories/watches.webp',
+      'DJI':              '/categories/dron.webp',
+      'Google':           '/categories/gadgets.webp',
+      'Huawei':           '/categories/laptops.webp',
+      'Beats':            '/categories/audio.webp',
+      'Marshall':         '/categories/desktop.webp',
+      'Honor':            '/categories/display.webp',
+      'Poco':             '/categories/action_camera.webp',
+      'OnePlus':          '/categories/accessories.webp',
+      'Yandex':           '/categories/smarthome.webp',
+      'Ray-Ban':          '/categories/gadgets.webp',
+      'Nintendo':         '/categories/consoles.webp',
+      'Fujifilm':         '/categories/photo.webp',
+      'Hisense':          '/categories/tv.webp',
+      'Insta360':         '/categories/action_camera.webp',
+      'Oakley':           '/categories/gadgets.webp',
+      'Canon':            '/categories/photo.webp',
+      'GoPro':            '/categories/action_camera.webp',
+      'Meta':             '/categories/consoles.webp',
+      'Bowers & Wilkins': '/categories/audio.webp',
+      'Medicube':         '/categories/beauty.webp',
+      'Plaud':            '/categories/gadgets.webp',
+      'Whoop':            '/categories/watches.webp',
+      'Microsoft':        '/categories/consoles.webp',
+      'Valve':            '/categories/consoles.webp',
+      'Asus':             '/categories/laptops.webp',
     }
 
     function renderBrandGrid() {
@@ -1446,7 +1465,7 @@
         return `
       <div class="cat-btn${hiddenClass}${activeBrand === b.name ? ' active' : ''}" data-brand="${esc(b.name)}" onclick="selectBrand('${esc(b.name)}')">
         <div class="cat-btn-text">
-          <div class="cat-btn-name">${esc(b.name)}</div>
+          <div class="cat-btn-name">${esc(b.name).toUpperCase()}</div>
           <div class="cat-btn-count">${b.count} ${pluralize(b.count, 'товар', 'товара', 'товаров')}</div>
         </div>
         ${img ? `<img class="cat-btn-img" src="${img}" alt="" loading="lazy" onerror="if(this.src.includes('.webp')){this.src=this.src.replace('.webp','.png')}else{this.style.display='none'}">` : ''}
