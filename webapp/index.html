@@ -1394,7 +1394,57 @@
       document.querySelectorAll('.cat-btn[data-brand]').forEach(el => {
         el.classList.toggle('active', el.dataset.brand === brand)
       })
+      // Update category filter for this brand
+      updateCatFilterForBrand(brand)
       renderGrid()
+    }
+
+    function updateCatFilterForBrand(brand) {
+      const bar = document.getElementById('catFilterBar')
+      if (!bar) return
+      if (!brand) {
+        bar.querySelectorAll('.cat-filter-tab').forEach(el => { el.style.display = '' })
+        return
+      }
+      const brandCats = new Set()
+      allProducts.forEach(p => {
+        const b = (p.brand && p.brand.trim()) ? p.brand.trim() : (p.name || '').split(' ')[0]
+        if (b === brand) brandCats.add(p.category || '')
+      })
+      bar.querySelectorAll('.cat-filter-tab').forEach(el => {
+        const cat = el.dataset.cat
+        el.style.display = (cat === '' || brandCats.has(cat)) ? '' : 'none'
+      })
+      if (activeCat && !brandCats.has(activeCat)) {
+        activeCat = ''
+        bar.querySelectorAll('.cat-filter-tab').forEach(el => {
+          el.classList.toggle('active', el.dataset.cat === '')
+        })
+      }
+    }
+
+    function updateBrandGridForCategory(cat) {
+      const tiles = document.querySelectorAll('.cat-btn[data-brand]')
+      if (!tiles.length) return
+      if (!cat) {
+        tiles.forEach(el => { el.style.display = '' })
+        return
+      }
+      const catBrands = new Set()
+      allProducts.forEach(p => {
+        if ((p.category || '') === cat) {
+          const b = (p.brand && p.brand.trim()) ? p.brand.trim() : (p.name || '').split(' ')[0]
+          catBrands.add(b)
+        }
+      })
+      tiles.forEach(el => {
+        const brand = el.dataset.brand
+        el.style.display = (brand === '' || catBrands.has(brand)) ? '' : 'none'
+      })
+      if (activeBrand && !catBrands.has(activeBrand)) {
+        activeBrand = ''
+        tiles.forEach(el => { el.classList.toggle('active', el.dataset.brand === '') })
+      }
     }
 
     // ── Category images ──────────────────────────────────────────────────────
@@ -1592,18 +1642,19 @@
         document.getElementById('catalogTitle').textContent = 'КАТАЛОГ'
         document.getElementById('catalogSub').textContent   = 'Все товары'
       }
+      // Update brand grid for this category
+      updateBrandGridForCategory(cat)
       document.getElementById('catalog').scrollIntoView({ behavior: 'smooth', block: 'start' })
-      loadProducts(cat)
+      renderGrid()
     }
 
     // ── Load products ─────────────────────────────────────────────────────────
-    async function loadProducts(cat) {
+    async function loadProducts() {
       const grid = document.getElementById('grid')
       grid.innerHTML = '<div class="state-msg">Загрузка…</div>'
       activeBrand = ''
       try {
-        const url  = cat ? `/api/products?category=${encodeURIComponent(cat)}` : '/api/products'
-        const res  = await fetch(url)
+        const res  = await fetch('/api/products')
         if (!res.ok) throw new Error('HTTP ' + res.status)
         allProducts = await res.json()
         computeBrands()
@@ -1631,6 +1682,11 @@
           ].filter(Boolean).join(' ').toLowerCase()
           return searchIn.includes(searchQuery)
         })
+      }
+
+      // Фильтр по категории
+      if (activeCat) {
+        products = products.filter(p => (p.category || '') === activeCat)
       }
 
       // Фильтр по бренду
@@ -2376,7 +2432,7 @@
           btn.classList.remove('disabled'); btnSpan.textContent = 'ОФОРМИТЬ'
           if (json.error && json.error.includes('Товар закончился')) {
             showOrderError('ТОВАР ЗАКОНЧИЛСЯ', 'К сожалению, «' + (json.product || 'товар') + '» уже закончился.')
-            await loadProducts(activeCat)
+            await loadProducts()
           } else {
             showOrderError('ОШИБКА', json.error || 'Не удалось оформить заказ.')
           }
@@ -2408,7 +2464,7 @@
         const localVersion  = localStorage.getItem('cache_v') ?? ''
         if (localVersion && localVersion !== serverVersion) {
           localStorage.setItem('cache_v', serverVersion)
-          loadMarquee(); loadHeroSlider(); loadCategories(); loadProducts(activeCat)
+          loadMarquee(); loadHeroSlider(); loadCategories(); loadProducts()
         } else if (!localVersion) {
           localStorage.setItem('cache_v', serverVersion)
         }
@@ -2678,7 +2734,7 @@
       if (t && t.brands && t.brands.length > 0) BRAND_POPULARITY = t.brands
     }).catch(() => {}).finally(() => {
       loadCategories()
-      loadProducts('')
+      loadProducts()
     })
     initPhoneMask()
     initSearch()
