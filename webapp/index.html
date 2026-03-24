@@ -126,6 +126,10 @@
     .nav-item.active { color: var(--accent); border-left: 3px solid var(--accent); padding-left: 17px; }
     .nav-item-all { color: var(--hint); }
     .nav-item-all.active { color: var(--accent); }
+    .nav-accordion-header { display: flex; align-items: center; justify-content: space-between; padding: 15px 20px; font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--accent); letter-spacing: 2px; cursor: pointer; border-bottom: 1px solid #0f0f0f; user-select: none; }
+    .nav-accordion-header .nav-accordion-arrow { transition: transform 0.2s; }
+    .nav-accordion-header.open .nav-accordion-arrow { transform: rotate(180deg); }
+    .nav-accordion-body .nav-item { font-size: 12px; padding: 12px 20px 12px 32px; }
 
     /* ── Marquee bar ──────────────────────────────────────────────────────── */
     .marquee-bar { position: sticky; top: var(--header-h); z-index: 490; height: var(--marquee-h); background: #0d0d0d; border-bottom: 1px solid #1a1a1a; display: flex; align-items: center; overflow: hidden; }
@@ -471,6 +475,9 @@
     .product-card.out-of-stock .product-photo { filter: grayscale(0.5); }
     .product-btn-wrap { margin-top: auto; }
     .product-btn-wrap.hidden { display: none; }
+    .product-hidden { display: none !important; }
+    .show-more-btn { display: block; width: calc(100% - 32px); margin: 16px auto; padding: 14px; background: transparent; border: 1px solid #2a2a2a; color: var(--accent); font-family: 'JetBrains Mono', monospace; font-size: 12px; letter-spacing: 2px; cursor: pointer; text-transform: uppercase; transition: border-color 0.2s; }
+    .show-more-btn:hover { border-color: var(--accent); }
 
     .box-button { cursor: pointer; border: 4px solid #333; background-color: #555; padding-bottom: 8px; transition: 0.1s ease-in-out; user-select: none; width: 100%; display: block; text-align: center; }
     .box-button .button { background-color: #dddddd; border: 4px solid #ffffff; padding: 10px 16px; width: 100%; display: flex; align-items: center; justify-content: center; box-sizing: border-box; }
@@ -763,7 +770,14 @@
       <button class="nav-close" id="navClose" aria-label="Закрыть">✕</button>
     </div>
     <div class="nav-list" id="navList">
-      <div class="nav-item nav-item-all active" data-cat="">ВСЕ КАТЕГОРИИ</div>
+      <div class="nav-item nav-item-all active" data-cat="">ВСЕ ТОВАРЫ</div>
+      <div class="nav-accordion">
+        <div class="nav-accordion-header" onclick="toggleNavAccordion(this)">
+          КАТЕГОРИИ
+          <svg class="nav-accordion-arrow" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+        </div>
+        <div class="nav-accordion-body" id="navCatList" style="display:none;"></div>
+      </div>
     </div>
   </nav>
 
@@ -905,6 +919,9 @@
     <div class="header-right">
       <button class="search-toggle" id="searchToggle" aria-label="Поиск" onclick="toggleSearch()">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      </button>
+      <button class="header-icon-btn" onclick="openFModal('help')" aria-label="Помощь" style="background:none;border:none;color:#e5e5e5;cursor:pointer;padding:4px;">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
       </button>
       <button class="cart-btn" id="cartBtn" aria-label="Корзина">
         🛒<span class="cart-badge" id="cartBadge" data-count="0">0</span>
@@ -1271,14 +1288,26 @@
       } catch (e) { console.error('[categories]', e) }
     }
 
+    function toggleNavAccordion(el) {
+      el.classList.toggle('open')
+      const body = el.nextElementSibling
+      body.style.display = body.style.display === 'none' ? 'block' : 'none'
+    }
+
     function renderNavList() {
-      const list = document.getElementById('navList')
-      let html = `<div class="nav-item nav-item-all${activeCat === '' ? ' active' : ''}" data-cat="">ВСЕ КАТЕГОРИИ</div>`
-      html += categories.map(c =>
+      // "ВСЕ ТОВАРЫ" button
+      const allBtn = document.querySelector('#navList > .nav-item-all')
+      if (allBtn) {
+        allBtn.className = `nav-item nav-item-all${activeCat === '' ? ' active' : ''}`
+        allBtn.onclick = () => { selectCategory(''); closeMenu() }
+      }
+      // Category items inside accordion
+      const catList = document.getElementById('navCatList')
+      if (!catList) return
+      catList.innerHTML = categories.map(c =>
         `<div class="nav-item${activeCat === c.name ? ' active' : ''}" data-cat="${esc(c.name)}">${esc(c.name.toUpperCase())}</div>`
       ).join('')
-      list.innerHTML = html
-      list.querySelectorAll('.nav-item').forEach(el => {
+      catList.querySelectorAll('.nav-item').forEach(el => {
         el.addEventListener('click', () => { selectCategory(el.dataset.cat); closeMenu() })
       })
     }
@@ -1674,6 +1703,22 @@
 
       setupCardHoverCycling()
       setupCardChips()
+
+      // Show more button
+      const oldBtn = document.getElementById('showMoreBtn')
+      if (oldBtn) oldBtn.remove()
+      const cards = grid.querySelectorAll('.product-card')
+      const VISIBLE_LIMIT = 6
+      if (cards.length > VISIBLE_LIMIT) {
+        cards.forEach((card, i) => { if (i >= VISIBLE_LIMIT) card.classList.add('product-hidden') })
+        const remaining = cards.length - VISIBLE_LIMIT
+        const btn = document.createElement('button')
+        btn.id = 'showMoreBtn'
+        btn.className = 'show-more-btn'
+        btn.innerHTML = `Показать ещё ${remaining} ${pluralize(remaining, 'товар', 'товара', 'товаров')} ▼`
+        btn.onclick = () => { grid.querySelectorAll('.product-hidden').forEach(c => c.classList.remove('product-hidden')); btn.remove() }
+        grid.after(btn)
+      }
     }
 
     function cardBtnClick(event, productId) {
