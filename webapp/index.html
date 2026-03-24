@@ -567,6 +567,16 @@
     .modal-attr-btn.unavailable:hover { border-color: #333; }
     .modal-attr-btn.info { border-color: #333; color: #999; cursor: default; pointer-events: none; }
 
+    .modal-recs { padding: 16px 0 8px; border-top: 1px solid #1a1a1a; margin-top: 16px; }
+    .modal-recs-title { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--accent); letter-spacing: 2px; margin-bottom: 12px; text-transform: uppercase; }
+    .modal-recs-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+    .modal-rec-card { background: #111; border: 1px solid #1a1a1a; border-radius: 10px; padding: 8px; cursor: pointer; transition: border-color 0.2s; }
+    .modal-rec-card:hover { border-color: var(--accent); }
+    .modal-rec-img { width: 100%; height: 80px; background: #161616; border-radius: 8px; display: flex; align-items: center; justify-content: center; overflow: hidden; margin-bottom: 6px; }
+    .modal-rec-img img { width: 100%; height: 100%; object-fit: contain; padding: 4px; }
+    .modal-rec-name { font-size: 10px; color: #ccc; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; min-height: 26px; }
+    .modal-rec-price { font-size: 11px; color: var(--accent); margin-top: 3px; font-weight: 600; }
+
     /* Delivery info */
     .modal-delivery-block { border: 1px solid #222; padding: 12px; margin: 16px 0; }
     .modal-delivery-row { display: flex; gap: 10px; align-items: flex-start; }
@@ -913,6 +923,11 @@
           <div class="modal-accordion-body">
             <div class="modal-product-desc" id="modalProductDesc"></div>
           </div>
+        </div>
+
+        <div class="modal-recs" id="modalRecs" style="display:none">
+          <div class="modal-recs-title">РЕКОМЕНДУЕМ</div>
+          <div class="modal-recs-grid" id="modalRecsGrid"></div>
         </div>
       </div>
     </div>
@@ -2018,6 +2033,9 @@
 
       // Button
       updateModalBtn()
+
+      // Recommendations
+      renderModalRecs()
     }
 
     function updateModalPhotos(variant, product) {
@@ -2184,6 +2202,63 @@
     function toggleAccordion(id) {
       const el = document.getElementById(id)
       if (el) el.classList.toggle('open')
+    }
+
+    // ── Recommendations ────────────────────────────────────────────────────
+    function getRecommendations(product, all, limit) {
+      limit = limit || 4
+      const recs = []
+      const used = {}
+      used[product.id] = true
+      const brand = (product.brand || '').trim()
+      const cat = product.category || ''
+      const price = product.variants && product.variants.length ? minVariantPrice(product) : Number(product.price)
+
+      // 1. Аксессуары того же бренда
+      const acc = all.filter(p => !used[p.id] && p.category === 'Аксессуары' && (p.brand || '').trim() === brand)
+        .sort((a, b) => Math.abs(minVariantPrice(a) - price) - Math.abs(minVariantPrice(b) - price))
+      for (let i = 0; i < acc.length && recs.length < limit && i < 2; i++) { recs.push(acc[i]); used[acc[i].id] = true }
+
+      // 2. Сопутствующие: тот же бренд, другая категория
+      const usedCats = {}; usedCats[cat] = true; usedCats['Аксессуары'] = true
+      const rel = all.filter(p => !used[p.id] && (p.brand || '').trim() === brand && p.category !== cat && p.category !== 'Аксессуары')
+        .sort((a, b) => Math.abs(minVariantPrice(a) - price) - Math.abs(minVariantPrice(b) - price))
+      for (let i = 0; i < rel.length && recs.length < limit; i++) {
+        if (usedCats[rel[i].category]) continue
+        usedCats[rel[i].category] = true
+        recs.push(rel[i]); used[rel[i].id] = true
+      }
+
+      // 3. Похожие: та же категория, ближайшие по цене
+      const sim = all.filter(p => !used[p.id] && p.category === cat)
+        .sort((a, b) => Math.abs(minVariantPrice(a) - price) - Math.abs(minVariantPrice(b) - price))
+      for (let i = 0; i < sim.length && recs.length < limit; i++) { recs.push(sim[i]); used[sim[i].id] = true }
+
+      return recs
+    }
+
+    function renderModalRecs() {
+      const section = document.getElementById('modalRecs')
+      const grid = document.getElementById('modalRecsGrid')
+      if (!section || !grid || !modalProduct) { if (section) section.style.display = 'none'; return }
+
+      const recs = getRecommendations(modalProduct, allProducts, 4)
+      if (!recs.length) { section.style.display = 'none'; return }
+
+      section.style.display = ''
+      grid.innerHTML = recs.map(p => {
+        const photo = p.photos && p.photos[0] ? photoUrl(p.photos[0]) : null
+        const imgHtml = photo
+          ? `<img src="${photo}" alt="" loading="lazy">`
+          : '<img src="/no-photo.webp" alt="" style="opacity:0.6" onerror="this.onerror=null;this.src=\'/no-photo.png\'">'
+        const mp = p.variants && p.variants.length ? minVariantPrice(p) : Number(p.price)
+        const priceText = mp === 0 ? 'Цена по запросу' : 'от ' + fmt(mp) + ' ₽'
+        return `<div class="modal-rec-card" onclick="closeProductModal(); setTimeout(()=>openProductModal(${p.id}), 200)">
+          <div class="modal-rec-img">${imgHtml}</div>
+          <div class="modal-rec-name">${esc(p.name)}</div>
+          <div class="modal-rec-price">${priceText}</div>
+        </div>`
+      }).join('')
     }
 
     // Modal carousel nav
