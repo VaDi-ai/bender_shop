@@ -261,8 +261,9 @@ export async function syncProductsFromSheets(shouldAbort?: () => boolean): Promi
         }
       }
       const productAttributes: Record<string, string[]> = {}
+      const ALWAYS_SHOW = ['Память', 'RAM', 'Экран', 'Размер', 'Чип', 'SIM', 'Связь']
       for (const [k, vals] of Object.entries(aggregated)) {
-        if (vals.size > 1) {
+        if (vals.size > 1 || ALWAYS_SHOW.includes(k)) {
           productAttributes[k] = [...vals].sort()
         }
       }
@@ -404,6 +405,41 @@ export async function syncProductsFromSheets(shouldAbort?: () => boolean): Promi
   }
 
   console.log(`[Sheets Sync] Done: ${created} created, ${updated} updated, ${disabled} disabled, ${errors.length} errors`)
+
+  // Audit: check products without key attributes
+  try {
+    const audit = await prisma.product.findMany({
+      where: { isAvailable: true },
+      select: { id: true, name: true, attributes: true, category: { select: { name: true } } },
+    })
+    const EXPECTED_ATTRS: Record<string, string[]> = {
+      'Телефоны': ['Память', 'Цвет'],
+      'Планшеты': ['Память', 'Цвет', 'Связь'],
+      'Ноутбуки': ['Память', 'Цвет'],
+      'Desktop': ['Память'],
+      'Часы': ['Размер'],
+      'Аудио': ['Цвет'],
+      'Телевизоры': ['Диагональ'],
+    }
+    const issues: string[] = []
+    for (const p of audit) {
+      const cat = p.category?.name || ''
+      const expected = EXPECTED_ATTRS[cat]
+      if (!expected) continue
+      const attrs = (p.attributes as Record<string, string[]>) || {}
+      for (const key of expected) {
+        if (!attrs[key] || attrs[key].length === 0) {
+          issues.push(`${p.name} (${cat}) — нет атрибута "${key}"`)
+        }
+      }
+    }
+    if (issues.length > 0) {
+      console.log(`[Audit] ${issues.length} товаров без ожидаемых атрибутов:`)
+      for (const issue of issues.slice(0, 30)) console.log(`  ${issue}`)
+      if (issues.length > 30) console.log(`  ...и ещё ${issues.length - 30}`)
+    }
+  } catch { /* audit is non-critical */ }
+
   return { created, updated, disabled, total: rows.length, errors }
 }
 

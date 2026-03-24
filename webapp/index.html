@@ -565,6 +565,7 @@
     .modal-attr-btn.active { border-color: var(--accent); background: var(--accent); color: var(--accent-fg); }
     .modal-attr-btn.unavailable { opacity: 0.28; cursor: not-allowed; }
     .modal-attr-btn.unavailable:hover { border-color: #333; }
+    .modal-attr-btn.info { border-color: #333; color: #999; cursor: default; pointer-events: none; }
 
     /* Delivery info */
     .modal-delivery-block { border: 1px solid #222; padding: 12px; margin: 16px 0; }
@@ -2015,6 +2016,15 @@
       section.innerHTML = keys.map(key => {
         const vals = p.attributes[key]
         if (!Array.isArray(vals) || !vals.length) return ''
+
+        // Single value — info chip (not clickable)
+        if (vals.length === 1) {
+          return `<div class="modal-attr-group">
+  <div class="modal-attr-label">${esc(key)}</div>
+  <div class="modal-attr-row"><span class="modal-attr-btn info">${esc(vals[0])}</span></div>
+</div>`
+        }
+
         const selectedVal = modalSelectedAttrs[key]
         const label = selectedVal ? key + ' : ' + selectedVal : key
         const btns = vals.map(v => {
