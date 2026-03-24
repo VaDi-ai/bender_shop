@@ -201,8 +201,8 @@ export function startApiServer(bot?: Telegraf): void {
   app.use('/api/orders', orderLimiter)
 
   const photoLimiter = rateLimit({
-    windowMs: 60 * 1000,
-    max: 60,
+    windowMs: 1 * 60 * 1000,
+    max: 200,
   })
   app.use('/api/banner', photoLimiter)
   app.use('/api/photo', photoLimiter)
