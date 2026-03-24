@@ -960,20 +960,20 @@
       </div>
     </div>
 
-    <div class="brand-filter-wrap" id="brandSection">
-      <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 16px 0;">
-        <div class="brand-filter-label" style="padding:0;">БРЕНДЫ</div>
-      </div>
-      <div class="brand-filter-bar" id="brandFilterBar"></div>
-    </div>
-
     <div class="cat-grid-section" id="catGridSection">
-      <div class="section-label" style="padding: 0 16px;">КАТЕГОРИИ</div>
+      <div class="section-label" style="padding: 0 16px;">БРЕНДЫ</div>
       <div class="cat-grid" id="catGrid"></div>
       <button class="cat-more-btn" id="catMoreBtn" onclick="toggleMoreCats()">
-        <span id="catMoreText">Ещё категории</span>
+        <span id="catMoreText">Ещё бренды</span>
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
       </button>
+    </div>
+
+    <div class="brand-filter-wrap" id="brandSection">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 16px 0;">
+        <div class="brand-filter-label" style="padding:0;">КАТЕГОРИИ</div>
+      </div>
+      <div class="brand-filter-bar" id="brandFilterBar"></div>
     </div>
 
     <div class="hits-section" id="hitsSection" style="display:none">
@@ -1288,7 +1288,7 @@
         const res  = await fetch('/api/categories')
         if (!res.ok) throw new Error('HTTP ' + res.status)
         categories = await res.json()
-        renderCategoryGrid(categories)
+        renderCategoryFilterBar()
         renderNavList()
       } catch (e) { console.error('[categories]', e) }
     }
@@ -1342,16 +1342,16 @@
         })
     }
 
-    function renderBrandFilterBar() {
+    function renderCategoryFilterBar() {
       const bar = document.getElementById('brandFilterBar')
       if (!bar) return
-      let html = `<div class="brand-filter-tab${activeBrand === '' ? ' active' : ''}" data-brand="">ВСЕ</div>`
-      html += brands.map(b =>
-        `<div class="brand-filter-tab${activeBrand === b.name ? ' active' : ''}" data-brand="${esc(b.name)}">${esc(b.name)}</div>`
+      let html = `<div class="brand-filter-tab${activeCat === '' ? ' active' : ''}" data-cat="">ВСЕ</div>`
+      html += categories.map(c =>
+        `<div class="brand-filter-tab${activeCat === c.name ? ' active' : ''}" data-cat="${esc(c.name)}">${esc(c.name)}</div>`
       ).join('')
       bar.innerHTML = html
       bar.querySelectorAll('.brand-filter-tab').forEach(el => {
-        el.addEventListener('click', () => selectBrand(el.dataset.brand))
+        el.addEventListener('click', () => selectCategory(el.dataset.cat))
       })
       setupBrandDrag(bar)
     }
@@ -1375,7 +1375,8 @@
 
     function selectBrand(brand) {
       activeBrand = brand
-      document.querySelectorAll('.brand-filter-tab').forEach(el => {
+      // Update brand grid tiles
+      document.querySelectorAll('.cat-btn[data-brand]').forEach(el => {
         el.classList.toggle('active', el.dataset.brand === brand)
       })
       renderGrid()
@@ -1416,28 +1417,37 @@
       return many
     }
 
-    function renderCategoryGrid(cats) {
+    const BRAND_IMAGES = {
+      'Apple':   '/categories/phones.webp',
+      'Samsung': '/categories/phones.webp',
+      'Sony':    '/categories/consoles.webp',
+      'Xiaomi':  '/categories/phones.webp',
+      'JBL':     '/categories/audio.webp',
+      'Dyson':   '/categories/beauty.webp',
+      'LG':      '/categories/tv.webp',
+      'Garmin':  '/categories/watches.webp',
+      'DJI':     '/categories/dron.webp',
+      'Google':  '/categories/phones.webp',
+      'Huawei':  '/categories/phones.webp',
+      'Beats':   '/categories/audio.webp',
+      'Marshall':'/categories/audio.webp',
+      'Honor':   '/categories/phones.webp',
+    }
+
+    function renderBrandGrid() {
       const grid = document.getElementById('catGrid')
       if (!grid) return
 
-      const sorted = [...cats].sort((a, b) => {
-        const ai = TOP_CATEGORIES.indexOf(a.name)
-        const bi = TOP_CATEGORIES.indexOf(b.name)
-        if (ai !== -1 && bi !== -1) return ai - bi
-        if (ai !== -1) return -1
-        if (bi !== -1) return 1
-        return (b.productCount || 0) - (a.productCount || 0)
-      })
+      const sorted = [...brands].slice(0, 20)
 
-      grid.innerHTML = sorted.map((cat, i) => {
-        const img = CATEGORY_IMAGES[cat.name] || ''
+      grid.innerHTML = sorted.map((b, i) => {
+        const img = BRAND_IMAGES[b.name] || ''
         const hiddenClass = i >= MAX_VISIBLE && !catsExpanded ? ' hidden' : ''
-        const count = cat.productCount || 0
         return `
-      <div class="cat-btn${hiddenClass}${activeCat === cat.name ? ' active' : ''}" data-cat="${esc(cat.name)}" onclick="selectCategory('${esc(cat.name)}')">
+      <div class="cat-btn${hiddenClass}${activeBrand === b.name ? ' active' : ''}" data-brand="${esc(b.name)}" onclick="selectBrand('${esc(b.name)}')">
         <div class="cat-btn-text">
-          <div class="cat-btn-name">${esc(cat.name)}</div>
-          <div class="cat-btn-count">${count} ${pluralize(count, 'товар', 'товара', 'товаров')}</div>
+          <div class="cat-btn-name">${esc(b.name)}</div>
+          <div class="cat-btn-count">${b.count} ${pluralize(b.count, 'товар', 'товара', 'товаров')}</div>
         </div>
         ${img ? `<img class="cat-btn-img" src="${img}" alt="" loading="lazy" onerror="if(this.src.includes('.webp')){this.src=this.src.replace('.webp','.png')}else{this.style.display='none'}">` : ''}
       </div>
@@ -1454,7 +1464,7 @@
       catsExpanded = !catsExpanded
       const btn = document.getElementById('catMoreBtn')
       btn.classList.toggle('expanded', catsExpanded)
-      document.getElementById('catMoreText').textContent = catsExpanded ? 'Свернуть' : 'Ещё категории'
+      document.getElementById('catMoreText').textContent = catsExpanded ? 'Свернуть' : 'Ещё бренды'
 
       document.querySelectorAll('.cat-btn').forEach((el, i) => {
         if (i >= MAX_VISIBLE) {
@@ -1533,8 +1543,9 @@
     // ── Select category ───────────────────────────────────────────────────────
     function selectCategory(cat) {
       activeCat = cat
-      document.querySelectorAll('.cat-btn').forEach(el => {
-        el.classList.toggle('active', cat !== '' && el.dataset.cat === cat)
+      // Update category filter bar
+      document.querySelectorAll('.brand-filter-tab[data-cat]').forEach(el => {
+        el.classList.toggle('active', el.dataset.cat === cat)
       })
       document.querySelectorAll('.nav-item').forEach(el => {
         el.classList.toggle('active', el.dataset.cat === cat)
@@ -1562,7 +1573,8 @@
         if (!res.ok) throw new Error('HTTP ' + res.status)
         allProducts = await res.json()
         computeBrands()
-        renderBrandFilterBar()
+        renderBrandGrid()
+        renderCategoryFilterBar()
         renderHits(allProducts)
         renderGrid()
       } catch {
