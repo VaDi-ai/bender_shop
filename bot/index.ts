@@ -1966,7 +1966,7 @@ setInterval(async () => {
                 `📋 ${staleItems.length} позиций без обновлённых цен.\n\nИспользуйте меню «💰 Цены → Из сообщения поставщика» чтобы начать обновлять цены через бота.`,
                 Markup.inlineKeyboard([[Markup.button.callback('⏭️ Понятно', 'stale:skip')]]),
               )
-            } catch { /* ignore */ }
+            } catch (err) { console.error('[Stale] Failed to notify admin:', err instanceof Error ? err.message : err) }
           }
         } else {
           ;(globalThis as any).__staleItems = staleItems
@@ -1990,7 +1990,7 @@ setInterval(async () => {
                 await bot.telegram.sendDocument(adminId, {
                   source: buffer,
                   filename: `stale-prices-${new Date().toISOString().slice(0, 10)}.txt`,
-                }, { caption: `📋 ${staleItems.length} позиций с устаревшими ценами` })
+                }, { caption: `📋 ${staleItems.length} позиций — переслать поставщикам` })
               }
             } catch (err) { console.error('[Stale] Notify error:', err instanceof Error ? err.message : err) }
           }
