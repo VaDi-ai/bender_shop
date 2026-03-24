@@ -636,6 +636,13 @@ function getAttributes(row: SheetRow): Record<string, string> {
     if (!attrs[key] && parsed[key]) attrs[key] = parsed[key]
   }
 
+  // Capitalize attribute values (skip technical: "256GB", "eSIM", "Wi-Fi", "LTE", "USB-C")
+  for (const [key, val] of Object.entries(attrs)) {
+    if (!val || typeof val !== 'string') continue
+    if (/^\d|^[A-Z]{2,}|^Wi-Fi|^eSIM|^USB/i.test(val)) continue
+    attrs[key] = val.charAt(0).toUpperCase() + val.slice(1)
+  }
+
   return attrs
 }
 
