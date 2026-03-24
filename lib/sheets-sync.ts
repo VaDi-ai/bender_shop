@@ -528,7 +528,21 @@ function getAttributes(row: SheetRow): Record<string, string> {
     }
     attrs['Цвет'] = colorVal
   }
-  if (row.memory) attrs['Память'] = row.memory
+  if (row.memory) {
+    const memStr = row.memory.toString().trim()
+    // Формат "X/Y" или "X/YGB" — X=RAM, Y=Storage
+    const slashMatch = memStr.match(/^(\d+)\s*\/\s*(\d+)\s*(GB|TB|Gb|gb|Tb|tb)?$/i)
+    if (slashMatch) {
+      const ram = slashMatch[1]
+      const storage = slashMatch[2]
+      const unit = (slashMatch[3] || 'GB').toUpperCase()
+      if (!attrs['RAM']) attrs['RAM'] = ram + 'GB'
+      const storageNum = parseInt(storage, 10)
+      attrs['Память'] = storageNum >= 1024 ? Math.round(storageNum / 1024) + 'TB' : storage + unit
+    } else {
+      attrs['Память'] = memStr
+    }
+  }
   // Для ноутбуков размер = экран, не дублировать
   const isLaptop = row.category === 'Ноутбуки' || /macbook/i.test(row.fullName)
   if (isLaptop && row.size) {
