@@ -1183,6 +1183,7 @@
       const def = 'BENDER SHOP // ТЕХНИКА. СТИЛЬ. БЕНДЕР. // ЛУЧШИЙ МАГАЗИН ТЕХНИКИ //'
       try {
         const res  = await fetch('/api/settings?key=marquee&_=' + Date.now())
+        if (!res.ok) throw new Error('HTTP ' + res.status)
         const json = await res.json()
         const text = (json.value && json.value.trim()) ? json.value : def
         const track = document.getElementById('marqueeTrack')
@@ -1200,6 +1201,7 @@
 
       try {
         const res = await fetch('/api/hero-banners')
+        if (!res.ok) throw new Error('HTTP ' + res.status)
         heroSlides = await res.json()
       } catch { heroSlides = [] }
 
@@ -1262,6 +1264,7 @@
     async function loadCategories() {
       try {
         const res  = await fetch('/api/categories')
+        if (!res.ok) throw new Error('HTTP ' + res.status)
         categories = await res.json()
         renderCategoryGrid(categories)
         renderNavList()
@@ -1522,6 +1525,7 @@
       try {
         const url  = cat ? `/api/products?category=${encodeURIComponent(cat)}` : '/api/products'
         const res  = await fetch(url)
+        if (!res.ok) throw new Error('HTTP ' + res.status)
         allProducts = await res.json()
         computeBrands()
         renderBrandFilterBar()
@@ -2293,6 +2297,7 @@
     async function checkCacheVersion() {
       try {
         const res = await fetch('/api/cache-version?_=' + Date.now())
+        if (!res.ok) throw new Error('HTTP ' + res.status)
         const json = await res.json()
         const serverVersion = json.version ?? '0'
         const localVersion  = localStorage.getItem('cache_v') ?? ''

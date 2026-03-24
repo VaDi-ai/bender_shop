@@ -26,6 +26,9 @@ import { handleInstagramVerification } from '../webhooks/instagram'
 import { DeliveryType } from '../generated/prisma/client'
 import { Decimal } from '@prisma/client/runtime/client'
 
+// BigInt → JSON serialization (avitoItemId etc.)
+;(BigInt.prototype as any).toJSON = function () { return Number(this) }
+
 if (!process.env.BOT_TOKEN) throw new Error('BOT_TOKEN is required')
 const BOT_TOKEN = process.env.BOT_TOKEN
 const PORT = Number(process.env.PORT || process.env.API_PORT || 3000)
@@ -890,7 +893,7 @@ export function startApiServer(bot?: Telegraf): void {
 
     const phoneDigits = (customerPhone || '').replace(/\D/g, '')
     if (phoneDigits.length !== 11 || !phoneDigits.startsWith('7')) {
-      console.log('[ORDER] Validation failed: invalid phone:', customerPhone, '→ digits:', phoneDigits)
+      console.log('[ORDER] Validation failed: invalid phone format, digits:', phoneDigits.length)
       res.status(400).json({ error: 'Неверный формат телефона. Используйте +7 (XXX) XXX-XX-XX' })
       return
     }
