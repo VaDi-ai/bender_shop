@@ -23,6 +23,62 @@ export async function saveTrends(data: TrendsData): Promise<void> {
   await setApiKeyValue('trends_data', JSON.stringify(data))
 }
 
+/**
+ * Apply featured products from AI trends to DB with fuzzy matching + fallback.
+ * Returns the number of products marked as featured.
+ */
+export async function applyFeaturedProducts(names: string[]): Promise<number> {
+  await prisma.product.updateMany({ where: { isFeatured: true }, data: { isFeatured: false } })
+
+  let count = 0
+  for (const name of names.slice(0, 10)) {
+    // Exact match
+    let p = await prisma.product.findFirst({
+      where: { name: { equals: name, mode: 'insensitive' }, isAvailable: true },
+    })
+    // Partial match
+    if (!p) {
+      p = await prisma.product.findFirst({
+        where: { name: { contains: name, mode: 'insensitive' }, isAvailable: true },
+      })
+    }
+    // First 3 words match
+    if (!p) {
+      const shortName = name.split(' ').slice(0, 3).join(' ')
+      if (shortName.length >= 5) {
+        p = await prisma.product.findFirst({
+          where: { name: { contains: shortName, mode: 'insensitive' }, isAvailable: true },
+        })
+      }
+    }
+    if (p) {
+      await prisma.product.update({ where: { id: p.id }, data: { isFeatured: true } })
+      count++
+    }
+  }
+
+  // Fallback: if fewer than 5 matched, fill from popular product names
+  if (count < 5) {
+    const FALLBACK_HITS = [
+      'Iphone 17 Pro Max', 'Samsung Galaxy S26 Ultra', 'Macbook Air M5',
+      'Airpods Pro 3', 'Apple Watch Ultra', 'Ipad Pro',
+      'Sony Playstation 5', 'Samsung Galaxy S26', 'Iphone 17 Pro', 'Mac Mini M4',
+    ]
+    for (const name of FALLBACK_HITS) {
+      if (count >= 10) break
+      const p = await prisma.product.findFirst({
+        where: { name: { contains: name, mode: 'insensitive' }, isFeatured: false, isAvailable: true },
+      })
+      if (p) {
+        await prisma.product.update({ where: { id: p.id }, data: { isFeatured: true } })
+        count++
+      }
+    }
+  }
+
+  return count
+}
+
 export async function fetchTrendsFromAI(): Promise<TrendsData | null> {
   const dbKey = await getApiKeyValue('openrouter_key')
   const apiKey = dbKey || process.env.OPENROUTER_API_KEY

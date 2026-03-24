@@ -674,19 +674,12 @@ bot.command('hits', async (ctx) => {
     // /hits auto
     if (sub === 'auto') {
       await ctx.reply('⏳ AI анализирует тренды...')
-      const { fetchTrendsFromAI, saveTrends } = await import('../lib/trends')
+      const { fetchTrendsFromAI, saveTrends, applyFeaturedProducts } = await import('../lib/trends')
       const trends = await fetchTrendsFromAI()
       if (!trends) { await ctx.reply('❌ Не удалось получить тренды от AI'); return }
       await saveTrends(trends)
 
-      await prisma.product.updateMany({ where: { isFeatured: true }, data: { isFeatured: false } })
-      let count = 0
-      for (const name of trends.featuredProducts.slice(0, 10)) {
-        const p = await prisma.product.findFirst({
-          where: { isAvailable: true, name: { contains: name, mode: 'insensitive' } },
-        })
-        if (p) { await prisma.product.update({ where: { id: p.id }, data: { isFeatured: true } }); count++ }
-      }
+      const count = await applyFeaturedProducts(trends.featuredProducts)
       await ctx.reply([
         `✅ AI обновил хиты (${count} товаров)`,
         '',
@@ -713,18 +706,11 @@ bot.command('hits', async (ctx) => {
 bot.action('hits:refresh', async (ctx) => {
   try { await ctx.answerCbQuery('⏳ Запускаю AI...') } catch { /* ignore */ }
   try {
-    const { fetchTrendsFromAI, saveTrends } = await import('../lib/trends')
+    const { fetchTrendsFromAI, saveTrends, applyFeaturedProducts } = await import('../lib/trends')
     const trends = await fetchTrendsFromAI()
     if (!trends) { await ctx.reply('❌ AI недоступен'); return }
     await saveTrends(trends)
-    await prisma.product.updateMany({ where: { isFeatured: true }, data: { isFeatured: false } })
-    let count = 0
-    for (const name of trends.featuredProducts.slice(0, 10)) {
-      const p = await prisma.product.findFirst({
-        where: { isAvailable: true, name: { contains: name, mode: 'insensitive' } },
-      })
-      if (p) { await prisma.product.update({ where: { id: p.id }, data: { isFeatured: true } }); count++ }
-    }
+    const count = await applyFeaturedProducts(trends.featuredProducts)
     await ctx.reply(`✅ AI обновил хиты (${count})\n💡 ${trends.reasoning}`)
   } catch (err) {
     await ctx.reply(`❌ ${err instanceof Error ? err.message : err}`)
@@ -1753,7 +1739,7 @@ setInterval(async () => {
 
     // AI-анализ трендов + обновление хитов
     try {
-      const { fetchTrendsFromAI, saveTrends, getCurrentTrends } = await import('../lib/trends')
+      const { fetchTrendsFromAI, saveTrends, getCurrentTrends, applyFeaturedProducts } = await import('../lib/trends')
       const newTrends = await fetchTrendsFromAI()
       if (newTrends) {
         const oldTrends = await getCurrentTrends()
@@ -1780,18 +1766,7 @@ setInterval(async () => {
 
         // Обновить блок "Хит продаж" (isFeatured)
         if (newTrends.featuredProducts && newTrends.featuredProducts.length > 0) {
-          await prisma.product.updateMany({ where: { isFeatured: true }, data: { isFeatured: false } })
-
-          let featuredCount = 0
-          for (const name of newTrends.featuredProducts.slice(0, 10)) {
-            const product = await prisma.product.findFirst({
-              where: { isAvailable: true, name: { contains: name, mode: 'insensitive' } },
-            })
-            if (product) {
-              await prisma.product.update({ where: { id: product.id }, data: { isFeatured: true } })
-              featuredCount++
-            }
-          }
+          const featuredCount = await applyFeaturedProducts(newTrends.featuredProducts)
 
           if (featuredCount > 0) {
             const featuredList = newTrends.featuredProducts.slice(0, featuredCount).join('\n• ')
