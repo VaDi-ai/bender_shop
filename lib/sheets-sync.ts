@@ -658,7 +658,7 @@ const M_KEEP_WORDS = new Set([
 /**
  * Извлекает базовое имя продукта из полного названия.
  */
-function extractProductName(fullName: string, brand: string): string {
+export function extractProductName(fullName: string, brand: string): string {
   let name = fullName
 
   // ─── Step 0: Normalize ───
