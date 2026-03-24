@@ -29,30 +29,47 @@ scripts/      — Утилиты (backup, restore, optimize)
 ## Быстрый старт
 
 ```bash
-# 1. Клонировать
-git clone <repo-url> && cd bender-shop
-
-# 2. Установить зависимости
+# Установка
 npm install
 
-# 3. Настроить переменные окружения
+# Настройка окружения
 cp .env.example .env
-# Заполнить .env (см. .env.example для описания)
+# Заполнить все переменные
 
-# 4. Применить схему БД
-npx prisma db push && npx prisma generate
+# Миграция БД
+npx prisma migrate deploy
 
-# 5. Запустить
-npx ts-node bot/index.ts
+# Dev
+npm run dev
+
+# Production
+npm run build && npm start
 ```
 
 ## Переменные окружения
 
 См. [.env.example](.env.example)
 
+## Ключевые команды бота
+
+| Команда | Описание |
+|---------|----------|
+| /start | Главное меню |
+| /sync | Синхронизация Google Sheets |
+| /hits | Управление хитами продаж |
+| /avito | Управление Avito |
+| /avito map | Маппинг Avito ↔ Sheets |
+
+## Ежедневные процессы
+
+- **Авто-синхронизация** Sheets → БД (при деплое + по расписанию)
+- **Утренняя сводка** устаревших цен (11:00 МСК)
+- **AI-тренды** — обновление хитов (11:00 МСК)
+- **Ежедневный бэкап** БД
+
 ## Деплой
 
-Railway: автодеплой при пуше в master.
+Автодеплой из master в Railway.
 
 ## Бэкап / Восстановление
 
