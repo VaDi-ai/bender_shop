@@ -1153,6 +1153,9 @@ export async function checkStalePrices(): Promise<StaleItem[]> {
       const dateStr = (row[STALE_DATE_COL] ?? '').toString().trim()
 
         if (!name || !price) continue
+        // Пропускаем категории не зависящие от курса
+        const category = (row[3] ?? '').toString().trim()
+        if (category === 'Услуги' || category === 'Аксессуары') continue
 
         let isStale = false
         if (!dateStr) {

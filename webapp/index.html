@@ -405,7 +405,7 @@
 
     /* ── Brand filter bar ─────────────────────────────────────────────────── */
     .brand-filter-wrap { border-bottom: 1px solid #1a1a1a; }
-    .brand-filter-label { padding: 10px 16px 0; font-size: 10px; color: #555; letter-spacing: 2px; font-family: 'JetBrains Mono', monospace; }
+    .brand-filter-label { padding: 10px 16px 0; font-size: 10px; color: #555; letter-spacing: 2px; font-family: 'JetBrains Mono', monospace; text-transform: uppercase; }
     .brand-filter-bar {
       display: flex; overflow-x: auto; gap: 8px;
       padding: 8px 16px 12px;
@@ -478,6 +478,8 @@
     .product-hidden { display: none !important; }
     .show-more-btn { display: block; width: calc(100% - 32px); margin: 16px auto; padding: 14px; background: transparent; border: 1px solid #2a2a2a; color: var(--accent); font-family: 'JetBrains Mono', monospace; font-size: 12px; letter-spacing: 2px; cursor: pointer; text-transform: uppercase; transition: border-color 0.2s; }
     .show-more-btn:hover { border-color: var(--accent); }
+    .scroll-top-btn { position: fixed; bottom: 80px; right: 16px; z-index: 400; width: 40px; height: 40px; border-radius: 50%; background: rgba(10,10,10,0.85); border: 1px solid #2a2a2a; color: var(--accent); cursor: pointer; display: none; align-items: center; justify-content: center; backdrop-filter: blur(8px); transition: opacity 0.2s, border-color 0.2s; }
+    .scroll-top-btn:hover { border-color: var(--accent); }
 
     .box-button { cursor: pointer; border: 4px solid #333; background-color: #555; padding-bottom: 8px; transition: 0.1s ease-in-out; user-select: none; width: 100%; display: block; text-align: center; }
     .box-button .button { background-color: #dddddd; border: 4px solid #ffffff; padding: 10px 16px; width: 100%; display: flex; align-items: center; justify-content: center; box-sizing: border-box; }
@@ -958,6 +960,13 @@
       </div>
     </div>
 
+    <div class="brand-filter-wrap" id="brandSection">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 16px 0;">
+        <div class="brand-filter-label" style="padding:0;">БРЕНДЫ</div>
+      </div>
+      <div class="brand-filter-bar" id="brandFilterBar"></div>
+    </div>
+
     <div class="cat-grid-section" id="catGridSection">
       <div class="section-label" style="padding: 0 16px;">КАТЕГОРИИ</div>
       <div class="cat-grid" id="catGrid"></div>
@@ -987,26 +996,22 @@
         <h2 class="catalog-title" id="catalogTitle">КАТАЛОГ</h2>
         <p class="catalog-sub" id="catalogSub">Все товары</p>
       </div>
-      <div class="brand-filter-wrap">
-        <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 16px 0;">
-          <div class="brand-filter-label" style="padding:0;">БРЕНДЫ</div>
-          <div class="sort-wrap" id="sortWrap">
-            <button class="sort-btn" onclick="toggleSortDropdown()">
-              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h10M4 18h7"/></svg>
-              <span id="sortLabel">По умолчанию</span>
-              <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
-            </button>
-            <div class="sort-dropdown" id="sortDropdown">
-              <div class="sort-option active" data-sort="default" onclick="setSort('default')">По умолчанию</div>
-              <div class="sort-option" data-sort="price_asc" onclick="setSort('price_asc')">Цена: сначала дешёвые</div>
-              <div class="sort-option" data-sort="price_desc" onclick="setSort('price_desc')">Цена: сначала дорогие</div>
-              <div class="sort-option" data-sort="popular" onclick="setSort('popular')">Популярные</div>
-              <div class="sort-option" data-sort="newest" onclick="setSort('newest')">Новинки</div>
-              <div class="sort-option" data-sort="name" onclick="setSort('name')">По имени А-Я</div>
-            </div>
+      <div style="display:flex;align-items:center;justify-content:flex-end;padding:8px 16px 0;">
+        <div class="sort-wrap" id="sortWrap">
+          <button class="sort-btn" onclick="toggleSortDropdown()">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h10M4 18h7"/></svg>
+            <span id="sortLabel">По умолчанию</span>
+            <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+          </button>
+          <div class="sort-dropdown" id="sortDropdown">
+            <div class="sort-option active" data-sort="default" onclick="setSort('default')">По умолчанию</div>
+            <div class="sort-option" data-sort="price_asc" onclick="setSort('price_asc')">Цена: сначала дешёвые</div>
+            <div class="sort-option" data-sort="price_desc" onclick="setSort('price_desc')">Цена: сначала дорогие</div>
+            <div class="sort-option" data-sort="popular" onclick="setSort('popular')">Популярные</div>
+            <div class="sort-option" data-sort="newest" onclick="setSort('newest')">Новинки</div>
+            <div class="sort-option" data-sort="name" onclick="setSort('name')">По имени А-Я</div>
           </div>
         </div>
-        <div class="brand-filter-bar" id="brandFilterBar"></div>
       </div>
       <div class="products" id="grid">
         <div class="state-msg">Загрузка…</div>
@@ -2604,6 +2609,11 @@
     }
 
     // ── Init ──────────────────────────────────────────────────────────────────
+    window.addEventListener('scroll', () => {
+      const btn = document.getElementById('scrollTopBtn')
+      if (btn) btn.style.display = window.scrollY > 400 ? 'flex' : 'none'
+    })
+
     checkCacheVersion()
     loadMarquee()
     loadHeroSlider()
@@ -2652,6 +2662,10 @@
       </div>
     </div>
   </div>
+
+  <button class="scroll-top-btn" id="scrollTopBtn" onclick="window.scrollTo({top:0,behavior:'smooth'})" aria-label="Наверх">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="18 15 12 9 6 15"/></svg>
+  </button>
 
 </body>
 </html>

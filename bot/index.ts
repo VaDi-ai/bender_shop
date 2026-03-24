@@ -1968,8 +1968,17 @@ setInterval(async () => {
               [Markup.button.callback('💬 «Уточняйте у менеджера»', 'stale:ask_manager')],
               [Markup.button.callback('⏭️ Оставить как есть', 'stale:skip')],
             ]))
-            await bot.telegram.sendMessage(adminId, formatStaleSupplierMessage(staleItems))
-          } catch { /* ignore */ }
+            const fullMsg = formatStaleSupplierMessage(staleItems)
+            if (fullMsg.length <= 4000) {
+              await bot.telegram.sendMessage(adminId, fullMsg)
+            } else {
+              const buffer = Buffer.from(fullMsg, 'utf-8')
+              await bot.telegram.sendDocument(adminId, {
+                source: buffer,
+                filename: `stale-prices-${new Date().toISOString().slice(0, 10)}.txt`,
+              }, { caption: `📋 ${staleItems.length} позиций с устаревшими ценами` })
+            }
+          } catch (err) { console.error('[Stale] Notify error:', err instanceof Error ? err.message : err) }
         }
       }
     } catch (err) {
