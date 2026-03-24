@@ -1955,30 +1955,45 @@ setInterval(async () => {
     try {
       const staleItems = await checkStalePrices()
       if (staleItems.length > 0) {
-        ;(globalThis as any).__staleItems = staleItems
-        for (const adminId of ADMIN_IDS) {
-          try {
-            await bot.telegram.sendMessage(adminId, [
-              `⚠️ ВНИМАНИЕ: ${staleItems.length} позиций с устаревшими ценами (>6 часов)`,
-              '',
-              'Что делать с этими позициями пока цены не обновлены?',
-            ].join('\n'),
-            Markup.inlineKeyboard([
-              [Markup.button.callback('🔴 Убрать с витрины', 'stale:hide')],
-              [Markup.button.callback('💬 «Уточняйте у менеджера»', 'stale:ask_manager')],
-              [Markup.button.callback('⏭️ Оставить как есть', 'stale:skip')],
-            ]))
-            const fullMsg = formatStaleSupplierMessage(staleItems)
-            if (fullMsg.length <= 4000) {
-              await bot.telegram.sendMessage(adminId, fullMsg)
-            } else {
-              const buffer = Buffer.from(fullMsg, 'utf-8')
-              await bot.telegram.sendDocument(adminId, {
-                source: buffer,
-                filename: `stale-prices-${new Date().toISOString().slice(0, 10)}.txt`,
-              }, { caption: `📋 ${staleItems.length} позиций с устаревшими ценами` })
-            }
-          } catch (err) { console.error('[Stale] Notify error:', err instanceof Error ? err.message : err) }
+        const totalProducts = await prisma.product.count({ where: { isAvailable: true } })
+        const staleRatio = totalProducts > 0 ? staleItems.length / totalProducts : 0
+
+        if (staleRatio > 0.9) {
+          // >90% без обновлённых цен — бот ещё не используется для ценообразования
+          for (const adminId of ADMIN_IDS) {
+            try {
+              await bot.telegram.sendMessage(adminId,
+                `📋 ${staleItems.length} позиций без обновлённых цен.\n\nИспользуйте меню «💰 Цены → Из сообщения поставщика» чтобы начать обновлять цены через бота.`,
+                Markup.inlineKeyboard([[Markup.button.callback('⏭️ Понятно', 'stale:skip')]]),
+              )
+            } catch { /* ignore */ }
+          }
+        } else {
+          ;(globalThis as any).__staleItems = staleItems
+          for (const adminId of ADMIN_IDS) {
+            try {
+              await bot.telegram.sendMessage(adminId, [
+                `⚠️ ВНИМАНИЕ: ${staleItems.length} позиций с устаревшими ценами (>6 часов)`,
+                '',
+                'Что делать с этими позициями пока цены не обновлены?',
+              ].join('\n'),
+              Markup.inlineKeyboard([
+                [Markup.button.callback('🔴 Убрать с витрины', 'stale:hide')],
+                [Markup.button.callback('💬 «Уточняйте у менеджера»', 'stale:ask_manager')],
+                [Markup.button.callback('⏭️ Оставить как есть', 'stale:skip')],
+              ]))
+              const fullMsg = formatStaleSupplierMessage(staleItems)
+              if (fullMsg.length <= 4000) {
+                await bot.telegram.sendMessage(adminId, fullMsg)
+              } else {
+                const buffer = Buffer.from(fullMsg, 'utf-8')
+                await bot.telegram.sendDocument(adminId, {
+                  source: buffer,
+                  filename: `stale-prices-${new Date().toISOString().slice(0, 10)}.txt`,
+                }, { caption: `📋 ${staleItems.length} позиций с устаревшими ценами` })
+              }
+            } catch (err) { console.error('[Stale] Notify error:', err instanceof Error ? err.message : err) }
+          }
         }
       }
     } catch (err) {
