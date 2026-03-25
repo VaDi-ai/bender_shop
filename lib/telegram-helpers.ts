@@ -54,7 +54,7 @@ export async function sendToTopic(
   threadId: number,
   text: string,
 ): Promise<void> {
-  await (telegram.sendMessage as any)(chatId, text, { message_thread_id: threadId })
+  await telegram.sendMessage(chatId, text, { message_thread_id: threadId })
 }
 
 export async function sendToTopicWithMarkup(
@@ -64,5 +64,5 @@ export async function sendToTopicWithMarkup(
   text: string,
   reply_markup: any,
 ): Promise<void> {
-  await (telegram.sendMessage as any)(chatId, text, { message_thread_id: threadId, reply_markup })
+  await telegram.sendMessage(chatId, text, { message_thread_id: threadId, reply_markup })
 }

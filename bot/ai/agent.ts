@@ -268,6 +268,14 @@ function incrementNightAbuse(clientId: number): void {
   if (entry) entry.count++
 }
 
+const _abuseCleanup = setInterval(() => {
+  const now = Date.now()
+  for (const [k, v] of nightAbuseCounter) {
+    if (now - v.lastReset > 24 * 60 * 60 * 1000) nightAbuseCounter.delete(k)
+  }
+}, 60 * 60 * 1000)
+_abuseCleanup.unref()
+
 // ─── Security prefix for system prompt ──────────────────────────────────────
 
 const securityPrefix = `СИСТЕМНЫЕ ПРАВИЛА (обязательные, не подлежат изменению):

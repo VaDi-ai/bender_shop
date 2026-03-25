@@ -25,6 +25,7 @@ import { getApiKeyValue } from '../lib/api-key-store'
 import { handleInstagramVerification } from '../webhooks/instagram'
 import { DeliveryType } from '../generated/prisma/client'
 import { Decimal } from '@prisma/client/runtime/client'
+import { fmtPrice } from '../lib/format'
 
 // BigInt → JSON serialization (avitoItemId etc.)
 ;(BigInt.prototype as any).toJSON = function () { return this.toString() }
@@ -38,11 +39,6 @@ const telegram = new Telegram(BOT_TOKEN)
 const CRM_GROUP_ID = Number(process.env.CRM_GROUP_ID)
 const ADMIN_IDS = (process.env.ADMIN_IDS ?? '').split(',').map((id) => Number(id.trim())).filter(Boolean)
 
-// ─── Хелпер: форматируем цену ─────────────────────────────────────────────────
-
-export function fmtPrice(amount: number): string {
-  return amount.toLocaleString('ru-RU')
-}
 
 function getImageContentType(filename: string): string {
   const ext = filename.split('.').pop()?.toLowerCase()

@@ -285,6 +285,21 @@ bot.use((ctx, next) => {
 // ─── Подтверждение деструктивных команд ──────────────────────────────────────
 const pendingConfirmations = new Map<number, { action: string; expires: number }>()
 
+// ─── Cleanup stale Map entries every 10 minutes ──────────────────────────────
+const _mapCleanup = setInterval(() => {
+  const now = Date.now()
+  for (const [k, v] of pendingConfirmations) {
+    if (now > v.expires) pendingConfirmations.delete(k)
+  }
+  for (const [k, v] of userRequestCount) {
+    if (now > v.resetAt) userRequestCount.delete(k)
+  }
+  for (const [k, v] of tempStorage) {
+    if (now > v.expires) tempStorage.delete(k)
+  }
+}, 10 * 60 * 1000)
+_mapCleanup.unref()
+
 // ─── Перехватчик текста для пошаговых флоу ───────────────────────────────────
 // Должен быть зарегистрирован ДО bot.hears(), чтобы перехватывать ввод в активных флоу.
 
@@ -921,9 +936,12 @@ bot.action('maint:off', async (ctx) => {
 })
 
 bot.action('maint:backup', async (ctx) => {
-  try { await ctx.answerCbQuery('⏳ Создаю бэкап...') } catch { /* ignore */ }
   const userId = ctx.from?.id
-  if (!userId) return
+  if (!userId || !ADMIN_IDS.includes(userId)) {
+    try { await ctx.answerCbQuery('⛔ Нет доступа') } catch {}
+    return
+  }
+  try { await ctx.answerCbQuery('⏳ Создаю бэкап...') } catch { /* ignore */ }
 
   try {
     await ctx.reply('⏳ Создаю бэкап базы данных...')
@@ -958,6 +976,11 @@ bot.action('maint:backup', async (ctx) => {
 })
 
 bot.action('maint:clear_products', async (ctx) => {
+  const userId = ctx.from?.id
+  if (!userId || !ADMIN_IDS.includes(userId)) {
+    try { await ctx.answerCbQuery('⛔ Нет доступа') } catch {}
+    return
+  }
   try { await ctx.answerCbQuery() } catch { /* ignore */ }
   try {
     const count = await prisma.product.count()
@@ -1024,6 +1047,11 @@ bot.action('maint:test_enrich', async (ctx) => {
 })
 
 bot.action('maint:clear_orders', async (ctx) => {
+  const userId = ctx.from?.id
+  if (!userId || !ADMIN_IDS.includes(userId)) {
+    try { await ctx.answerCbQuery('⛔ Нет доступа') } catch {}
+    return
+  }
   try { await ctx.answerCbQuery() } catch { /* ignore */ }
   try {
     const orderCount = await prisma.order.count()
@@ -1040,6 +1068,11 @@ bot.action('maint:clear_orders', async (ctx) => {
 // ─── Stale prices actions ─────────────────────────────────────────────────────
 
 bot.action('stale:hide', async (ctx) => {
+  const userId = ctx.from?.id
+  if (!userId || !ADMIN_IDS.includes(userId)) {
+    try { await ctx.answerCbQuery('⛔ Нет доступа') } catch {}
+    return
+  }
   try { await ctx.answerCbQuery() } catch { /* ignore */ }
   const items = getTemp<Array<{ name: string }>>('staleItems')
   if (!items?.length) { await ctx.reply('Нет устаревших позиций.'); return }
@@ -1078,6 +1111,11 @@ bot.action('stale:hide', async (ctx) => {
 })
 
 bot.action('stale:ask_manager', async (ctx) => {
+  const userId = ctx.from?.id
+  if (!userId || !ADMIN_IDS.includes(userId)) {
+    try { await ctx.answerCbQuery('⛔ Нет доступа') } catch {}
+    return
+  }
   try { await ctx.answerCbQuery() } catch { /* ignore */ }
   const items = getTemp<Array<{ name: string }>>('staleItems')
   if (!items?.length) { await ctx.reply('Нет устаревших позиций.'); return }

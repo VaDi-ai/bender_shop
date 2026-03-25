@@ -296,20 +296,20 @@ export async function mapAvitoToProducts(): Promise<AvitoMapping[]> {
 
 /** Применить маппинг — записать avitoItemId + avitoEnabled в Product */
 export async function applyAvitoMapping(mappings: AvitoMapping[]): Promise<number> {
-  let applied = 0
-  for (const m of mappings) {
-    if (m.productId && m.confidence !== 'none') {
-      await prisma.product.update({
-        where: { id: m.productId },
-        data: {
-          avitoItemId: BigInt(m.avitoId),
-          avitoEnabled: true,
-        },
-      })
-      applied++
-    }
+  const updates = mappings
+    .filter(m => m.productId && m.confidence !== 'none')
+    .map(m => prisma.product.update({
+      where: { id: m.productId! },
+      data: { avitoItemId: BigInt(m.avitoId), avitoEnabled: true },
+    }))
+
+  if (updates.length === 0) return 0
+
+  const BATCH = 10
+  for (let i = 0; i < updates.length; i += BATCH) {
+    await prisma.$transaction(updates.slice(i, i + BATCH))
   }
-  return applied
+  return updates.length
 }
 
 /** Синхронизировать цены БД → Avito (МГНОВЕННО через REST API) */

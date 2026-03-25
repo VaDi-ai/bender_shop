@@ -131,7 +131,7 @@ model Client {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  segment      Segment?      @relation(fields: [segmentId], references: [id])
+  segment      Segment?      @relation(fields: [segmentId], references: [id], onDelete: SetNull)
   messages     Message[]
   tags         Tag[]
   tasks        Task[]
@@ -172,6 +172,7 @@ model Tag {
 
   @@unique([clientId, name])
   @@index([name])
+  @@index([clientId])
 }
 
 model Task {
@@ -238,7 +239,7 @@ model Product {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  category     Category?      @relation(fields: [categoryId], references: [id])
+  category     Category?      @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   reservations Reservation[]
   variants     ProductVariant[]
 
@@ -450,7 +451,6 @@ model CurrencyRate {
   previousRate Decimal? @db.Decimal(12, 4)
   updatedAt    DateTime @updatedAt
 
-  @@index([currency])
 }
 
 model Supplier {
@@ -519,4 +519,5 @@ model PriceAlias {
 
   @@index([alias])
   @@index([productId])
+  @@index([variantId])
 }
