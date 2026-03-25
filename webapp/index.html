@@ -1795,7 +1795,11 @@
         if (p.attributes && typeof p.attributes === 'object') {
           const attrKeys = Object.keys(p.attributes)
           if (attrKeys.length) {
-            const key  = attrKeys[0]
+            const ATTR_PRIORITY = ['Память', 'Цвет', 'Экран', 'Размер', 'RAM', 'Связь', 'SIM', 'Чип']
+            let key = attrKeys[0]
+            for (const preferred of ATTR_PRIORITY) {
+              if (p.attributes[preferred] && Array.isArray(p.attributes[preferred]) && p.attributes[preferred].length > 0) { key = preferred; break }
+            }
             const vals = p.attributes[key]
             if (Array.isArray(vals) && vals.length) {
               chipsHtml = `<div class="product-attr-chips">${vals.slice(0, 6).map(v => {
