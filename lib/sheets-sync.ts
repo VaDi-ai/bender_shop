@@ -10,6 +10,16 @@ import { Decimal } from '@prisma/client/runtime/client'
 import { prisma } from './prisma'
 import { readSheet, getSheetNames } from './google-sheets'
 
+function capitalizeAttr(val: string): string {
+  if (!val) return val
+  const t = val.trim()
+  if (!t) return t
+  if (/^\d/.test(t)) return t
+  if (/^[A-Z]{2,}/.test(t)) return t
+  if (/^eSIM|^Wi-Fi|^USB|^iOS|^macOS|^iP/i.test(t)) return t
+  return t.charAt(0).toUpperCase() + t.slice(1)
+}
+
 const DEFAULT_QTY = parseInt(process.env.DEFAULT_STOCK_QTY || '3', 10) // если «В наличие» пусто
 
 // Column letters for writeback (supplier, date, description, specs)
@@ -604,7 +614,7 @@ function getAttributes(row: SheetRow): Record<string, string> {
         colorVal = lastWord
       }
     }
-    attrs['Цвет'] = colorVal
+    attrs['Цвет'] = capitalizeAttr(colorVal)
   }
   if (row.memory) {
     const memStr = row.memory.toString().trim()
@@ -633,14 +643,10 @@ function getAttributes(row: SheetRow): Record<string, string> {
   // 2. Fallback: парсинг из названия (если колонка пуста)
   const parsed = parseAttributes(row.fullName, row.brand, row.country)
   for (const key of ['Цвет', 'Память', 'RAM', 'Размер', 'SIM', 'Связь', 'Чип', 'Ремешок', 'Комплектация', 'Экран', 'Серия', 'Диагональ', 'Разъём', 'Touch ID', 'Дисплей', 'Ревизия', 'Умный дом', 'AI', 'Материал', 'Состояние', 'Линзы', 'Крепление', 'Шумоподавление'] as const) {
-    if (!attrs[key] && parsed[key]) attrs[key] = parsed[key]
-  }
-
-  // Capitalize attribute values (skip technical: "256GB", "eSIM", "Wi-Fi", "LTE", "USB-C")
-  for (const [key, val] of Object.entries(attrs)) {
-    if (!val || typeof val !== 'string') continue
-    if (/^\d|^[A-Z]{2,}|^Wi-Fi|^eSIM|^USB/i.test(val)) continue
-    attrs[key] = val.charAt(0).toUpperCase() + val.slice(1)
+    if (!attrs[key] && parsed[key]) {
+      const textAttrs = ['Цвет', 'Комплектация', 'Материал', 'Состояние', 'Ремешок', 'Линзы']
+      attrs[key] = textAttrs.includes(key) ? capitalizeAttr(parsed[key]) : parsed[key]
+    }
   }
 
   return attrs
