@@ -52,10 +52,27 @@ export async function handleSupplierMessage(
     let savedCount = 0
 
     for (const item of parsed) {
+      // Проверяем алиас перед сохранением
+      const alias = await prisma.priceAlias.findUnique({
+        where: { alias: item.model.toLowerCase().trim() },
+      })
+
+      if (alias?.isIgnored) continue
+
+      // Если алиас привязан к товару — подставить название товара
+      let model = item.model
+      if (alias?.productId) {
+        const linkedProduct = await prisma.product.findUnique({
+          where: { id: alias.productId },
+          select: { name: true },
+        })
+        if (linkedProduct) model = linkedProduct.name
+      }
+
       await prisma.supplierPrice.create({
         data: {
           supplierId: supplier.id,
-          model: item.model,
+          model,
           storage: item.storage ?? null,
           color: item.color ?? null,
           simType: item.simType ?? null,

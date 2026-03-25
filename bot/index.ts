@@ -603,6 +603,145 @@ bot.command('sync', async (ctx) => {
   }
 })
 
+// ─── 🔗 Алиасы (PriceAlias) ───────────────────────────────────────────────────
+
+bot.command('alias', async (ctx) => {
+  const userId = ctx.from?.id
+  if (!userId || !ADMIN_IDS.includes(userId)) return
+
+  const args = ctx.message.text.split(/\s+/).slice(1)
+  const sub = args[0]?.toLowerCase()
+
+  if (!sub) {
+    const aliases = await prisma.priceAlias.findMany({
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+    })
+
+    if (!aliases.length) {
+      await ctx.reply(
+        '📝 Алиасов нет.\n\n' +
+        'Команды:\n' +
+        '/alias add <алиас> → <товар> — привязать к товару\n' +
+        '/alias ignore <текст> — игнорировать при парсинге\n' +
+        '/alias remove <алиас> — удалить\n\n' +
+        'Примеры:\n' +
+        '/alias add Яблоко 16 Про 256 → iPhone 16 Pro\n' +
+        '/alias ignore Доставка бесплатно',
+      )
+      return
+    }
+
+    const lines = aliases.map(a => {
+      if (a.isIgnored) return `🚫 "${a.alias}" — игнорируется`
+      return `🔗 "${a.alias}" → Product #${a.productId || '?'}${a.variantId ? ` Variant #${a.variantId}` : ''}`
+    })
+
+    const msg = `📝 Алиасы (${aliases.length}):\n\n${lines.join('\n')}`
+    if (msg.length <= 4000) {
+      await ctx.reply(msg)
+    } else {
+      const { safeReply } = await import('../lib/telegram-helpers')
+      await safeReply(ctx, msg)
+    }
+    return
+  }
+
+  if (sub === 'add') {
+    const rest = args.slice(1).join(' ')
+    const parts = rest.split(/\s*→\s*|\s*->\s*/)
+    if (parts.length < 2) {
+      await ctx.reply('Формат: /alias add Яблоко 16 Про → iPhone 16 Pro\n\nИспользуйте → или -> как разделитель')
+      return
+    }
+    const aliasText = parts[0].trim()
+    const productSearch = parts[1].trim()
+
+    if (!aliasText || !productSearch) {
+      await ctx.reply('Укажите и алиас, и название товара')
+      return
+    }
+
+    const product = await prisma.product.findFirst({
+      where: { name: { contains: productSearch, mode: 'insensitive' } },
+      select: { id: true, name: true },
+    })
+
+    if (!product) {
+      await ctx.reply(`❌ Товар "${productSearch}" не найден`)
+      return
+    }
+
+    await prisma.priceAlias.upsert({
+      where: { alias: aliasText.toLowerCase() },
+      create: {
+        alias: aliasText.toLowerCase(),
+        productId: product.id,
+        isIgnored: false,
+      },
+      update: {
+        productId: product.id,
+        variantId: null,
+        isIgnored: false,
+      },
+    })
+
+    await ctx.reply(`✅ Алиас создан:\n"${aliasText}" → ${product.name} (#${product.id})`)
+    return
+  }
+
+  if (sub === 'ignore') {
+    const aliasText = args.slice(1).join(' ').trim()
+    if (!aliasText) {
+      await ctx.reply('Формат: /alias ignore Доставка бесплатно')
+      return
+    }
+
+    await prisma.priceAlias.upsert({
+      where: { alias: aliasText.toLowerCase() },
+      create: {
+        alias: aliasText.toLowerCase(),
+        isIgnored: true,
+      },
+      update: {
+        isIgnored: true,
+        productId: null,
+        variantId: null,
+      },
+    })
+
+    await ctx.reply(`🚫 "${aliasText}" будет игнорироваться при парсинге цен`)
+    return
+  }
+
+  if (sub === 'remove' || sub === 'delete' || sub === 'del') {
+    const aliasText = args.slice(1).join(' ').trim()
+    if (!aliasText) {
+      await ctx.reply('Формат: /alias remove Яблоко 16 Про')
+      return
+    }
+
+    const deleted = await prisma.priceAlias.deleteMany({
+      where: { alias: aliasText.toLowerCase() },
+    })
+
+    if (deleted.count > 0) {
+      await ctx.reply(`✅ Алиас "${aliasText}" удалён`)
+    } else {
+      await ctx.reply(`❌ Алиас "${aliasText}" не найден`)
+    }
+    return
+  }
+
+  await ctx.reply(
+    'Команды:\n' +
+    '/alias — список алиасов\n' +
+    '/alias add <алиас> → <товар> — привязать к товару\n' +
+    '/alias ignore <текст> — игнорировать при парсинге\n' +
+    '/alias remove <алиас> — удалить',
+  )
+})
+
 // ─── 📢 Рассылки ──────────────────────────────────────────────────────────────
 
 setupBroadcastHandlers(bot)
