@@ -473,19 +473,24 @@ export async function syncProductsFromSheets(shouldAbort?: () => boolean): Promi
     disabled = toDisable.length
 
     const affectedProductIds = [...new Set(toDisable.map(v => v.productId))]
-    for (const pid of affectedProductIds) {
-      const totalQty = await prisma.productVariant.aggregate({
-        where: { productId: pid },
-        _sum: { quantity: true },
-      })
-      await prisma.product.update({
+
+    // Batch: one groupBy instead of N aggregate queries
+    const stockSums = await prisma.productVariant.groupBy({
+      by: ['productId'],
+      where: { productId: { in: affectedProductIds } },
+      _sum: { quantity: true },
+    })
+    const stockMap = new Map(stockSums.map(s => [s.productId, s._sum.quantity || 0]))
+
+    const updates = affectedProductIds.map(pid => {
+      const stock = stockMap.get(pid) || 0
+      return prisma.product.update({
         where: { id: pid },
-        data: {
-          stock: totalQty._sum.quantity ?? 0,
-          quantity: totalQty._sum.quantity ?? 0,
-          isAvailable: (totalQty._sum.quantity ?? 0) > 0,
-        },
+        data: { stock, quantity: stock, isAvailable: stock > 0 },
       })
+    })
+    for (let i = 0; i < updates.length; i += 10) {
+      await prisma.$transaction(updates.slice(i, i + 10))
     }
   }
 

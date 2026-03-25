@@ -25,8 +25,8 @@ async function getEnrichClient(): Promise<OpenAI> {
  * Заполняет description и specs если они пустые.
  * Возвращает true если данные были обновлены.
  */
-export async function enrichProductCard(productId: number, force = false): Promise<boolean> {
-  const product = await prisma.product.findUnique({ where: { id: productId } })
+export async function enrichProductCard(productId: number, force = false, preloaded?: { id: number; name: string; description: string | null; specs: any; attributes: any }): Promise<boolean> {
+  const product = preloaded ?? await prisma.product.findUnique({ where: { id: productId } })
   if (!product) return false
 
   const hasDescription = !!product.description
@@ -202,7 +202,7 @@ export async function enrichAllProducts(shouldAbort?: () => boolean, force = fal
 
   const products = await prisma.product.findMany({
     where,
-    select: { id: true, name: true },
+    select: { id: true, name: true, description: true, specs: true, attributes: true },
     orderBy: { createdAt: 'desc' },
   })
 
@@ -217,7 +217,7 @@ export async function enrichAllProducts(shouldAbort?: () => boolean, force = fal
       break
     }
     try {
-      const success = await enrichProductCard(product.id, force)
+      const success = await enrichProductCard(product.id, force, product)
       if (success) enriched++
       else failed++
     } catch {
