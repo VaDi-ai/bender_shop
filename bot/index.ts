@@ -566,6 +566,43 @@ bot.hears('📬 Входящие', async (ctx) => {
   )
 })
 
+// ─── /sync — ручная синхронизация Google Sheets ──────────────────────────────
+
+bot.command('sync', async (ctx) => {
+  const userId = ctx.from?.id
+  if (!userId || !ADMIN_IDS.includes(userId)) return
+
+  await ctx.reply('⏳ Синхронизация Google Sheets...')
+  try {
+    const { syncProductsFromSheets, checkStalePrices, formatStaleSupplierMessage } = await import('../lib/sheets-sync')
+    const result = await syncProductsFromSheets()
+
+    await ctx.reply(
+      `✅ Синхронизация завершена:\n➕ ${result.created} создано\n🔄 ${result.updated} обновлено\n🔴 ${result.disabled} снято\n❌ ${result.errors.length} ошибок`
+    )
+
+    // Проверить stale prices
+    const staleItems = await checkStalePrices()
+    if (staleItems.length > 0) {
+      await ctx.reply(`⚠️ ${staleItems.length} позиций с устаревшими ценами`)
+      const msg = formatStaleSupplierMessage(staleItems)
+      if (msg.length <= 4000) {
+        await ctx.reply(msg)
+      } else {
+        const buffer = Buffer.from(msg, 'utf-8')
+        await ctx.replyWithDocument(
+          { source: buffer, filename: 'stale-prices.txt' },
+          { caption: `📋 ${staleItems.length} позиций` }
+        )
+      }
+    } else {
+      await ctx.reply('✅ Устаревших цен нет')
+    }
+  } catch (err) {
+    await ctx.reply(`❌ Ошибка: ${err instanceof Error ? err.message : err}`)
+  }
+})
+
 // ─── 📢 Рассылки ──────────────────────────────────────────────────────────────
 
 setupBroadcastHandlers(bot)
