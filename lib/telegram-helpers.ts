@@ -1,4 +1,16 @@
-import { Telegram } from 'telegraf'
+import { Telegram, Context } from 'telegraf'
+
+export async function safeReply(ctx: Context, text: string, extra?: any): Promise<void> {
+  if (text.length <= 4000) {
+    await ctx.reply(text, extra)
+    return
+  }
+  const buffer = Buffer.from(text, 'utf-8')
+  await ctx.replyWithDocument(
+    { source: buffer, filename: 'message.txt' },
+    { caption: text.slice(0, 200) + '...' },
+  )
+}
 
 export function splitMessage(text: string, maxLength = 4000): string[] {
   if (text.length <= maxLength) return [text]

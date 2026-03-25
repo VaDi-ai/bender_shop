@@ -18,16 +18,21 @@ interface AvitoToken {
 }
 
 let cachedToken: { token: string; expiresAt: number } | null = null
+let refreshPromise: Promise<string> | null = null
 
 export async function getAvitoToken(): Promise<string> {
   if (cachedToken && Date.now() < cachedToken.expiresAt) {
     return cachedToken.token
   }
 
+  if (refreshPromise) return refreshPromise
+
   if (!AVITO_CLIENT_ID || !AVITO_CLIENT_SECRET) {
     throw new Error('AVITO_CLIENT_ID or AVITO_CLIENT_SECRET not set')
   }
 
+  refreshPromise = (async () => {
+  try {
   for (let attempt = 1; attempt <= 3; attempt++) {
     try {
       const res = await fetch(`${AVITO_API}/token`, {
@@ -60,6 +65,12 @@ export async function getAvitoToken(): Promise<string> {
     }
   }
   throw new Error('Avito OAuth: failed after 3 attempts')
+  } finally {
+    refreshPromise = null
+  }
+  })()
+
+  return refreshPromise
 }
 
 // ─── Профиль продавца ─────────────────────────────────────────────────────────

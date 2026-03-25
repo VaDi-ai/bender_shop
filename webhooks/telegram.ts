@@ -1249,6 +1249,9 @@ export function moderateAIOutput(text: string): string {
   cleaned = cleaned.replace(/[\w.+\-]+@[\w\-]+\.[\w.]+/g, '[email]')
   // Redact URLs
   cleaned = cleaned.replace(/https?:\/\/[^\s]+/g, '[ссылка]')
+  // Redact card numbers
+  cleaned = cleaned.replace(/\b\d{4}[\s-]\d{4}[\s-]\d{4}[\s-]\d{4}\b/g, '[номер карты]')
+  cleaned = cleaned.replace(/\b\d{16}\b/g, '[номер карты]')
 
   return cleaned.length > 2000 ? cleaned.slice(0, 2000) : cleaned
 }

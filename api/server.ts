@@ -646,7 +646,7 @@ export function startApiServer(bot?: Telegraf): void {
         'Дисплеи': { category: 'Мониторы' },
       }
 
-      const escXml = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+      const escXml = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;')
       const address = process.env.AVITO_ADDRESS || 'Москва, ул. Барклая, д. 8, ТЦ Горбушка, Павильон 211/1'
       const phone = process.env.AVITO_PHONE || ''
       const manager = process.env.AVITO_MANAGER || 'Bender Shop'
@@ -661,8 +661,8 @@ export function startApiServer(bot?: Telegraf): void {
 
         xml += '  <Ad>\n'
         xml += `    <Id>bshop-${p.id}</Id>\n`
-        xml += `    <Title>${escXml(p.name)}</Title>\n`
-        xml += `    <Description>${escXml(p.description || p.name)}</Description>\n`
+        xml += `    <Title>${escXml((p.name || '').slice(0, 100))}</Title>\n`
+        xml += `    <Description>${escXml((p.description || p.name || '').slice(0, 7500))}</Description>\n`
         xml += `    <Price>${Math.round(Number(p.price))}</Price>\n`
         xml += `    <Category>${escXml(mapping.category)}</Category>\n`
         if (mapping.goodsType) xml += `    <GoodsType>${escXml(mapping.goodsType)}</GoodsType>\n`
@@ -1243,8 +1243,10 @@ export function startApiServer(bot?: Telegraf): void {
   server.on('error', (err) => { console.error('Listen failed:', err); process.exit(1) })
 
   // Graceful HTTP drain: stop accepting connections, allow up to 10s to finish in-flight requests
-  const closeServer = () => {
+  const closeServer = async () => {
     server.close()
+    try { await prisma.$disconnect() } catch { /* ignore */ }
+    console.log('[API] Prisma disconnected')
     setTimeout(() => {
       console.error('[API] Force exit after 10s drain timeout')
       process.exit(1)
