@@ -27,6 +27,7 @@ import { message } from 'telegraf/filters'
 import { setupClientHandlers } from '../webhooks/telegram'
 import { startScheduler, isRunning as schedulerRunning } from './scheduler'
 import { getUserId } from './helpers'
+import log from '../lib/logger'
 import { startApiServer } from '../api/server'
 import { prisma, pool, initPrismaAlerts } from '../lib/prisma'
 import {
@@ -1146,7 +1147,7 @@ bot.action('maint:backup', async (ctx) => {
       await logSecurityEvent('backup_created', { sizeMB, adminId: userId, manual: true }, userId)
     } catch { /* ignore */ }
   } catch (err) {
-    console.error('[Backup] Manual backup failed:', err)
+    log.error('Manual backup failed', { error: err instanceof Error ? err.message : String(err) })
     await ctx.reply(`❌ Бэкап не удался: ${err instanceof Error ? err.message : 'Ошибка'}`)
   }
 })
@@ -1600,7 +1601,7 @@ setInterval(async () => {
 
     await setApiKeyValue('last_backup_date', todayStr)
 
-    console.log('[Backup] Starting daily backup...')
+    log.info('Starting daily backup')
     const { buffer, stats } = await createBackupBuffer()
     const sizeMB = (buffer.length / 1024 / 1024).toFixed(2)
     const dateStr = todayStr.replace(/-/g, '')
@@ -1625,13 +1626,13 @@ setInterval(async () => {
           source: buffer,
           filename: `bender-backup-${dateStr}.json`,
         }, { caption })
-        console.log(`[Backup] Sent to admin ${adminId} (${sizeMB} MB)`)
+        log.info('Backup sent', { adminId, sizeMB })
       } catch (err) {
-        console.error('[Backup] Failed to send to Telegram:', err)
+        log.error('Backup send failed', { error: err instanceof Error ? err.message : String(err) })
       }
     }
   } catch (err) {
-    console.error('[Backup] Daily backup failed:', err)
+    log.error('Daily backup failed', { error: err instanceof Error ? err.message : String(err) })
     for (const adminId of ADMIN_IDS) {
       try {
         await bot.telegram.sendMessage(adminId, `⚠️ Ежедневный бэкап не удался: ${err instanceof Error ? err.message : 'unknown error'}`)
@@ -2158,7 +2159,7 @@ setInterval(async () => {
     const hour = now.getHours()
     if (hour < 11 || hour >= 20) return // только рабочее время
 
-    console.log(`[Sheets Sync] Auto-sync at ${hour}:00 MSK`)
+    log.info('Sheets auto-sync', { hour })
     const { syncProductsFromSheets, checkStalePrices, formatStaleSupplierMessage } = await import('../lib/sheets-sync')
     const result = await syncProductsFromSheets()
 
@@ -2186,7 +2187,7 @@ setInterval(async () => {
                 `📋 ${staleItems.length} позиций без обновлённых цен.\n\nИспользуйте меню «💰 Цены → Из сообщения поставщика» чтобы начать обновлять цены через бота.`,
                 Markup.inlineKeyboard([[Markup.button.callback('⏭️ Понятно', 'stale:skip')]]),
               )
-            } catch (err) { console.error('[Stale] Failed to notify admin:', err instanceof Error ? err.message : err) }
+            } catch (err) { log.error('Stale notify failed', { error: err instanceof Error ? err.message : String(err) }) }
           }
         } else {
           setTemp('staleItems', staleItems)
@@ -2212,15 +2213,15 @@ setInterval(async () => {
                   filename: `stale-prices-${new Date().toISOString().slice(0, 10)}.txt`,
                 }, { caption: `📋 ${staleItems.length} позиций — переслать поставщикам` })
               }
-            } catch (err) { console.error('[Stale] Notify error:', err instanceof Error ? err.message : err) }
+            } catch (err) { log.error('Stale notify error', { error: err instanceof Error ? err.message : String(err) }) }
           }
         }
       }
     } catch (err) {
-      console.error('[Stale Prices] Check error:', err)
+      log.error('Stale prices check error', { error: err instanceof Error ? err.message : String(err) })
     }
   } catch (err) {
-    console.error('[Sheets Sync] Auto-sync error:', err)
+    log.error('Sheets auto-sync error', { error: err instanceof Error ? err.message : String(err) })
   }
 }, 60 * 60 * 1000) // каждый час
 
@@ -2229,9 +2230,9 @@ setTimeout(async () => {
   try {
     const { syncProductsFromSheets } = await import('../lib/sheets-sync')
     await syncProductsFromSheets()
-    console.log('[Sheets Sync] Initial sync done')
+    log.info('Sheets initial sync done')
   } catch (err) {
-    console.error('[Sheets Sync] Initial sync error:', err)
+    log.error('Sheets initial sync error', { error: err instanceof Error ? err.message : String(err) })
   }
 }, 30_000)
 

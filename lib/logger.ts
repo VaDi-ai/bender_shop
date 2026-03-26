@@ -1,35 +1,49 @@
-const SECRET_SUBSTRINGS = [
-  'token', 'key', 'password', 'secret',
-  'auth', 'bearer', 'credential', 'phone', 'email', 'card', 'cvv', 'otp', 'pin',
-]
+import pino from 'pino'
 
-function sanitizeValue(value: unknown, depth: number): unknown {
-  if (depth >= 3) return value
-  if (Array.isArray(value)) {
-    return value.map((item) => sanitizeValue(item, depth + 1))
-  }
-  if (value !== null && typeof value === 'object') {
-    return sanitizeObject(value as Record<string, unknown>, depth + 1)
-  }
-  return value
-}
+const logger = pino({
+  level: process.env.LOG_LEVEL || 'info',
+  transport: process.env.NODE_ENV !== 'production'
+    ? { target: 'pino/file', options: { destination: 1 } }
+    : undefined,
+  formatters: {
+    level(label) { return { level: label } },
+  },
+  timestamp: pino.stdTimeFunctions.isoTime,
+})
 
-function sanitizeObject(data: Record<string, unknown>, depth: number): Record<string, unknown> {
+const SENSITIVE_KEYS = /token|secret|password|key|phone|email|address|card|cvv|otp|pin|credential|bearer|пароль|телефон/i
+
+function sanitize(obj: Record<string, unknown>): Record<string, unknown> {
   const result: Record<string, unknown> = {}
-  for (const field of Object.keys(data)) {
-    if (SECRET_SUBSTRINGS.some((s) => field.toLowerCase().includes(s))) {
-      result[field] = '***'
+  for (const [k, v] of Object.entries(obj)) {
+    if (SENSITIVE_KEYS.test(k) && typeof v === 'string') {
+      result[k] = v.length > 4 ? v.slice(0, 2) + '***' + v.slice(-2) : '***'
+    } else if (typeof v === 'object' && v !== null && !Array.isArray(v)) {
+      result[k] = sanitize(v as Record<string, unknown>)
     } else {
-      result[field] = sanitizeValue(data[field], depth)
+      result[k] = v
     }
   }
   return result
 }
 
-export function safeLog(message: string, data?: Record<string, unknown>): void {
-  if (!data) {
-    console.log(message)
-    return
-  }
-  console.log(message, sanitizeObject(data, 0))
+export const log = {
+  info(msg: string, data?: Record<string, unknown>) {
+    logger.info(data ? sanitize(data) : {}, msg)
+  },
+  warn(msg: string, data?: Record<string, unknown>) {
+    logger.warn(data ? sanitize(data) : {}, msg)
+  },
+  error(msg: string, data?: Record<string, unknown>) {
+    logger.error(data ? sanitize(data) : {}, msg)
+  },
+  debug(msg: string, data?: Record<string, unknown>) {
+    logger.debug(data ? sanitize(data) : {}, msg)
+  },
 }
+
+export function safeLog(message: string, data?: Record<string, unknown>): void {
+  log.info(message, data)
+}
+
+export default log

@@ -26,6 +26,7 @@ import { handleInstagramVerification } from '../webhooks/instagram'
 import { DeliveryType } from '../generated/prisma/client'
 import { Decimal } from '@prisma/client/runtime/client'
 import { fmtPrice } from '../lib/format'
+import log from '../lib/logger'
 
 // BigInt → JSON serialization (avitoItemId etc.)
 ;(BigInt.prototype as any).toJSON = function () { return this.toString() }
@@ -129,7 +130,7 @@ export function startApiServer(bot?: Telegraf): void {
   try {
     indexHtml = fs.readFileSync(WEBAPP_PATH)
   } catch {
-    console.warn('[API] webapp/index.html not found at startup:', WEBAPP_PATH)
+    log.warn('webapp/index.html not found at startup', { path: WEBAPP_PATH })
   }
 
   // ── Telegram webhook (production, before body parsers) ─────────────────────
@@ -173,7 +174,7 @@ export function startApiServer(bot?: Telegraf): void {
         } else if (process.env.NODE_ENV !== 'production' && origin.startsWith('http://localhost')) {
           callback(null, true)
         } else {
-          console.warn('[API] CORS blocked:', origin)
+          log.warn('CORS blocked', { origin })
           callback(new Error('CORS: недопустимый источник'))
         }
       },
@@ -222,7 +223,7 @@ export function startApiServer(bot?: Telegraf): void {
   // ─── Request logging (skip /health) ────────────────────────────────────────
   app.use((req, _res, next) => {
     if (req.path !== '/health' && req.path !== '/api/cache-version') {
-      console.log(`[HTTP] ${req.method} ${req.path}`)
+      log.debug('HTTP request', { method: req.method, path: req.path })
     }
     next()
   })
@@ -683,7 +684,7 @@ export function startApiServer(bot?: Telegraf): void {
       res.setHeader('Cache-Control', 'public, max-age=1800')
       res.send(xml)
     } catch (err) {
-      console.error('[Avito XML] Error:', err)
+      log.error('Avito XML generation failed', { error: err instanceof Error ? err.message : String(err) })
       if (!res.headersSent) res.status(500).send('Internal error')
     }
   })
@@ -848,7 +849,7 @@ export function startApiServer(bot?: Telegraf): void {
     // Frontend sends "payment", accept both field names
     const paymentMethod: string | undefined = req.body.paymentMethod || req.body.payment
 
-    console.log('[API] POST /api/orders', {
+    log.info('Order received', {
       items: req.body.items?.length ?? 0,
       payment: req.body.paymentMethod || req.body.payment,
       delivery: req.body.deliveryMethod || req.body.delivery,
@@ -868,7 +869,7 @@ export function startApiServer(bot?: Telegraf): void {
     // Fallback: use telegramId from body if sent by frontend (unverified)
     if (!telegramId && req.body.telegramId) {
       telegramId = 'unverified_' + String(req.body.telegramId)
-      console.warn('[ORDER] Unverified telegramId from body:', telegramId)
+      log.warn('Unverified telegramId from body', { telegramId })
     }
 
     // If no Telegram auth, require name + phone from form
@@ -882,39 +883,39 @@ export function startApiServer(bot?: Telegraf): void {
 
     // ── Валидация входящих данных ──────────────────────────────────────────
     if (!Array.isArray(items) || items.length === 0) {
-      console.log('[ORDER] Validation failed: empty items, telegramId:', telegramId)
+      log.warn('Order validation failed', { reason: 'empty items', telegramId })
       await logSecurityEvent('invalid_order_data', { ip: req.ip, reason: 'empty items', telegramId }, telegramId)
       res.status(400).json({ error: 'Корзина пуста' })
       return
     }
 
     if (!paymentMethod || !['cash', 'card'].includes(paymentMethod)) {
-      console.log('[ORDER] Validation failed: invalid paymentMethod:', paymentMethod, '| raw body.payment:', req.body.payment, '| raw body.paymentMethod:', req.body.paymentMethod)
+      log.warn('Order validation failed', { reason: 'invalid paymentMethod', paymentMethod, rawPayment: req.body.payment, rawPaymentMethod: req.body.paymentMethod })
       res.status(400).json({ error: 'Неверный способ оплаты' })
       return
     }
 
     if (!customerName || customerName.trim().length < 2) {
-      console.log('[ORDER] Validation failed: invalid customerName, length:', (customerName || '').length)
+      log.warn('Order validation failed', { reason: 'invalid customerName', length: (customerName || '').length })
       res.status(400).json({ error: 'Укажите ФИО' })
       return
     }
 
     const phoneDigits = (customerPhone || '').replace(/\D/g, '')
     if (phoneDigits.length !== 11 || !phoneDigits.startsWith('7')) {
-      console.log('[ORDER] Validation failed: invalid phone format, digits:', phoneDigits.length)
+      log.warn('Order validation failed', { reason: 'invalid phone', digits: phoneDigits.length })
       res.status(400).json({ error: 'Неверный формат телефона. Используйте +7 (XXX) XXX-XX-XX' })
       return
     }
 
     if (!['pickup', 'delivery'].includes(deliveryType)) {
-      console.log('[ORDER] Validation failed: invalid deliveryType:', deliveryType)
+      log.warn('Order validation failed', { reason: 'invalid deliveryType', deliveryType })
       res.status(400).json({ error: 'Неверный тип доставки' })
       return
     }
 
     if (deliveryType === 'delivery' && (!deliveryAddress || deliveryAddress.trim().length < 5)) {
-      console.log('[ORDER] Validation failed: missing delivery address')
+      log.warn('Order validation failed', { reason: 'missing delivery address' })
       res.status(400).json({ error: 'Укажите адрес доставки' })
       return
     }
@@ -926,13 +927,13 @@ export function startApiServer(bot?: Telegraf): void {
       item.price = parseFloat(item.price) || 0
 
       if (item.variantId <= 0) {
-        console.log('[ORDER] Validation failed: invalid variantId:', item)
+        log.warn('Order validation failed', { reason: 'invalid variantId', variantId: item.variantId })
         await logSecurityEvent('invalid_order_data', { ip: req.ip, reason: 'invalid variantId', item, telegramId }, telegramId)
         res.status(400).json({ error: 'Неверный ID товара' })
         return
       }
       if (item.quantity < 1 || item.quantity > 99) {
-        console.log('[ORDER] Validation failed: invalid quantity:', item)
+        log.warn('Order validation failed', { reason: 'invalid quantity', variantId: item.variantId, quantity: item.quantity })
         res.status(400).json({ error: 'Неверное количество товара' })
         return
       }
@@ -963,7 +964,7 @@ export function startApiServer(bot?: Telegraf): void {
             throw Object.assign(new Error('Товар не найден'), { isStockConflict: true })
           }
           if (stockCheckEnabled && (!variant.inStock || variant.quantity < item.quantity)) {
-            console.log('[ORDER] Stock conflict: variantId', item.variantId, 'available:', variant.quantity, 'requested:', item.quantity)
+            log.warn('Stock conflict', { variantId: item.variantId, available: variant.quantity, requested: item.quantity })
             throw Object.assign(new Error('Товар закончился или недоступен'), { isStockConflict: true })
           }
 
@@ -1094,10 +1095,10 @@ export function startApiServer(bot?: Telegraf): void {
       })
 
       // Ответ клиенту СРАЗУ — до уведомлений
-      console.log(`[ORDER] #${order.id} created by ${telegramId}: ${items.length} items, ${order.totalAmount}₽, ${paymentMethod}`)
+      log.info('Order created', { orderId: order.id, telegramId, items: items.length, total: Number(order.totalAmount), paymentMethod })
       if (!res.headersSent) {
         res.json({ success: true, orderId: order.id })
-        console.log(`[ORDER] #${order.id} response sent to client`)
+        log.debug('Order response sent', { orderId: order.id })
       }
 
       // ── Уведомления в фоне (не блокируют ответ) ────────────────────
@@ -1140,7 +1141,7 @@ export function startApiServer(bot?: Telegraf): void {
                 where: { id: client.id },
                 data: { telegramTopicId: topic.message_thread_id },
               })
-            } catch (err) { console.error('[ORDER] Topic creation error:', err instanceof Error ? err.message : err) }
+            } catch (err) { log.error('Topic creation error', { error: err instanceof Error ? err.message : String(err) }) }
           }
           const tgUsername = client?.telegramUsername ?? null
           const tgLink = tgUsername
@@ -1173,7 +1174,7 @@ export function startApiServer(bot?: Telegraf): void {
                 })
               }
             } catch (e) {
-              console.error('[ORDER] Failed to send to CRM group:', e)
+              log.error('Failed to send to CRM group', { error: e instanceof Error ? e.message : String(e) })
             }
           }
 
@@ -1195,7 +1196,7 @@ export function startApiServer(bot?: Telegraf): void {
               await telegram.sendMessage(CRM_GROUP_ID, `🛒 Клиент оформил заказ #${order.id} через сайт\n\n${itemLines}\n\n💵 ${totalStr}₽`, {
                 message_thread_id: client.telegramTopicId,
               })
-            } catch (err) { console.error('[ORDER] CRM topic notify error:', err instanceof Error ? err.message : err) }
+            } catch (err) { log.error('CRM topic notify error', { error: err instanceof Error ? err.message : String(err) }) }
           }
 
           // 4. Подтверждение клиенту в личку
@@ -1214,12 +1215,12 @@ export function startApiServer(bot?: Telegraf): void {
             ].join('\n'))
           } catch { /* ignore: user may have blocked bot */ }
         } catch (err) {
-          console.error('[ORDER] Notification error:', err)
+          log.error('Order notification error', { error: err instanceof Error ? err.message : String(err) })
         }
       })()
     } catch (err: any) {
       if (err.isStockConflict) {
-        console.log(`[ORDER] Stock conflict for ${telegramId}`)
+        log.info('Order stock conflict', { telegramId })
         if (!res.headersSent) res.status(409).json({ error: 'Товар закончился или недоступен' })
         return
       }
@@ -1229,22 +1230,22 @@ export function startApiServer(bot?: Telegraf): void {
 
   // ── Глобальный обработчик ошибок ───────────────────────────────────────────
   app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
-    console.error('[API] Ошибка:', err)
+    log.error('Unhandled API error', { error: err.message, stack: err.stack })
     if (!res.headersSent) res.status(500).json({ error: 'Internal server error' })
   })
 
   const server = app.listen(PORT, '0.0.0.0', () => {
-    console.log(`[API] Сервер запущен: http://localhost:${PORT}/shop`)
+    log.info('Server listening', { port: PORT, url: `http://localhost:${PORT}/shop` })
   })
-  server.on('error', (err) => { console.error('Listen failed:', err); process.exit(1) })
+  server.on('error', (err) => { log.error('Listen failed', { error: err.message }); process.exit(1) })
 
   // Graceful HTTP drain: stop accepting connections, allow up to 10s to finish in-flight requests
   const closeServer = async () => {
     server.close()
     try { await prisma.$disconnect() } catch { /* ignore */ }
-    console.log('[API] Prisma disconnected')
+    log.info('Prisma disconnected')
     setTimeout(() => {
-      console.error('[API] Force exit after 10s drain timeout')
+      log.error('Force exit after 10s drain timeout')
       process.exit(1)
     }, 10_000)
   }
