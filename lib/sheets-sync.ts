@@ -11,7 +11,7 @@ import log from './logger'
 import { prisma } from './prisma'
 import { readSheet, getSheetNames } from './google-sheets'
 
-function capitalizeAttr(val: string): string {
+export function capitalizeAttr(val: string): string {
   if (!val) return val
   const t = val.trim()
   if (!t) return t

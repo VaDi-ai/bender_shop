@@ -242,7 +242,7 @@ const JAILBREAK_PATTERNS = [
   /\[INST\]|\[\/INST\]|<<SYS>>|<\|im_start\|>/i,
 ]
 
-function containsJailbreakAttempt(text: string): boolean {
+export function containsJailbreakAttempt(text: string): boolean {
   const normalized = normalizeForJailbreakCheck(text)
   return JAILBREAK_PATTERNS.some(p => p.test(normalized))
 }
