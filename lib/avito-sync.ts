@@ -1,6 +1,7 @@
 /**
  * lib/avito-sync.ts — Маппинг Avito объявлений ↔ Google Sheets и синхронизация цен
  */
+import log from './logger'
 import { prisma } from './prisma'
 import { getAvitoItems, updateAvitoPrice, isAvitoConfigured } from './avito'
 import { readSheet, getSheetNames } from './google-sheets'
@@ -334,6 +335,6 @@ export async function syncPricesToAvito(): Promise<{ updated: number; failed: nu
     const ok = await updateAvitoPrice(Number(p.avitoItemId), price)
     if (ok) updated++; else failed++
   }
-  console.log(`[Avito Sync] Prices: ${updated} updated, ${failed} failed, ${skipped} skipped`)
+  log.info('Avito sync prices', { updated, failed, skipped })
   return { updated, failed, skipped }
 }

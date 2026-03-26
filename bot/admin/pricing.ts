@@ -7,6 +7,7 @@
 import https from 'https'
 import ExcelJS from 'exceljs'
 import { Context, Markup, Telegraf } from 'telegraf'
+import log from '../../lib/logger'
 import { prisma } from '../../lib/prisma'
 import {
   CURRENCY_FLAGS, fetchCurrencyRates,
@@ -445,11 +446,11 @@ async function downloadTelegramFile(ctx: Context, fileId: string): Promise<Buffe
       res.on('data', (c) => chunks.push(c))
       res.on('end', () => resolve(Buffer.concat(chunks)))
       res.on('error', (err) => {
-        console.error('[pricing] downloadTelegramFile res error:', safeUrl, err.message)
+        log.error('Pricing download file response error', { error: err.message })
         reject(err)
       })
     }).on('error', (err) => {
-      console.error('[pricing] downloadTelegramFile error:', safeUrl, err.message)
+      log.error('Pricing download file error', { error: err.message })
       reject(err)
     })
   })
@@ -565,7 +566,7 @@ async function findBestPricesFromSheets(): Promise<Array<{ model: string; price:
         }
       }
     } catch (err) {
-      console.error(`[Pricing] Error reading supplier sheet ${sheetName}:`, err)
+      log.error('Pricing supplier sheet read error', { sheetName, error: err instanceof Error ? err.message : String(err) })
     }
   }
 
@@ -669,7 +670,7 @@ async function processSupplierPrice(
       ]),
     )
   } catch (err) {
-    console.error('[Pricing] processSupplierPrice error:', err)
+    log.error('Pricing process supplier price error', { error: err instanceof Error ? err.message : String(err) })
     await ctx.reply(`❌ Ошибка обработки прайса: ${err instanceof Error ? err.message : 'Неизвестная ошибка'}`)
     pricingState.delete(userId)
   }
@@ -804,7 +805,7 @@ export function setupPricingHandlers(bot: Telegraf): void {
             await batchUpdateSheets(sheetUpdates)
           }
         } catch (err) {
-          console.error(`[Pricing] Error updating sheet ${sheetName}:`, err)
+          log.error('Pricing sheet update error', { sheetName, error: err instanceof Error ? err.message : String(err) })
         }
       }
 
@@ -819,7 +820,7 @@ export function setupPricingHandlers(bot: Telegraf): void {
           avitoLine = `\n📢 Avito: ${avitoResult.updated} цен обновлено${avitoResult.failed > 0 ? `, ${avitoResult.failed} ошибок` : ''}`
         }
       } catch (e) {
-        console.error('[Pricing] Avito sync error:', e)
+        log.error('Pricing Avito sync error', { error: e instanceof Error ? e.message : String(e) })
       }
 
       pricingState.delete(userId)
@@ -835,7 +836,7 @@ export function setupPricingHandlers(bot: Telegraf): void {
       ].filter(Boolean).join('\n'))
 
     } catch (err) {
-      console.error('[Pricing] apply_sheets error:', err)
+      log.error('Pricing apply sheets error', { error: err instanceof Error ? err.message : String(err) })
       await ctx.reply(`❌ Ошибка: ${err instanceof Error ? err.message : 'Неизвестная ошибка'}`)
       pricingState.delete(userId)
     }
@@ -1635,7 +1636,7 @@ export async function handlePricingDocument(ctx: Context, userId: number): Promi
     await ctx.reply(previewLines.join('\n'))
     await showPreview(ctx, userId)
   } catch (err) {
-    console.error('handlePricingDocument error:', err)
+    log.error('Pricing document handler error', { error: err instanceof Error ? err.message : String(err) })
     await ctx.reply('❌ Ошибка при обработке файла. Убедитесь, что загружаете xlsx прайс-лист.')
   }
 

@@ -35,7 +35,7 @@ import {
 } from '../bot/ai/agent'
 import { logSecurityEvent } from '../lib/security-log'
 import { encryptClientField, decryptClientField, encryptDate, decryptDate } from '../lib/client-crypto'
-import { safeLog } from '../lib/logger'
+import log, { safeLog } from '../lib/logger'
 
 const CRM_GROUP_ID = Number(process.env.CRM_GROUP_ID)
 const ADMIN_IDS = (process.env.ADMIN_IDS ?? '').split(',').map((id) => Number(id.trim()))
@@ -228,7 +228,7 @@ export function setupClientHandlers(bot: Telegraf): void {
           logSecurityEvent('unauthorized_access', {
             userId: callerId ?? 'unknown',
             action: data,
-          }).catch((err) => console.error('[security-log] unauthorized_access:', err))
+          }).catch((err) => log.error('Security log write failed', { error: err instanceof Error ? err.message : String(err) }))
         }
         return ctx.answerCbQuery()
       }
@@ -776,7 +776,7 @@ export function setupClientHandlers(bot: Telegraf): void {
       }
 
     } catch (err) {
-      console.error('callback_query error:', err)
+      log.error('Callback query error', { error: err instanceof Error ? err.message : String(err) })
       return ctx.answerCbQuery('Ошибка')
     }
 
@@ -817,7 +817,7 @@ export function setupClientHandlers(bot: Telegraf): void {
       }
       await handleWebAppOrder(ctx.telegram, ctx.from, orderData)
     } catch (err) {
-      console.error('web_app_data error:', err)
+      log.error('Web app data error', { error: err instanceof Error ? err.message : String(err) })
     }
   })
 
@@ -842,7 +842,7 @@ export function setupClientHandlers(bot: Telegraf): void {
             try {
               await handleManagerReply(ctx as Context, threadId, text, from.id, messageId)
             } catch (err) {
-              console.error('handleManagerReply error:', err)
+              log.error('Manager reply error', { error: err instanceof Error ? err.message : String(err) })
             }
           } else if (messageId) {
             // Медиа-ответ менеджера — переслать клиенту через copyMessage
@@ -851,7 +851,7 @@ export function setupClientHandlers(bot: Telegraf): void {
               try {
                 await ctx.telegram.copyMessage(client.externalId, CRM_GROUP_ID, messageId)
               } catch (err) {
-                console.error('[CRM→Client] Failed to copy media message:', err)
+                log.error('CRM media copy failed', { error: err instanceof Error ? err.message : String(err) })
               }
             }
           }
@@ -870,7 +870,7 @@ export function setupClientHandlers(bot: Telegraf): void {
         try {
           await handleEditMessage(ctx.telegram, from.id, text)
         } catch (err) {
-          console.error('handleEditMessage error:', err)
+          log.error('Edit message error', { error: err instanceof Error ? err.message : String(err) })
         }
         return
       }
@@ -883,7 +883,7 @@ export function setupClientHandlers(bot: Telegraf): void {
       try {
         await handleClientMessage(ctx.telegram, from, text)
       } catch (err) {
-        console.error('handleClientMessage error:', err)
+        log.error('Client message error', { error: err instanceof Error ? err.message : String(err) })
       }
     } else {
       // Медиа-сообщение от клиента — переслать в CRM-топик
@@ -953,7 +953,7 @@ export function setupClientHandlers(bot: Telegraf): void {
           },
         })
       } catch (err) {
-        console.error('handleClientMedia error:', err)
+        log.error('Client media error', { error: err instanceof Error ? err.message : String(err) })
       }
     }
   })
@@ -1064,12 +1064,12 @@ async function sendAndPinControlPanel(
         disable_notification: true,
       })
     } catch (pinErr) {
-      console.error('pinChatMessage error:', pinErr)
+      log.error('Pin message error', { error: pinErr instanceof Error ? pinErr.message : String(pinErr) })
     }
 
     return pinnedMessageId
   } catch (err) {
-    console.error('sendAndPinControlPanel error:', err)
+    log.error('Control panel send error', { error: err instanceof Error ? err.message : String(err) })
     return null
   }
 }
@@ -1090,13 +1090,13 @@ async function createClientTopic(
       threadId = topic.message_thread_id
       break
     } catch (err) {
-      console.error(`[CRM] Topic creation attempt ${attempt}/2:`, err instanceof Error ? err.message : err)
+      log.error('CRM topic creation attempt failed', { attempt, error: err instanceof Error ? err.message : String(err) })
       if (attempt < 2) await new Promise(r => setTimeout(r, 1000))
     }
   }
 
   if (!threadId) {
-    console.error('[CRM] Topic creation failed, message will go to general chat')
+    log.error('CRM topic creation failed, using general chat')
     return null
   }
 
@@ -1129,7 +1129,7 @@ async function handleClientMessage(
   text: string,
 ): Promise<void> {
   try {
-    console.log(`[CRM] ← client ${from.id}: ${(text ?? '[media]').slice(0, 80)}`)
+    log.info('CRM client message', { fromId: from.id, textPreview: (text ?? '[media]').slice(0, 80) })
     const externalId = String(from.id)
     const name = getClientName(from)
 
@@ -1196,7 +1196,7 @@ async function handleClientMessage(
         await sendToTopic(telegram, CRM_GROUP_ID, client.telegramTopicId, `💬 ${name}: ${text}`)
       } catch (e: any) {
         if (e?.response?.description?.includes('message thread not found')) {
-          console.warn(`[handleClientMessage] Топик ${client.telegramTopicId} не найден — пересоздаём`)
+          log.warn('CRM topic not found, recreating', { topicId: client.telegramTopicId })
           await prisma.client.update({ where: { id: client.id }, data: { telegramTopicId: null } })
           const threadId = await createClientTopic(telegram, client.id, name)
           if (threadId) {
@@ -1220,11 +1220,11 @@ async function handleClientMessage(
       const threadId = currentClient.telegramTopicId
       // Запускаем AI асинхронно, не блокируем ответ клиенту
       handleAIResponse(telegram, client.id, text, threadId).catch((err) => {
-        console.error('handleAIResponse error:', err)
+        log.error('AI response error', { error: err instanceof Error ? err.message : String(err) })
       })
     }
   } catch (e) {
-    console.error('handleClientMessage FULL ERROR:', e)
+    log.error('Client message handler error', { error: e instanceof Error ? e.message : String(e) })
   }
 }
 
@@ -1297,7 +1297,7 @@ async function processAIReservation(
         })
       })
 
-      console.log(`[AI Night] Reserved "${found.name}" variant ${variant.id} for client ${clientId}`)
+      log.info('AI night reserve created', { productName: found.name, variantId: variant.id, clientId })
 
       await prisma.task.create({
         data: {
@@ -1327,10 +1327,10 @@ async function processAIReservation(
           status: 'done',
         },
       })
-      console.log(`[AI Night] Product not found for reserve: "${requestedItem}" from client ${clientId}`)
+      log.info('AI night reserve product not found', { requestedItem, clientId })
     }
   } catch (err) {
-    console.error('[AI Night] Reserve error:', err)
+    log.error('AI night reserve error', { error: err instanceof Error ? err.message : String(err) })
   }
 
   return cleanResponse
@@ -1359,14 +1359,14 @@ async function handleAIResponse(
       ].join('\n')
       await sendToTopic(telegram, CRM_GROUP_ID, threadId, priceHint)
     }
-  } catch (err) { console.error('[CRM] Supplier price lookup error:', err instanceof Error ? err.message : err) }
+  } catch (err) { log.error('CRM supplier price lookup error', { error: err instanceof Error ? err.message : String(err) }) }
 
   let aiText: string
   try {
     aiText = await generateAIResponse(clientId, userMessage)
     incrementStat('total')
   } catch (err) {
-    console.error('generateAIResponse error:', err)
+    log.error('AI response generation error', { error: err instanceof Error ? err.message : String(err) })
     return
   }
 
@@ -1469,7 +1469,7 @@ async function handleManagerReply(
   }
 
   // ── Обычный ответ — пересылаем клиенту ───────────────────────────────────
-  console.log(`[CRM] → manager ${managerId} in topic ${threadId}: ${(text ?? '[media]').slice(0, 80)}`)
+  log.info('CRM manager reply', { managerId, threadId, textPreview: (text ?? '[media]').slice(0, 80) })
   const client = await prisma.client.findFirst({ where: { telegramTopicId: threadId } })
   if (!client) return
 
@@ -1484,7 +1484,7 @@ async function handleManagerReply(
         await sendAvitoMessage(chatId, text)
       }
     } catch (err) {
-      console.error('[CRM] Avito reply error:', err)
+      log.error('CRM Avito reply error', { error: err instanceof Error ? err.message : String(err) })
       await sendToTopic(ctx.telegram, CRM_GROUP_ID, threadId, `⚠️ Не удалось отправить в Avito: ${err instanceof Error ? err.message : err}`)
     }
   }
@@ -1566,7 +1566,7 @@ async function handleWebAppOrder(
     await prisma.order.update({
       where: { id: orderId },
       data: { clientId: client.id },
-    }).catch((err) => console.error('[webhook] order.update clientId:', err))
+    }).catch((err) => log.error('Webhook order update error', { error: err instanceof Error ? err.message : String(err) }))
 
     // Обновить статистику клиента
     await prisma.client.update({
@@ -1576,7 +1576,7 @@ async function handleWebAppOrder(
         totalRevenue: { increment: verifiedTotal },
         lastPurchaseDate: new Date(),
       },
-    }).catch((err) => console.error('[webhook] client stats update:', err))
+    }).catch((err) => log.error('Webhook client stats update error', { error: err instanceof Error ? err.message : String(err) }))
   }
 
   if (client.telegramTopicId == null) {
@@ -1587,7 +1587,7 @@ async function handleWebAppOrder(
       include: { segment: true },
     })
     if (!refreshed) {
-      console.error('[webhook] Client %d not found after topic creation', client.id)
+      log.error('Webhook client not found after topic creation', { clientId: client.id })
       return
     }
     client = refreshed

@@ -5,6 +5,8 @@
  * Avito Messenger API: https://developers.avito.ru/api-catalog/messenger
  */
 
+import log from './logger'
+
 const AVITO_CLIENT_ID = process.env.AVITO_CLIENT_ID
 const AVITO_CLIENT_SECRET = process.env.AVITO_CLIENT_SECRET
 const AVITO_API = 'https://api.avito.ru'
@@ -57,10 +59,10 @@ export async function getAvitoToken(): Promise<string> {
         expiresAt: Date.now() + (data.expires_in - 60) * 1000,
       }
 
-      console.log('[Avito] Token obtained (scope: messenger:read,write), expires in', data.expires_in, 'sec')
+      log.info('Avito token obtained', { expiresIn: data.expires_in })
       return cachedToken.token
     } catch (err) {
-      console.error(`[Avito] Token refresh attempt ${attempt}/3:`, err instanceof Error ? err.message : err)
+      log.error('Avito token refresh failed', { attempt, error: err instanceof Error ? err.message : String(err) })
       if (attempt < 3) await new Promise(r => setTimeout(r, attempt * 1000))
     }
   }
@@ -137,7 +139,7 @@ export async function sendAvitoMessage(chatId: string, text: string): Promise<vo
   const token = await getAvitoToken()
   const userId = await getAvitoUserId()
 
-  console.log('[Avito] Sending to chat:', chatId, 'type:', typeof chatId, 'user:', userId, 'text:', text.slice(0, 50))
+  log.debug('Avito sending message', { chatId, userId, textPreview: text.slice(0, 50) })
 
   const headers = {
     Authorization: `Bearer ${token}`,
@@ -148,16 +150,16 @@ export async function sendAvitoMessage(chatId: string, text: string): Promise<vo
   // v1 is the correct endpoint per Avito docs
   for (const ver of ['v1']) {
     const url = `${AVITO_API}/messenger/${ver}/accounts/${userId}/chats/${chatId}/messages`
-    console.log(`[Avito] Trying ${ver}: ${url}`)
+    log.debug('Avito API request', { version: ver })
 
     const res = await fetch(url, { method: 'POST', headers, body })
     if (res.ok) {
-      console.log(`[Avito] Send success with ${ver}!`)
+      log.info('Avito message sent', { version: ver })
       return
     }
 
     const errText = await res.text()
-    console.log(`[Avito] ${ver} response: ${res.status} ${errText.slice(0, 300)}`)
+    log.warn('Avito send failed', { version: ver, status: res.status, response: errText.slice(0, 200) })
   }
 
   throw new Error(`Avito send failed: all API versions returned errors for chat ${chatId}`)
@@ -177,7 +179,7 @@ async function avitoFetchWithRetry(url: string, options: RequestInit, maxRetries
     if (res.status === 429) {
       const retryAfter = parseInt(res.headers.get('Retry-After') || '0', 10)
       const delay = retryAfter > 0 ? retryAfter * 1000 : attempt * 2000
-      console.warn(`[Avito] 429 rate limited, retry in ${delay}ms (attempt ${attempt}/${maxRetries})`)
+      log.warn('Avito rate limited', { attempt, maxRetries, delay })
       await new Promise(r => setTimeout(r, delay))
       continue
     }
@@ -217,13 +219,13 @@ export async function updateAvitoPrice(itemId: number, price: number): Promise<b
       body: JSON.stringify({ price: Math.round(price) }),
     })
     if (!res.ok) {
-      console.error(`[Avito] updatePrice ${itemId}: ${res.status} ${await res.text()}`)
+      log.error('Avito price update failed', { itemId, status: res.status })
       return false
     }
-    console.log(`[Avito] Price updated: item ${itemId} → ${Math.round(price)}₽`)
+    log.info('Avito price updated', { itemId, price: Math.round(price) })
     return true
   } catch (err) {
-    console.error(`[Avito] updatePrice error:`, err)
+    log.error('Avito updatePrice error', { error: err instanceof Error ? err.message : String(err) })
     return false
   }
 }

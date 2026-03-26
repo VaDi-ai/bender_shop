@@ -10,6 +10,7 @@
  */
 
 import OpenAI from 'openai'
+import log from '../../lib/logger'
 import { prisma } from '../../lib/prisma'
 import { notifyAdminsAboutApiError } from '../../lib/notify-admins'
 import { getApiKeyValue, setApiKeyValue } from '../../lib/api-key-store'
@@ -46,12 +47,12 @@ export async function getAIMode(): Promise<AIMode> {
       if (validModes.includes(value as AIMode)) {
         return value as AIMode
       }
-      console.warn(`[ai] Invalid AI mode in DB: "${value}", falling back to "off"`)
+      log.warn('Invalid AI mode in DB, falling back to off', { value })
     }
     const envMode = process.env.AI_MODE as AIMode | undefined
     return envMode ?? 'off'
   } catch (err) {
-    console.error('[ai] getAIMode failed:', err)
+    log.error('getAIMode failed', { error: err instanceof Error ? err.message : String(err) })
     return 'off'
   }
 }
@@ -177,7 +178,7 @@ async function searchTechInfo(query: string): Promise<string> {
     })
     return response.choices[0]?.message?.content?.trim() ?? ''
   } catch (err) {
-    console.error('Perplexity search error:', err)
+    log.error('Perplexity search error', { error: err instanceof Error ? err.message : String(err) })
     return ''
   }
 }
@@ -318,7 +319,7 @@ export async function generateAIResponse(
 
   // Jailbreak detection
   if (containsJailbreakAttempt(newMessage)) {
-    console.warn(`[AI] Jailbreak attempt from client ${clientId}: ${newMessage.slice(0, 100)}`)
+    log.warn('Jailbreak attempt detected', { clientId })
     return 'Я консультант магазина Bender Shop. Могу помочь подобрать технику или ответить на вопросы о наших товарах!'
   }
 
@@ -503,16 +504,16 @@ ${historyText}${webSearchContext}${supplierPriceContext}${supplierPriceContext ?
       const usage = response.usage
       if (usage) {
         const cost = (usage.prompt_tokens * 3 + usage.completion_tokens * 15) / 1_000_000
-        console.log(`[AI] Tokens: ${usage.prompt_tokens}+${usage.completion_tokens}, cost: $${cost.toFixed(4)}`)
+        log.info('AI response', { promptTokens: usage.prompt_tokens, completionTokens: usage.completion_tokens, cost: `$${cost.toFixed(4)}` })
       }
       const text = response.choices[0]?.message?.content?.trim()
       if (!text) throw new Error('Пустой ответ от модели')
       aiResponse = text
       break
     } catch (err) {
-      console.error(`[AI] Attempt ${attempt}/3 failed:`, err instanceof Error ? err.message : err)
+      log.error('AI attempt failed', { attempt, error: err instanceof Error ? err.message : String(err) })
       if (attempt === 3) {
-        notifyAdminsAboutApiError(err, 'AI ответ клиенту').catch((e) => console.error('[ai] notify error:', e))
+        notifyAdminsAboutApiError(err, 'AI ответ клиенту').catch((e) => log.error('AI admin notify error', { error: e instanceof Error ? e.message : String(e) }))
       }
       if (attempt < 3) {
         await new Promise(r => setTimeout(r, attempt * 1500))

@@ -7,6 +7,7 @@
  */
 
 import { Decimal } from '@prisma/client/runtime/client'
+import log from './logger'
 import { prisma } from './prisma'
 import { readSheet, getSheetNames } from './google-sheets'
 
@@ -75,7 +76,7 @@ export function mapHeaders(headerRow: any[]): ColumnMap {
     throw new Error(`Required column "price" not found. Headers: ${headerStrings.join(', ')}`)
   }
 
-  console.log('[Sheets] Column mapping:', JSON.stringify(headers))
+  log.debug('Column mapping', { columns: headers })
   return headers
 }
 
@@ -171,7 +172,7 @@ export async function syncProductsFromSheets(shouldAbort?: () => boolean): Promi
   // Prevent concurrent syncs via PostgreSQL advisory lock
   const lockAcquired = await prisma.$queryRaw<[{pg_try_advisory_lock: boolean}]>`SELECT pg_try_advisory_lock(73001) as "pg_try_advisory_lock"`
   if (!lockAcquired[0]?.pg_try_advisory_lock) {
-    console.warn('[Sheets Sync] Another sync is already running, skipping')
+    log.warn('Sheets sync already running, skipping')
     return { created: 0, updated: 0, disabled: 0, total: 0, errors: ['Sync already in progress'] }
   }
 
@@ -180,7 +181,7 @@ export async function syncProductsFromSheets(shouldAbort?: () => boolean): Promi
   if (process.env.SHEETS_FULL_RESET === 'true') {
     const realOrders = await prisma.order.count()
     if (realOrders === 0) {
-      console.log('[Sheets Sync] Clearing old products (SHEETS_FULL_RESET=true)...')
+      log.info('Sheets sync clearing old products (full reset)')
       await prisma.$transaction([
         prisma.stockMovement.deleteMany(),
         prisma.promotionPrice.deleteMany(),
@@ -193,9 +194,9 @@ export async function syncProductsFromSheets(shouldAbort?: () => boolean): Promi
         prisma.productVariant.deleteMany(),
         prisma.product.deleteMany(),
       ])
-      console.log('[Sheets Sync] Old products cleared')
+      log.info('Sheets sync old products cleared')
     } else {
-      console.log(`[Sheets Sync] Skipping cleanup — ${realOrders} real orders exist`)
+      log.info('Sheets sync skipping cleanup', { realOrders })
     }
   }
 
@@ -203,10 +204,10 @@ export async function syncProductsFromSheets(shouldAbort?: () => boolean): Promi
   try {
     rows = await readAllProducts()
   } catch (err) {
-    console.error(`[Sheets Sync] Failed to read Google Sheets: ${err}`)
+    log.error('Sheets sync read failed', { error: err instanceof Error ? err.message : String(err) })
     return { created: 0, updated: 0, disabled: 0, total: 0, errors: [`Failed to read sheets: ${err}`] }
   }
-  console.log(`[Sheets Sync] Read ${rows.length} rows from Google Sheets`)
+  log.info('Sheets sync rows read', { count: rows.length })
 
   // ── Step 1: Group rows by productName + category ──────────────────────────
 
@@ -262,7 +263,7 @@ export async function syncProductsFromSheets(shouldAbort?: () => boolean): Promi
     })
   }
 
-  console.log(`[Sheets Sync] Grouped into ${groups.size} products`)
+  log.info('Sheets sync grouped', { productCount: groups.size })
 
   // ── Step 2: Preload existing data ─────────────────────────────────────────
 
@@ -292,15 +293,15 @@ export async function syncProductsFromSheets(shouldAbort?: () => boolean): Promi
 
   for (const [key, group] of groups) {
     if (shouldAbort?.()) {
-      console.log('[Sheets Sync] Aborted by user')
+      log.info('Sheets sync aborted by user')
       break
     }
     groupIdx++
     if (groupIdx % 20 === 0) {
-      console.log(`[Sheets Sync] Processing product ${groupIdx}/${groups.size}...`)
+      log.debug('Sheets sync progress', { current: groupIdx, total: groups.size })
     }
     if (Date.now() - startTime > 10 * 60 * 1000) {
-      console.error(`[Sheets Sync] Timeout after 10 minutes at product ${groupIdx}/${groups.size}`)
+      log.error('Sheets sync timeout', { current: groupIdx, total: groups.size })
       errors.push(`Timeout after 10 minutes at product ${groupIdx}`)
       break
     }
@@ -432,7 +433,7 @@ export async function syncProductsFromSheets(shouldAbort?: () => boolean): Promi
             seenVariantIds.add(batch[j].existing?.id ?? (results[j] as any).id)
           }
         } catch (batchErr) {
-          console.warn('[Sync] Batch upsert failed, falling back to sequential:', batchErr instanceof Error ? batchErr.message : batchErr)
+          log.warn('Sync batch upsert failed, falling back to sequential', { error: batchErr instanceof Error ? batchErr.message : String(batchErr) })
           for (const entry of batch) {
             try {
               const result = await buildPrismaOp(entry)
@@ -440,7 +441,7 @@ export async function syncProductsFromSheets(shouldAbort?: () => boolean): Promi
             } catch (err) {
               const msg = `Row ${entry.variant.rowIndex} (${entry.variant.sheetName}): ${entry.variant.fullName} — ${err}`
               errors.push(msg)
-              console.error(`[Sheets Sync] Error row ${entry.variant.rowIndex}: ${err}`)
+              log.error('Sheets sync row error', { rowIndex: entry.variant.rowIndex, error: String(err) })
             }
           }
         }
@@ -448,7 +449,7 @@ export async function syncProductsFromSheets(shouldAbort?: () => boolean): Promi
     } catch (err) {
       const msg = `Product "${group.productName}" (${group.category}): ${err}`
       errors.push(msg)
-      console.error(`[Sheets Sync] Error product: ${msg}`)
+      log.error('Sheets sync product error', { product: group.productName, error: String(err) })
     }
   }
 
@@ -494,7 +495,7 @@ export async function syncProductsFromSheets(shouldAbort?: () => boolean): Promi
     }
   }
 
-  console.log(`[Sheets Sync] Done: ${created} created, ${updated} updated, ${disabled} disabled, ${errors.length} errors`)
+  log.info('Sheets sync done', { created, updated, disabled, errors: errors.length })
 
   // Audit: check products without key attributes
   try {
@@ -524,9 +525,7 @@ export async function syncProductsFromSheets(shouldAbort?: () => boolean): Promi
       }
     }
     if (issues.length > 0) {
-      console.log(`[Audit] ${issues.length} товаров без ожидаемых атрибутов:`)
-      for (const issue of issues.slice(0, 30)) console.log(`  ${issue}`)
-      if (issues.length > 30) console.log(`  ...и ещё ${issues.length - 30}`)
+      log.warn('Audit: products missing expected attributes', { count: issues.length, sample: issues.slice(0, 10) })
     }
   } catch { /* audit is non-critical */ }
 
@@ -1346,7 +1345,7 @@ export async function checkStalePrices(): Promise<StaleItem[]> {
         }
       }
   } catch (err) {
-    console.error(`[Stale Prices] Error reading ${sheetName}: ${err}`)
+    log.error('Stale prices check failed', { sheetName, error: String(err) })
   }
 
   return staleItems

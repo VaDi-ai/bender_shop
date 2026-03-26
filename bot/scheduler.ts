@@ -12,6 +12,7 @@
  */
 
 import { Telegraf, Telegram, Markup } from 'telegraf'
+import log from '../lib/logger'
 import { prisma } from '../lib/prisma'
 import { isAvitoConfigured, getAvitoChats, getAvitoUserId, sendAvitoMessage, type AvitoChat } from '../lib/avito'
 import { getAIMode, generateAIResponse, storeSuggestion, incrementStat } from './ai/agent'
@@ -29,12 +30,12 @@ type RemindPayload = {
 // ─── Запуск планировщика ──────────────────────────────────────────────────────
 
 export function startScheduler(bot: Telegraf): void {
-  console.log('Планировщик запущен (интервал: 10 мин)')
-  setInterval(() => { runTick(bot).catch(err => console.error('[Scheduler]', err)) }, INTERVAL_MS)
+  log.info('Scheduler started', { intervalMs: INTERVAL_MS })
+  setInterval(() => { runTick(bot).catch(err => log.error('Scheduler tick error', { error: err instanceof Error ? err.message : String(err) })) }, INTERVAL_MS)
 
   // Avito polling: отдельный таймер, каждые 2 минуты
-  setTimeout(() => pollAvitoMessages(bot.telegram).catch(e => console.error('[Avito]', e)), 30_000)
-  setInterval(() => { pollAvitoMessages(bot.telegram).catch(e => console.error('[Avito]', e)) }, 2 * 60 * 1000)
+  setTimeout(() => pollAvitoMessages(bot.telegram).catch(e => log.error('Avito poll error', { error: e instanceof Error ? e.message : String(e) })), 30_000)
+  setInterval(() => { pollAvitoMessages(bot.telegram).catch(e => log.error('Avito poll error', { error: e instanceof Error ? e.message : String(e) })) }, 2 * 60 * 1000)
 }
 
 // ─── Один «тик» — проверяем и выполняем задачи ───────────────────────────────
@@ -55,18 +56,18 @@ async function runTick(bot: Telegraf): Promise<void> {
 
     if (tasks.length === 0) return
 
-    console.log(`[Scheduler] Обрабатываем ${tasks.length} задач(и)`)
+    log.info('Scheduler processing tasks', { count: tasks.length })
 
     for (const task of tasks) {
       try {
         await executeTask(bot, task)
         await prisma.task.update({ where: { id: task.id }, data: { status: 'done' } })
       } catch (err) {
-        console.error(`[Scheduler] Задача #${task.id} завершилась с ошибкой:`, err)
+        log.error('Scheduler task failed', { taskId: task.id, error: err instanceof Error ? err.message : String(err) })
         const newAttemptCount = task.attemptCount + 1
         const MAX_ATTEMPTS = 5
         if (newAttemptCount >= MAX_ATTEMPTS) {
-          console.error(`[Scheduler] Задача #${task.id} превысила лимит попыток (${MAX_ATTEMPTS}), помечаем как failed`)
+          log.error('Scheduler task max attempts exceeded', { taskId: task.id, maxAttempts: MAX_ATTEMPTS })
           await prisma.task.update({
             where: { id: task.id },
             data: { status: 'failed', attemptCount: newAttemptCount },
@@ -86,12 +87,12 @@ async function runTick(bot: Telegraf): Promise<void> {
         where: { isActive: true, parsedAt: { lt: cutoff } },
         data: { isActive: false },
       })
-      if (count > 0) console.log(`[Scheduler] Deactivated ${count} stale supplier prices`)
+      if (count > 0) log.info('Deactivated stale supplier prices', { count })
     } catch (err) {
-      console.error('[Scheduler] Supplier price cleanup error:', err)
+      log.error('Supplier price cleanup error', { error: err instanceof Error ? err.message : String(err) })
     }
   } catch (err) {
-    console.error('[Scheduler] Ошибка получения задач:', err)
+    log.error('Scheduler fetch tasks error', { error: err instanceof Error ? err.message : String(err) })
   } finally {
     isRunning = false
   }
@@ -112,16 +113,14 @@ async function executeTask(
   const text = data.text
 
   if (!text) {
-    console.warn(`[Scheduler] Задача #${task.id}: payload.text не задан, пропускаем`)
+    log.warn('Scheduler task missing payload.text', { taskId: task.id })
     return
   }
 
   if (action === 'remind_client' || action === 'promo_notify') {
     if (client.source === 'telegram' && client.externalId) {
       await bot.telegram.sendMessage(client.externalId, text)
-      console.log(
-        `[Scheduler] Задача #${task.id}: сообщение отправлено клиенту #${client.id} (TG)`,
-      )
+      log.info('Scheduler task sent', { taskId: task.id, clientId: client.id, channel: 'telegram' })
       return
     }
 
@@ -130,14 +129,12 @@ async function executeTask(
       const chatId = client.externalId.split(':')[1]
       if (chatId) {
         await sendAvitoMessage(chatId, text)
-        console.log(`[Scheduler] Задача #${task.id}: сообщение отправлено клиенту #${client.id} (Avito)`)
+        log.info('Scheduler task sent', { taskId: task.id, clientId: client.id, channel: 'avito' })
         return
       }
     }
 
-    console.warn(
-      `[Scheduler] Задача #${task.id}: канал ${client.source} не поддерживается, пропускаем`,
-    )
+    log.warn('Scheduler task unsupported channel', { taskId: task.id, source: client.source })
     return
   }
 
@@ -145,7 +142,7 @@ async function executeTask(
     // AI suggestions are serialized/restored separately, skip
     return
   }
-  console.warn(`[Scheduler] Задача #${task.id}: неизвестный action="${action}"`)
+  log.warn('Scheduler task unknown action', { taskId: task.id, action })
 }
 
 // ─── Avito Messenger Polling ──────────────────────────────────────────────────
@@ -165,10 +162,10 @@ function buildItemInfo(chat: AvitoChat): { title: string; url: string } {
 }
 
 async function pollAvitoMessages(telegram: Telegram): Promise<void> {
-  console.log('[Avito] Client ID:', process.env.AVITO_CLIENT_ID ? 'set' : 'NOT SET')
-  if (!isAvitoConfigured()) { console.log('[Avito] Not configured, skipping'); return }
+  log.debug('Avito poll check', { clientIdSet: !!process.env.AVITO_CLIENT_ID })
+  if (!isAvitoConfigured()) { log.debug('Avito not configured, skipping'); return }
 
-  console.log('[Avito] Polling started...')
+  log.debug('Avito polling started')
   const CRM_GROUP_ID = Number(process.env.CRM_GROUP_ID)
   if (!CRM_GROUP_ID) return
 
@@ -183,7 +180,7 @@ async function pollAvitoMessages(telegram: Telegram): Promise<void> {
       }
     }
     initialPollDone = true
-    console.log('[Avito] Initial poll: cached', chats.length, 'chats')
+    log.info('Avito initial poll cached', { chatCount: chats.length })
     return
   }
 
@@ -195,9 +192,7 @@ async function pollAvitoMessages(telegram: Telegram): Promise<void> {
 
     lastProcessedMsg.set(chat.id, lastMsg.id)
 
-    // Debug: log chat and message structure
-    console.log('[Avito] Chat id:', chat.id, 'type:', typeof chat.id, 'keys:', Object.keys(chat).join(','))
-    console.log('[Avito] Message object:', JSON.stringify(lastMsg).slice(0, 500))
+    log.debug('Avito chat message', { chatId: chat.id, keys: Object.keys(chat).join(',') })
 
     const buyer = chat.users?.find(u => u.id !== userId)
     if (!buyer) continue
@@ -250,7 +245,7 @@ async function pollAvitoMessages(telegram: Telegram): Promise<void> {
           { message_thread_id: topic.message_thread_id },
         )
       } catch (err) {
-        console.error(`[Avito] Failed to create topic for ${name}:`, err)
+        log.error('Avito topic creation failed', { error: err instanceof Error ? err.message : String(err) })
         continue
       }
     } else {
@@ -273,10 +268,10 @@ async function pollAvitoMessages(telegram: Telegram): Promise<void> {
               { message_thread_id: topic.message_thread_id },
             )
           } catch (err2) {
-            console.error(`[Avito] Failed to recreate topic for ${name}:`, err2)
+            log.error('Avito topic recreation failed', { error: err2 instanceof Error ? err2.message : String(err2) })
           }
         } else {
-          console.error(`[Avito] Failed to forward message:`, err)
+          log.error('Avito forward message failed', { error: err instanceof Error ? err.message : String(err) })
         }
       }
     }
@@ -286,7 +281,7 @@ async function pollAvitoMessages(telegram: Telegram): Promise<void> {
       data: { clientId: client.id, direction: 'in', text, source: 'avito' },
     })
 
-    console.log(`[Avito] New message from ${name}: ${text.slice(0, 50)}`)
+    log.info('Avito new message', { clientId: client.id, textPreview: text.slice(0, 50) })
 
     // AI agent processing
     if (client.telegramTopicId) {
@@ -323,9 +318,9 @@ async function pollAvitoMessages(telegram: Telegram): Promise<void> {
           }
         }
       } catch (err) {
-        console.error(`[Avito] AI error for ${name}:`, err)
+        log.error('Avito AI error', { clientId: client.id, error: err instanceof Error ? err.message : String(err) })
       }
     }
   }
-  console.log(`[Avito] Polling done, processed ${chats.length} chats`)
+  log.debug('Avito polling done', { chatCount: chats.length })
 }
