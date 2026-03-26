@@ -1,4 +1,6 @@
 import 'dotenv/config'
+import { initSentry } from '../lib/sentry'
+initSentry()
 
 // ─── Typed temp storage with TTL (replaces globalThis hacks) ─────────────────
 interface TimedData<T> { data: T; expires: number }

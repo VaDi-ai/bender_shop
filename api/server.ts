@@ -8,6 +8,8 @@
  */
 
 import 'dotenv/config'
+import { initSentry, Sentry } from '../lib/sentry'
+initSentry()
 import crypto from 'crypto'
 import fs from 'fs'
 import https from 'https'
@@ -1228,6 +1230,11 @@ export function startApiServer(bot?: Telegraf): void {
     }
   })
 
+  // ── Sentry error handler (must be before custom error handler) ─────────────
+  if (process.env.SENTRY_DSN) {
+    Sentry.setupExpressErrorHandler(app)
+  }
+
   // ── Глобальный обработчик ошибок ───────────────────────────────────────────
   app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
     log.error('Unhandled API error', { error: err.message, stack: err.stack })
@@ -1242,6 +1249,7 @@ export function startApiServer(bot?: Telegraf): void {
   // Graceful HTTP drain: stop accepting connections, allow up to 10s to finish in-flight requests
   const closeServer = async () => {
     server.close()
+    await Sentry.close(2000)
     try { await prisma.$disconnect() } catch { /* ignore */ }
     log.info('Prisma disconnected')
     setTimeout(() => {

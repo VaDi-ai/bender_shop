@@ -5,6 +5,7 @@
  * Avito Messenger API: https://developers.avito.ru/api-catalog/messenger
  */
 
+import { Sentry } from './sentry'
 import log from './logger'
 
 const AVITO_CLIENT_ID = process.env.AVITO_CLIENT_ID
@@ -66,7 +67,9 @@ export async function getAvitoToken(): Promise<string> {
       if (attempt < 3) await new Promise(r => setTimeout(r, attempt * 1000))
     }
   }
-  throw new Error('Avito OAuth: failed after 3 attempts')
+  const oauthErr = new Error('Avito OAuth: failed after 3 attempts')
+  Sentry.captureException(oauthErr, { tags: { operation: 'avito-oauth' } })
+  throw oauthErr
   } finally {
     refreshPromise = null
   }

@@ -12,6 +12,7 @@
  */
 
 import { Telegraf, Telegram, Markup } from 'telegraf'
+import { Sentry } from '../lib/sentry'
 import log from '../lib/logger'
 import { prisma } from '../lib/prisma'
 import { isAvitoConfigured, getAvitoChats, getAvitoUserId, sendAvitoMessage, type AvitoChat } from '../lib/avito'
@@ -92,6 +93,7 @@ async function runTick(bot: Telegraf): Promise<void> {
       log.error('Supplier price cleanup error', { error: err instanceof Error ? err.message : String(err) })
     }
   } catch (err) {
+    Sentry.captureException(err, { tags: { operation: 'scheduler-tick' } })
     log.error('Scheduler fetch tasks error', { error: err instanceof Error ? err.message : String(err) })
   } finally {
     isRunning = false

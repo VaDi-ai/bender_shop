@@ -10,6 +10,7 @@
  */
 
 import OpenAI from 'openai'
+import { Sentry } from '../../lib/sentry'
 import log from '../../lib/logger'
 import { prisma } from '../../lib/prisma'
 import { notifyAdminsAboutApiError } from '../../lib/notify-admins'
@@ -513,6 +514,7 @@ ${historyText}${webSearchContext}${supplierPriceContext}${supplierPriceContext ?
     } catch (err) {
       log.error('AI attempt failed', { attempt, error: err instanceof Error ? err.message : String(err) })
       if (attempt === 3) {
+        Sentry.captureException(err, { tags: { operation: 'ai-response' } })
         notifyAdminsAboutApiError(err, 'AI ответ клиенту').catch((e) => log.error('AI admin notify error', { error: e instanceof Error ? e.message : String(e) }))
       }
       if (attempt < 3) {
