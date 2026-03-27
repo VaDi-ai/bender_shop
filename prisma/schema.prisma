@@ -538,3 +538,50 @@ model Event {
   @@index([productId])
   @@index([sessionId])
 }
+
+/// Статистика Avito объявлений (из выгрузки)
+model AvitoStat {
+  id                Int       @id @default(autoincrement())
+  listingId         String?
+  category          String?
+  subcategory       String?
+  parameter         String?
+  title             String?
+  price             Int?
+  publishedAt       DateTime?
+  unpublishedAt     DateTime?
+  daysOnAvito       Int?
+  impressions       Int?
+  views             Int?
+  viewConversion    Float?
+  avgViewPrice      Float?
+  contacts          Int?
+  contactConversion Float?
+  chats             Int?
+  phoneLooks        Int?
+  favorites         Int?
+  avgContactPrice   Float?
+  totalSpend        Float?
+  promoSpend        Float?
+  importedAt        DateTime  @default(now())
+
+  @@index([category])
+  @@index([subcategory])
+  @@index([publishedAt])
+}
+
+/// Продажи (из Excel расходов)
+model Sale {
+  id          Int      @id @default(autoincrement())
+  date        DateTime
+  productName String
+  quantity    Int      @default(1)
+  costPrice   Float
+  sellPrice   Float
+  extraCost   Float    @default(0)
+  profit      Float
+  importedAt  DateTime @default(now())
+
+  @@index([date])
+  @@index([productName])
+}

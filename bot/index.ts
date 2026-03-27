@@ -989,11 +989,48 @@ bot.command('avito', async (ctx) => {
         `✅ avitoEnabled: ${enabled}`,
         '',
         'Команды:',
+        '/avito stats — аналитика по объявлениям',
         '/avito map — автоматический маппинг',
         '/avito sync — синхронизация цен',
         '/avito enable_cat <Категория>',
         '/avito disable_cat <Категория>',
         '/avito list — смапленные товары',
+      ].join('\n'))
+      return
+    }
+
+    // /avito stats
+    if (sub === 'stats') {
+      const [totalStats, totalSales, topCategories] = await Promise.all([
+        prisma.avitoStat.count(),
+        prisma.sale.count(),
+        prisma.avitoStat.groupBy({
+          by: ['subcategory'],
+          _sum: { impressions: true, contacts: true, totalSpend: true },
+          _count: true,
+          orderBy: { _sum: { contacts: 'desc' } },
+          take: 10,
+        }),
+      ])
+
+      if (totalStats === 0) {
+        await ctx.reply('📊 Нет данных Avito статистики.\n\nИмпорт: npx ts-node scripts/import-avito-stats.ts --stats <file.xlsx>')
+        return
+      }
+
+      const lines = topCategories.map(c => {
+        const spend = Math.round(c._sum.totalSpend || 0)
+        const contacts = c._sum.contacts || 0
+        const cpc = contacts > 0 ? Math.round(spend / contacts) : 0
+        return `  ${c.subcategory}: ${c._count} объявл. | ${contacts} контактов | ${spend.toLocaleString('ru-RU')}₽ | CPC: ${cpc}₽`
+      })
+
+      await ctx.reply([
+        '📊 Avito аналитика:',
+        `📋 Объявлений: ${totalStats} | Продаж: ${totalSales}`,
+        '',
+        'По категориям:',
+        ...lines,
       ].join('\n'))
       return
     }
