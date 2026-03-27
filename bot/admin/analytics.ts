@@ -19,7 +19,7 @@ import { getUserId } from '../helpers'
 
 type AnalyticsFlowState = {
   flow: 'custom_period'
-  target: 'main' | 'top_prod' | 'top_cli'
+  target: 'main' | 'top_prod' | 'top_cli' | 'funnel'
 }
 
 export const analyticsState = new Map<number, AnalyticsFlowState>()
@@ -103,9 +103,10 @@ function mainButtons() {
       Markup.button.callback('👤 Отчёт по клиенту', 'an:cli:0'),
     ],
     [
+      Markup.button.callback('📈 Воронка', 'an:funnel'),
       Markup.button.callback('📂 Сегменты', 'segs:list'),
-      Markup.button.callback('🏠 Главное меню', 'back:main'),
     ],
+    [Markup.button.callback('🏠 Главное меню', 'back:main')],
   ])
 }
 
@@ -152,8 +153,38 @@ async function buildMainReport(from: Date, to: Date, label: string): Promise<str
     }),
   ])
 
+  const [totalProducts, totalVariants, featuredCount, outOfStock, categoryStats, sourceStats] = await Promise.all([
+    prisma.product.count({ where: { isAvailable: true } }),
+    prisma.productVariant.count({ where: { inStock: true } }),
+    prisma.product.count({ where: { isFeatured: true } }),
+    prisma.product.count({ where: { isAvailable: true, stock: 0 } }),
+    prisma.category.findMany({
+      include: { _count: { select: { products: { where: { isAvailable: true } } } } },
+      orderBy: { id: 'asc' },
+    }),
+    prisma.client.groupBy({
+      by: ['source'],
+      where: { createdAt: { gte: from, lte: to } },
+      _count: true,
+    }),
+  ])
+
   const revenue = fmt(ordersAgg._sum.totalAmount)
+  const avgCheck = ordersAgg._count > 0
+    ? Math.round(Number(ordersAgg._sum.totalAmount) / ordersAgg._count)
+    : 0
   const segLines = segments.map((s) => `${s.color} ${s.name}: ${s._count.clients}`).join('\n')
+
+  const catLines = categoryStats
+    .filter(c => c._count.products > 0)
+    .map(c => `  ${c.name}: ${c._count.products}`)
+    .join('\n')
+
+  const sourceIcons: Record<string, string> = { telegram: '📱', avito: '🟢', instagram: '📷' }
+  const sourceLines = sourceStats
+    .sort((a, b) => b._count - a._count)
+    .map(s => `  ${sourceIcons[s.source] ?? '🌐'} ${s.source || 'unknown'}: ${s._count}`)
+    .join('\n')
 
   return [
     `📊 Аналитика за ${label}`,
@@ -161,12 +192,19 @@ async function buildMainReport(from: Date, to: Date, label: string): Promise<str
     `👥 Новых клиентов: ${newClients}`,
     `💬 Сообщений получено: ${msgCount}`,
     `💰 Продаж: ${ordersAgg._count} на сумму ${revenue} ₽`,
+    `📊 Средний чек: ${fmt(avgCheck)} ₽`,
     `🔖 Резервов: ${resCount}`,
+    SEP,
+    `📦 Каталог: ${totalProducts} товаров, ${totalVariants} вариантов`,
+    `⭐ Хитов: ${featuredCount} | Нет в наличии: ${outOfStock}`,
+    catLines ? `\nПо категориям:\n${catLines}` : '',
+    SEP,
+    sourceLines ? `Источники:\n${sourceLines}` : '',
     SEP,
     'По сегментам:',
     segLines || '—',
     SEP,
-  ].join('\n')
+  ].filter(Boolean).join('\n')
 }
 
 async function buildTopProducts(from: Date, to: Date, label: string): Promise<string> {
@@ -291,6 +329,38 @@ async function sendClientReport(ctx: Context, clientId: number): Promise<void> {
   await ctx.reply(lines, backToAnalyticsButtons())
 }
 
+async function buildFunnelReport(from: Date, to: Date, label: string): Promise<string> {
+  const [visitors, orders, reservations, repeatClients] = await Promise.all([
+    prisma.client.count({ where: { createdAt: { gte: from, lte: to } } }),
+    prisma.order.aggregate({
+      where: { createdAt: { gte: from, lte: to } },
+      _count: true,
+      _sum: { totalAmount: true },
+    }),
+    prisma.reservation.count({ where: { createdAt: { gte: from, lte: to } } }),
+    prisma.client.count({
+      where: {
+        orders: { some: { createdAt: { gte: from, lte: to } } },
+        totalPurchases: { gte: 2 },
+      },
+    }),
+  ])
+
+  const convRate = visitors > 0 ? ((orders._count / visitors) * 100).toFixed(1) : '0'
+
+  return [
+    `📈 Воронка за ${label}`,
+    SEP,
+    `👥 Новых клиентов: ${visitors}`,
+    `🔖 Резервов: ${reservations}`,
+    `💰 Заказов: ${orders._count}`,
+    `📊 Конверсия: ${convRate}%`,
+    `🔄 Повторных: ${repeatClients}`,
+    orders._count > 0 ? `💵 Выручка: ${fmt(orders._sum.totalAmount)} ₽` : '',
+    SEP,
+  ].filter(Boolean).join('\n')
+}
+
 // ─── Публичный интерфейс ─────────────────────────────────────────────────────
 
 export async function showAnalyticsToday(ctx: Context): Promise<void> {
@@ -330,6 +400,9 @@ export async function handleAnalyticsMessage(
   } else if (state.target === 'top_cli') {
     const report = await buildTopClients(parsed.from, parsed.to, parsed.label)
     await ctx.reply(report, backToAnalyticsButtons())
+  } else if (state.target === 'funnel') {
+    const report = await buildFunnelReport(parsed.from, parsed.to, parsed.label)
+    await ctx.reply(report, backToAnalyticsButtons())
   }
 
   return true
@@ -362,6 +435,12 @@ export function setupAnalyticsHandlers(bot: Telegraf): void {
     await ctx.reply('🏆 Топ товаров — выберите период:', periodButtons('top_prod'))
   })
 
+  // Воронка
+  bot.action('an:funnel', async (ctx) => {
+    try { await ctx.answerCbQuery() } catch { /* ignore */ }
+    await ctx.reply('📈 Воронка — выберите период:', periodButtons('funnel'))
+  })
+
   // Выбор периода для топ клиентов
   bot.action('an:tc', async (ctx) => {
     try { await ctx.answerCbQuery('⏳ Загрузка...') } catch { /* ignore: answerCbQuery may fail if query expired */ }
@@ -372,7 +451,7 @@ export function setupAnalyticsHandlers(bot: Telegraf): void {
   bot.action(/^an:p:(\w+):(\w+)$/, async (ctx) => {
     try { await ctx.answerCbQuery('⏳ Загрузка...') } catch { /* ignore: answerCbQuery may fail if query expired */ }
     const userId = getUserId(ctx)
-    const target = ctx.match[1] as 'main' | 'top_prod' | 'top_cli'
+    const target = ctx.match[1] as 'main' | 'top_prod' | 'top_cli' | 'funnel'
     const period = ctx.match[2]
 
     if (period === 'custom') {
@@ -393,6 +472,9 @@ export function setupAnalyticsHandlers(bot: Telegraf): void {
       await ctx.reply(text, backToAnalyticsButtons())
     } else if (target === 'top_cli') {
       const text = await buildTopClients(from, to, label)
+      await ctx.reply(text, backToAnalyticsButtons())
+    } else if (target === 'funnel') {
+      const text = await buildFunnelReport(from, to, label)
       await ctx.reply(text, backToAnalyticsButtons())
     }
   })

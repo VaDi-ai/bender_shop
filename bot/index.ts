@@ -242,6 +242,25 @@ bot.start(async (ctx, next) => {
   return next()
 })
 
+// /stats — быстрая статистика для админов
+bot.command('stats', async (ctx) => {
+  const userId = ctx.from?.id
+  if (!userId || !ADMIN_IDS.includes(userId)) return
+  const [products, orders, clients, revenue] = await Promise.all([
+    prisma.product.count({ where: { isAvailable: true } }),
+    prisma.order.count(),
+    prisma.client.count(),
+    prisma.order.aggregate({ _sum: { totalAmount: true } }),
+  ])
+  await ctx.reply([
+    '📊 Быстрая статистика:',
+    `📦 Товаров: ${products}`,
+    `👥 Клиентов: ${clients}`,
+    `💰 Заказов: ${orders}`,
+    `💵 Выручка: ${Number(revenue._sum.totalAmount || 0).toLocaleString('ru-RU')} ₽`,
+  ].join('\n'))
+})
+
 // /shop — ответить кнопкой Mini App (любой пользователь)
 bot.command('shop', async (ctx) => {
   if (!WEBAPP_URL) return
