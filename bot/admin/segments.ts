@@ -90,6 +90,7 @@ export function setupSegmentHandlers(bot: Telegraf): void {
 
     segmentsState.set(userId, { flow: 'rename', segmentId })
     await ctx.reply(`Введите новое название для "${seg.color} ${seg.name}":`)
+    return
   })
 
   // Подтверждение удаления
@@ -127,6 +128,7 @@ export function setupSegmentHandlers(bot: Telegraf): void {
         ],
       ]),
     )
+    return
   })
 
   // Подтверждённое удаление
@@ -150,6 +152,7 @@ export function setupSegmentHandlers(bot: Telegraf): void {
 
     await ctx.reply(`✅ Сегмент "${seg.color} ${seg.name}" удалён.`)
     await showSegments(ctx)
+    return
   })
 
   // Начать добавление
@@ -183,6 +186,7 @@ export function setupSegmentHandlers(bot: Telegraf): void {
       await ctx.reply('Сегмент с таким названием уже существует. Введите другое:')
       segmentsState.set(userId, { flow: 'add_name' })
     }
+    return
   })
 }
 

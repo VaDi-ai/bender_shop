@@ -721,7 +721,7 @@ export function setupPromotionsHandlers(bot: Telegraf): void {
         ? `${fmtDate(promo.startsAt)} — ${fmtDate(promo.endsAt)}`
         : 'Без ограничений'
 
-    await ctx.reply(
+    return await ctx.reply(
       [
         `📊 Акция: ${promo.name}`,
         `Скидка: ${discLabel}`,
@@ -744,7 +744,7 @@ export function setupPromotionsHandlers(bot: Telegraf): void {
     const promo = await prisma.promotion.findUnique({ where: { id: promoId } })
     if (!promo) return await ctx.reply('Акция не найдена.')
 
-    await ctx.reply(
+    return await ctx.reply(
       `Завершить акцию «${promo.name}»?\nЦены будут восстановлены.`,
       Markup.inlineKeyboard([
         [
@@ -765,7 +765,7 @@ export function setupPromotionsHandlers(bot: Telegraf): void {
     await cancelPromotion(promoId)
     try { await logSecurityEvent('promotion_cancelled', { promoId, name: promo.name, adminId: getUserId(ctx) }, getUserId(ctx)) } catch { /* logging failure should not break the operation */ }
 
-    await ctx.reply(
+    return await ctx.reply(
       `✅ Акция «${promo.name}» завершена. Цены восстановлены.`,
       Markup.inlineKeyboard([
         [Markup.button.callback('📋 Активные акции', 'promo:list_active')],

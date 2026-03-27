@@ -506,6 +506,7 @@ export function setupBroadcastHandlers(bot: Telegraf): void {
         [Markup.button.callback('🔙 Назад', 'bcast:segs')],
       ]),
     )
+    return
   })
 
   bot.action(/^bcast:seg_go:(\d+)$/, async (ctx) => {
@@ -527,6 +528,7 @@ export function setupBroadcastHandlers(bot: Telegraf): void {
       `📂 Рассылка по сегменту «${seg.color} ${seg.name}» (${count} чел.)\n\nОтправьте текст, фото или видео:`,
       Markup.inlineKeyboard([[Markup.button.callback('❌ Отмена', 'bcast:cancel')]]),
     )
+    return
   })
 
   // Выбор тега для фильтрации сегмента
@@ -562,6 +564,7 @@ export function setupBroadcastHandlers(bot: Telegraf): void {
       `📂 ${seg.color} ${seg.name} + 🏷️ «${tagName}»: ${count} Telegram-клиентов.\n\nОтправьте текст, фото или видео:`,
       Markup.inlineKeyboard([[Markup.button.callback('❌ Отмена', 'bcast:cancel')]]),
     )
+    return
   })
 
   // ── История ────────────────────────────────────────────────────────────────
@@ -591,6 +594,7 @@ export function setupBroadcastHandlers(bot: Telegraf): void {
     }
     broadcastsState.delete(userId)
     await executeBroadcast(ctx, userId, state)
+    return
   })
 
   // ── Предпросмотр: изменить ─────────────────────────────────────────────────

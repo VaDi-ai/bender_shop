@@ -152,7 +152,7 @@ export function setupSalesHandlers(bot: Telegraf): void {
       return await ctx.reply('Нет категорий товаров.')
     }
     salesState.set(userId, { flow: 'sale', step: 'category', clientId })
-    await ctx.reply(
+    return await ctx.reply(
       '📂 Выберите категорию:',
       Markup.inlineKeyboard([
         ...categories.map((c) => [Markup.button.callback(c.name, `sale:cat:${clientId}:${c.id}`)]),
@@ -172,7 +172,7 @@ export function setupSalesHandlers(bot: Telegraf): void {
       return await ctx.reply('Нет категорий товаров.')
     }
     salesState.set(userId, { flow: 'reserve', step: 'category', clientId })
-    await ctx.reply(
+    return await ctx.reply(
       '📂 Выберите категорию:',
       Markup.inlineKeyboard([
         ...categories.map((c) => [Markup.button.callback(c.name, `res:cat:${clientId}:${c.id}`)]),
@@ -213,7 +213,7 @@ export function setupSalesHandlers(bot: Telegraf): void {
       return await ctx.reply('Нет доступных товаров в этой категории.')
     }
     salesState.set(userId, { flow: 'sale', step: 'product_pick', clientId, categoryId })
-    await ctx.reply(
+    return await ctx.reply(
       '📦 Выберите товар:',
       Markup.inlineKeyboard([
         ...products.map((p) => {
@@ -242,7 +242,7 @@ export function setupSalesHandlers(bot: Telegraf): void {
       return await ctx.reply('Нет доступных товаров в этой категории.')
     }
     salesState.set(userId, { flow: 'reserve', step: 'product_pick', clientId, categoryId })
-    await ctx.reply(
+    return await ctx.reply(
       '📦 Выберите товар:',
       Markup.inlineKeyboard([
         ...products.map((p) => {
@@ -267,7 +267,7 @@ export function setupSalesHandlers(bot: Telegraf): void {
     if (!product) return await ctx.reply('Товар не найден.')
     salesState.set(userId, { flow: 'sale', step: 'qty', clientId, productId, productName: product.name, price: Number(product.price) })
     const available = product.quantity - product.reserved
-    await ctx.reply(`📦 ${product.name}\nДоступно: ${available} шт.\n\nВведите количество:`)
+    return await ctx.reply(`📦 ${product.name}\nДоступно: ${available} шт.\n\nВведите количество:`)
   })
 
   // ── Резерв: выбран товар → шаг количество ─────────────────────────────────
@@ -280,7 +280,7 @@ export function setupSalesHandlers(bot: Telegraf): void {
     if (!product) return await ctx.reply('Товар не найден.')
     salesState.set(userId, { flow: 'reserve', step: 'qty', clientId, productId, productName: product.name, price: Number(product.price) })
     const available = product.quantity - product.reserved
-    await ctx.reply(`📦 ${product.name}\nДоступно: ${available} шт.\n\nВведите количество:`)
+    return await ctx.reply(`📦 ${product.name}\nДоступно: ${available} шт.\n\nВведите количество:`)
   })
 
   // ── Подтверждение продажи ──────────────────────────────────────────────────
@@ -333,9 +333,10 @@ export function setupSalesHandlers(bot: Telegraf): void {
       if (client.telegramTopicId) {
         await sendToTopicCtx(ctx, CRM_GROUP_ID, client.telegramTopicId, msg)
       }
+      return
     } catch (err) {
       console.error('sale:confirm error:', err)
-      await ctx.reply('Ошибка при оформлении продажи.')
+      return await ctx.reply('Ошибка при оформлении продажи.')
     }
   })
 
@@ -387,9 +388,10 @@ export function setupSalesHandlers(bot: Telegraf): void {
       if (client.telegramTopicId) {
         await sendToTopicCtx(ctx, CRM_GROUP_ID, client.telegramTopicId, msg)
       }
+      return
     } catch (err) {
       console.error('res:confirm error:', err)
-      await ctx.reply('Ошибка при оформлении резерва.')
+      return await ctx.reply('Ошибка при оформлении резерва.')
     }
   })
 
@@ -436,7 +438,7 @@ export function setupSalesHandlers(bot: Telegraf): void {
       return await ctx.reply('Нет категорий товаров.')
     }
     salesState.set(userId, { flow: 'sale_nc', step: 'category', clientName })
-    await ctx.reply(
+    return await ctx.reply(
       '📂 Выберите категорию:',
       Markup.inlineKeyboard([
         ...categories.map((c) => [Markup.button.callback(c.name, `sale_nc:cat:${c.id}`)]),
@@ -457,7 +459,7 @@ export function setupSalesHandlers(bot: Telegraf): void {
       return await ctx.reply('Нет категорий товаров.')
     }
     salesState.set(userId, { flow: 'reserve_nc', step: 'category', clientName })
-    await ctx.reply(
+    return await ctx.reply(
       '📂 Выберите категорию:',
       Markup.inlineKeyboard([
         ...categories.map((c) => [Markup.button.callback(c.name, `res_nc:cat:${c.id}`)]),
@@ -541,7 +543,7 @@ export function setupSalesHandlers(bot: Telegraf): void {
     if (!product) return await ctx.reply('Товар не найден.')
     salesState.set(userId, { flow: 'sale_nc', step: 'qty', clientName, productId, productName: product.name, price: Number(product.price) })
     const available = product.quantity - product.reserved
-    await ctx.reply(`📦 ${product.name}\nДоступно: ${available} шт.\n\nВведите количество:`)
+    return await ctx.reply(`📦 ${product.name}\nДоступно: ${available} шт.\n\nВведите количество:`)
   })
 
   bot.action(/^res_nc:pick:(\d+)$/, async (ctx) => {
@@ -555,7 +557,7 @@ export function setupSalesHandlers(bot: Telegraf): void {
     if (!product) return await ctx.reply('Товар не найден.')
     salesState.set(userId, { flow: 'reserve_nc', step: 'qty', clientName, productId, productName: product.name, price: Number(product.price) })
     const available = product.quantity - product.reserved
-    await ctx.reply(`📦 ${product.name}\nДоступно: ${available} шт.\n\nВведите количество:`)
+    return await ctx.reply(`📦 ${product.name}\nДоступно: ${available} шт.\n\nВведите количество:`)
   })
 
   // ── sale_nc: подтверждение ─────────────────────────────────────────────────
@@ -656,10 +658,10 @@ export function setupSalesHandlers(bot: Telegraf): void {
       await releaseReserve(reservationId, 'completed')
       try { await logSecurityEvent('reservation_released', { reservationId, status: 'completed', adminId: getUserId(ctx) }, getUserId(ctx)) } catch { /* logging failure should not break the operation */ }
       await ctx.editMessageReplyMarkup({ inline_keyboard: [] }).catch((err) => console.error('[sales] editMarkup:', err))
-      await ctx.reply(`✅ Резерв #${reservationId} завершён — товар выдан.`)
+      return await ctx.reply(`✅ Резерв #${reservationId} завершён — товар выдан.`)
     } catch (err) {
       console.error('res:do_complete error:', err)
-      await ctx.reply('Ошибка при завершении резерва.')
+      return await ctx.reply('Ошибка при завершении резерва.')
     }
   })
 
@@ -675,10 +677,10 @@ export function setupSalesHandlers(bot: Telegraf): void {
       await releaseReserve(reservationId, 'cancelled')
       try { await logSecurityEvent('reservation_released', { reservationId, status: 'cancelled', adminId: getUserId(ctx) }, getUserId(ctx)) } catch { /* logging failure should not break the operation */ }
       await ctx.editMessageReplyMarkup({ inline_keyboard: [] }).catch((err) => console.error('[sales] editMarkup:', err))
-      await ctx.reply(`❌ Резерв #${reservationId} отменён.`)
+      return await ctx.reply(`❌ Резерв #${reservationId} отменён.`)
     } catch (err) {
       console.error('res:do_cancel error:', err)
-      await ctx.reply('Ошибка при отмене резерва.')
+      return await ctx.reply('Ошибка при отмене резерва.')
     }
   })
 }

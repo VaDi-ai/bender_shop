@@ -1118,7 +1118,7 @@ export function setupPricingHandlers(bot: Telegraf): void {
       attrs,
       currentPrice: Number(variant.price),
     })
-    await ctx.reply(
+    return await ctx.reply(
       `Введите новую цену для ${variant.product.name} (${attrs})\nТекущая цена: ${fmtPrice(Number(variant.price))}:`,
       Markup.inlineKeyboard([[Markup.button.callback('❌ Отмена', 'pricing:cancel')]]),
     )
@@ -1135,7 +1135,7 @@ export function setupPricingHandlers(bot: Telegraf): void {
       productId: product.id,
       productName: product.name,
     })
-    await ctx.reply(
+    return await ctx.reply(
       `Введите новую цену — применится ко всем вариантам «${product.name}»:`,
       Markup.inlineKeyboard([[Markup.button.callback('❌ Отмена', 'pricing:cancel')]]),
     )
@@ -1175,7 +1175,7 @@ export function setupPricingHandlers(bot: Telegraf): void {
       Markup.button.callback(`${c.name} (${c._count.products})`, `pricing:bulk_cat:${c.id}`),
     ])
     rows.push([Markup.button.callback('❌ Отмена', 'pricing:menu')])
-    await ctx.reply('Выберите категорию:', Markup.inlineKeyboard(rows))
+    return await ctx.reply('Выберите категорию:', Markup.inlineKeyboard(rows))
   })
 
   bot.action(/^pricing:bulk_cat:(\d+)$/, async (ctx) => {
@@ -1188,7 +1188,7 @@ export function setupPricingHandlers(bot: Telegraf): void {
       filterValue: cat.name,
       filterLabel: `категория «${cat.name}»`,
     })
-    await ctx.reply(
+    return await ctx.reply(
       `Категория «${cat.name}». Введите процент наценки:`,
       Markup.inlineKeyboard([[Markup.button.callback('❌ Отмена', 'pricing:cancel')]]),
     )
