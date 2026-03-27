@@ -1,3 +1,5 @@
+![CI](https://github.com/VaDi-ai/bender_shop/actions/workflows/ci.yml/badge.svg)
+
 # Bender Shop
 
 Telegram CRM + Mini App магазин электроники.
