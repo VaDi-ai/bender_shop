@@ -8,6 +8,11 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap">
+  <link rel="preload" href="/no-photo.webp" as="image">
+  <link rel="dns-prefetch" href="https://api.telegram.org">
+  <meta name="theme-color" content="#0a0a0a">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     img { background-color: #1a1a1a; }
@@ -2851,6 +2856,10 @@
       updateTotals()
     })
     setInterval(checkCacheVersion, 30000)
+
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js').catch(() => {})
+    }
   </script>
 
   <!-- ── Order success screen ─────────────────────────────────────── -->

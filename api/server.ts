@@ -152,7 +152,11 @@ export function startApiServer(bot?: Telegraf): void {
     contentSecurityPolicy: {
       directives: {
         defaultSrc: ["'self'"],
-        scriptSrc: ["'self'", "https://telegram.org", "'unsafe-inline'", "https://api-maps.yandex.ru", "https://yandex.ru"], // TODO: replace with nonce/hash when webapp migrates to Vite
+        // TODO: When webapp migrates to external CSS/JS files, replace 'unsafe-inline' with nonce:
+        // const nonce = crypto.randomBytes(16).toString('base64')
+        // res.locals.cspNonce = nonce
+        // scriptSrc: [`'nonce-${nonce}'`]
+        scriptSrc: ["'self'", "https://telegram.org", "'unsafe-inline'", "https://api-maps.yandex.ru", "https://yandex.ru"],
         scriptSrcAttr: ["'unsafe-inline'"], // for onclick handlers in webapp
         styleSrc: ["'self'", "'unsafe-inline'"],
         fontSrc: ["'self'", "data:"],
@@ -256,6 +260,13 @@ export function startApiServer(bot?: Telegraf): void {
   // ── GET / и /shop — Mini App ───────────────────────────────────────────────
   app.get('/', (_req, res) => {
     res.redirect('/shop')
+  })
+
+  // Service Worker (no-cache for instant update)
+  app.get('/sw.js', (_req, res) => {
+    res.setHeader('Content-Type', 'application/javascript')
+    res.setHeader('Cache-Control', 'no-cache')
+    res.sendFile(path.join(__dirname, '../../public/sw.js'))
   })
 
   // Static: public assets (no-photo placeholder, etc.)
