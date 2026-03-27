@@ -608,7 +608,7 @@ async function main() {
     ['Galaxy S24', 'galaxy-s24', ['Black','Grey','Violet','Yellow'], ['128','256','512']],
     ['Galaxy S24+', 'galaxy-s24-plus', ['Onyx Black','Marble Gray','Cobalt Violet','Amber Yellow','Jade Green','Sapphire Blue'], ['256','512']],
     ['Galaxy S24 Ultra', 'galaxy-s24-ultra', ['Titanium Black','Titanium Gray','Titanium Violet','Titanium Yellow'], ['256','512','1TB']],
-  ] as any[]) {
+  ] as [string, string, string[], string[]][]) {
     const memPrices: Record<string, number> = {}
     for (const m of mems) {
       const k = `${priceKey}-${m.toLowerCase().replace(' ','')}`
@@ -631,7 +631,7 @@ async function main() {
     ['Galaxy S25+', 'galaxy-s25-plus', ['Icy Blue','Mint','Navy','Silver Shadow'], ['256','512']],
     ['Galaxy S25 Edge', 'galaxy-s25-edge', ['Jet Black','Silver','Ice Blue'], ['256','512']],
     ['Galaxy S25 Ultra', 'galaxy-s25-ultra', ['Black','Grey','Silver Blue','White Silver'], ['256','512','1TB']],
-  ] as any[]) {
+  ] as [string, string, string[], string[]][]) {
     const memPrices: Record<string, number> = {}
     for (const m of mems) {
       const k = `${priceKey}-${m.toLowerCase().replace(' ','')}`
@@ -929,7 +929,7 @@ async function main() {
     ['Apple Watch Ultra 2', 'watch-ultra2', ['Natural Titanium','Black Titanium'], 'Apple Watch Ultra 2'],
     ['Apple Watch Ultra 3', 'watch-ultra3', ['Natural Titanium','Black Titanium'], 'Apple Watch Ultra 3'],
   ]
-  for (const [name, priceKey, colors, descKey] of watchModels as any[]) {
+  for (const [name, priceKey, colors, descKey] of watchModels as [string, string, string[], string][]) {
     const isNew = name.includes('11') || name.includes('Ultra 3')
     await createProduct({
       name, brand: 'Apple', categoryId: WATCHES.id, badge: isNew ? 'НОВИНКА' : undefined,
@@ -1040,7 +1040,7 @@ async function main() {
     ['Яндекс Станция Дуо Макс', 'yandex-duo-max', 'Яндекс Станция Дуо Макс — колонка с экраном 10" и видеозвонками. Умный дом и стриминг в одном устройстве.', { Звук: '30 Вт', Экран: '10" IPS 1280×800', Камера: '5 МП', Микрофоны: '8 микрофонов' }],
     ['Яндекс Станция Миди', 'yandex-midi', 'Яндекс Станция Миди с Zigbee-хабом — умная колонка и центр умного дома в одном устройстве.', { Звук: '24 Вт', "Умный дом": 'Zigbee-хаб встроен', Микрофоны: '6 микрофонов', Связь: 'Wi-Fi, Bluetooth, Zigbee' }],
   ]
-  for (const [name, priceKey, desc, specs] of yandexStations as any[]) {
+  for (const [name, priceKey, desc, specs] of yandexStations as [string, string, string, Record<string, string>][]) {
     await createProduct({
       name, brand: 'Яндекс', categoryId: AUDIO.id,
       description: desc, specs,
@@ -1057,7 +1057,7 @@ async function main() {
     ['JBL PartyBox 520', 'jbl-partybox520', 'JBL PartyBox 520 — большая колонка для вечеринок с RGB подсветкой и звуком 480 Вт. Беспроводной микрофон в комплекте.', { Звук: '480 Вт', Батарея: 'до 18 часов', Подсветка: 'RGB', Bluetooth: '5.1' }],
     ['JBL PartyBox Encore 2', 'jbl-partybox-encore2', 'JBL PartyBox Encore 2 с двумя беспроводными микрофонами. Для домашних вечеринок и корпоративов.', { Звук: '100 Вт', Батарея: 'до 6 часов', Микрофоны: '2 беспроводных', Bluetooth: '5.1' }],
   ]
-  for (const [name, priceKey, desc, specs] of jblModels as any[]) {
+  for (const [name, priceKey, desc, specs] of jblModels as [string, string, string, Record<string, string>][]) {
     await createProduct({
       name, brand: 'JBL', categoryId: AUDIO.id,
       description: desc, specs,
@@ -1089,7 +1089,7 @@ async function main() {
     ['Meta Quest 3S', 'oculus-quest-3s', 'Meta', 'Игровые консоли', 'Meta Quest 3S — доступная смешанная реальность с Snapdragon XR2 Gen 2 и цветными сенсорами.', { Чип: 'Snapdragon XR2 Gen 2', ОЗУ: '8 ГБ', Дисплей: 'LCD 2064×2208 на глаз', Батарея: 'до 2.5 часов' }],
     ['Meta Quest 3', 'oculus-quest-3', 'Meta', 'Игровые консоли', 'Meta Quest 3 — лучшее смешанная реальность для потребителей. Вдвое тоньше Quest 2, цветные камеры passthrough.', { Чип: 'Snapdragon XR2 Gen 2', ОЗУ: '8 ГБ', Дисплей: 'LCD 2064×2208 на глаз', Хранилище: '128/512 ГБ', Батарея: 'до 3 часов' }],
   ]
-  for (const [name, priceKey, brand, , desc, specs] of consoleItems as any[]) {
+  for (const [name, priceKey, brand, , desc, specs] of consoleItems as [string, string, string, string, string, Record<string, string>][]) {
     await createProduct({
       name, brand, categoryId: CONSOLES.id,
       description: desc, specs,
@@ -1119,7 +1119,7 @@ async function main() {
     ['Dyson Supersonic Professional', 'dyson-supersonic-pro', 'Dyson Supersonic Professional — специальная версия для парикмахеров с кейсом и широким выбором насадок.', { Мотор: 'Dyson V9', Комплект: 'Кейс + 6 профессиональных насадок', Использование: 'Профессиональный салон' }],
     ['Dyson HT01 Airstrait', 'dyson-ht01', 'Dyson Airstrait HT01 — выпрямитель потоком воздуха без пластин. Выпрямляет влажные волосы без нагрева пластин.', { Технология: 'Воздух вместо пластин', Для: 'Влажные и сухие волосы', Режимы: '4 настройки' }],
   ]
-  for (const [name, priceKey, desc, specs] of dysonHairItems as any[]) {
+  for (const [name, priceKey, desc, specs] of dysonHairItems as [string, string, string, Record<string, string>][]) {
     await createProduct({
       name, brand: 'Dyson', categoryId: HAIR.id,
       description: desc, specs,
@@ -1140,7 +1140,7 @@ async function main() {
     ['Dyson V10 Animal', 'dyson-v10', 'Dyson V10 Animal — мощный пылесос для домов с животными. Специальные насадки для шерсти.', { Всасывание: '151 AW', Батарея: 'до 60 мин', Насадки: 'Для шерсти животных', Фильтрация: 'HEPA' }],
     ['Dyson PencilVac', 'dyson-pencilvac', 'Dyson PencilVac — ультратонкий пылесос диаметром 12 мм для труднодоступных мест.', { Диаметр: '12 мм', Батарея: 'до 20 мин', Применение: 'Щели, автомобиль, клавиатура' }],
   ]
-  for (const [name, priceKey, desc, specs] of dysonVacuumItems as any[]) {
+  for (const [name, priceKey, desc, specs] of dysonVacuumItems as [string, string, string, Record<string, string>][]) {
     await createProduct({
       name, brand: 'Dyson', categoryId: VACUUM.id,
       description: desc, specs,
@@ -1163,7 +1163,7 @@ async function main() {
     ['Roborock F25 LT', 'roborock-f25-lt', 'Roborock F25 LT — лёгкий вертикальный пылесос с быстрой зарядкой и автосамоочисткой.', { Всасывание: '180 AW', Батарея: 'до 45 мин', Вес: '1.4 кг' }],
     ['Roborock H60', 'roborock-h60', 'Roborock H60 — мощный вертикальный пылесос с HEPA фильтром и длинной аккумуляторной жизнью.', { Всасывание: '220 AW', Батарея: 'до 90 мин', Фильтрация: 'HEPA H12' }],
   ]
-  for (const [name, priceKey, desc, specs] of roborockItems as any[]) {
+  for (const [name, priceKey, desc, specs] of roborockItems as [string, string, string, Record<string, string>][]) {
     await createProduct({ name, brand: 'Roborock', categoryId: VACUUM.id, description: desc, specs, variants: [{ skuParts: [name.replace(/\s/g,'-').toUpperCase()], price: price(priceKey), attributes: {} }] })
   }
 
@@ -1173,7 +1173,7 @@ async function main() {
     ['Xiaomi Vacuum Cleaner G20 Lite', 'xiaomi-g20-lite', 'Xiaomi G20 Lite — доступная версия G20 для ежедневной уборки.', { Всасывание: '150 Вт', Батарея: 'до 50 мин' }],
     ['Xiaomi Vacuum Cleaner G20 Max', 'xiaomi-g20-max', 'Xiaomi G20 Max — усиленная версия с большим аккумулятором и мощным всасыванием.', { Всасывание: '220 Вт', Батарея: 'до 90 мин' }],
   ]
-  for (const [name, priceKey, desc, specs] of xiaomiVacuums as any[]) {
+  for (const [name, priceKey, desc, specs] of xiaomiVacuums as [string, string, string, Record<string, string>][]) {
     await createProduct({ name, brand: 'Xiaomi', categoryId: VACUUM.id, description: desc, specs, variants: [{ skuParts: [name.replace(/\s/g,'-').toUpperCase()], price: price(priceKey), attributes: {} }] })
   }
 
@@ -1196,7 +1196,7 @@ async function main() {
     ['Ray-Ban Meta Headliner', 'ray-ban-meta-headliner', 'Ray-Ban', 'Ray-Ban Meta Headliner — умные очки с камерой 12 МП, открытым звуком и Meta AI. Новый дизайн Headliner.', { Камера: '12 МП', Аудио: 'Открытые динамики', AI: 'Meta AI встроен', Связь: 'Bluetooth, Wi-Fi', Батарея: 'до 4 часов' }],
     ['Ray-Ban Meta Skyler', 'ray-ban-meta-skyler', 'Ray-Ban', 'Ray-Ban Meta Skyler — умные очки Ray-Ban Meta в женском дизайне Skyler с камерой и Meta AI.', { Камера: '12 МП', Аудио: 'Открытые динамики', AI: 'Meta AI встроен', Дизайн: 'Skyler (женский фрейм)' }],
   ]
-  for (const [name, priceKey, brand, desc, specs] of photoItems as any[]) {
+  for (const [name, priceKey, brand, desc, specs] of photoItems as [string, string, string, string, Record<string, string>][]) {
     await createProduct({ name, brand, categoryId: PHOTO.id, description: desc, specs, variants: [{ skuParts: [name.replace(/\s/g,'-').toUpperCase()], price: price(priceKey), attributes: {} }] })
   }
 
@@ -1224,7 +1224,7 @@ async function main() {
     ['Защитное стекло на камеры', 'acc-glass-camera', 'Защитное стекло на блок камер для'],
     ['Зарядная станция 3 в 1', 'acc-dock-3in1', 'Зарядная станция 3 в 1 (iPhone + Apple Watch + AirPods) для'],
   ]
-  for (const [accName, priceKey, descPrefix] of iphoneAccessories as any[]) {
+  for (const [accName, priceKey, descPrefix] of iphoneAccessories as [string, string, string][]) {
     await createProduct({
       name: accName, brand: accName.includes('Pitaka') ? 'Pitaka' : accName.includes('ReMax') ? 'ReMax' : 'Apple',
       categoryId: ACCESSORIES.id,
@@ -1243,7 +1243,7 @@ async function main() {
     ['Чехол AirPods 4', 'acc-case-airpods4', 'AirPods 4', 'Защитный силиконовый чехол для кейса AirPods 4.'],
     ['Чехол AirPods Pro 2', 'acc-case-airpods-pro2', 'AirPods Pro 2', 'Защитный силиконовый чехол для кейса AirPods Pro 2.'],
   ]
-  for (const [accName, priceKey, model, desc] of airpodsAccessories as any[]) {
+  for (const [accName, priceKey, model, desc] of airpodsAccessories as [string, string, string, string][]) {
     await createProduct({
       name: accName, brand: 'Apple', categoryId: ACCESSORIES.id,
       description: desc, specs: {},
@@ -1267,7 +1267,7 @@ async function main() {
     ['Зарядный блок iPad Original', 'acc-charger-block-ipad', 'Оригинальный зарядный блок Apple 20W/30W для iPad.'],
     ['Защитное стекло iPad', 'acc-glass-ipad', 'Защитное стекло на экран для iPad — матовое антибликовое.'],
   ]
-  for (const [accName, priceKey, desc] of ipadAccessories as any[]) {
+  for (const [accName, priceKey, desc] of ipadAccessories as [string, string, string][]) {
     const isUniversal = accName.includes('Pencil') || accName.includes('Зарядный')
     await createProduct({
       name: accName,
@@ -1296,7 +1296,7 @@ async function main() {
     ['Кабель MacBook 2m', 'acc-cable-2m', 'Кабель USB-C 2 метра для зарядки MacBook.', true],
     ['Переходник-вилка MacBook', 'acc-plug-adapter', 'Переходник вилки для зарядного устройства MacBook под европейский стандарт.', true],
   ]
-  for (const [accName, priceKey, desc, isUniversal] of macbookAccessories as any[]) {
+  for (const [accName, priceKey, desc, isUniversal] of macbookAccessories as [string, string, string, boolean?][]) {
     await createProduct({
       name: accName, brand: 'Apple', categoryId: ACCESSORIES.id, description: desc, specs: {},
       variants: isUniversal
@@ -1317,7 +1317,7 @@ async function main() {
     ['Зарядный блок Apple Watch', 'acc-charger-block-watch', 'Оригинальный зарядный блок Apple 20W для Apple Watch.'],
     ['Зарядная станция 3 в 1 Watch', 'acc-dock-3in1-watch', 'Зарядная станция 3 в 1 для Apple Watch, iPhone и AirPods.'],
   ]
-  for (const [accName, priceKey, desc] of watchAccessories as any[]) {
+  for (const [accName, priceKey, desc] of watchAccessories as [string, string, string][]) {
     const isUniversal = !accName.includes('Ремешок') && !accName.includes('стекло')
     await createProduct({
       name: accName, brand: 'Apple', categoryId: ACCESSORIES.id, description: desc, specs: {},

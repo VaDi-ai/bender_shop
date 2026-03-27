@@ -430,14 +430,14 @@ export async function syncProductsFromSheets(shouldAbort?: () => boolean): Promi
         try {
           const results = await prisma.$transaction(batch.map(buildPrismaOp))
           for (let j = 0; j < batch.length; j++) {
-            seenVariantIds.add(batch[j].existing?.id ?? (results[j] as any).id)
+            seenVariantIds.add(batch[j].existing?.id ?? (results[j] as { id: number }).id)
           }
         } catch (batchErr) {
           log.warn('Sync batch upsert failed, falling back to sequential', { error: batchErr instanceof Error ? batchErr.message : String(batchErr) })
           for (const entry of batch) {
             try {
               const result = await buildPrismaOp(entry)
-              seenVariantIds.add(entry.existing?.id ?? (result as any).id)
+              seenVariantIds.add(entry.existing?.id ?? (result as { id: number }).id)
             } catch (err) {
               const msg = `Row ${entry.variant.rowIndex} (${entry.variant.sheetName}): ${entry.variant.fullName} — ${err}`
               errors.push(msg)

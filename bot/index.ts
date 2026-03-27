@@ -137,8 +137,8 @@ bot.use(async (ctx, next) => {
   const fromId = ctx.from?.id
   const chatId = ctx.chat?.id
   const chatType = ctx.chat?.type ?? ''
-  const text = ((ctx.message as any)?.text ?? '').slice(0, 60)
-  const cbData = (ctx.callbackQuery as any)?.data ?? ''
+  const text = ((ctx.message as Record<string, unknown> | undefined)?.text as string ?? '').slice(0, 60)
+  const cbData = (ctx.callbackQuery as Record<string, unknown> | undefined)?.data as string ?? ''
   const info = text || cbData || ''
   console.log(`[BOT] ${updateType} from=${fromId ?? '?'} chat=${chatId ?? '?'}(${chatType})${info ? ' ' + info : ''}`)
   return next()
@@ -407,7 +407,7 @@ bot.on(message('text'), async (ctx, next) => {
 
   // Флоу витрины
   if (storefrontState.has(userId)) {
-    const handled = await handleStorefrontMessage(ctx as any, userId, text)
+    const handled = await handleStorefrontMessage(ctx as Parameters<typeof handleStorefrontMessage>[0], userId, text)
     if (handled) return
   }
 
@@ -453,7 +453,7 @@ bot.on(message('photo'), async (ctx, next) => {
   if (handledBcast) return
   const handled = await handleInventoryPhoto(ctx, userId)
   if (handled) return
-  const handledSf = await handleStorefrontPhoto(ctx as any, userId)
+  const handledSf = await handleStorefrontPhoto(ctx as Parameters<typeof handleStorefrontPhoto>[0], userId)
   if (handledSf) return
   return next()
 })
@@ -479,15 +479,15 @@ bot.on(message('document'), async (ctx, next) => {
 
   // Image-документ → роутим в photo-обработчики (работают с photo и document)
   if (doc?.mime_type?.startsWith('image/')) {
-    const handled = await handleInventoryPhoto(ctx as any, userId)
+    const handled = await handleInventoryPhoto(ctx as Parameters<typeof handleInventoryPhoto>[0], userId)
     if (handled) return
-    const handledSf = await handleStorefrontPhoto(ctx as any, userId)
+    const handledSf = await handleStorefrontPhoto(ctx as Parameters<typeof handleStorefrontPhoto>[0], userId)
     if (handledSf) return
   }
 
   // xlsx прайс-лист для обновления цен
   if (!doc?.mime_type?.startsWith('image/')) {
-    const handledPricing = await handlePricingDocument(ctx as any, userId)
+    const handledPricing = await handlePricingDocument(ctx as Parameters<typeof handlePricingDocument>[0], userId)
     if (handledPricing) return
   }
 
@@ -1826,9 +1826,9 @@ setInterval(async () => {
           lines.push('')
           lines.push(`🔖 БРОНИ (${nightReserves.length}) — НУЖНО ПОДТВЕРДИТЬ:`)
           for (const r of nightReserves) {
-            const payload = r.payload as any
+            const payload = r.payload as Record<string, unknown>
             const clientName = r.client?.name ?? 'Неизвестный'
-            const clientUsername = (r.client as any)?.telegramUsername ?? ''
+            const clientUsername = (r.client as Record<string, unknown> | null)?.telegramUsername ?? ''
             lines.push(`  • ${clientName} ${clientUsername} → ${payload.productName} (${Number(payload.price).toLocaleString('ru-RU')}₽)`)
           }
         }
@@ -1837,7 +1837,7 @@ setInterval(async () => {
           lines.push('')
           lines.push(`❓ ЗАПРОСЫ (товар не найден):`)
           for (const r of nightRequests) {
-            const payload = r.payload as any
+            const payload = r.payload as Record<string, unknown>
             const clientName = r.client?.name ?? 'Неизвестный'
             lines.push(`  • ${clientName} искал: "${payload.requestedItem}"`)
           }
@@ -1847,7 +1847,7 @@ setInterval(async () => {
         for (const m of nightMessages) {
           if (m.client?.telegramTopicId) {
             const clientName = m.client.name
-            const username = (m.client as any)?.telegramUsername ?? ''
+            const username = (m.client as Record<string, unknown> | null)?.telegramUsername ?? ''
             clientsNeedReply.add(`${clientName} ${username}`.trim())
           }
         }
@@ -1865,10 +1865,10 @@ setInterval(async () => {
 
         // Кнопки для быстрого перехода к клиентам
         const crmGroupId = Number(process.env.CRM_GROUP_ID)
-        const nightButtons: any[][] = []
+        const nightButtons: (ReturnType<typeof Markup.button.url> | ReturnType<typeof Markup.button.callback>)[][] = []
         for (const r of nightReserves) {
           const clientName = r.client?.name ?? 'Клиент'
-          const tgUsername = (r.client as any)?.telegramUsername ?? ''
+          const tgUsername = (r.client as Record<string, unknown> | null)?.telegramUsername ?? ''
           const topicId = r.client?.telegramTopicId
           if (topicId && crmGroupId) {
             const topicLink = `https://t.me/c/${String(crmGroupId).replace('-100', '')}/${topicId}`
@@ -2258,8 +2258,7 @@ async function ensureSalesTopic(): Promise<void> {
     console.log(`Топик «📦 Продажи и резервы» создан: threadId=${threadId}`)
 
     // Отправляем панель управления в топик
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await (bot.telegram.sendMessage as any)(
+    await bot.telegram.sendMessage(
       CRM_GROUP_ID,
       '💼 Панель продаж и резервов',
       {

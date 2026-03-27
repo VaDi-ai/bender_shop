@@ -254,8 +254,7 @@ export function setupClientHandlers(bot: Telegraf): void {
           case 'sale': {
             if (!managerId) return ctx.answerCbQuery()
             salesState.set(managerId, { flow: 'sale', step: 'product_method', clientId })
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            await (ctx.telegram.sendMessage as any)(managerId, '💰 Продажа — выберите способ выбора товара:', {
+            await ctx.telegram.sendMessage(managerId, '💰 Продажа — выберите способ выбора товара:', {
               reply_markup: Markup.inlineKeyboard([
                 [Markup.button.callback('📋 Из списка', `sale:list:${clientId}`)],
                 [Markup.button.callback('🔢 По SKU', `sale:sku:${clientId}`)],
@@ -269,8 +268,7 @@ export function setupClientHandlers(bot: Telegraf): void {
           case 'res': {
             if (!managerId) return ctx.answerCbQuery()
             salesState.set(managerId, { flow: 'reserve', step: 'product_method', clientId })
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            await (ctx.telegram.sendMessage as any)(managerId, '🔖 Резерв — выберите способ выбора товара:', {
+            await ctx.telegram.sendMessage(managerId, '🔖 Резерв — выберите способ выбора товара:', {
               reply_markup: Markup.inlineKeyboard([
                 [Markup.button.callback('📋 Из списка', `res:list:${clientId}`)],
                 [Markup.button.callback('🔢 По SKU', `res:sku:${clientId}`)],
@@ -285,7 +283,7 @@ export function setupClientHandlers(bot: Telegraf): void {
             if (!managerId) return ctx.answerCbQuery()
             await ctx.answerCbQuery()
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            return await (ctx.telegram.sendMessage as any)(managerId, '✏️ Что редактировать?', {
+            return await ctx.telegram.sendMessage(managerId, '✏️ Что редактировать?', {
               reply_markup: Markup.inlineKeyboard([
                 [
                   Markup.button.callback('👤 ФИО', `edit:field:${clientId}:fullName`),
@@ -432,15 +430,14 @@ export function setupClientHandlers(bot: Telegraf): void {
         }
 
         const { requestPriceFromAllSuppliers } = await import('../webhooks/supplier')
-        const bot = (ctx as any).telegram?.constructor?.name === 'Telegram'
-          ? { telegram: ctx.telegram } as any
-          : ctx
+        // TODO: requestPriceFromAllSuppliers should accept { telegram: Telegram } instead of Telegraf
         const sent = await requestPriceFromAllSuppliers(
-          { telegram: ctx.telegram } as any,
+          { telegram: ctx.telegram } as unknown as Telegraf,
           lastMsg.text.slice(0, 200),
         )
 
-        const threadId = (ctx.callbackQuery as any)?.message?.message_thread_id as number | undefined
+        const cbMsg = ctx.callbackQuery?.message as Record<string, unknown> | undefined
+        const threadId = cbMsg?.message_thread_id as number | undefined
         if (threadId) {
           await sendToTopic(
             ctx.telegram,
@@ -924,7 +921,7 @@ export function setupClientHandlers(bot: Telegraf): void {
         const chatId = (rawMsg['chat'] as Record<string, unknown>)?.['id'] as number
         if (client.telegramTopicId && chatId && messageId) {
           try {
-            await (ctx.telegram.forwardMessage as any)(
+            await ctx.telegram.forwardMessage(
               CRM_GROUP_ID, chatId, messageId,
               { message_thread_id: client.telegramTopicId },
             )
@@ -933,7 +930,7 @@ export function setupClientHandlers(bot: Telegraf): void {
               await prisma.client.update({ where: { id: client.id }, data: { telegramTopicId: null } })
               const threadId = await createClientTopic(ctx.telegram, client.id, name)
               if (threadId) {
-                await (ctx.telegram.forwardMessage as any)(
+                await ctx.telegram.forwardMessage(
                   CRM_GROUP_ID, chatId, messageId,
                   { message_thread_id: threadId },
                 )
@@ -1050,8 +1047,7 @@ async function sendAndPinControlPanel(
   clientId: number,
 ): Promise<number | null> {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const panelMsg = await (telegram.sendMessage as any)(CRM_GROUP_ID, '⚙️ Панель управления', {
+    const panelMsg = await telegram.sendMessage(CRM_GROUP_ID, '⚙️ Панель управления', {
       message_thread_id: threadId,
       reply_markup: buildControlPanelKeyboard(clientId).reply_markup,
     })
@@ -1059,8 +1055,7 @@ async function sendAndPinControlPanel(
 
     // Закрепляем сообщение в топике
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (telegram.pinChatMessage as any)(CRM_GROUP_ID, pinnedMessageId, {
+      await telegram.pinChatMessage(CRM_GROUP_ID, pinnedMessageId, {
         disable_notification: true,
       })
     } catch (pinErr) {
@@ -1399,7 +1394,7 @@ async function handleAIResponse(
     // Сохраняем предложение и показываем менеджеру с кнопками
     const suggestionId = storeSuggestion(clientId, safeAiText, threadId)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await (telegram.sendMessage as any)(CRM_GROUP_ID, `🤖 Предложение AI:\n\n${safeAiText}`, {
+    await telegram.sendMessage(CRM_GROUP_ID, `🤖 Предложение AI:\n\n${safeAiText}`, {
       message_thread_id: threadId,
       reply_markup: Markup.inlineKeyboard([
         [
@@ -1528,13 +1523,13 @@ async function handleWebAppOrder(
 
   // Fetch server-verified prices from DB — never trust client-supplied items/total
   if (!orderId || orderId <= 0) {
-    safeLog('[handleWebAppOrder] Rejected order with missing/zero orderId', { userId: from.id } as any)
+    safeLog('[handleWebAppOrder] Rejected order with missing/zero orderId', { userId: from.id })
     return
   }
 
   const dbOrder = await prisma.order.findUnique({ where: { id: orderId }, include: { items: true } })
   if (!dbOrder) {
-    safeLog('[handleWebAppOrder] orderId not found in DB', { orderId, userId: from.id } as any)
+    safeLog('[handleWebAppOrder] orderId not found in DB', { orderId, userId: from.id })
     return
   }
 

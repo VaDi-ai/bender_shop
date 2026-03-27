@@ -117,7 +117,7 @@ function requireTelegramAuth(req: Request, res: Response, next: NextFunction): v
     res.status(401).json({ error: 'Неверная подпись Telegram' })
     return
   }
-  ;(req as any).telegramId = userId
+  ;(req as unknown as Record<string, unknown>).telegramId = userId
   next()
 }
 

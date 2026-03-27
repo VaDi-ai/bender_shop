@@ -1001,8 +1001,7 @@ async function notifyToSalesTopic(ctx: Context, text: string, clientName: string
     if (!topicValue) return
     const threadId = parseInt(topicValue, 10)
     if (isNaN(threadId)) return
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await (ctx.telegram.sendMessage as any)(CRM_GROUP_ID, text, { message_thread_id: threadId })
+    await ctx.telegram.sendMessage(CRM_GROUP_ID, text, { message_thread_id: threadId })
   } catch (err) {
     console.error('notifyToSalesTopic error:', err)
   }

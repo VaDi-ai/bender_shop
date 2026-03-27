@@ -194,7 +194,7 @@ export async function enrichAllProducts(shouldAbort?: () => boolean, force = fal
   const where = force
     ? {}
     : { OR: [
-        { specs: { equals: null as any } },
+        { specs: { equals: null as unknown as undefined } },
         { specs: { equals: {} } },
         { description: null },
         { description: '' },

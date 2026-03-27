@@ -242,7 +242,7 @@ async function pollAvitoMessages(telegram: Telegram): Promise<void> {
           where: { id: client.id },
           data: { telegramTopicId: topic.message_thread_id },
         })
-        await (telegram.sendMessage as any)(CRM_GROUP_ID,
+        await telegram.sendMessage(CRM_GROUP_ID,
           `👤 Новый клиент с Avito: ${name}${itemLine}${urlLine}\n💬 ${text}`,
           { message_thread_id: topic.message_thread_id },
         )
@@ -252,7 +252,7 @@ async function pollAvitoMessages(telegram: Telegram): Promise<void> {
       }
     } else {
       try {
-        await (telegram.sendMessage as any)(CRM_GROUP_ID,
+        await telegram.sendMessage(CRM_GROUP_ID,
           `💬 [Avito] ${name}:${itemLine}\n${text}`,
           { message_thread_id: client.telegramTopicId },
         )
@@ -265,7 +265,7 @@ async function pollAvitoMessages(telegram: Telegram): Promise<void> {
               where: { id: client.id },
               data: { telegramTopicId: topic.message_thread_id },
             })
-            await (telegram.sendMessage as any)(CRM_GROUP_ID,
+            await telegram.sendMessage(CRM_GROUP_ID,
               `👤 Топик пересоздан\n💬 [Avito] ${name}:${itemLine}\n${text}`,
               { message_thread_id: topic.message_thread_id },
             )
@@ -300,14 +300,14 @@ async function pollAvitoMessages(telegram: Telegram): Promise<void> {
               data: { clientId: client.id, direction: 'out', text: safeText, source: 'avito' },
             })
             incrementStat('approved')
-            await (telegram.sendMessage as any)(CRM_GROUP_ID,
+            await telegram.sendMessage(CRM_GROUP_ID,
               `🤖 Бендер → [Avito] ${name}:\n${safeText}`,
               { message_thread_id: client.telegramTopicId },
             )
           } else {
             // semi — предложение менеджеру с кнопками
             const suggestionId = storeSuggestion(client.id, safeText, client.telegramTopicId)
-            await (telegram.sendMessage as any)(CRM_GROUP_ID, `🤖 Предложение AI:\n\n${safeText}`, {
+            await telegram.sendMessage(CRM_GROUP_ID, `🤖 Предложение AI:\n\n${safeText}`, {
               message_thread_id: client.telegramTopicId,
               reply_markup: Markup.inlineKeyboard([
                 [

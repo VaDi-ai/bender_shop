@@ -13,7 +13,8 @@ async function withSerializableRetry<T>(
     try {
       return await fn()
     } catch (err: unknown) {
-      const code = (err as any)?.code ?? (err as any)?.meta?.code ?? ''
+      const e = err as { code?: string; meta?: { code?: string } }
+      const code = e?.code ?? e?.meta?.code ?? ''
       if (code === '40001' && attempt < SERIALIZATION_MAX_RETRIES - 1) {
         console.warn(`[stock] Serialization conflict, retry ${attempt + 1}/${SERIALIZATION_MAX_RETRIES}`)
         continue

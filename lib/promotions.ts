@@ -87,7 +87,8 @@ export async function applyPromotion(promotionId: number): Promise<number> {
       throw new Error('Акция была изменена параллельно — повторите операцию')
     }
 
-    const variants = await findVariantsByFilter(promo.filterType, promo.filterValue, tx as any)
+    // TODO: replace cast when findVariantsByFilter accepts TransactionClient
+    const variants = await findVariantsByFilter(promo.filterType, promo.filterValue, tx as unknown as typeof prisma)
     if (variants.length === 0) return
 
     // Сохраняем оригинальные цены (skipDuplicates — защита от повторного вызова)

@@ -460,7 +460,7 @@ async function downloadTelegramFile(ctx: Context, fileId: string): Promise<Buffe
 
 async function parsePriceListXlsx(buffer: Buffer): Promise<{ sku: string; newPrice: number; comment: string }[]> {
   const wb = new ExcelJS.Workbook()
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- ExcelJS Buffer type mismatch with Node 22
   await wb.xlsx.load(buffer as any)
   // Try sheet named "Прайс-лист", fallback to first sheet
   const ws = wb.getWorksheet('Прайс-лист') ?? wb.worksheets[0]
