@@ -261,6 +261,26 @@ bot.command('stats', async (ctx) => {
   ].join('\n'))
 })
 
+// /events — статистика событий за сегодня
+bot.command('events', async (ctx) => {
+  const userId = ctx.from?.id
+  if (!userId || !ADMIN_IDS.includes(userId)) return
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const [stats, total] = await Promise.all([
+    prisma.event.groupBy({
+      by: ['type'],
+      where: { createdAt: { gte: today } },
+      _count: true,
+    }),
+    prisma.event.count({ where: { createdAt: { gte: today } } }),
+  ])
+  const lines = stats.sort((a, b) => b._count - a._count).map(s => `  ${s.type}: ${s._count}`)
+  await ctx.reply(total > 0
+    ? [`📊 События за сегодня: ${total}`, ...lines].join('\n')
+    : '📊 Событий пока нет')
+})
+
 // /shop — ответить кнопкой Mini App (любой пользователь)
 bot.command('shop', async (ctx) => {
   if (!WEBAPP_URL) return

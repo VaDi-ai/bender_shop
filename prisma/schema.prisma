@@ -521,3 +521,20 @@ model PriceAlias {
   @@index([productId])
   @@index([variantId])
 }
+
+model Event {
+  id        Int      @id @default(autoincrement())
+  type      String
+  clientId  Int?
+  productId Int?
+  data      Json?
+  source    String?
+  sessionId String?
+  createdAt DateTime @default(now())
+
+  @@index([type])
+  @@index([createdAt])
+  @@index([clientId])
+  @@index([productId])
+  @@index([sessionId])
+}

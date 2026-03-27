@@ -29,6 +29,7 @@ import { DeliveryType } from '../generated/prisma/client'
 import { Decimal } from '@prisma/client/runtime/client'
 import { fmtPrice } from '../lib/format'
 import log from '../lib/logger'
+import { trackEvent } from '../lib/events'
 
 // BigInt → JSON serialization (avitoItemId etc.)
 ;(BigInt.prototype as any).toJSON = function () { return this.toString() }
@@ -216,6 +217,9 @@ export function startApiServer(bot?: Telegraf): void {
     message: { error: 'Слишком много запросов на скачивание. Подождите минуту.' },
   })
 
+  const trackLimiter = rateLimit({ windowMs: 60_000, max: 100 })
+  app.use('/api/track', trackLimiter)
+
   // ── Таймаут для долгих запросов ───────────────────────────────────────────
   app.use((_req, res, next) => {
     res.setTimeout(10_000, () => {
@@ -260,6 +264,22 @@ export function startApiServer(bot?: Telegraf): void {
   // ── GET / и /shop — Mini App ───────────────────────────────────────────────
   app.get('/', (_req, res) => {
     res.redirect('/shop')
+  })
+
+  // ── Event tracking endpoint ──────────────────────────────────────────────────
+  const ALLOWED_EVENT_TYPES = ['view_product', 'add_to_cart', 'remove_from_cart', 'search', 'filter_brand', 'filter_category', 'checkout_start']
+  app.post('/api/track', express.json(), (req: Request, res: Response) => {
+    const { type, productId, data, sessionId } = req.body
+    if (!type || typeof type !== 'string') { res.status(400).json({ error: 'type required' }); return }
+    if (!ALLOWED_EVENT_TYPES.includes(type)) { res.status(400).json({ error: 'invalid type' }); return }
+    trackEvent({
+      type,
+      productId: typeof productId === 'number' ? productId : undefined,
+      data: typeof data === 'object' && data !== null ? data : undefined,
+      sessionId: typeof sessionId === 'string' ? sessionId.slice(0, 64) : undefined,
+      source: 'webapp',
+    })
+    res.json({ ok: true })
   })
 
   // Service Worker (no-cache for instant update)
@@ -1105,6 +1125,18 @@ export function startApiServer(bot?: Telegraf): void {
         })
 
         return order
+      })
+
+      trackEvent({
+        type: 'order_created',
+        data: {
+          orderId: order.id,
+          itemCount: items.length,
+          total: Number(order.totalAmount),
+          payment: paymentMethod,
+          delivery: deliveryType,
+        },
+        source: telegramId.startsWith('unverified_') || telegramId.startsWith('web_') ? 'web' : 'telegram',
       })
 
       // Ответ клиенту СРАЗУ — до уведомлений

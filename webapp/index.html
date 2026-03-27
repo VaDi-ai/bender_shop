@@ -1087,6 +1087,17 @@
     const tg = window.Telegram && window.Telegram.WebApp
     if (tg) { tg.ready(); tg.expand() }
 
+    // ── Analytics ──────────────────────────────────────────────────────────────
+    const SESSION_ID = Math.random().toString(36).slice(2) + Date.now().toString(36)
+    function track(type, data) {
+      try {
+        navigator.sendBeacon('/api/track', new Blob(
+          [JSON.stringify({ type, productId: data?.productId, data, sessionId: SESSION_ID })],
+          { type: 'application/json' }
+        ))
+      } catch {}
+    }
+
     // ── State ─────────────────────────────────────────────────────────────────
     let allProducts   = []
     let categories    = []
@@ -1424,6 +1435,7 @@
     }
 
     function selectBrand(brand) {
+      track('filter_brand', { brand })
       activeBrand = brand
       // Update brand grid tiles
       document.querySelectorAll('.cat-btn[data-brand]').forEach(el => {
@@ -1661,6 +1673,7 @@
 
     // ── Select category ───────────────────────────────────────────────────────
     function selectCategory(cat) {
+      track('filter_category', { category: cat })
       activeCat = cat
       // Update category filter bar
       document.querySelectorAll('.cat-filter-tab[data-cat]').forEach(el => {
@@ -1983,6 +1996,7 @@
     function openProductModal(productId) {
       const p = allProducts.find(x => x.id === productId)
       if (!p) return
+      track('view_product', { productId })
 
       modalProduct       = p
       modalSelectedAttrs = {}
@@ -2361,6 +2375,7 @@
     function addToCart(productId, variantId) {
       const p = allProducts.find(x => x.id === productId)
       if (!p) return
+      track('add_to_cart', { productId, variantId })
       const variant  = variantId ? (p.variants || []).find(v => v.id === variantId) : null
       const cartKey  = variantId ? productId + '-' + variantId : String(productId)
       const price    = variant ? variant.price : p.price
@@ -2492,6 +2507,7 @@
     async function checkout() {
       if (window.__isSubmitting) return
       if (!cart.length) return
+      track('checkout_start', { itemCount: cart.length })
       if (!payMethod) { showToast('Выберите способ оплаты'); return }
       const consentBox = document.getElementById('consentCheckbox')
       if (!consentBox?.checked) {
@@ -2807,10 +2823,15 @@
       const clearBtn = document.getElementById('searchClear')
       if (!input) return
 
+      let _searchTrackTimer
       input.addEventListener('input', function() {
         searchQuery = this.value.trim().toLowerCase()
         clearBtn.classList.toggle('visible', !!searchQuery)
         renderGrid()
+        clearTimeout(_searchTrackTimer)
+        if (searchQuery.length >= 3) {
+          _searchTrackTimer = setTimeout(() => track('search', { query: searchQuery }), 800)
+        }
       })
 
       input.addEventListener('keydown', function(e) {
