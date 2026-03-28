@@ -232,3 +232,59 @@ export async function updateAvitoPrice(itemId: number, price: number): Promise<b
     return false
   }
 }
+
+// ─── Stats API ──────────────────────────────────────────────────────────────
+
+interface AvitoItemStatResult {
+  itemId: string
+  date: string
+  uniqViews: number
+  uniqContacts: number
+  uniqFavorites: number
+}
+
+/** Fetch daily stats for items via POST /stats/v1/accounts/{userId}/items */
+export async function getAvitoItemStats(
+  itemIds: string[], dateFrom: string, dateTo: string,
+): Promise<AvitoItemStatResult[]> {
+  const token = await getAvitoToken()
+  const userId = await getAvitoUserId()
+  const results: AvitoItemStatResult[] = []
+
+  const BATCH = 200
+  for (let i = 0; i < itemIds.length; i += BATCH) {
+    const batch = itemIds.slice(i, i + BATCH)
+    const res = await avitoFetchWithRetry(
+      `${AVITO_API}/stats/v1/accounts/${userId}/items`,
+      {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          dateFrom, dateTo,
+          itemIds: batch.map(Number),
+          fields: ['uniqViews', 'uniqContacts', 'uniqFavorites'],
+        }),
+      },
+    )
+    if (!res.ok) {
+      log.warn('Avito stats API error', { status: res.status })
+      continue
+    }
+    const data = await res.json() as {
+      result?: { items?: Array<{ itemId: number; stats?: Array<{ date: string; uniqViews?: number; uniqContacts?: number; uniqFavorites?: number }> }> }
+    }
+    for (const item of data.result?.items ?? []) {
+      for (const stat of item.stats ?? []) {
+        results.push({
+          itemId: String(item.itemId),
+          date: stat.date,
+          uniqViews: stat.uniqViews ?? 0,
+          uniqContacts: stat.uniqContacts ?? 0,
+          uniqFavorites: stat.uniqFavorites ?? 0,
+        })
+      }
+    }
+    if (i + BATCH < itemIds.length) await new Promise(r => setTimeout(r, 15_000))
+  }
+  return results
+}

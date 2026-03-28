@@ -1001,9 +1001,15 @@ bot.command('avito', async (ctx) => {
 
     // /avito stats
     if (sub === 'stats') {
-      const [totalStats, totalSales, topCategories] = await Promise.all([
+      const weekAgo = new Date(Date.now() - 7 * 86_400_000)
+      const [excelCount, salesCount, apiCount, weekApi, topCategories] = await Promise.all([
         prisma.avitoStat.count(),
         prisma.sale.count(),
+        prisma.avitoItemStat.count(),
+        prisma.avitoItemStat.aggregate({
+          where: { date: { gte: weekAgo } },
+          _sum: { uniqViews: true, uniqContacts: true, uniqFavorites: true },
+        }),
         prisma.avitoStat.groupBy({
           by: ['subcategory'],
           _sum: { impressions: true, contacts: true, totalSpend: true },
@@ -1013,25 +1019,34 @@ bot.command('avito', async (ctx) => {
         }),
       ])
 
-      if (totalStats === 0) {
-        await ctx.reply('📊 Нет данных Avito статистики.\n\nИмпорт: npx ts-node scripts/import-avito-stats.ts --stats <file.xlsx>')
+      if (excelCount === 0 && apiCount === 0) {
+        await ctx.reply('📊 Нет данных Avito статистики.\n\nИмпорт Excel: npx ts-node scripts/import-avito-stats.ts --stats <file.xlsx>\nAPI данные собираются автоматически в 14:00 МСК.')
         return
       }
 
-      const lines = topCategories.map(c => {
-        const spend = Math.round(c._sum.totalSpend || 0)
-        const contacts = c._sum.contacts || 0
-        const cpc = contacts > 0 ? Math.round(spend / contacts) : 0
-        return `  ${c.subcategory}: ${c._count} объявл. | ${contacts} контактов | ${spend.toLocaleString('ru-RU')}₽ | CPC: ${cpc}₽`
-      })
+      const output: string[] = ['📊 Avito аналитика:']
+      output.push(`📋 API записей: ${apiCount} | Excel записей: ${excelCount} | Продаж: ${salesCount}`)
 
-      await ctx.reply([
-        '📊 Avito аналитика:',
-        `📋 Объявлений: ${totalStats} | Продаж: ${totalSales}`,
-        '',
-        'По категориям:',
-        ...lines,
-      ].join('\n'))
+      if (apiCount > 0) {
+        output.push('')
+        output.push('За 7 дней (API):')
+        output.push(`  👁 ${(weekApi._sum.uniqViews || 0).toLocaleString('ru-RU')} просмотров`)
+        output.push(`  📞 ${(weekApi._sum.uniqContacts || 0).toLocaleString('ru-RU')} контактов`)
+        output.push(`  ⭐ ${(weekApi._sum.uniqFavorites || 0).toLocaleString('ru-RU')} в избранное`)
+      }
+
+      if (topCategories.length > 0) {
+        output.push('')
+        output.push('По категориям (Excel):')
+        for (const c of topCategories) {
+          const spend = Math.round(c._sum.totalSpend || 0)
+          const contacts = c._sum.contacts || 0
+          const cpc = contacts > 0 ? Math.round(spend / contacts) : 0
+          output.push(`  ${c.subcategory}: ${c._count} объявл. | ${contacts} контактов | ${spend.toLocaleString('ru-RU')}₽ | CPC: ${cpc}₽`)
+        }
+      }
+
+      await ctx.reply(output.join('\n'))
       return
     }
 

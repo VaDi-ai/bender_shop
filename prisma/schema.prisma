@@ -585,3 +585,19 @@ model Sale {
   @@index([date])
   @@index([productName])
 }
+
+/// Ежедневная статистика Avito объявлений (API)
+model AvitoItemStat {
+  id            Int      @id @default(autoincrement())
+  avitoItemId   String
+  title         String?
+  date          DateTime
+  uniqViews     Int      @default(0)
+  uniqContacts  Int      @default(0)
+  uniqFavorites Int      @default(0)
+  createdAt     DateTime @default(now())
+
+  @@unique([avitoItemId, date])
+  @@index([avitoItemId])
+  @@index([date])
+}

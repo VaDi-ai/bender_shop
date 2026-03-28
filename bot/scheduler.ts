@@ -92,6 +92,44 @@ async function runTick(bot: Telegraf): Promise<void> {
     } catch (err) {
       log.error('Supplier price cleanup error', { error: err instanceof Error ? err.message : String(err) })
     }
+
+    // Avito stats API — ежедневно в 14:00 МСК
+    try {
+      const mskNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Europe/Moscow' }))
+      if (mskNow.getHours() === 14 && mskNow.getMinutes() < 11) {
+        const { isAvitoConfigured, getAvitoItemStats } = await import('../lib/avito')
+        if (isAvitoConfigured()) {
+          const products = await prisma.product.findMany({
+            where: { avitoItemId: { not: null } },
+            select: { avitoItemId: true, name: true },
+          })
+          const itemIds = products.filter(p => p.avitoItemId).map(p => String(p.avitoItemId))
+          if (itemIds.length > 0) {
+            const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10)
+            const stats = await getAvitoItemStats(itemIds, yesterday, yesterday)
+            let saved = 0
+            for (const s of stats) {
+              await prisma.avitoItemStat.upsert({
+                where: { avitoItemId_date: { avitoItemId: s.itemId, date: new Date(s.date) } },
+                create: {
+                  avitoItemId: s.itemId,
+                  date: new Date(s.date),
+                  uniqViews: s.uniqViews,
+                  uniqContacts: s.uniqContacts,
+                  uniqFavorites: s.uniqFavorites,
+                  title: products.find(p => String(p.avitoItemId) === s.itemId)?.name ?? null,
+                },
+                update: { uniqViews: s.uniqViews, uniqContacts: s.uniqContacts, uniqFavorites: s.uniqFavorites },
+              }).catch(() => {})
+              saved++
+            }
+            log.info('Avito stats collected', { items: itemIds.length, saved })
+          }
+        }
+      }
+    } catch (err) {
+      log.error('Avito stats collection failed', { error: err instanceof Error ? err.message : String(err) })
+    }
   } catch (err) {
     Sentry.captureException(err, { tags: { operation: 'scheduler-tick' } })
     log.error('Scheduler fetch tasks error', { error: err instanceof Error ? err.message : String(err) })
