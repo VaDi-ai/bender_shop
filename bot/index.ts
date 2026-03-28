@@ -1091,6 +1091,20 @@ bot.command('avito', async (ctx) => {
       return
     }
 
+    // /avito clear_sales
+    if (sub === 'clear_sales') {
+      const { count } = await prisma.sale.deleteMany({})
+      await ctx.reply(`🗑 Удалено ${count} записей продаж. Отправьте Excel заново.`)
+      return
+    }
+
+    // /avito clear_stats
+    if (sub === 'clear_stats') {
+      const { count } = await prisma.avitoStat.deleteMany({})
+      await ctx.reply(`🗑 Удалено ${count} записей статистики. Отправьте Excel заново.`)
+      return
+    }
+
     // /avito stats
     if (sub === 'stats') {
       const weekAgo = new Date(Date.now() - 7 * 86_400_000)

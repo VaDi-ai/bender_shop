@@ -72,6 +72,8 @@ export async function importAvitoStats(buffer: Buffer): Promise<number> {
     }
   })
 
+  await prisma.avitoStat.deleteMany({})
+
   let imported = 0
   for (let i = 0; i < rows.length; i += 50) {
     const batch = rows.slice(i, i + 50)
@@ -121,6 +123,8 @@ export async function importAvitoSales(buffer: Buffer): Promise<number> {
   })
 
   if (skipped > 0) log.info('Sales import skipped rows', { skipped })
+
+  await prisma.sale.deleteMany({})
 
   let imported = 0
   for (let i = 0; i < rows.length; i += 50) {
