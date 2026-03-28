@@ -281,6 +281,71 @@ bot.command('events', async (ctx) => {
     : '📊 Событий пока нет')
 })
 
+// /audit_attrs — аудит атрибутов товаров
+bot.command('audit_attrs', async (ctx) => {
+  const userId = ctx.from?.id
+  if (!userId || !ADMIN_IDS.includes(userId)) return
+
+  await ctx.reply('⏳ Аудит атрибутов...')
+
+  const products = await prisma.product.findMany({
+    where: { isAvailable: true },
+    include: { category: true, variants: true },
+  })
+
+  const issues: string[] = []
+
+  for (const p of products) {
+    const cat = p.category?.name || ''
+    const attrs = (p.attributes as Record<string, string[]>) || {}
+    const name = p.name
+
+    if (attrs['Память']) {
+      for (const val of attrs['Память']) {
+        if (val.includes('/')) issues.push(`${name}: Память "${val}" содержит /`)
+      }
+    }
+    if (attrs['Экран'] && attrs['Размер'] && JSON.stringify(attrs['Экран']) === JSON.stringify(attrs['Размер'])) {
+      issues.push(`${name}: дубль Экран/Размер`)
+    }
+    if ((cat === 'Desktop' || /imac/i.test(name)) && attrs['Размер'] && !attrs['Экран']) {
+      issues.push(`${name}: Desktop с "Размер" вместо "Экран"`)
+    }
+    if (cat === 'Телефоны' && !attrs['Память']) issues.push(`${name}: нет Память`)
+    if (cat === 'Телефоны' && !attrs['Цвет']) issues.push(`${name}: нет Цвет`)
+    if (/iphone/i.test(name) && !attrs['SIM']) issues.push(`${name}: нет SIM`)
+    if (cat === 'Планшеты' && !attrs['Связь']) issues.push(`${name}: нет Связь`)
+    if ((cat === 'Ноутбуки' || cat === 'Ноутбуки и компьютеры') && !attrs['Экран']) issues.push(`${name}: нет Экран`)
+    if (cat === 'Часы' && !attrs['Размер'] && !/airpods|earpods/i.test(name)) issues.push(`${name}: нет Размер`)
+    if (attrs['Цвет']) {
+      for (const v of attrs['Цвет']) {
+        if (v && /^[a-zа-я]/.test(v) && !/^eSIM|^i/.test(v)) issues.push(`${name}: цвет "${v}" с маленькой`)
+      }
+    }
+    for (const [key, vals] of Object.entries(attrs)) {
+      if (Array.isArray(vals) && vals.length === 0) issues.push(`${name}: пустой ${key}`)
+    }
+  }
+
+  const text = [
+    `📋 Аудит: ${products.length} товаров`,
+    `⚠️ Проблем: ${issues.length}`,
+    '',
+    ...issues.slice(0, 50),
+    issues.length > 50 ? `... и ещё ${issues.length - 50}` : '',
+  ].filter(Boolean).join('\n')
+
+  if (text.length <= 4000) {
+    await ctx.reply(text)
+  } else {
+    const buffer = Buffer.from(issues.join('\n'), 'utf-8')
+    await ctx.replyWithDocument(
+      { source: buffer, filename: `attribute-audit-${new Date().toISOString().slice(0, 10)}.txt` },
+      { caption: `📋 ${issues.length} проблем из ${products.length} товаров` },
+    )
+  }
+})
+
 // /shop — ответить кнопкой Mini App (любой пользователь)
 bot.command('shop', async (ctx) => {
   if (!WEBAPP_URL) return

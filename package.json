@@ -18,6 +18,7 @@
     "clear-products": "ts-node scripts/clear-test-products.ts",
     "optimize-images": "ts-node scripts/optimize-images.ts",
     "import:avito": "ts-node scripts/import-avito-stats.ts",
+    "audit:attrs": "ts-node scripts/audit-attributes.ts",
     "test": "vitest run",
     "test:watch": "vitest"
   },
