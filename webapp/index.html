@@ -850,16 +850,30 @@
       .product-modal {
         display: flex;
         justify-content: center;
-        background: rgba(0, 0, 0, 0.85);
+        align-items: flex-start;
+        background: rgba(0, 0, 0, 0.9);
       }
       .product-modal .modal-scroll {
         max-width: 480px;
-        width: 100%;
+        width: 480px;
         background: var(--bg);
+        max-height: 100vh;
+        max-height: 100dvh;
+      }
+      .product-modal .modal-footer {
+        position: fixed;
+        bottom: 0;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 480px;
+        max-width: 480px;
       }
 
       .cart-sidebar {
         max-width: 400px;
+      }
+      .cart-head {
+        padding-top: 20px;
       }
 
       .toast {
@@ -882,7 +896,8 @@
       .app-container { max-width: 520px; }
       .header { max-width: 520px; }
       .search-bar { max-width: 520px; }
-      .product-modal .modal-scroll { max-width: 520px; }
+      .product-modal .modal-scroll { max-width: 520px; width: 520px; }
+      .product-modal .modal-footer { width: 520px; max-width: 520px; }
       .scroll-top-btn { right: calc(50% - 260px + 16px); }
       .toast { max-width: 520px; }
       .order-result-content { max-width: 520px; }
@@ -2109,6 +2124,15 @@
       modalSelectedAttrs = {}
       modalActiveVariant = null
       modalPhotoIdx      = 0
+
+      // Auto-select attributes with exactly one value
+      if (p.attributes && typeof p.attributes === 'object') {
+        for (const [key, vals] of Object.entries(p.attributes)) {
+          if (Array.isArray(vals) && vals.length === 1) {
+            modalSelectedAttrs[key] = vals[0]
+          }
+        }
+      }
 
       // If only one variant — auto-select its attributes
       if (p.variants && p.variants.length === 1) {

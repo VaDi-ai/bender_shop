@@ -335,6 +335,13 @@ export async function syncProductsFromSheets(shouldAbort?: () => boolean): Promi
         }
       }
 
+      // Убрать дубль Экран/Размер
+      if (productAttributes['Экран'] && productAttributes['Размер']) {
+        if (productAttributes['Экран'].join(',') === productAttributes['Размер'].join(',')) {
+          delete productAttributes['Размер']
+        }
+      }
+
       const minPrice = Math.min(...group.variants.map(v => v.price))
       const totalQty = group.variants.reduce((s, v) => s + v.quantity, 0)
 
@@ -623,21 +630,22 @@ function getAttributes(row: SheetRow): Record<string, string> {
   if (row.memory) {
     const memStr = row.memory.toString().trim()
     // Формат "X/Y" или "X/YGB" — X=RAM, Y=Storage
-    const slashMatch = memStr.match(/^(\d+)\s*\/\s*(\d+)\s*(GB|TB|Gb|gb|Tb|tb)?$/i)
+    const slashMatch = memStr.match(/^(\d+)\s*(GB|gb)?\s*\/\s*(\d+)\s*(GB|TB|gb|tb)?$/i)
     if (slashMatch) {
       const ram = slashMatch[1]
-      const storage = slashMatch[2]
-      const unit = (slashMatch[3] || 'GB').toUpperCase()
+      const storage = slashMatch[3]
+      const unit = (slashMatch[4] || 'GB').toUpperCase()
       if (!attrs['RAM']) attrs['RAM'] = ram + 'GB'
       const storageNum = parseInt(storage, 10)
-      attrs['Память'] = storageNum >= 1024 ? Math.round(storageNum / 1024) + 'TB' : storage + unit
+      attrs['Память'] = unit === 'TB' ? storage + 'TB' : (storageNum >= 1024 ? Math.round(storageNum / 1024) + 'TB' : storage + unit)
     } else {
       attrs['Память'] = memStr
     }
   }
-  // Для ноутбуков размер = экран, не дублировать
+  // Для ноутбуков и десктопов размер = экран, не дублировать
   const isLaptop = row.category === 'Ноутбуки' || /macbook/i.test(row.fullName)
-  if (isLaptop && row.size) {
+  const isDesktop = row.category === 'Desktop' || /imac/i.test(row.fullName)
+  if ((isLaptop || isDesktop) && row.size) {
     attrs['Экран'] = row.size
   } else if (row.size) {
     attrs['Размер'] = row.size
