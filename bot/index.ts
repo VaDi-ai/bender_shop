@@ -605,6 +605,7 @@ bot.on(message('document'), async (ctx, next) => {
           : await importAvitoSales(buffer)
         await ctx.reply(`✅ Импортировано: ${count} записей (${caption})`)
       } catch (err) {
+        log.error('Avito import failed', { caption, error: err instanceof Error ? err.message : String(err), stack: err instanceof Error ? err.stack : undefined })
         await ctx.reply(`❌ Ошибка импорта: ${err instanceof Error ? err.message : String(err)}`)
       }
       return
