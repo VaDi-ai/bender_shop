@@ -18,6 +18,7 @@ export function reinitClient(newKey: string): void {
 export type AIParsedProduct = {
   model: string
   storage: string | null
+  ram: string | null
   color: string | null
   country: string | null
   simType: string | null
@@ -35,6 +36,7 @@ const AIParsedProductSchema = z.array(
   z.object({
     model: z.string(),
     storage: z.string().nullable(),
+    ram: z.string().nullable().optional().default(null),
     color: z.string().nullable(),
     country: z.string().nullable(),
     simType: z.string().nullable(),
@@ -68,7 +70,8 @@ ${text}
 Формат каждого элемента:
 {
   "model": "точное название модели например iPhone 17 Pro или MacBook Air M4",
-  "storage": "объём памяти например 256 ГБ или 1 ТБ или null",
+  "storage": "объём хранилища например 256GB или 1TB или null (только storage, НЕ RAM)",
+  "ram": "объём оперативной памяти например 8GB или 24GB или null (для ноутбуков, десктопов, планшетов)",
   "color": "цвет на английском например Silver или null",
   "country": "код страны HK/EU/IN/CN/US/AE/TH/KZ/ID или null если не указан (определять по флагу 🇭🇰=HK, 🇪🇺=EU, 🇮🇳=IN, 🇨🇳=CN, 🇺🇸=US, 🇦🇪=AE, 🇹🇭=TH, 🇰🇿=KZ, 🇮🇩=ID)",
   "simType": "тип SIM например 1 Sim+eSim или null",
@@ -81,6 +84,8 @@ ${text}
 - Пробелы в числах тоже разделители тысяч: 112 800 = 112800
 - "От 1 шт - 51 500" — цена = 51500
 - Артикулы в скобках (SM-S948B) — не включать в model
+- "24gb 1Tb" или "24/1TB" — ram="24GB", storage="1TB" (меньшее число = RAM, большее = storage)
+- Для телефонов ram обычно null (если только одно число — это storage)
 - 🏎️ и другие эмодзи кроме флагов стран — игнорировать
 - Если строка не содержит товар и цену — пропустить
 - Верни только JSON массив []`,

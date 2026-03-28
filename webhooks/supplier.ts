@@ -74,6 +74,7 @@ export async function handleSupplierMessage(
           supplierId: supplier.id,
           model,
           storage: item.storage ?? null,
+          ram: item.ram ?? null,
           color: item.color ?? null,
           simType: item.simType ?? null,
           country: item.country ?? null,
@@ -97,7 +98,7 @@ export async function handleSupplierMessage(
     const notifyEnabled = await getApiKeyValue('supplier_notify')
     if (notifyEnabled !== 'false') {
       const summary = parsed.map(p =>
-        `${p.model}${p.storage ? ' ' + p.storage : ''}${p.color ? ' ' + p.color : ''} — ${p.price.toLocaleString('ru-RU')}₽`,
+        `${p.model}${p.ram ? ' ' + p.ram : ''}${p.storage ? '/' + p.storage : ''}${p.color ? ' ' + p.color : ''} — ${p.price.toLocaleString('ru-RU')}₽`,
       ).join('\n')
 
       const notification = [
