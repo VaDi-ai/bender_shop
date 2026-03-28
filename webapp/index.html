@@ -1568,6 +1568,10 @@
       // Update category filter for this brand
       updateCatFilterForBrand(brand)
       renderGrid()
+      const catalog = document.getElementById('catalog')
+      if (catalog) {
+        setTimeout(() => catalog.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100)
+      }
     }
 
     function updateCatFilterForBrand(brand) {
