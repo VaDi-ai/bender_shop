@@ -436,7 +436,7 @@ export async function generatePriceListBuffer(): Promise<Buffer> {
 
 // ─── Скачивание файла из Telegram ─────────────────────────────────────────────
 
-async function downloadTelegramFile(ctx: Context, fileId: string): Promise<Buffer> {
+export async function downloadTelegramFile(ctx: Context, fileId: string): Promise<Buffer> {
   const file = await ctx.telegram.getFile(fileId)
   const url = `https://api.telegram.org/file/bot${process.env.BOT_TOKEN}/${file.file_path}`
   return new Promise((resolve, reject) => {

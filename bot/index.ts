@@ -589,6 +589,28 @@ bot.on(message('document'), async (ctx, next) => {
     if (handledSf) return
   }
 
+  // Avito stats/sales import via caption
+  if (!doc?.mime_type?.startsWith('image/') && ADMIN_IDS.includes(userId)) {
+    const caption = ((ctx.message as Record<string, unknown>).caption as string || '').toLowerCase().trim()
+    if (caption === 'avito stats' || caption === 'avito sales') {
+      const fileId = (doc as { file_id?: string })?.file_id
+      if (!fileId) { await ctx.reply('❌ Не удалось получить файл'); return }
+      await ctx.reply('⏳ Импорт...')
+      try {
+        const { downloadTelegramFile } = await import('./admin/pricing')
+        const buffer = await downloadTelegramFile(ctx, fileId)
+        const { importAvitoStats, importAvitoSales } = await import('../lib/avito-import')
+        const count = caption === 'avito stats'
+          ? await importAvitoStats(buffer)
+          : await importAvitoSales(buffer)
+        await ctx.reply(`✅ Импортировано: ${count} записей (${caption})`)
+      } catch (err) {
+        await ctx.reply(`❌ Ошибка импорта: ${err instanceof Error ? err.message : String(err)}`)
+      }
+      return
+    }
+  }
+
   // xlsx прайс-лист для обновления цен
   if (!doc?.mime_type?.startsWith('image/')) {
     const handledPricing = await handlePricingDocument(ctx as Parameters<typeof handlePricingDocument>[0], userId)
