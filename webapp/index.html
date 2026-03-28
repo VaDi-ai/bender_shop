@@ -785,64 +785,81 @@
     .order-result-btn.secondary { background: transparent; color: #888; border: 1px solid #333; }
     .order-result-btn.secondary:hover { border-color: #555; color: #aaa; }
 
-    /* ── Desktop layout (≥768px) ─────────────────────────────────────────── */
+    /* ── Desktop layout (≥768px) — wrapper approach ─────────────────────── */
     @media (min-width: 768px) {
       body {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        background: #050505;
+        background: #030303;
       }
       body::before {
         content: '';
         position: fixed;
         inset: 0;
         background:
-          radial-gradient(circle at 10% 20%, rgba(168,255,62,0.03) 0%, transparent 50%),
-          radial-gradient(circle at 90% 80%, rgba(168,255,62,0.02) 0%, transparent 50%);
+          radial-gradient(ellipse at 20% 30%, rgba(168,255,62,0.015) 0%, transparent 60%),
+          radial-gradient(ellipse at 80% 70%, rgba(168,255,62,0.01) 0%, transparent 60%);
         pointer-events: none;
         z-index: -1;
       }
 
-      .header { max-width: 100%; width: 100%; }
-      .header > * { max-width: 480px; margin: 0 auto; width: 100%; }
-
-      .marquee-bar,
-      .search-bar,
-      .hero-slider,
-      .cat-grid-section,
-      .brand-filter-wrap,
-      .hits-section,
-      #catalog,
-      .products {
+      .app-container {
         max-width: 480px;
-        margin-left: auto;
-        margin-right: auto;
-        width: 100%;
+        margin: 0 auto;
+        background: var(--bg);
+        min-height: 100vh;
+        min-height: 100dvh;
+        position: relative;
+        box-shadow: 0 0 60px rgba(0,0,0,0.8);
       }
 
-      .site-footer { max-width: 100%; width: 100%; }
-      .site-footer > * { max-width: 480px; margin-left: auto; margin-right: auto; }
+      .header {
+        left: 50%;
+        transform: translateX(-50%);
+        width: 100%;
+        max-width: 480px;
+      }
+
+      .marquee-bar {
+        position: sticky;
+      }
+
+      .search-bar {
+        left: 50%;
+        transform: translateX(-50%);
+        max-width: 480px;
+        width: 100%;
+      }
+      .search-bar.open {
+        transform: translateX(-50%) translateY(0);
+      }
+
+      .hero-slider {
+        border-radius: 0 0 16px 16px;
+        overflow: hidden;
+      }
+
+      .hero-slider-fallback-text {
+        font-size: clamp(32px, 6vw, 52px);
+        white-space: nowrap;
+      }
+
+      .scroll-top-btn {
+        position: fixed;
+        right: calc(50% - 240px + 16px);
+      }
 
       .product-modal {
         display: flex;
         justify-content: center;
-        background: rgba(0,0,0,0.8);
+        background: rgba(0, 0, 0, 0.85);
       }
-      .modal-scroll {
+      .product-modal .modal-scroll {
         max-width: 480px;
+        width: 100%;
         background: var(--bg);
       }
 
-      .cart-sidebar { max-width: 400px; }
-
-      .overlay,
-      .product-modal,
-      .nav-sidebar,
-      .cart-sidebar { /* remain fullscreen */ }
-
-      .scroll-top-btn {
-        right: calc(50% - 240px + 16px);
+      .cart-sidebar {
+        max-width: 400px;
       }
 
       .toast {
@@ -851,29 +868,24 @@
         max-width: 480px;
       }
 
-      .order-result { display: flex; justify-content: center; }
-      .order-result-content { max-width: 480px; width: 100%; }
+      .order-result {
+        display: flex;
+        justify-content: center;
+      }
+      .order-result-content {
+        max-width: 480px;
+        width: 100%;
+      }
     }
 
     @media (min-width: 1024px) {
-      .header > *,
-      .marquee-bar,
-      .search-bar,
-      .hero-slider,
-      .cat-grid-section,
-      .brand-filter-wrap,
-      .hits-section,
-      #catalog,
-      .products,
-      .modal-scroll,
-      .site-footer > *,
-      .order-result-content {
-        max-width: 520px;
-      }
-      .scroll-top-btn {
-        right: calc(50% - 260px + 16px);
-      }
+      .app-container { max-width: 520px; }
+      .header { max-width: 520px; }
+      .search-bar { max-width: 520px; }
+      .product-modal .modal-scroll { max-width: 520px; }
+      .scroll-top-btn { right: calc(50% - 260px + 16px); }
       .toast { max-width: 520px; }
+      .order-result-content { max-width: 520px; }
     }
   </style>
 </head>
@@ -1043,6 +1055,8 @@
     </div>
   </div>
 
+  <div class="app-container" id="appContainer">
+
   <!-- Fixed header -->
   <header class="header">
     <span class="header-logo" onclick="scrollToTop()">BENDER SHOP</span>
@@ -1165,6 +1179,8 @@
     </div>
     <div class="footer-copy">© 2026 Bender Shop. Все права защищены.</div>
   </footer>
+
+  </div><!-- .app-container -->
 
   <div class="fmodal-backdrop" id="fmodalBackdrop" onclick="if(event.target===this)closeFModal()">
     <div class="fmodal">
