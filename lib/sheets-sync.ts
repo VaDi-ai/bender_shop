@@ -36,7 +36,7 @@ export const WRITEBACK_COLS = {
 
 const EXPECTED_HEADERS: Record<string, string[]> = {
   brand:       ['Бренд', 'Brand'],
-  category:    ['Общая категория', 'Категория', 'Category'],
+  category:    ['Общая категория', 'Category'],
   fullName:    ['Название модели', 'Название', 'Model'],
   color:       ['Цвет', 'Color'],
   memory:      ['Память', 'Memory', 'RAM/Storage'],
