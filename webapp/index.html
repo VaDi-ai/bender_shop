@@ -784,6 +784,97 @@
     .order-result-btn.primary:hover { box-shadow: 0 0 20px rgba(168,255,62,0.3); }
     .order-result-btn.secondary { background: transparent; color: #888; border: 1px solid #333; }
     .order-result-btn.secondary:hover { border-color: #555; color: #aaa; }
+
+    /* ── Desktop layout (≥768px) ─────────────────────────────────────────── */
+    @media (min-width: 768px) {
+      body {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        background: #050505;
+      }
+      body::before {
+        content: '';
+        position: fixed;
+        inset: 0;
+        background:
+          radial-gradient(circle at 10% 20%, rgba(168,255,62,0.03) 0%, transparent 50%),
+          radial-gradient(circle at 90% 80%, rgba(168,255,62,0.02) 0%, transparent 50%);
+        pointer-events: none;
+        z-index: -1;
+      }
+
+      .header { max-width: 100%; width: 100%; }
+      .header > * { max-width: 480px; margin: 0 auto; width: 100%; }
+
+      .marquee-bar,
+      .search-bar,
+      .hero-slider,
+      .cat-grid-section,
+      .brand-filter-wrap,
+      .hits-section,
+      #catalog,
+      .products {
+        max-width: 480px;
+        margin-left: auto;
+        margin-right: auto;
+        width: 100%;
+      }
+
+      .site-footer { max-width: 100%; width: 100%; }
+      .site-footer > * { max-width: 480px; margin-left: auto; margin-right: auto; }
+
+      .product-modal {
+        display: flex;
+        justify-content: center;
+        background: rgba(0,0,0,0.8);
+      }
+      .modal-scroll {
+        max-width: 480px;
+        background: var(--bg);
+      }
+
+      .cart-sidebar { max-width: 400px; }
+
+      .overlay,
+      .product-modal,
+      .nav-sidebar,
+      .cart-sidebar { /* remain fullscreen */ }
+
+      .scroll-top-btn {
+        right: calc(50% - 240px + 16px);
+      }
+
+      .toast {
+        left: 50%;
+        transform: translateX(-50%);
+        max-width: 480px;
+      }
+
+      .order-result { display: flex; justify-content: center; }
+      .order-result-content { max-width: 480px; width: 100%; }
+    }
+
+    @media (min-width: 1024px) {
+      .header > *,
+      .marquee-bar,
+      .search-bar,
+      .hero-slider,
+      .cat-grid-section,
+      .brand-filter-wrap,
+      .hits-section,
+      #catalog,
+      .products,
+      .modal-scroll,
+      .site-footer > *,
+      .order-result-content {
+        max-width: 520px;
+      }
+      .scroll-top-btn {
+        right: calc(50% - 260px + 16px);
+      }
+      .toast { max-width: 520px; }
+    }
   </style>
 </head>
 <body>
