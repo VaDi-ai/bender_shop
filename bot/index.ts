@@ -578,7 +578,7 @@ bot.on(message('video'), async (ctx, next) => {
 bot.on(message('document'), async (ctx, next) => {
   const userId = ctx.from?.id
   if (!userId) return next()
-
+  try {
   const doc = (ctx.message as { document?: { mime_type?: string } })?.document
 
   // Image-документ → роутим в photo-обработчики (работают с photo и document)
@@ -605,8 +605,9 @@ bot.on(message('document'), async (ctx, next) => {
           : await importAvitoSales(buffer)
         await ctx.reply(`✅ Импортировано: ${count} записей (${caption})`)
       } catch (err) {
-        log.error('Avito import failed', { caption, error: err instanceof Error ? err.message : String(err), stack: err instanceof Error ? err.stack : undefined })
-        await ctx.reply(`❌ Ошибка импорта: ${err instanceof Error ? err.message : String(err)}`)
+        const msg = err instanceof Error ? err.message : String(err)
+        log.error('Avito import failed', { caption, error: msg, stack: err instanceof Error ? err.stack : undefined })
+        await ctx.reply(`❌ Ошибка импорта: ${msg.slice(0, 3900)}`)
       }
       return
     }
@@ -625,6 +626,9 @@ bot.on(message('document'), async (ctx, next) => {
   }
 
   return next()
+  } catch (err) {
+    log.error('Document handler error', { error: err instanceof Error ? err.message : String(err) })
+  }
 })
 
 // ─── /start ───────────────────────────────────────────────────────────────────
