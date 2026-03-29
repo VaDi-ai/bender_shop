@@ -8,6 +8,7 @@
 import OpenAI from 'openai'
 import { prisma } from './prisma'
 import { getApiKeyValue } from './api-key-store'
+import log from './logger'
 
 let _enrichClient: OpenAI | null = null
 
@@ -32,11 +33,11 @@ export async function enrichProductCard(productId: number, force = false, preloa
   const hasDescription = !!product.description
   const hasSpecs = product.specs && typeof product.specs === 'object' && Object.keys(product.specs as object).length > 0
   if (!force && hasSpecs) {
-    console.log(`[Enrich] ${product.name}: specs already filled, skipping`)
+    log.debug('Enrich skipped, specs already filled', { product: product.name })
     return false
   }
 
-  console.log(`[Enrich] Fetching specs for "${product.name}"...`)
+  log.info('Fetching specs', { product: product.name })
 
   try {
     const client = await getEnrichClient()
@@ -77,7 +78,7 @@ export async function enrichProductCard(productId: number, force = false, preloa
 
     const rawText = specsResponse.choices[0]?.message?.content?.trim() ?? ''
     if (!rawText) {
-      console.warn(`[Enrich] ${product.name}: empty response from Perplexity`)
+      log.warn('Enrich empty response from Perplexity', { product: product.name })
       return false
     }
 
@@ -106,7 +107,7 @@ export async function enrichProductCard(productId: number, force = false, preloa
     try {
       parsed = JSON.parse(cleaned)
     } catch {
-      console.warn(`[Enrich] ${product.name}: failed to parse JSON, raw: ${rawText.slice(0, 300)}`)
+      log.warn('Enrich failed to parse JSON', { product: product.name, rawPreview: rawText.slice(0, 300) })
       // Try to extract at least description
       const descMatch = cleaned.match(/"description"\s*:\s*"([^"]+)/)
       if (descMatch) {
@@ -120,7 +121,7 @@ export async function enrichProductCard(productId: number, force = false, preloa
     const specs = parsed.specs && typeof parsed.specs === 'object' ? parsed.specs : null
 
     if (!description && !specs) {
-      console.warn(`[Enrich] ${product.name}: no usable data in response`)
+      log.warn('Enrich no usable data in response', { product: product.name })
       return false
     }
 
@@ -164,7 +165,7 @@ export async function enrichProductCard(productId: number, force = false, preloa
     }
 
     if (Object.keys(updateData).length === 0) {
-      console.log(`[Enrich] ${product.name}: nothing to update`)
+      log.debug('Enrich nothing to update', { product: product.name })
       return false
     }
 
@@ -174,14 +175,14 @@ export async function enrichProductCard(productId: number, force = false, preloa
     })
 
     const specCount = updateData.specs ? Object.keys(updateData.specs as object).length : 0
-    console.log(`[Enrich] ${product.name}: updated (description: ${!!updateData.description}, specs: ${specCount} fields)`)
+    log.info('Enrich updated product', { product: product.name, hasDescription: !!updateData.description, specCount })
 
     // Write to Google Sheets (all variant rows)
     await writeEnrichToSheets(product.id, updateData.description as string | undefined, updateData.specs as Record<string, string> | undefined)
 
     return true
   } catch (err) {
-    console.error(`[Enrich] ${product.name}: error:`, err)
+    log.error('Enrich error', { product: product.name, error: err instanceof Error ? err.message : String(err) })
     return false
   }
 }
@@ -206,14 +207,14 @@ export async function enrichAllProducts(shouldAbort?: () => boolean, force = fal
     orderBy: { createdAt: 'desc' },
   })
 
-  console.log(`[Enrich] Found ${products.length} products to enrich`)
+  log.info('Enrich starting batch', { count: products.length })
 
   let enriched = 0
   let failed = 0
 
   for (const product of products) {
     if (shouldAbort?.()) {
-      console.log('[Enrich] Aborted by user')
+      log.info('Enrich aborted by user')
       break
     }
     try {
@@ -228,7 +229,7 @@ export async function enrichAllProducts(shouldAbort?: () => boolean, force = fal
     await new Promise(r => setTimeout(r, 2000))
   }
 
-  console.log(`[Enrich] Done: ${enriched} enriched, ${failed} failed out of ${products.length}`)
+  log.info('Enrich batch complete', { enriched, failed, total: products.length })
   return { total: products.length, enriched, failed }
 }
 
@@ -293,10 +294,10 @@ async function writeEnrichToSheets(
       await batchUpdate(batchData)
     }
 
-    console.log(`[Enrich] ${matchCount} rows matched, ${batchData.length} cells written to Sheets`)
+    log.debug('Enrich wrote to Sheets', { matchCount, cellsWritten: batchData.length })
     return matchCount
   } catch (err) {
-    console.warn(`[Enrich] Failed to write to Sheets:`, err)
+    log.warn('Enrich failed to write to Sheets', { error: err instanceof Error ? err.message : String(err) })
     return 0
   }
 }

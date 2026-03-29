@@ -18,6 +18,7 @@ import { getAIMode, setAIMode, getAIStats, reinitClient as reinitAgentClient, ty
 import { reinitClient as reinitParserClient } from '../../lib/ai-parser'
 import { logSecurityEvent, type SecurityEvent } from '../../lib/security-log'
 import { getUserId } from '../helpers'
+import log from '../../lib/logger'
 
 // ─── Лейблы режимов ───────────────────────────────────────────────────────────
 
@@ -57,7 +58,7 @@ export async function handleSecurityMessage(
     securityState.delete(userId)
     if (text.trim() === 'CONFIRM') {
       const { count } = await prisma.securityLog.deleteMany()
-      console.log(`[security] Log cleared by admin — ${count} record(s) deleted`)
+      log.info('[security] Log cleared by admin', { count })
       await logSecurityEvent('security_log_purged', { adminId: userId }, userId)
       await ctx.reply('🗑️ Лог безопасности очищен.')
       await showSecurityLog(ctx)

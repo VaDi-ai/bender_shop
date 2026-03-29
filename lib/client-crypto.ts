@@ -6,6 +6,7 @@
  */
 
 import { encrypt, decrypt, isEncrypted } from './crypto'
+import log from './logger'
 
 export function encryptClientField(value: string | null | undefined, fieldName?: string): string | null {
   if (value == null || value === '') return null
@@ -23,11 +24,11 @@ export function decryptClientField(value: string | null | undefined, fieldName?:
   } catch (err) {
     // Fallback ONLY for legacy data (no version prefix = encrypted before AAD was introduced)
     if (!/^v\d+:/.test(value)) {
-      console.warn(`[Crypto] Legacy decryption without AAD for field "${fieldName}", consider re-encrypting`)
+      log.warn('[Crypto] Legacy decryption without AAD, consider re-encrypting', { fieldName })
       return decrypt(value)  // legacy format: no version, no AAD
     }
     // Versioned data MUST decrypt with AAD — if it fails, it's corrupted or tampered
-    console.error(`[Crypto] AAD decryption failed for versioned data, field="${fieldName}":`, err instanceof Error ? err.message : err)
+    log.error('[Crypto] AAD decryption failed for versioned data', { fieldName, err: err instanceof Error ? err.message : String(err) })
     throw err  // don't silently swallow — this could be tampering
   }
 }
@@ -50,10 +51,10 @@ export function decryptDate(value: string | null | undefined, fieldName?: string
     iso = decrypt(value, aad)
   } catch (err) {
     if (!/^v\d+:/.test(value)) {
-      console.warn(`[Crypto] Legacy date decryption without AAD for field "${fieldName}"`)
+      log.warn('[Crypto] Legacy date decryption without AAD', { fieldName })
       iso = decrypt(value)
     } else {
-      console.error(`[Crypto] AAD date decryption failed for versioned data, field="${fieldName}"`)
+      log.error('[Crypto] AAD date decryption failed for versioned data', { fieldName })
       throw err
     }
   }

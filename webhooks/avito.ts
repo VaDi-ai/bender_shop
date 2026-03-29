@@ -25,18 +25,19 @@ import crypto from 'crypto'
 import { Telegram } from 'telegraf'
 import { prisma } from '../lib/prisma'
 import { sendToTopic } from '../lib/telegram-helpers'
+import log from '../lib/logger'
 
 const CRM_GROUP_ID = Number(process.env.CRM_GROUP_ID)
 const AVITO_SECRET = process.env.AVITO_WEBHOOK_SECRET
 
 if (!AVITO_SECRET) {
-  console.error('AVITO_WEBHOOK_SECRET is required but not set — Avito webhook verification will reject all requests')
+  log.error('AVITO_WEBHOOK_SECRET is required but not set — Avito webhook verification will reject all requests')
 }
 
 // Validate CRM_GROUP_ID at module load; if invalid, processing is skipped entirely.
 const CRM_GROUP_ID_VALID = Number.isFinite(CRM_GROUP_ID) && CRM_GROUP_ID !== 0
 if (!CRM_GROUP_ID_VALID) {
-  console.error('avito.ts: CRM_GROUP_ID is missing or invalid — Avito messages will not be processed')
+  log.error('avito.ts: CRM_GROUP_ID is missing or invalid — Avito messages will not be processed')
 }
 
 // ─── HMAC-SHA256 verification ─────────────────────────────────────────────────
@@ -100,7 +101,7 @@ export async function handleAvitoWebhook(
 ): Promise<void> {
   verifyAvitoSignature(rawBody, signature)
   if (!CRM_GROUP_ID_VALID) {
-    console.error('handleAvitoWebhook: skipping — CRM_GROUP_ID is invalid')
+    log.error('handleAvitoWebhook: skipping — CRM_GROUP_ID is invalid')
     return
   }
   for (const event of body.events) {

@@ -1,6 +1,7 @@
 import { Decimal } from '@prisma/client/runtime/client'
 import { Prisma } from '../generated/prisma/client'
 import { prisma } from './prisma'
+import log from './logger'
 
 // ─── Retry wrapper for Serializable transactions ────────────────────────────
 
@@ -16,7 +17,7 @@ async function withSerializableRetry<T>(
       const e = err as { code?: string; meta?: { code?: string } }
       const code = e?.code ?? e?.meta?.code ?? ''
       if (code === '40001' && attempt < SERIALIZATION_MAX_RETRIES - 1) {
-        console.warn(`[stock] Serialization conflict, retry ${attempt + 1}/${SERIALIZATION_MAX_RETRIES}`)
+        log.warn('[stock] Serialization conflict, retrying', { attempt: attempt + 1, maxRetries: SERIALIZATION_MAX_RETRIES })
         continue
       }
       throw err
@@ -50,7 +51,7 @@ export async function atomicSale(
   params: AtomicSaleParams,
 ): Promise<{ variantId: number | null }> {
   if (process.env.STOCK_WRITEOFF_ENABLED !== 'true') {
-    console.log('[Stock] Write-off disabled (STOCK_WRITEOFF_ENABLED != true)')
+    log.info('[Stock] Write-off disabled', { setting: 'STOCK_WRITEOFF_ENABLED' })
     return { variantId: null }
   }
   return withSerializableRetry(() =>
@@ -162,7 +163,7 @@ export async function stockOut(
   userId: string
 ): Promise<void> {
   if (process.env.STOCK_WRITEOFF_ENABLED !== 'true') {
-    console.log('[Stock] Write-off disabled (STOCK_WRITEOFF_ENABLED != true)')
+    log.info('[Stock] Write-off disabled', { setting: 'STOCK_WRITEOFF_ENABLED' })
     return
   }
   await withSerializableRetry(() =>

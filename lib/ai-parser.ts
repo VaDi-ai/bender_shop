@@ -5,6 +5,7 @@
 import OpenAI from 'openai'
 import { z } from 'zod'
 import { notifyAdminsAboutApiError } from './notify-admins'
+import log from './logger'
 
 let client = new OpenAI({
   baseURL: 'https://openrouter.ai/api/v1',
@@ -106,13 +107,13 @@ ${text}
     const result = JSON.parse(jsonStr)
     const parsed = AIParsedProductSchema.safeParse(result)
     if (!parsed.success) {
-      console.error('AI parser: schema validation failed (products):', parsed.error.message)
+      log.error('AI parser schema validation failed (products)', { error: parsed.error.message })
       return []
     }
     return parsed.data
   } catch (err) {
-    console.error('AI parser: parseSupplierMessage error:', err)
-    notifyAdminsAboutApiError(err, 'Парсинг прайса поставщика').catch((e) => console.error('[ai-parser] notify error:', e))
+    log.error('AI parser parseSupplierMessage error', { error: err instanceof Error ? err.message : String(err) })
+    notifyAdminsAboutApiError(err, 'Парсинг прайса поставщика').catch((e) => log.error('ai-parser notify error', { error: e instanceof Error ? e.message : String(e) }))
     return []
   }
 }
@@ -153,13 +154,13 @@ ${text}
     const result = JSON.parse(clean)
     const parsed = AIParsedRateSchema.safeParse(result)
     if (!parsed.success) {
-      console.error('AI parser: schema validation failed (rates):', parsed.error.message)
+      log.error('AI parser schema validation failed (rates)', { error: parsed.error.message })
       return []
     }
     return parsed.data
   } catch (err) {
-    console.error('AI parser: parseCurrencyRates error:', err)
-    notifyAdminsAboutApiError(err, 'Парсинг курсов валют').catch((e) => console.error('[ai-parser] notify error:', e))
+    log.error('AI parser parseCurrencyRates error', { error: err instanceof Error ? err.message : String(err) })
+    notifyAdminsAboutApiError(err, 'Парсинг курсов валют').catch((e) => log.error('ai-parser notify error', { error: e instanceof Error ? e.message : String(e) }))
     return []
   }
 }

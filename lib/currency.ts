@@ -3,6 +3,7 @@
  */
 
 import { prisma } from './prisma'
+import log from './logger'
 
 /** Статические флаги для UI */
 export const CURRENCY_FLAGS: Record<string, string> = { USD: '🇺🇸' }
@@ -62,7 +63,7 @@ export async function updateCurrencyRates(): Promise<CurrencyChange[]> {
   try {
     allRates = await fetchCurrencyRates()
   } catch (err) {
-    console.error('[currency] fetchCurrencyRates failed:', err)
+    log.error('[currency] fetchCurrencyRates failed', { err: err instanceof Error ? err.message : String(err) })
     return []
   }
 

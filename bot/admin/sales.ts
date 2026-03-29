@@ -19,6 +19,7 @@ import { atomicSale, releaseReserve } from '../../lib/stock'
 import { getApiKeyValue } from '../../lib/api-key-store'
 import { getUserId } from '../helpers'
 import { logSecurityEvent } from '../../lib/security-log'
+import log from '../../lib/logger'
 
 const CRM_GROUP_ID = Number(process.env.CRM_GROUP_ID)
 
@@ -335,7 +336,7 @@ export function setupSalesHandlers(bot: Telegraf): void {
       }
       return
     } catch (err) {
-      console.error('sale:confirm error:', err)
+      log.error('sale:confirm error', { error: err instanceof Error ? err.message : String(err) })
       return await ctx.reply('Ошибка при оформлении продажи.')
     }
   })
@@ -390,7 +391,7 @@ export function setupSalesHandlers(bot: Telegraf): void {
       }
       return
     } catch (err) {
-      console.error('res:confirm error:', err)
+      log.error('res:confirm error', { error: err instanceof Error ? err.message : String(err) })
       return await ctx.reply('Ошибка при оформлении резерва.')
     }
   })
@@ -588,7 +589,7 @@ export function setupSalesHandlers(bot: Telegraf): void {
       await ctx.reply(msg)
       await notifyToSalesTopic(ctx, msg, clientName)
     } catch (err) {
-      console.error('sale_nc:confirm error:', err)
+      log.error('sale_nc:confirm error', { error: err instanceof Error ? err.message : String(err) })
       await ctx.reply('Ошибка при оформлении продажи.')
     }
   })
@@ -641,7 +642,7 @@ export function setupSalesHandlers(bot: Telegraf): void {
       )
       await notifyToSalesTopic(ctx, msg, clientName)
     } catch (err) {
-      console.error('res_nc:confirm error:', err)
+      log.error('res_nc:confirm error', { error: err instanceof Error ? err.message : String(err) })
       await ctx.reply(`⚠️ Ошибка при оформлении резерва: ${err instanceof Error ? err.message : String(err)}`)
     }
   })
@@ -657,10 +658,10 @@ export function setupSalesHandlers(bot: Telegraf): void {
       }
       await releaseReserve(reservationId, 'completed')
       try { await logSecurityEvent('reservation_released', { reservationId, status: 'completed', adminId: getUserId(ctx) }, getUserId(ctx)) } catch { /* logging failure should not break the operation */ }
-      await ctx.editMessageReplyMarkup({ inline_keyboard: [] }).catch((err) => console.error('[sales] editMarkup:', err))
+      await ctx.editMessageReplyMarkup({ inline_keyboard: [] }).catch((err) => log.error('sales editMarkup error', { error: err instanceof Error ? err.message : String(err) }))
       return await ctx.reply(`✅ Резерв #${reservationId} завершён — товар выдан.`)
     } catch (err) {
-      console.error('res:do_complete error:', err)
+      log.error('res:do_complete error', { error: err instanceof Error ? err.message : String(err) })
       return await ctx.reply('Ошибка при завершении резерва.')
     }
   })
@@ -676,10 +677,10 @@ export function setupSalesHandlers(bot: Telegraf): void {
       }
       await releaseReserve(reservationId, 'cancelled')
       try { await logSecurityEvent('reservation_released', { reservationId, status: 'cancelled', adminId: getUserId(ctx) }, getUserId(ctx)) } catch { /* logging failure should not break the operation */ }
-      await ctx.editMessageReplyMarkup({ inline_keyboard: [] }).catch((err) => console.error('[sales] editMarkup:', err))
+      await ctx.editMessageReplyMarkup({ inline_keyboard: [] }).catch((err) => log.error('sales editMarkup error', { error: err instanceof Error ? err.message : String(err) }))
       return await ctx.reply(`❌ Резерв #${reservationId} отменён.`)
     } catch (err) {
-      console.error('res:do_cancel error:', err)
+      log.error('res:do_cancel error', { error: err instanceof Error ? err.message : String(err) })
       return await ctx.reply('Ошибка при отмене резерва.')
     }
   })
@@ -1005,7 +1006,7 @@ async function notifyToSalesTopic(ctx: Context, text: string, clientName: string
     if (isNaN(threadId)) return
     await ctx.telegram.sendMessage(CRM_GROUP_ID, text, { message_thread_id: threadId })
   } catch (err) {
-    console.error('notifyToSalesTopic error:', err)
+    log.error('notifyToSalesTopic error', { error: err instanceof Error ? err.message : String(err) })
   }
 }
 

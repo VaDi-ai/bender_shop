@@ -12,6 +12,7 @@ import { prisma } from '../lib/prisma'
 import { parseSupplierMessage } from '../lib/ai-parser'
 import { getApiKeyValue } from '../lib/api-key-store'
 import { roundPrice } from '../lib/currency'
+import log from '../lib/logger'
 
 const ADMIN_IDS = (process.env.ADMIN_IDS ?? '').split(',').map((id) => Number(id.trim())).filter(Boolean)
 
@@ -41,7 +42,7 @@ export async function handleSupplierMessage(
   const hasPricePattern = /\d{2,3}[.,]\d{3}|\d{4,6}\s*₽|\d{4,6}\s*р/i.test(text)
   if (!hasPricePattern) return false
 
-  console.log(`[supplier] Parsing price from "${supplier.name}" (chat ${chatId}): ${text.slice(0, 80)}...`)
+  log.info('Parsing supplier price', { supplier: supplier.name, chatId, textPreview: text.slice(0, 80) })
 
   try {
     const parsed = await parseSupplierMessage(text)
@@ -92,7 +93,7 @@ export async function handleSupplierMessage(
       data: { lastPriceAt: new Date() },
     })
 
-    console.log(`[supplier] Saved ${savedCount} prices from "${supplier.name}"`)
+    log.info('Saved supplier prices', { supplier: supplier.name, savedCount })
 
     // Уведомить админов (если включено)
     const notifyEnabled = await getApiKeyValue('supplier_notify')
@@ -116,7 +117,7 @@ export async function handleSupplierMessage(
 
     return true
   } catch (err) {
-    console.error(`[supplier] Parse error from "${supplier.name}":`, err)
+    log.error('Supplier parse error', { supplier: supplier.name, error: err instanceof Error ? err.message : String(err) })
     return false
   }
 }
@@ -137,10 +138,10 @@ export async function requestPriceFromSupplier(
       supplier.chatId,
       `Добрый день! Подскажите актуальную цену:\n${query}`,
     )
-    console.log(`[supplier] Price request sent to "${supplier.name}": ${query}`)
+    log.info('Price request sent', { supplier: supplier.name, query })
     return true
   } catch (err) {
-    console.error(`[supplier] Failed to send request to "${supplier.name}":`, err)
+    log.error('Failed to send price request', { supplier: supplier.name, error: err instanceof Error ? err.message : String(err) })
     return false
   }
 }
@@ -160,10 +161,10 @@ export async function requestPriceFromAllSuppliers(
       await bot.telegram.sendMessage(supplier.chatId, `Подскажите актуальную цену:\n${query}`)
       sent++
     } catch {
-      console.error(`[supplier] Failed to request from "${supplier.name}"`)
+      log.error('Failed to request from supplier', { supplier: supplier.name })
     }
   }
-  console.log(`[supplier] Price request sent to ${sent}/${suppliers.length} suppliers: ${query}`)
+  log.info('Price request sent to suppliers', { sent, total: suppliers.length, query })
   return sent
 }
 

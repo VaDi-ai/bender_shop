@@ -1,5 +1,6 @@
 import { Telegraf } from 'telegraf'
 import { prisma } from './prisma'
+import log from './logger'
 
 export type SecurityEvent =
   | 'invalid_telegram_signature'
@@ -142,7 +143,7 @@ export async function logSecurityEvent(
     ? { ...details, adminTelegramId }
     : details
   const safe = sanitizeDetails(allDetails)
-  console.warn(`[SECURITY] ${event}:`, safe)
+  log.warn(`[SECURITY] ${event}`, { event, details: safe })
 
   try {
     await prisma.securityLog.create({
@@ -153,7 +154,7 @@ export async function logSecurityEvent(
       },
     })
   } catch (err) {
-    console.error('[SECURITY] Failed to write security log:', err)
+    log.error('[SECURITY] Failed to write security log', { err: err instanceof Error ? err.message : String(err) })
   }
 
   const text = formatSecurityAlert(event, safe)
@@ -163,7 +164,7 @@ export async function logSecurityEvent(
       try {
         await _bot.telegram.sendMessage(adminId, text)
       } catch (err) {
-        console.error('[SECURITY] Failed to send alert to admin', adminId, ':', err)
+        log.error('[SECURITY] Failed to send alert to admin', { adminId, err: err instanceof Error ? err.message : String(err) })
       }
     }
   }
@@ -175,7 +176,7 @@ export async function logSecurityEvent(
       try {
         await _bot.telegram.sendMessage(id, text)
       } catch (err) {
-        console.error('[SECURITY] Failed to send alert to admin', id, ':', err)
+        log.error('[SECURITY] Failed to send alert to admin', { adminId: id, err: err instanceof Error ? err.message : String(err) })
       }
     }
   }

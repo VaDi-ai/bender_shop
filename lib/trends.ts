@@ -4,6 +4,7 @@
 import OpenAI from 'openai'
 import { prisma } from './prisma'
 import { getApiKeyValue, setApiKeyValue } from './api-key-store'
+import log from './logger'
 
 export interface TrendsData {
   categories: string[]
@@ -150,7 +151,7 @@ ${modelsList}
     try {
       parsed = parseResponse(text)
     } catch {
-      console.warn('[Trends] Perplexity returned non-JSON, retrying with Claude:', text.slice(0, 100))
+      log.warn('[Trends] Perplexity returned non-JSON, retrying with Claude', { preview: text.slice(0, 100) })
 
       // Attempt 2: Claude Sonnet (more reliable for JSON)
       const retryResponse = await client.chat.completions.create({
@@ -173,7 +174,7 @@ ${modelsList}
       reasoning: parsed.reasoning || '',
     }
   } catch (err) {
-    console.error('[Trends] AI fetch error:', err)
+    log.error('[Trends] AI fetch error', { err: err instanceof Error ? err.message : String(err) })
     return null
   }
 }

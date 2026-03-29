@@ -2,6 +2,7 @@ import 'dotenv/config'
 import { PrismaClient } from '../generated/prisma/client'
 import { PrismaPg } from '@prisma/adapter-pg'
 import { Pool } from 'pg'
+import log from './logger'
 
 // A2: guard — fail fast if DATABASE_URL is missing
 if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL required')
@@ -23,12 +24,12 @@ export function initPrismaAlerts(bot: import('telegraf').Telegraf, adminIds: num
 }
 
 pool.on('error', (err) => {
-  console.error('pg pool error:', err.message)
+  log.error('pg pool error', { message: err.message })
   if (_poolAlertBot && _poolAlertAdminIds.length > 0) {
     const code = (err as NodeJS.ErrnoException).code ?? 'unknown'
     const text = `🚨 DB pool error\nCode: ${code}\nПроблема с соединением к базе данных`
     for (const adminId of _poolAlertAdminIds) {
-      _poolAlertBot.telegram.sendMessage(adminId, text).catch((e) => console.error('[prisma] pool alert send error:', e))
+      _poolAlertBot.telegram.sendMessage(adminId, text).catch((e) => log.error('[prisma] pool alert send error', { err: e instanceof Error ? e.message : String(e) }))
     }
   }
 })

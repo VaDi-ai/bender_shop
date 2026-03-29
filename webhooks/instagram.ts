@@ -36,13 +36,14 @@
 import crypto from 'crypto'
 import type { Request, Response } from 'express'
 import { Telegram } from 'telegraf'
+import log from '../lib/logger'
 
 const INSTAGRAM_SECRET = process.env.INSTAGRAM_APP_SECRET
 
 if (!INSTAGRAM_SECRET) {
-  console.error('INSTAGRAM_APP_SECRET is required but not set — Instagram webhook verification will reject all requests')
+  log.error('INSTAGRAM_APP_SECRET is required but not set — Instagram webhook verification will reject all requests')
 }
-if (!process.env.INSTAGRAM_VERIFY_TOKEN) console.warn('INSTAGRAM_VERIFY_TOKEN not set')
+if (!process.env.INSTAGRAM_VERIFY_TOKEN) log.warn('INSTAGRAM_VERIFY_TOKEN not set')
 
 // ─── Webhook verification (GET) ───────────────────────────────────────────────
 
@@ -105,5 +106,5 @@ export async function handleInstagramWebhook(
   signature: string | undefined,
 ): Promise<void> {
   verifyInstagramSignature(rawBody, signature)
-  console.log('[Instagram] Webhook received, type:', body?.object ?? 'unknown')
+  log.info('[Instagram] Webhook received', { type: body?.object ?? 'unknown' })
 }

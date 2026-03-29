@@ -1,6 +1,7 @@
 /**
  * lib/api-errors.ts — Человекочитаемые сообщения об ошибках API
  */
+import log from './logger'
 
 export function humanizeApiError(e: unknown): string {
   const err = e as Record<string, unknown>
@@ -23,6 +24,6 @@ export function humanizeApiError(e: unknown): string {
     return '🔑 Неверный формат ключа API.'
   if (message.includes('model'))
     return '🤖 Указанная модель недоступна для вашего тарифа OpenRouter.'
-  console.error('[API Error] Unhandled:', message || status)
+  log.error('[API Error] Unhandled', { message: message || undefined, status })
   return 'Произошла ошибка. Попробуйте позже или обратитесь к администратору.'
 }

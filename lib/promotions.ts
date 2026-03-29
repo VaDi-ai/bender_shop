@@ -11,6 +11,7 @@ import { Decimal } from '@prisma/client/runtime/client'
 import { prisma } from './prisma'
 import { roundPrice } from './currency'
 import { DiscountType, FilterType } from '../generated/prisma/client'
+import log from './logger'
 import type { ProductVariantModel } from '../generated/prisma/models'
 import type { ProductModel } from '../generated/prisma/models'
 
@@ -47,12 +48,12 @@ export async function findVariantsByFilter(
         include: { product: true },
       })
       if (results.length > 1000) {
-        console.warn(`[promotions] attribute filter "${filterValue}" matched ${results.length} variants, slicing to 1000`)
+        log.warn('[promotions] attribute filter matched too many variants, slicing to 1000', { filterValue, matchCount: results.length })
         return results.slice(0, 1000)
       }
       return results
     } catch (err) {
-      console.error('[promotions] attribute filter query failed:', err)
+      log.error('[promotions] attribute filter query failed', { err: err instanceof Error ? err.message : String(err) })
       return []
     }
   }

@@ -20,6 +20,7 @@ import { prisma } from '../../lib/prisma'
 import { stockIn, stockOut, getStockHistory } from '../../lib/stock'
 import { logSecurityEvent } from '../../lib/security-log'
 import { getUserId } from '../helpers'
+import log from '../../lib/logger'
 
 // ─── Форматирование вариантов ─────────────────────────────────────────────────
 
@@ -877,7 +878,7 @@ async function saveVariant(
     )
     await showVariantsList(ctx, s.productId)
   } catch (err) {
-    console.error('saveVariant error:', err)
+    log.error('saveVariant error', { error: err instanceof Error ? err.message : String(err) })
     inventoryState.delete(userId)
     await ctx.reply('❌ Ошибка при сохранении варианта.', Markup.removeKeyboard())
     await showVariantsList(ctx, s.productId)
@@ -1113,7 +1114,7 @@ export function setupInventoryHandlers(bot: Telegraf): void {
       await ctx.reply(`✅ Категория «${s.name}» добавлена (${label}).`, Markup.removeKeyboard())
       await showCategories(ctx)
     } catch (err) {
-      console.error('category add textSide error:', err)
+      log.error('category add textSide error', { error: err instanceof Error ? err.message : String(err) })
       inventoryState.delete(userId)
       await ctx.reply('❌ Ошибка при сохранении.', Markup.removeKeyboard())
       await showInventory(ctx)
@@ -1252,7 +1253,7 @@ export function setupInventoryHandlers(bot: Telegraf): void {
 
         if (userId) await bot.telegram.sendMessage(userId, lines.join('\n'))
       } catch (err) {
-        console.error('[Sheets Sync] Error:', err)
+        log.error('Sheets Sync error', { error: err instanceof Error ? err.message : String(err) })
         if (userId) await bot.telegram.sendMessage(userId, `❌ Ошибка синхронизации: ${err instanceof Error ? err.message : 'Неизвестная ошибка'}`).catch(() => {})
       }
     })()
@@ -1770,7 +1771,7 @@ export function setupInventoryHandlers(bot: Telegraf): void {
         await ctx.reply('❌ Не удалось найти характеристики. Попробуйте позже или заполните вручную.')
       }
     } catch (err) {
-      console.error('[Enrich] Manual error:', err)
+      log.error('Enrich manual error', { error: err instanceof Error ? err.message : String(err) })
       await ctx.reply('❌ Ошибка при поиске характеристик.')
     }
   })
@@ -1886,7 +1887,7 @@ export async function handleInventoryPhoto(ctx: Context, userId: number): Promis
       await ctx.reply(`✅ Баннер для «${s.categoryName}» сохранён.`, Markup.removeKeyboard())
       await showCategoryEdit(ctx, s.categoryId)
     } catch (err) {
-      console.error('category banner error:', err)
+      log.error('category banner error', { error: err instanceof Error ? err.message : String(err) })
       inventoryState.delete(userId)
       await ctx.reply('❌ Ошибка при сохранении баннера.', Markup.removeKeyboard())
     }
@@ -2030,7 +2031,7 @@ export async function handleInventoryDocument(ctx: Context, userId: number): Pro
     inventoryState.delete(userId)
     await processImportFile(ctx, buffer, userId)
   } catch (err) {
-    console.error('inventory file error:', err)
+    log.error('inventory file error', { error: err instanceof Error ? err.message : String(err) })
     inventoryState.delete(userId)
     await ctx.reply('❌ Ошибка при обработке файла.', Markup.removeKeyboard())
     await showInventory(ctx)
@@ -2212,7 +2213,7 @@ async function processImportFile(ctx: Context, buffer: Buffer, userId: number): 
             await ctx.reply(`✨ Автообогащение: характеристики заполнены для ${result.enriched} товаров.`)
           }
         } catch (err) {
-          console.error('[Enrich] After create-import error:', err)
+          log.error('Enrich after create-import error', { error: err instanceof Error ? err.message : String(err) })
         }
       })()
     }
@@ -2353,7 +2354,7 @@ async function processImport(ctx: Context, rows: FileRow[]): Promise<void> {
         await ctx.reply(`✨ Автообогащение: заполнены характеристики для ${result.enriched} товаров из ${result.total}.`)
       }
     } catch (err) {
-      console.error('[Enrich] After import error:', err)
+      log.error('Enrich after import error', { error: err instanceof Error ? err.message : String(err) })
     }
   })()
 }
@@ -2917,7 +2918,7 @@ async function exportInventory(ctx: Context): Promise<void> {
     await ctx.replyWithDocument({ source: Buffer.from(buf), filename: `остатки_${date}.xlsx` })
     await showInventory(ctx)
   } catch (err) {
-    console.error('inventory export error:', err)
+    log.error('inventory export error', { error: err instanceof Error ? err.message : String(err) })
     await ctx.reply('❌ Ошибка при генерации файла.')
   }
 }
@@ -3274,11 +3275,11 @@ async function handleAddFlow(
               await ctx.reply(`✨ Характеристики для "${product.name}" заполнены из интернета.`)
             }
           } catch (err) {
-            console.error('[Enrich] After create error:', err)
+            log.error('Enrich after create error', { error: err instanceof Error ? err.message : String(err) })
           }
         })()
       } catch (err) {
-        console.error('inventory add error:', err)
+        log.error('inventory add error', { error: err instanceof Error ? err.message : String(err) })
         inventoryState.delete(userId)
         await ctx.reply('❌ Ошибка при сохранении. Попробуйте снова.', Markup.removeKeyboard())
         await showInventory(ctx)
@@ -3425,7 +3426,7 @@ async function handleCategoryAddFlow(
         ]),
       )
     } catch (err) {
-      console.error('category add error:', err)
+      log.error('category add error', { error: err instanceof Error ? err.message : String(err) })
       inventoryState.delete(userId)
       await ctx.reply('❌ Ошибка при сохранении.', Markup.removeKeyboard())
       await showInventory(ctx)
@@ -3467,7 +3468,7 @@ async function handleCategoryRenameFlow(
     )
     await showCategories(ctx)
   } catch (err) {
-    console.error('category rename error:', err)
+    log.error('category rename error', { error: err instanceof Error ? err.message : String(err) })
     inventoryState.delete(userId)
     await ctx.reply('❌ Ошибка при переименовании.', Markup.removeKeyboard())
     await showCategories(ctx)
