@@ -140,7 +140,7 @@ bot.use(async (ctx, next) => {
   const text = ((ctx.message as Record<string, unknown> | undefined)?.text as string ?? '').slice(0, 60)
   const cbData = (ctx.callbackQuery as Record<string, unknown> | undefined)?.data as string ?? ''
   const info = text || cbData || ''
-  console.log(`[BOT] ${updateType} from=${fromId ?? '?'} chat=${chatId ?? '?'}(${chatType})${info ? ' ' + info : ''}`)
+  log.debug('Incoming update', { updateType, fromId, chatId, chatType, info: info || undefined })
   return next()
 })
 
@@ -403,6 +403,15 @@ const _mapCleanup = setInterval(() => {
   }
   for (const [k, v] of tempStorage) {
     if (now > v.expires) tempStorage.delete(k)
+  }
+  // Safety valve: clear admin state maps that grow beyond 100 entries
+  const stateMaps = [
+    inventoryState, broadcastsState, segmentsState, salesState,
+    analyticsState, storefrontState, promotionsState, pricingState,
+    apiKeysState, securityState, suppliersState,
+  ]
+  for (const m of stateMaps) {
+    if (m.size > 100) m.clear()
   }
 }, 10 * 60 * 1000)
 _mapCleanup.unref()
@@ -1573,7 +1582,7 @@ bot.action('maint:enrich_all', async (ctx) => {
         }
       }
     } catch (err) {
-      console.error('[Enrich] Background error:', err)
+      log.error('Enrich background error', { error: err instanceof Error ? err.message : String(err) })
       if (userId) {
         await bot.telegram.sendMessage(userId, `❌ Ошибка обогащения: ${err}`).catch(() => {})
       }
@@ -1715,18 +1724,18 @@ if (process.env.NODE_ENV === 'production') {
       secretToken: process.env.WEBHOOK_SECRET,
     },
     allowedUpdates: ['message', 'callback_query', 'chat_member'],
-  }).catch(err => { console.error('Launch error:', err); process.exit(1) })
+  }).catch(err => { log.error('Launch error', { error: err instanceof Error ? err.message : String(err) }); process.exit(1) })
 } else {
-  bot.launch().catch((err) => { console.error('Bot launch failed:', err); process.exit(1) })
+  bot.launch().catch((err) => { log.error('Bot launch failed', { error: err instanceof Error ? err.message : String(err) }); process.exit(1) })
 }
 
-console.log('Бот запущен')
+log.info('Bot started')
 
 // Регистрация команд бота в Telegram
 bot.telegram.setMyCommands([
   { command: 'start', description: 'Главное меню' },
   { command: 'shop', description: 'Открыть магазин' },
-]).catch((e) => console.error('setMyCommands error:', e))
+]).catch((e) => log.error('setMyCommands error', { error: e instanceof Error ? e.message : String(e) }))
 
 // Кнопка-меню Mini App в личных чатах
 if (WEBAPP_URL) {
@@ -1734,7 +1743,7 @@ if (WEBAPP_URL) {
     .setChatMenuButton({
       menuButton: { type: 'web_app', text: '🛍 Магазин', web_app: { url: WEBAPP_URL } },
     })
-    .catch((e) => console.error('setChatMenuButton error:', e))
+    .catch((e) => log.error('setChatMenuButton error', { error: e instanceof Error ? e.message : String(e) }))
 }
 
 startScheduler(bot)
@@ -1749,10 +1758,10 @@ startApiServer(process.env.NODE_ENV === 'production' ? bot : undefined)
       process.env.OPENROUTER_API_KEY = savedKey
       reinitAgentClient(savedKey)
       reinitParserClient(savedKey)
-      console.log('OpenRouter ключ загружен из БД')
+      log.info('OpenRouter key loaded from DB')
     }
   } catch (e) {
-    console.error('Load OpenRouter key error:', e)
+    log.error('Load OpenRouter key error', { error: e instanceof Error ? e.message : String(e) })
   }
 })()
 
@@ -1769,10 +1778,10 @@ startApiServer(process.env.NODE_ENV === 'production' ? bot : undefined)
       await prisma.task.update({ where: { id: task.id }, data: { status: 'done' } })
     }
     if (pendingTasks.length > 0) {
-      console.log(`[ai] Reloaded ${pendingTasks.length} pending suggestions from DB`)
+      log.info('Reloaded pending AI suggestions from DB', { count: pendingTasks.length })
     }
   } catch (e) {
-    console.error('[ai] Failed to reload suggestions:', e)
+    log.error('Failed to reload AI suggestions', { error: e instanceof Error ? e.message : String(e) })
   }
 })()
 
@@ -1783,9 +1792,9 @@ setInterval(async () => {
   try {
     await prisma.$queryRaw`SELECT 1`
   } catch (e) {
-    console.error('DB keepalive failed:', e)
+    log.error('DB keepalive failed', { error: e instanceof Error ? e.message : String(e) })
   }
-}, 4 * 60 * 1000)
+}, 4 * 60 * 1000).unref()
 
 // ─── Ежедневный автобэкап в 03:00 МСК ──────────────────────────────────────
 
@@ -1838,7 +1847,7 @@ setInterval(async () => {
       } catch { /* ignore */ }
     }
   }
-}, 60 * 60 * 1000) // проверка каждый час
+}, 60 * 60 * 1000).unref() // проверка каждый час
 
 // ─── Автозавершение акций по истечению срока (каждые 10 минут) ───────────────
 
@@ -1861,9 +1870,9 @@ setInterval(async () => {
       }
     }
   } catch (e) {
-    console.error('Promo auto-cancel error:', e)
+    log.error('Promo auto-cancel error', { error: e instanceof Error ? e.message : String(e) })
   }
-}, 10 * 60 * 1000)
+}, 10 * 60 * 1000).unref()
 
 // ─── Ежедневное уведомление о курсах валют в 10:00 МСК ───────────────────────
 // Проверяем раз в час; если час === 10 и сегодня ещё не отправляли — отправляем.
@@ -1919,9 +1928,9 @@ setInterval(async () => {
       }
     }
   } catch (e) {
-    console.error('Currency notify error:', e)
+    log.error('Currency notify error', { error: e instanceof Error ? e.message : String(e) })
   }
-}, 60 * 60 * 1000)
+}, 60 * 60 * 1000).unref()
 
 // ─── Утренняя сводка цен от поставщиков (11:00 МСК) ─────────────────────────
 
@@ -1958,10 +1967,10 @@ async function notifyNightClients(): Promise<void> {
     }
 
     if (nightMessages.length > 0) {
-      console.log(`[Morning] Notified ${nightMessages.length} night clients`)
+      log.info('Morning notification sent', { clientCount: nightMessages.length })
     }
   } catch (err) {
-    console.error('[Morning] notifyNightClients error:', err)
+    log.error('Morning notifyNightClients error', { error: err instanceof Error ? err.message : String(err) })
   }
 }
 
@@ -2083,10 +2092,10 @@ setInterval(async () => {
           } catch { /* ignore */ }
         }
 
-        console.log(`[Night Brief] Sent: ${uniqueClients} clients, ${nightReserves.length} reserves, ${nightRequests.length} requests`)
+        log.info('Night brief sent', { clients: uniqueClients, reserves: nightReserves.length, requests: nightRequests.length })
       }
     } catch (err) {
-      console.error('[Night Brief] Error:', err)
+      log.error('Night brief error', { error: err instanceof Error ? err.message : String(err) })
     }
 
     // Собрать цены за сегодня
@@ -2191,15 +2200,15 @@ setInterval(async () => {
             }
           }
         }
-        console.log('[Trends] Updated:', newTrends.reasoning?.slice(0, 100))
+        log.info('Trends updated', { reasoning: newTrends.reasoning?.slice(0, 100) })
       }
     } catch (err) {
-      console.error('[Trends] Error:', err)
+      log.error('Trends error', { error: err instanceof Error ? err.message : String(err) })
     }
   } catch (err) {
-    console.error('[Morning summary] Error:', err)
+    log.error('Morning summary error', { error: err instanceof Error ? err.message : String(err) })
   }
-}, 15 * 60 * 1000)
+}, 15 * 60 * 1000).unref()
 
 // ─── AI авто-режим по расписанию ─────────────────────────────────────────────
 
@@ -2219,7 +2228,7 @@ async function checkAISchedule(): Promise<void> {
     if (!isWorkHours && currentMode !== 'auto' && currentMode !== 'off') {
       await setApiKeyValue('ai_mode_before_night', currentMode)
       await setAIMode('auto')
-      console.log(`[AI Schedule] ${hour}:00 MSK → AUTO (was ${currentMode}, after hours)`)
+      log.info('AI schedule switched to auto', { hour, previousMode: currentMode })
       for (const adminId of ADMIN_IDS) {
         try {
           await bot.telegram.sendMessage(adminId,
@@ -2232,7 +2241,7 @@ async function checkAISchedule(): Promise<void> {
         const restoreMode = (['manual', 'semi', 'auto', 'off'].includes(prevMode) ? prevMode : 'semi') as 'manual' | 'semi' | 'auto' | 'off'
         await setAIMode(restoreMode)
         await setApiKeyValue('ai_mode_before_night', '')
-        console.log(`[AI Schedule] ${hour}:00 MSK → ${restoreMode.toUpperCase()} (restored, work hours)`)
+        log.info('AI schedule restored', { hour, restoredMode: restoreMode })
         for (const adminId of ADMIN_IDS) {
           try {
             await bot.telegram.sendMessage(adminId,
@@ -2242,11 +2251,11 @@ async function checkAISchedule(): Promise<void> {
       }
     }
   } catch (err) {
-    console.error('[AI Schedule] Error:', err)
+    log.error('AI schedule error', { error: err instanceof Error ? err.message : String(err) })
   }
 }
 
-setInterval(checkAISchedule, 10 * 60 * 1000)
+setInterval(checkAISchedule, 10 * 60 * 1000).unref()
 setTimeout(checkAISchedule, 10_000)
 
 // ─── Обработчики утренних кнопок ─────────────────────────────────────────────
@@ -2422,7 +2431,7 @@ setInterval(async () => {
   } catch (err) {
     log.error('Sheets auto-sync error', { error: err instanceof Error ? err.message : String(err) })
   }
-}, 60 * 60 * 1000) // каждый час
+}, 60 * 60 * 1000).unref() // каждый час
 
 // Первая синхронизация через 30 сек после старта
 setTimeout(async () => {
@@ -2444,7 +2453,7 @@ async function ensureSalesTopic(): Promise<void> {
 
     const existingTopic = await getApiKeyValue('sales_topic')
     if (existingTopic) {
-      console.log(`Топик продаж: threadId=${existingTopic}`)
+      log.info('Sales topic exists', { threadId: existingTopic })
       return
     }
 
@@ -2452,7 +2461,7 @@ async function ensureSalesTopic(): Promise<void> {
     const threadId = topic.message_thread_id
 
     await setApiKeyValue('sales_topic', String(threadId))
-    console.log(`Топик «📦 Продажи и резервы» создан: threadId=${threadId}`)
+    log.info('Sales topic created', { threadId })
 
     // Отправляем панель управления в топик
     await bot.telegram.sendMessage(
@@ -2471,11 +2480,11 @@ async function ensureSalesTopic(): Promise<void> {
       },
     )
   } catch (err) {
-    console.error('ensureSalesTopic error:', err)
+    log.error('ensureSalesTopic error', { error: err instanceof Error ? err.message : String(err) })
   }
 }
 
-;(async () => { await ensureSalesTopic() })().catch((err) => console.error('ensureSalesTopic failed:', err))
+;(async () => { await ensureSalesTopic() })().catch((err) => log.error('ensureSalesTopic failed', { error: err instanceof Error ? err.message : String(err) }))
 
 async function serializeAISuggestions(): Promise<void> {
   if (aiSuggestions.size === 0) return
@@ -2492,9 +2501,9 @@ async function serializeAISuggestions(): Promise<void> {
       }),
     )
     await Promise.all(ops)
-    console.log(`[ai] Serialized ${aiSuggestions.size} pending suggestions to DB`)
+    log.info('Serialized pending AI suggestions to DB', { count: aiSuggestions.size })
   } catch (e) {
-    console.error('[ai] Failed to serialize suggestions:', e)
+    log.error('Failed to serialize AI suggestions', { error: e instanceof Error ? e.message : String(e) })
   }
 }
 
@@ -2503,7 +2512,7 @@ let shuttingDown = false
 async function gracefulShutdown(signal: string): Promise<void> {
   if (shuttingDown) return
   shuttingDown = true
-  console.log(`[shutdown] ${signal} received`)
+  log.info('Shutdown signal received', { signal })
 
   // Wait for scheduler tick to finish (max 10s)
   const waitStart = Date.now()
@@ -2511,12 +2520,12 @@ async function gracefulShutdown(signal: string): Promise<void> {
     await new Promise((r) => setTimeout(r, 200))
   }
 
-  try { await serializeAISuggestions() } catch (e) { console.error('[shutdown] serializeAISuggestions failed:', e) }
-  try { bot.stop(signal) } catch (e) { console.error('[shutdown] bot.stop failed:', e) }
-  try { await prisma.$disconnect() } catch (e) { console.error('[shutdown] prisma disconnect failed:', e) }
-  try { await pool.end() } catch (e) { console.error('[shutdown] pool.end failed:', e) }
+  try { await serializeAISuggestions() } catch (e) { log.error('Shutdown: serializeAISuggestions failed', { error: e instanceof Error ? e.message : String(e) }) }
+  try { bot.stop(signal) } catch (e) { log.error('Shutdown: bot.stop failed', { error: e instanceof Error ? e.message : String(e) }) }
+  try { await prisma.$disconnect() } catch (e) { log.error('Shutdown: prisma disconnect failed', { error: e instanceof Error ? e.message : String(e) }) }
+  try { await pool.end() } catch (e) { log.error('Shutdown: pool.end failed', { error: e instanceof Error ? e.message : String(e) }) }
   process.exit(0)
 }
 
-process.once('SIGTERM', () => { gracefulShutdown('SIGTERM').catch(e => { console.error('[shutdown] fatal:', e); process.exit(1) }) })
-process.once('SIGINT', () => { gracefulShutdown('SIGINT').catch(e => { console.error('[shutdown] fatal:', e); process.exit(1) }) })
+process.once('SIGTERM', () => { gracefulShutdown('SIGTERM').catch(e => { log.error('Shutdown fatal', { error: e instanceof Error ? e.message : String(e) }); process.exit(1) }) })
+process.once('SIGINT', () => { gracefulShutdown('SIGINT').catch(e => { log.error('Shutdown fatal', { error: e instanceof Error ? e.message : String(e) }); process.exit(1) }) })

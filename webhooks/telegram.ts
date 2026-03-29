@@ -36,6 +36,7 @@ import {
 import { logSecurityEvent } from '../lib/security-log'
 import { encryptClientField, decryptClientField, encryptDate, decryptDate } from '../lib/client-crypto'
 import log, { safeLog } from '../lib/logger'
+import { Sentry } from '../lib/sentry'
 
 const CRM_GROUP_ID = Number(process.env.CRM_GROUP_ID)
 const ADMIN_IDS = (process.env.ADMIN_IDS ?? '').split(',').map((id) => Number(id.trim()))
@@ -281,7 +282,7 @@ export function setupClientHandlers(bot: Telegraf): void {
           // Редактировать — меню в личке менеджера
           case 'edit': {
             if (!managerId) return ctx.answerCbQuery()
-            await ctx.answerCbQuery()
+            try { await ctx.answerCbQuery() } catch { /* query expired */ }
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             return await ctx.telegram.sendMessage(managerId, '✏️ Что редактировать?', {
               reply_markup: Markup.inlineKeyboard([
@@ -367,7 +368,7 @@ export function setupClientHandlers(bot: Telegraf): void {
 
           case 'price': {
             if (!managerId) return ctx.answerCbQuery()
-            await ctx.answerCbQuery()
+            try { await ctx.answerCbQuery() } catch { /* query expired */ }
 
             const lastMsg = await prisma.message.findFirst({
               where: { clientId, direction: 'in' },
@@ -419,7 +420,7 @@ export function setupClientHandlers(bot: Telegraf): void {
       if (data.startsWith('cp:price_send:')) {
         const clientId = parseCallbackId(data.slice(14))
         if (clientId === null) return ctx.answerCbQuery('Некорректные данные')
-        await ctx.answerCbQuery('⏳ Отправляю...')
+        try { await ctx.answerCbQuery('⏳ Отправляю...') } catch { /* query expired */ }
 
         const lastMsg = await prisma.message.findFirst({
           where: { clientId, direction: 'in' },
@@ -618,7 +619,7 @@ export function setupClientHandlers(bot: Telegraf): void {
       if (data.startsWith('edit:menu:')) {
         const clientId = parseCallbackId(data.slice(10))
         if (clientId === null) return ctx.answerCbQuery('Некорректные данные')
-        await ctx.answerCbQuery()
+        try { await ctx.answerCbQuery() } catch { /* query expired */ }
         return await ctx.reply(
           '✏️ Что редактировать?',
           Markup.inlineKeyboard([
@@ -645,7 +646,7 @@ export function setupClientHandlers(bot: Telegraf): void {
         if (!userId) return ctx.answerCbQuery()
 
         editMode.set(userId, { clientId, field })
-        await ctx.answerCbQuery()
+        try { await ctx.answerCbQuery() } catch { /* query expired */ }
 
         const prompts: Record<EditField, string> = {
           fullName: 'Введите полное ФИО клиента:',
@@ -663,7 +664,7 @@ export function setupClientHandlers(bot: Telegraf): void {
       if (data === 'edit:cancel') {
         const userId = ctx.from?.id
         if (userId) editMode.delete(userId)
-        await ctx.answerCbQuery()
+        try { await ctx.answerCbQuery() } catch { /* query expired */ }
         return await ctx.reply('Редактирование отменено.')
       }
 
@@ -671,7 +672,7 @@ export function setupClientHandlers(bot: Telegraf): void {
       if (data.startsWith('crm:sale:')) {
         const clientId = parseCallbackId(data.slice(9))
         if (clientId === null) return ctx.answerCbQuery('Некорректные данные')
-        await ctx.answerCbQuery()
+        try { await ctx.answerCbQuery() } catch { /* query expired */ }
         return await startSaleFlow(ctx as Context, clientId)
       }
 
@@ -679,7 +680,7 @@ export function setupClientHandlers(bot: Telegraf): void {
       if (data.startsWith('crm:res:')) {
         const clientId = parseCallbackId(data.slice(8))
         if (clientId === null) return ctx.answerCbQuery('Некорректные данные')
-        await ctx.answerCbQuery()
+        try { await ctx.answerCbQuery() } catch { /* query expired */ }
         return await startReserveFlow(ctx as Context, clientId)
       }
 
@@ -773,6 +774,7 @@ export function setupClientHandlers(bot: Telegraf): void {
       }
 
     } catch (err) {
+      Sentry.captureException(err, { tags: { operation: 'callback_query' } })
       log.error('Callback query error', { error: err instanceof Error ? err.message : String(err) })
       return ctx.answerCbQuery('Ошибка')
     }
@@ -880,6 +882,7 @@ export function setupClientHandlers(bot: Telegraf): void {
       try {
         await handleClientMessage(ctx.telegram, from, text)
       } catch (err) {
+        Sentry.captureException(err, { tags: { operation: 'handleClientMessage' } })
         log.error('Client message error', { error: err instanceof Error ? err.message : String(err) })
       }
     } else {

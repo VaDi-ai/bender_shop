@@ -32,11 +32,11 @@ type RemindPayload = {
 
 export function startScheduler(bot: Telegraf): void {
   log.info('Scheduler started', { intervalMs: INTERVAL_MS })
-  setInterval(() => { runTick(bot).catch(err => log.error('Scheduler tick error', { error: err instanceof Error ? err.message : String(err) })) }, INTERVAL_MS)
+  setInterval(() => { runTick(bot).catch(err => log.error('Scheduler tick error', { error: err instanceof Error ? err.message : String(err) })) }, INTERVAL_MS).unref()
 
   // Avito polling: отдельный таймер, каждые 2 минуты
   setTimeout(() => pollAvitoMessages(bot.telegram).catch(e => log.error('Avito poll error', { error: e instanceof Error ? e.message : String(e) })), 30_000)
-  setInterval(() => { pollAvitoMessages(bot.telegram).catch(e => log.error('Avito poll error', { error: e instanceof Error ? e.message : String(e) })) }, 2 * 60 * 1000)
+  setInterval(() => { pollAvitoMessages(bot.telegram).catch(e => log.error('Avito poll error', { error: e instanceof Error ? e.message : String(e) })) }, 2 * 60 * 1000).unref()
 }
 
 // ─── Один «тик» — проверяем и выполняем задачи ───────────────────────────────

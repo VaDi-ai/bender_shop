@@ -7,6 +7,7 @@
  */
 
 import { Decimal } from '@prisma/client/runtime/client'
+import { Sentry } from './sentry'
 import log from './logger'
 import { prisma } from './prisma'
 import { readSheet, getSheetNames } from './google-sheets'
@@ -204,6 +205,7 @@ export async function syncProductsFromSheets(shouldAbort?: () => boolean): Promi
   try {
     rows = await readAllProducts()
   } catch (err) {
+    Sentry.captureException(err, { tags: { operation: 'sheets-sync' } })
     log.error('Sheets sync read failed', { error: err instanceof Error ? err.message : String(err) })
     return { created: 0, updated: 0, disabled: 0, total: 0, errors: [`Failed to read sheets: ${err}`] }
   }

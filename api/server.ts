@@ -1264,6 +1264,7 @@ export function startApiServer(bot?: Telegraf): void {
         }
       })()
     } catch (err: any) {
+      Sentry.captureException(err, { tags: { operation: 'create-order' } })
       if (err.isStockConflict) {
         log.info('Order stock conflict', { telegramId })
         if (!res.headersSent) res.status(409).json({ error: 'Товар закончился или недоступен' })
