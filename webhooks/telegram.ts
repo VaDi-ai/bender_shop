@@ -73,6 +73,12 @@ const noteMode = new Map<number, number>()
 type EditField = 'fullName' | 'phone' | 'email' | 'birthDate'
 const editMode = new Map<number, { clientId: number; field: EditField }>()
 
+// Cleanup stale noteMode/editMode entries
+setInterval(() => {
+  if (noteMode.size > 100) noteMode.clear()
+  if (editMode.size > 100) editMode.clear()
+}, 30 * 60 * 1000).unref()
+
 // ─── Inline keyboard панели управления ────────────────────────────────────────
 // Отправляется один раз в топик при его создании и закрепляется.
 // Callback data: cp:{action}:{clientId}
@@ -427,7 +433,8 @@ export function setupClientHandlers(bot: Telegraf): void {
           orderBy: { createdAt: 'desc' },
         })
         if (!lastMsg?.text) {
-          return ctx.answerCbQuery('Нет сообщений от клиента')
+          try { await ctx.answerCbQuery('Нет сообщений от клиента') } catch { /* already answered */ }
+          return
         }
 
         const { requestPriceFromAllSuppliers } = await import('../webhooks/supplier')
@@ -1080,6 +1087,25 @@ async function createClientTopic(
   clientId: number,
   name: string,
 ): Promise<number | null> {
+  // Advisory lock to prevent duplicate topics from concurrent messages
+  const lockId = 80000 + clientId
+  const lockResult = await prisma.$queryRawUnsafe<[{pg_try_advisory_lock: boolean}]>(
+    `SELECT pg_try_advisory_lock(${lockId}) as "pg_try_advisory_lock"`,
+  )
+  const gotLock = lockResult[0]?.pg_try_advisory_lock
+
+  if (!gotLock) {
+    await new Promise(r => setTimeout(r, 2000))
+    const updated = await prisma.client.findUnique({ where: { id: clientId } })
+    if (updated?.telegramTopicId) return updated.telegramTopicId
+    return null
+  }
+
+  try {
+  // Re-check after acquiring lock (TOCTOU)
+  const fresh = await prisma.client.findUnique({ where: { id: clientId } })
+  if (fresh?.telegramTopicId) return fresh.telegramTopicId
+
   let threadId: number | null = null
 
   for (let attempt = 1; attempt <= 2; attempt++) {
@@ -1117,6 +1143,9 @@ async function createClientTopic(
   }
 
   return threadId
+  } finally {
+    await prisma.$queryRawUnsafe(`SELECT pg_advisory_unlock(${lockId})`)
+  }
 }
 
 // ─── Обработка входящего сообщения от клиента ────────────────────────────────

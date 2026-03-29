@@ -189,6 +189,7 @@ async function executeTask(
 
 const lastProcessedMsg = new Map<string, string>()
 let initialPollDone = false
+let isPollingAvito = false
 
 function extractMessageText(msg: { text?: string; content?: { text?: string }; body?: string }): string {
   return msg.text || msg.content?.text || msg.body || ''
@@ -202,6 +203,9 @@ function buildItemInfo(chat: AvitoChat): { title: string; url: string } {
 }
 
 async function pollAvitoMessages(telegram: Telegram): Promise<void> {
+  if (isPollingAvito) return
+  isPollingAvito = true
+  try {
   log.debug('Avito poll check', { clientIdSet: !!process.env.AVITO_CLIENT_ID })
   if (!isAvitoConfigured()) { log.debug('Avito not configured, skipping'); return }
 
@@ -363,4 +367,16 @@ async function pollAvitoMessages(telegram: Telegram): Promise<void> {
     }
   }
   log.debug('Avito polling done', { chatCount: chats.length })
+
+  // LRU eviction — keep map from growing unbounded
+  if (lastProcessedMsg.size > 1000) {
+    const entries = [...lastProcessedMsg.entries()]
+    lastProcessedMsg.clear()
+    for (const [k, v] of entries.slice(-500)) {
+      lastProcessedMsg.set(k, v)
+    }
+  }
+  } finally {
+    isPollingAvito = false
+  }
 }
