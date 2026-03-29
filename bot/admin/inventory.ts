@@ -66,7 +66,7 @@ async function generateProductSku(categoryId: number | null): Promise<string> {
   let nextNum = 1
   if (lastProduct) {
     const match = lastProduct.sku.match(/^\d{2}-(\d{4})/)
-    if (match) nextNum = parseInt(match[1], 10) + 1
+    if (match) nextNum = parseInt(match[1]!, 10) + 1
   }
   return `${catNum}-${String(nextNum).padStart(4, '0')}`
 }
@@ -327,19 +327,19 @@ function parsePipe(content: string): FileRow[] | string {
   if (lines.length === 0) return 'Файл пуст'
 
   // Пропускаем строку-заголовок, если первая колонка — «sku» или «артикул»
-  const firstCol = lines[0].split('|')[0].trim().toLowerCase()
+  const firstCol = lines[0]!.split('|')[0]!.trim().toLowerCase()
   const startLine = firstCol === 'sku' || firstCol === 'артикул' ? 1 : 0
 
   const rows: FileRow[] = []
   for (let i = startLine; i < lines.length; i++) {
-    const cols = lines[i].split('|').map((c) => c.trim())
+    const cols = lines[i]!.split('|').map((c) => c.trim())
     if (cols.length < 2) continue
 
     const sku = cols[0]
     if (!sku) continue
 
     // Последняя колонка — количество
-    const qty = parseInt(cols[cols.length - 1], 10)
+    const qty = parseInt(cols[cols.length - 1]!, 10)
     if (isNaN(qty) || qty < 0) continue
 
     let name: string | null = null
@@ -350,7 +350,7 @@ function parsePipe(content: string): FileRow[] | string {
     if (cols.length >= 6) {
       // Полный формат: SKU | Название | Цена | Категория | Фото URL | Количество
       name = cols[1] || null
-      const p = parseFloat(cols[2].replace(',', '.'))
+      const p = parseFloat(cols[2]!.replace(',', '.'))
       if (!isNaN(p) && p >= 0) price = p
       category = cols[3] || null
       photoUrl = cols[4] || null
@@ -358,7 +358,7 @@ function parsePipe(content: string): FileRow[] | string {
       // SKU | Название | ... | Количество
       name = cols[1] || null
       if (cols.length >= 4) {
-        const p = parseFloat(cols[2].replace(',', '.'))
+        const p = parseFloat(cols[2]!.replace(',', '.'))
         if (!isNaN(p) && p >= 0) price = p
       }
     }
@@ -936,7 +936,7 @@ export function setupInventoryHandlers(bot: Telegraf): void {
   })
 
   bot.action(/^inv:hit_toggle:(\d+)$/, async (ctx) => {
-    const id = parseInt((ctx.match as RegExpMatchArray)[1], 10)
+    const id = parseInt((ctx.match as RegExpMatchArray)[1]!, 10)
     const product = await prisma.product.findUnique({ where: { id } })
     if (!product) {
       try { await ctx.answerCbQuery('Товар не найден') } catch { /* ignore */ }
@@ -962,20 +962,20 @@ export function setupInventoryHandlers(bot: Telegraf): void {
 
   bot.action(/^inv:stock_product:(\d+)$/, async (ctx) => {
     try { await ctx.answerCbQuery() } catch { /* ignore */ }
-    const productId = parseInt((ctx.match as RegExpMatchArray)[1], 10)
+    const productId = parseInt((ctx.match as RegExpMatchArray)[1]!, 10)
     await showStockProduct(ctx, productId)
   })
 
   bot.action(/^inv:stock_hist:(\d+)$/, async (ctx) => {
     try { await ctx.answerCbQuery() } catch { /* ignore */ }
-    const variantId = parseInt((ctx.match as RegExpMatchArray)[1], 10)
+    const variantId = parseInt((ctx.match as RegExpMatchArray)[1]!, 10)
     await showVariantStockHistory(ctx, variantId)
   })
 
   bot.action(/^inv:stock_in:(\d+)$/, async (ctx) => {
     try { await ctx.answerCbQuery() } catch { /* ignore */ }
     const userId = getUserId(ctx)
-    const variantId = parseInt((ctx.match as RegExpMatchArray)[1], 10)
+    const variantId = parseInt((ctx.match as RegExpMatchArray)[1]!, 10)
     const variant = await prisma.productVariant.findUnique({
       where: { id: variantId }, include: { product: true },
     })
@@ -996,7 +996,7 @@ export function setupInventoryHandlers(bot: Telegraf): void {
   bot.action(/^inv:stock_out:(\d+)$/, async (ctx) => {
     try { await ctx.answerCbQuery() } catch { /* ignore */ }
     const userId = getUserId(ctx)
-    const variantId = parseInt((ctx.match as RegExpMatchArray)[1], 10)
+    const variantId = parseInt((ctx.match as RegExpMatchArray)[1]!, 10)
     const variant = await prisma.productVariant.findUnique({
       where: { id: variantId }, include: { product: true },
     })
@@ -1035,7 +1035,7 @@ export function setupInventoryHandlers(bot: Telegraf): void {
 
   bot.action(/^inv:cat_edit:(\d+)$/, async (ctx) => {
     try { await ctx.answerCbQuery() } catch { /* ignore stale query */ }
-    const categoryId = parseInt((ctx.match as RegExpMatchArray)[1], 10)
+    const categoryId = parseInt((ctx.match as RegExpMatchArray)[1]!, 10)
     await showCategoryEdit(ctx, categoryId)
   })
 
@@ -1044,7 +1044,7 @@ export function setupInventoryHandlers(bot: Telegraf): void {
   bot.action(/^inv:cat_banner:(\d+)$/, async (ctx) => {
     try { await ctx.answerCbQuery() } catch { /* ignore stale query */ }
     const userId = getUserId(ctx)
-    const categoryId = parseInt((ctx.match as RegExpMatchArray)[1], 10)
+    const categoryId = parseInt((ctx.match as RegExpMatchArray)[1]!, 10)
     const cat = await prisma.category.findUnique({ where: { id: categoryId } })
     if (!cat) {
       await ctx.reply('❌ Категория не найдена.')
@@ -1061,7 +1061,7 @@ export function setupInventoryHandlers(bot: Telegraf): void {
 
   bot.action(/^inv:cat_textside:(\d+)$/, async (ctx) => {
     try { await ctx.answerCbQuery() } catch { /* ignore stale query */ }
-    const categoryId = parseInt((ctx.match as RegExpMatchArray)[1], 10)
+    const categoryId = parseInt((ctx.match as RegExpMatchArray)[1]!, 10)
     const cat = await prisma.category.findUnique({ where: { id: categoryId } })
     if (!cat) {
       await ctx.reply('❌ Категория не найдена.')
@@ -1082,8 +1082,8 @@ export function setupInventoryHandlers(bot: Telegraf): void {
   bot.action(/^inv:cat_textside_set:(\d+):(left|right)$/, async (ctx) => {
     try { await ctx.answerCbQuery() } catch { /* ignore stale query */ }
     const m = ctx.match as RegExpMatchArray
-    const categoryId = parseInt(m[1], 10)
-    const side = m[2] as 'left' | 'right'
+    const categoryId = parseInt(m[1]!, 10)
+    const side = m[2]! as 'left' | 'right'
     const cat = await prisma.category.findUnique({ where: { id: categoryId } })
     if (!cat) {
       await ctx.reply('❌ Категория не найдена.')
@@ -1103,7 +1103,7 @@ export function setupInventoryHandlers(bot: Telegraf): void {
     const state = inventoryState.get(userId)
     if (!state || state.flow !== 'category_add' || state.step !== 'textSide') return
 
-    const side = (ctx.match as RegExpMatchArray)[1] as 'left' | 'right'
+    const side = (ctx.match as RegExpMatchArray)[1]! as 'left' | 'right'
     const s = state as Extract<CategoryAddFlow, { step: 'textSide' }>
     try {
       await prisma.category.create({ data: { name: s.name, textSide: side } })
@@ -1183,7 +1183,7 @@ export function setupInventoryHandlers(bot: Telegraf): void {
     const state = inventoryState.get(userId)
     if (!state || state.flow !== 'add' || state.step !== 'category') return
 
-    const categoryId = parseInt((ctx.match as RegExpMatchArray)[1], 10)
+    const categoryId = parseInt((ctx.match as RegExpMatchArray)[1]!, 10)
     const cat = await prisma.category.findUnique({ where: { id: categoryId } })
     if (!cat) {
       await ctx.reply('❌ Категория не найдена.')
@@ -1273,7 +1273,7 @@ export function setupInventoryHandlers(bot: Telegraf): void {
   bot.action(/^inv:cat_rename:(\d+)$/, async (ctx) => {
     try { await ctx.answerCbQuery() } catch { /* ignore stale query */ }
     const userId = getUserId(ctx)
-    const categoryId = parseInt((ctx.match as RegExpMatchArray)[1], 10)
+    const categoryId = parseInt((ctx.match as RegExpMatchArray)[1]!, 10)
     const cat = await prisma.category.findUnique({ where: { id: categoryId } })
     if (!cat) {
       await ctx.reply('❌ Категория не найдена.')
@@ -1295,7 +1295,7 @@ export function setupInventoryHandlers(bot: Telegraf): void {
 
   bot.action(/^inv:cat_delete:(\d+)$/, async (ctx) => {
     try { await ctx.answerCbQuery() } catch { /* ignore stale query */ }
-    const categoryId = parseInt((ctx.match as RegExpMatchArray)[1], 10)
+    const categoryId = parseInt((ctx.match as RegExpMatchArray)[1]!, 10)
     const cat = await prisma.category.findUnique({
       where: { id: categoryId },
       include: { _count: { select: { products: true } } },
@@ -1325,13 +1325,13 @@ export function setupInventoryHandlers(bot: Telegraf): void {
 
   bot.action(/^inv:ep_cat:(\d+)$/, async (ctx) => {
     try { await ctx.answerCbQuery() } catch { /* ignore stale query */ }
-    const categoryId = parseInt((ctx.match as RegExpMatchArray)[1], 10)
+    const categoryId = parseInt((ctx.match as RegExpMatchArray)[1]!, 10)
     await showProductsForEdit(ctx, categoryId)
   })
 
   bot.action(/^inv:ep_prod:(\d+)$/, async (ctx) => {
     try { await ctx.answerCbQuery() } catch { /* ignore stale query */ }
-    const productId = parseInt((ctx.match as RegExpMatchArray)[1], 10)
+    const productId = parseInt((ctx.match as RegExpMatchArray)[1]!, 10)
     await showProductCard(ctx, productId)
   })
 
@@ -1339,14 +1339,14 @@ export function setupInventoryHandlers(bot: Telegraf): void {
 
   bot.action(/^inv:prod_variants:(\d+)$/, async (ctx) => {
     try { await ctx.answerCbQuery() } catch { /* ignore stale query */ }
-    const productId = parseInt((ctx.match as RegExpMatchArray)[1], 10)
+    const productId = parseInt((ctx.match as RegExpMatchArray)[1]!, 10)
     await showVariantsList(ctx, productId)
   })
 
   bot.action(/^inv:variant_add:(\d+)$/, async (ctx) => {
     try { await ctx.answerCbQuery() } catch { /* ignore stale query */ }
     const userId = getUserId(ctx)
-    const productId = parseInt((ctx.match as RegExpMatchArray)[1], 10)
+    const productId = parseInt((ctx.match as RegExpMatchArray)[1]!, 10)
     const product = await prisma.product.findUnique({ where: { id: productId } })
     inventoryState.set(userId, { flow: 'variant_add', step: 'price', productId, sku: '' })
     await ctx.reply(
@@ -1357,7 +1357,7 @@ export function setupInventoryHandlers(bot: Telegraf): void {
 
   bot.action(/^inv:var_view:(\d+)$/, async (ctx) => {
     try { await ctx.answerCbQuery() } catch { /* ignore stale query */ }
-    const variantId = parseInt((ctx.match as RegExpMatchArray)[1], 10)
+    const variantId = parseInt((ctx.match as RegExpMatchArray)[1]!, 10)
     const variant = await prisma.productVariant.findUnique({
       where: { id: variantId },
       include: { product: true },
@@ -1387,8 +1387,8 @@ export function setupInventoryHandlers(bot: Telegraf): void {
   bot.action(/^inv:var_del:(\d+):(\d+)$/, async (ctx) => {
     try { await ctx.answerCbQuery() } catch { /* ignore stale query */ }
     const m = ctx.match as RegExpMatchArray
-    const variantId = parseInt(m[1], 10)
-    const productId = parseInt(m[2], 10)
+    const variantId = parseInt(m[1]!, 10)
+    const productId = parseInt(m[2]!, 10)
     const variant = await prisma.productVariant.findUnique({ where: { id: variantId } })
     if (!variant) {
       await ctx.reply('❌ Вариант не найден.')
@@ -1408,8 +1408,8 @@ export function setupInventoryHandlers(bot: Telegraf): void {
   bot.action(/^inv:var_del_ok:(\d+):(\d+)$/, async (ctx) => {
     try { await ctx.answerCbQuery() } catch { /* ignore stale query */ }
     const m = ctx.match as RegExpMatchArray
-    const variantId = parseInt(m[1], 10)
-    const productId = parseInt(m[2], 10)
+    const variantId = parseInt(m[1]!, 10)
+    const productId = parseInt(m[2]!, 10)
     const hasOrders = await prisma.orderItem.count({ where: { variantId } })
     if (hasOrders > 0) {
       await ctx.reply(`❌ Нельзя удалить вариант — есть ${hasOrders} заказов. Можно только скрыть с витрины.`)
@@ -1428,14 +1428,14 @@ export function setupInventoryHandlers(bot: Telegraf): void {
 
   bot.action(/^inv:var_photos:(\d+)$/, async (ctx) => {
     try { await ctx.answerCbQuery() } catch { /* ignore stale query */ }
-    const variantId = parseInt((ctx.match as RegExpMatchArray)[1], 10)
+    const variantId = parseInt((ctx.match as RegExpMatchArray)[1]!, 10)
     await showVariantPhotos(ctx, variantId)
   })
 
   bot.action(/^inv:var_photo_add:(\d+)$/, async (ctx) => {
     try { await ctx.answerCbQuery() } catch { /* ignore stale query */ }
     const userId = getUserId(ctx)
-    const variantId = parseInt((ctx.match as RegExpMatchArray)[1], 10)
+    const variantId = parseInt((ctx.match as RegExpMatchArray)[1]!, 10)
     const variant = await prisma.productVariant.findUnique({ where: { id: variantId } })
     if (!variant) { await ctx.reply('❌ Вариант не найден.'); return }
     inventoryState.set(userId, {
@@ -1454,7 +1454,7 @@ export function setupInventoryHandlers(bot: Telegraf): void {
   bot.action(/^inv:var_photo_done_e:(\d+)$/, async (ctx) => {
     try { await ctx.answerCbQuery() } catch { /* ignore stale query */ }
     const userId = getUserId(ctx)
-    const variantId = parseInt((ctx.match as RegExpMatchArray)[1], 10)
+    const variantId = parseInt((ctx.match as RegExpMatchArray)[1]!, 10)
     const state = inventoryState.get(userId)
     const pending = state?.flow === 'variant_photo_edit' ? state.pendingPhotos : []
     inventoryState.delete(userId)
@@ -1468,7 +1468,7 @@ export function setupInventoryHandlers(bot: Telegraf): void {
 
   bot.action(/^inv:var_photo_clr:(\d+)$/, async (ctx) => {
     try { await ctx.answerCbQuery() } catch { /* ignore stale query */ }
-    const variantId = parseInt((ctx.match as RegExpMatchArray)[1], 10)
+    const variantId = parseInt((ctx.match as RegExpMatchArray)[1]!, 10)
     await ctx.reply(
       '🗑️ Удалить все фото варианта?',
       Markup.inlineKeyboard([
@@ -1482,7 +1482,7 @@ export function setupInventoryHandlers(bot: Telegraf): void {
 
   bot.action(/^inv:var_photo_clr_ok:(\d+)$/, async (ctx) => {
     try { await ctx.answerCbQuery() } catch { /* ignore stale query */ }
-    const variantId = parseInt((ctx.match as RegExpMatchArray)[1], 10)
+    const variantId = parseInt((ctx.match as RegExpMatchArray)[1]!, 10)
     await prisma.productVariant.update({ where: { id: variantId }, data: { photos: [] } })
     await ctx.reply('✅ Фото варианта очищены.')
     await showVariantPhotos(ctx, variantId)
@@ -1495,9 +1495,9 @@ export function setupInventoryHandlers(bot: Telegraf): void {
     const userId = getUserId(ctx)
     const state = inventoryState.get(userId)
     if (!state || state.flow !== 'variant_add' || state.step !== 'attrs') return
-    const value = decodeURIComponent((ctx.match as RegExpMatchArray)[1])
+    const value = decodeURIComponent((ctx.match as RegExpMatchArray)[1]!)
     const s = state as Extract<VariantAddFlow, { step: 'attrs' }>
-    const currentKey = s.attrKeys[s.currentAttrIndex]
+    const currentKey = s.attrKeys[s.currentAttrIndex]!
     const newSelectedAttrs = { ...s.selectedAttrs, [currentKey]: value }
     const nextIndex = s.currentAttrIndex + 1
 
@@ -1527,9 +1527,9 @@ export function setupInventoryHandlers(bot: Telegraf): void {
       })
       const product = await prisma.product.findUnique({ where: { id: s.productId } })
       const productAttrs = product?.attributes as Record<string, string[]> | null
-      const nextKey = s.attrKeys[nextIndex]
+      const nextKey = s.attrKeys[nextIndex]!
       const nextValues = productAttrs?.[nextKey] ?? []
-      const valButtons = nextValues.map((v) => Markup.button.callback(v, `inv:var_attr:${encodeURIComponent(v)}`))
+      const valButtons = nextValues.map((v: string) => Markup.button.callback(v, `inv:var_attr:${encodeURIComponent(v)}`))
       const valRows: ReturnType<typeof Markup.button.callback>[][] = []
       for (let i = 0; i < valButtons.length; i += 3) valRows.push(valButtons.slice(i, i + 3))
       await ctx.reply(
@@ -1559,14 +1559,14 @@ export function setupInventoryHandlers(bot: Telegraf): void {
 
   bot.action(/^inv:prod_attrs:(\d+)$/, async (ctx) => {
     try { await ctx.answerCbQuery() } catch { /* ignore stale query */ }
-    const productId = parseInt((ctx.match as RegExpMatchArray)[1], 10)
+    const productId = parseInt((ctx.match as RegExpMatchArray)[1]!, 10)
     await showProductAttrs(ctx, productId)
   })
 
   bot.action(/^inv:attr_add:(\d+)$/, async (ctx) => {
     try { await ctx.answerCbQuery() } catch { /* ignore stale query */ }
     const userId = getUserId(ctx)
-    const productId = parseInt((ctx.match as RegExpMatchArray)[1], 10)
+    const productId = parseInt((ctx.match as RegExpMatchArray)[1]!, 10)
     inventoryState.set(userId, { flow: 'attr_add', step: 'name', productId })
     await ctx.reply(
       '🏷️ Добавление атрибута\n\nШаг 1 — введите название (например: Память, Цвет):',
@@ -1578,8 +1578,8 @@ export function setupInventoryHandlers(bot: Telegraf): void {
     try { await ctx.answerCbQuery() } catch { /* ignore stale query */ }
     const userId = getUserId(ctx)
     const m = ctx.match as RegExpMatchArray
-    const productId = parseInt(m[1], 10)
-    const attrName = m[2]
+    const productId = parseInt(m[1]!, 10)
+    const attrName = m[2]!
     inventoryState.set(userId, { flow: 'attr_edit', step: 'values', productId, attrName })
     const product = await prisma.product.findUnique({ where: { id: productId } })
     const existingAttrs = (product?.attributes as Record<string, string[]> | null) ?? {}
@@ -1593,8 +1593,8 @@ export function setupInventoryHandlers(bot: Telegraf): void {
   bot.action(/^inv:attr_del:(\d+):(.+)$/, async (ctx) => {
     try { await ctx.answerCbQuery() } catch { /* ignore stale query */ }
     const m = ctx.match as RegExpMatchArray
-    const productId = parseInt(m[1], 10)
-    const attrName = m[2]
+    const productId = parseInt(m[1]!, 10)
+    const attrName = m[2]!
     const product = await prisma.product.findUnique({ where: { id: productId } })
     if (!product) return
     const attrs = (product.attributes as Record<string, string[]> | null) ?? {}
@@ -1608,14 +1608,14 @@ export function setupInventoryHandlers(bot: Telegraf): void {
 
   bot.action(/^inv:prod_specs:(\d+)$/, async (ctx) => {
     try { await ctx.answerCbQuery() } catch { /* ignore stale query */ }
-    const productId = parseInt((ctx.match as RegExpMatchArray)[1], 10)
+    const productId = parseInt((ctx.match as RegExpMatchArray)[1]!, 10)
     await showProductSpecs(ctx, productId)
   })
 
   bot.action(/^inv:spec_add:(\d+)$/, async (ctx) => {
     try { await ctx.answerCbQuery() } catch { /* ignore stale query */ }
     const userId = getUserId(ctx)
-    const productId = parseInt((ctx.match as RegExpMatchArray)[1], 10)
+    const productId = parseInt((ctx.match as RegExpMatchArray)[1]!, 10)
     inventoryState.set(userId, { flow: 'spec_add', step: 'input', productId })
     await ctx.reply(
       '📋 Добавление характеристики\n\nВведите в формате:\nНазвание : Значение\n\nПример: Процессор : Apple A18',
@@ -1626,8 +1626,8 @@ export function setupInventoryHandlers(bot: Telegraf): void {
   bot.action(/^inv:spec_del:(\d+):(.+)$/, async (ctx) => {
     try { await ctx.answerCbQuery() } catch { /* ignore stale query */ }
     const m = ctx.match as RegExpMatchArray
-    const productId = parseInt(m[1], 10)
-    const specName = m[2]
+    const productId = parseInt(m[1]!, 10)
+    const specName = m[2]!
     const product = await prisma.product.findUnique({ where: { id: productId } })
     if (!product) return
     const specs = (product.specs as Record<string, string> | null) ?? {}
@@ -1641,7 +1641,7 @@ export function setupInventoryHandlers(bot: Telegraf): void {
 
   bot.action(/^inv:prod_badge:(\d+)$/, async (ctx) => {
     try { await ctx.answerCbQuery() } catch { /* ignore stale query */ }
-    const productId = parseInt((ctx.match as RegExpMatchArray)[1], 10)
+    const productId = parseInt((ctx.match as RegExpMatchArray)[1]!, 10)
     const product = await prisma.product.findUnique({ where: { id: productId } })
     if (!product) return
     await ctx.reply(
@@ -1661,8 +1661,8 @@ export function setupInventoryHandlers(bot: Telegraf): void {
   bot.action(/^inv:badge_set:(\d+):(.+)$/, async (ctx) => {
     try { await ctx.answerCbQuery() } catch { /* ignore stale query */ }
     const m = ctx.match as RegExpMatchArray
-    const productId = parseInt(m[1], 10)
-    const badge = m[2]
+    const productId = parseInt(m[1]!, 10)
+    const badge = m[2]!
     await prisma.product.update({ where: { id: productId }, data: { badge } })
     await ctx.reply(`✅ Метка «${badge}» установлена.`)
     await showProductCard(ctx, productId)
@@ -1670,7 +1670,7 @@ export function setupInventoryHandlers(bot: Telegraf): void {
 
   bot.action(/^inv:badge_clear:(\d+)$/, async (ctx) => {
     try { await ctx.answerCbQuery() } catch { /* ignore stale query */ }
-    const productId = parseInt((ctx.match as RegExpMatchArray)[1], 10)
+    const productId = parseInt((ctx.match as RegExpMatchArray)[1]!, 10)
     await prisma.product.update({ where: { id: productId }, data: { badge: null } })
     await ctx.reply('✅ Метка убрана.')
     await showProductCard(ctx, productId)
@@ -1681,7 +1681,7 @@ export function setupInventoryHandlers(bot: Telegraf): void {
   bot.action(/^inv:prod_brand:(\d+)$/, async (ctx) => {
     try { await ctx.answerCbQuery() } catch { /* ignore stale query */ }
     const userId = getUserId(ctx)
-    const productId = parseInt((ctx.match as RegExpMatchArray)[1], 10)
+    const productId = parseInt((ctx.match as RegExpMatchArray)[1]!, 10)
     const product = await prisma.product.findUnique({ where: { id: productId } })
     if (!product) return
     inventoryState.set(userId, { flow: 'brand_edit', step: 'input', productId })
@@ -1695,14 +1695,14 @@ export function setupInventoryHandlers(bot: Telegraf): void {
 
   bot.action(/^inv:prod_photos:(\d+)$/, async (ctx) => {
     try { await ctx.answerCbQuery() } catch { /* ignore stale query */ }
-    const productId = parseInt((ctx.match as RegExpMatchArray)[1], 10)
+    const productId = parseInt((ctx.match as RegExpMatchArray)[1]!, 10)
     await showProductPhotos(ctx, productId)
   })
 
   bot.action(/^inv:prod_photo_add:(\d+)$/, async (ctx) => {
     try { await ctx.answerCbQuery() } catch { /* ignore stale query */ }
     const userId = getUserId(ctx)
-    const productId = parseInt((ctx.match as RegExpMatchArray)[1], 10)
+    const productId = parseInt((ctx.match as RegExpMatchArray)[1]!, 10)
     inventoryState.set(userId, { flow: 'product_photo', step: 'uploading', productId, pendingPhotos: [] })
     await ctx.reply(
       'Отправьте фото товара (можно несколько, до 7 штук). Нажмите ✅ Готово когда закончите.',
@@ -1713,7 +1713,7 @@ export function setupInventoryHandlers(bot: Telegraf): void {
   bot.action(/^inv:prod_photo_done:(\d+)$/, async (ctx) => {
     try { await ctx.answerCbQuery() } catch { /* ignore stale query */ }
     const userId = getUserId(ctx)
-    const productId = parseInt((ctx.match as RegExpMatchArray)[1], 10)
+    const productId = parseInt((ctx.match as RegExpMatchArray)[1]!, 10)
     const state = inventoryState.get(userId)
     const pending = (state?.flow === 'product_photo' ? state.pendingPhotos : [])
     inventoryState.delete(userId)
@@ -1731,7 +1731,7 @@ export function setupInventoryHandlers(bot: Telegraf): void {
 
   bot.action(/^inv:prod_photo_clear:(\d+)$/, async (ctx) => {
     try { await ctx.answerCbQuery() } catch { /* ignore stale query */ }
-    const productId = parseInt((ctx.match as RegExpMatchArray)[1], 10)
+    const productId = parseInt((ctx.match as RegExpMatchArray)[1]!, 10)
     await ctx.reply(
       '🗑️ Удалить все фото товара?',
       Markup.inlineKeyboard([
@@ -1745,7 +1745,7 @@ export function setupInventoryHandlers(bot: Telegraf): void {
 
   bot.action(/^inv:prod_photo_clear_ok:(\d+)$/, async (ctx) => {
     try { await ctx.answerCbQuery() } catch { /* ignore stale query */ }
-    const productId = parseInt((ctx.match as RegExpMatchArray)[1], 10)
+    const productId = parseInt((ctx.match as RegExpMatchArray)[1]!, 10)
     await prisma.product.update({ where: { id: productId }, data: { photos: [] } })
     await ctx.reply('✅ Все фото удалены.')
     await showProductPhotos(ctx, productId)
@@ -1755,7 +1755,7 @@ export function setupInventoryHandlers(bot: Telegraf): void {
 
   bot.action(/^inv:enrich:(\d+)$/, async (ctx) => {
     try { await ctx.answerCbQuery('⏳ Ищу характеристики...') } catch { /* ignore */ }
-    const productId = parseInt((ctx.match as RegExpMatchArray)[1], 10)
+    const productId = parseInt((ctx.match as RegExpMatchArray)[1]!, 10)
 
     try {
       const { enrichProductCard } = await import('../../lib/enrich')
@@ -1868,7 +1868,7 @@ export async function handleInventoryPhoto(ctx: Context, userId: number): Promis
 
   let fileId: string | null = null
   if (msg?.photo && Array.isArray(msg.photo) && msg.photo.length > 0) {
-    fileId = msg.photo[msg.photo.length - 1].file_id
+    fileId = msg.photo[msg.photo.length - 1]!.file_id
   } else if (msg?.document?.mime_type?.startsWith('image/')) {
     fileId = msg.document.file_id
   }
@@ -2611,9 +2611,9 @@ async function processTemplateFile(ctx: Context, buffer: Buffer): Promise<void> 
             product = await prisma.product.create({
               data: {
                 // Артикул товара = SKU первого варианта (уникальный идентификатор)
-                sku:         group.variants[0].variantSku,
+                sku:         group.variants[0]!.variantSku,
                 name:        group.name,
-                price:       group.variants[0].price,
+                price:       group.variants[0]!.price,
                 brand:       group.brand   ?? undefined,
                 description: group.desc    ?? undefined,
                 badge:       group.badge   ?? undefined,
@@ -2933,7 +2933,7 @@ function cartesianProduct(attrs: Record<string, string[]>): Array<Record<string,
   for (const key of keys) {
     const next: Array<Record<string, string>> = []
     for (const existing of result) {
-      for (const val of attrs[key]) {
+      for (const val of attrs[key]!) {
         next.push({ ...existing, [key]: val })
       }
     }
@@ -3182,7 +3182,7 @@ async function handleAddFlow(
                 price: state.price,
                 quantity: varQty,
                 inStock: varQty > 0,
-                attributes: combos[i],
+                attributes: combos[i]!,
                 photos: [],
               },
             })
@@ -3246,11 +3246,11 @@ async function handleAddFlow(
           lines.push(`В наличии: ${stockedVariants} из ${variantCount}`)
           lines.push(`Всего:     ${totalQty} шт.`)
 
-          if (perVariantQty.some((q, i) => i > 0 && q !== perVariantQty[0])) {
+          if (perVariantQty.some((q, i) => i > 0 && q !== perVariantQty[0]!)) {
             lines.push('')
             combos.forEach((attrs, i) => {
               const attrStr = Object.values(attrs).join(' / ')
-              const q = perVariantQty[i]
+              const q = perVariantQty[i] ?? 0
               const icon = q > 0 ? '🟢' : '🔴'
               lines.push(`  ${icon} ${attrStr} — ${q} шт.`)
             })
@@ -3543,9 +3543,9 @@ async function handleVariantAddFlow(
           selectedAttrs: {},
           currentAttrIndex: 0,
         })
-        const firstKey = attrKeys[0]
+        const firstKey = attrKeys[0]!
         const firstValues = productAttrs[firstKey] ?? []
-        const valButtons = firstValues.map((v) =>
+        const valButtons = firstValues.map((v: string) =>
           Markup.button.callback(v, `inv:var_attr:${encodeURIComponent(v)}`),
         )
         const valRows: ReturnType<typeof Markup.button.callback>[][] = []

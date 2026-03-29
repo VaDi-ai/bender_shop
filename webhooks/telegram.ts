@@ -239,7 +239,7 @@ export function setupClientHandlers(bot: Telegraf): void {
       if (data.startsWith('cp:')) {
         const parts = data.split(':')
         const action = parts[1]
-        const clientId = parseCallbackId(parts[2])
+        const clientId = parseCallbackId(parts[2] ?? '')
         if (clientId === null) return ctx.answerCbQuery('Некорректные данные')
         const managerId = ctx.from?.id
 
@@ -305,8 +305,8 @@ export function setupClientHandlers(bot: Telegraf): void {
             const currentIndex = segments.findIndex((s) => s.id === client.segmentId)
             const nextIndex = (currentIndex + 1) % segments.length
             const nextSeg = segments[nextIndex]
-            await prisma.client.update({ where: { id: clientId }, data: { segmentId: nextSeg.id } })
-            return ctx.answerCbQuery(`📊 Сегмент → ${nextSeg.color} ${nextSeg.name}`)
+            await prisma.client.update({ where: { id: clientId }, data: { segmentId: nextSeg!.id } })
+            return ctx.answerCbQuery(`📊 Сегмент → ${nextSeg!.color} ${nextSeg!.name}`)
           }
 
           // Теги — заглушка
@@ -466,7 +466,7 @@ export function setupClientHandlers(bot: Telegraf): void {
         const nextIndex = (currentIndex + 1) % segments.length
         const nextSeg = segments[nextIndex]
 
-        await prisma.client.update({ where: { id: clientId }, data: { segmentId: nextSeg.id } })
+        await prisma.client.update({ where: { id: clientId }, data: { segmentId: nextSeg!.id } })
 
         const label = getSegmentLabel(nextSeg)
         if (chatId && messageId) {
@@ -484,7 +484,7 @@ export function setupClientHandlers(bot: Telegraf): void {
       if (data.startsWith('st:')) {
         const parts = data.split(':')
         const statusType = parts[1]
-        const clientId = parseCallbackId(parts[2])
+        const clientId = parseCallbackId(parts[2] ?? '')
         if (clientId === null) return ctx.answerCbQuery('Некорректные данные')
 
         const client = await prisma.client.findUnique({ where: { id: clientId } })
@@ -520,7 +520,7 @@ export function setupClientHandlers(bot: Telegraf): void {
           },
         }
 
-        const def = defs[statusType]
+        const def = defs[statusType!]
         if (!def) return ctx.answerCbQuery()
 
         await prisma.task.create({
@@ -638,7 +638,7 @@ export function setupClientHandlers(bot: Telegraf): void {
       // ── Редактировать: edit:field:{clientId}:{field} ──────────────────────
       if (data.startsWith('edit:field:')) {
         const parts = data.split(':')
-        const clientId = parseCallbackId(parts[2])
+        const clientId = parseCallbackId(parts[2] ?? '')
         if (clientId === null) return ctx.answerCbQuery('Некорректные данные')
         const field = parts[3] as EditField
         const userId = ctx.from?.id
@@ -992,7 +992,7 @@ async function handleEditMessage(
       return
     }
     const [d, m, y] = parts.map(Number)
-    const date = new Date(y, m - 1, d)
+    const date = new Date(y!, m! - 1, d!)
     if (isNaN(date.getTime())) {
       await telegram.sendMessage(userId, '❌ Неверная дата.')
       return
@@ -1258,7 +1258,7 @@ async function processAIReservation(
   const reserveMatch = aiResponse.match(/\[БРОНЬ:\s*(.+?)\]/)
   if (!reserveMatch) return aiResponse
 
-  const requestedItem = reserveMatch[1].trim()
+  const requestedItem = reserveMatch[1]!.trim()
   let cleanResponse = aiResponse.replace(/\[БРОНЬ:\s*.+?\]/, '').trim()
 
   try {
@@ -1273,7 +1273,7 @@ async function processAIReservation(
     )
 
     if (found && found.variants.length > 0) {
-      const variant = found.variants[0]
+      const variant = found.variants[0]!
 
       await prisma.$transaction(async (tx) => {
         await tx.reservation.create({

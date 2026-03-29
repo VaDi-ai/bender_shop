@@ -65,7 +65,7 @@ export function mapHeaders(headerRow: any[]): ColumnMap {
     const idx = headerStrings.findIndex(h =>
       variants.some(v => h.toLowerCase().includes(v.toLowerCase()))
     )
-    headers[key] = idx >= 0 ? idx : FALLBACK_INDICES[key]
+    headers[key] = idx >= 0 ? idx : FALLBACK_INDICES[key]!
   }
 
   // Validate required columns
@@ -112,11 +112,11 @@ export async function readAllProducts(): Promise<SheetRow[]> {
   const data = await readSheet(sheetName)
   if (data.length === 0) return []
 
-  const COL = mapHeaders(data[0])
+  const COL = mapHeaders(data[0]!)
   const rows: SheetRow[] = []
 
   for (let i = 1; i < data.length; i++) {
-    const row = data[i]
+    const row = data[i]!
 
     const fullName    = col(row, COL.fullName)
     const priceRaw    = col(row, COL.price).replace(/\s/g, '').replace(',', '.')
@@ -437,7 +437,7 @@ export async function syncProductsFromSheets(shouldAbort?: () => boolean): Promi
         try {
           const results = await prisma.$transaction(batch.map(buildPrismaOp))
           for (let j = 0; j < batch.length; j++) {
-            seenVariantIds.add(batch[j].existing?.id ?? (results[j] as { id: number }).id)
+            seenVariantIds.add(batch[j]!.existing?.id ?? (results[j] as { id: number }).id)
           }
         } catch (batchErr) {
           log.warn('Sync batch upsert failed, falling back to sequential', { error: batchErr instanceof Error ? batchErr.message : String(batchErr) })
@@ -621,8 +621,8 @@ function getAttributes(row: SheetRow): Record<string, string> {
       const words = colorVal.split(/\s+/)
       const lastWord = words[words.length - 1]
       const KNOWN_COLORS = ['Black','White','Grey','Beige','Red','Blue','Green','Turquose','Turquoise','Violet','Orange','Pink','Brown','Yellow','Silver','Gold']
-      if (KNOWN_COLORS.some(c => c.toLowerCase() === lastWord.toLowerCase())) {
-        colorVal = lastWord
+      if (lastWord && KNOWN_COLORS.some(c => c.toLowerCase() === lastWord.toLowerCase())) {
+        colorVal = lastWord!
       }
     }
     attrs['Цвет'] = capitalizeAttr(colorVal)
@@ -632,9 +632,9 @@ function getAttributes(row: SheetRow): Record<string, string> {
     // Формат "X/Y" или "X/YGB" — X=RAM, Y=Storage
     const slashMatch = memStr.match(/^(\d+)\s*(GB|gb)?\s*\/\s*(\d+)\s*(GB|TB|gb|tb)?$/i)
     if (slashMatch) {
-      const ram = slashMatch[1]
-      const storage = slashMatch[3]
-      const unit = (slashMatch[4] || 'GB').toUpperCase()
+      const ram = slashMatch[1]!
+      const storage = slashMatch[3]!
+      const unit = (slashMatch[4] ?? 'GB').toUpperCase()
       if (!attrs['RAM']) attrs['RAM'] = ram + 'GB'
       const storageNum = parseInt(storage, 10)
       attrs['Память'] = unit === 'TB' ? storage + 'TB' : (storageNum >= 1024 ? Math.round(storageNum / 1024) + 'TB' : storage + unit)
@@ -687,7 +687,7 @@ function getAttributes(row: SheetRow): Record<string, string> {
     const colorPattern = /\b(Black|White|Silver|Gray|Grey|Blue|Green|Red|Pink|Purple|Gold|Orange|Yellow|Midnight|Starlight|Obsidian|Porcelain|Titanium|Cream|Brown|Navy|Sand|Teal|Mint|Graphite|Beige|Jade|Cyan|Lavender|Sage|Frost|Indigo)\b/i
     const colorMatch = row.fullName.match(colorPattern)
     if (colorMatch) {
-      attrs['Цвет'] = capitalizeAttr(colorMatch[1])
+      attrs['Цвет'] = capitalizeAttr(colorMatch[1]!)
     }
   }
 
@@ -1062,52 +1062,52 @@ function parseAttributes(fullName: string, brand: string, country: string): Reco
 
   // ─── CPU chip config (Mac Desktop): 10c/10c, 14c/20c ───
   const chipConfig = normalized.match(/\b(\d+c\/\d+c)\b/)
-  if (chipConfig) attrs['Чип'] = chipConfig[1]
+  if (chipConfig) attrs['Чип'] = chipConfig[1]!
 
   // ─── Chip (iPad): A16, M3, M4 ───
   if (isiPad) {
     const ipadChip = normalized.match(/\b(A\d+|M\d+)\b/)
-    if (ipadChip) attrs['Чип'] = ipadChip[1]
+    if (ipadChip) attrs['Чип'] = ipadChip[1]!
   }
 
   // ─── Memory / Storage ───
   if (isMac || isMacBook) {
     const memMatches = normalized.match(/\b(\d+)\s*(GB|TB)\b/gi)
     if (memMatches && memMatches.length >= 2) {
-      attrs['RAM'] = memMatches[0].replace(/\s+/g, '').toUpperCase()
-      attrs['Память'] = memMatches[1].replace(/\s+/g, '').toUpperCase()
+      attrs['RAM'] = memMatches[0]!.replace(/\s+/g, '').toUpperCase()
+      attrs['Память'] = memMatches[1]!.replace(/\s+/g, '').toUpperCase()
     } else if (memMatches && memMatches.length === 1) {
-      attrs['Память'] = memMatches[0].replace(/\s+/g, '').toUpperCase()
+      attrs['Память'] = memMatches[0]!.replace(/\s+/g, '').toUpperCase()
     }
     if (isMacBook) {
       const screenMatch = normalized.match(/\b(13|14|15|16)\b/)
-      if (screenMatch) attrs['Экран'] = screenMatch[1] + '"'
+      if (screenMatch) attrs['Экран'] = screenMatch[1]! + '"'
     }
   } else if (!isDyson && !isTV) {
     // Samsung/Huawei/Honor: 12/256Gb, 16/1TB
     const slashMem = normalized.match(/\b(\d+)\/(\d+)\s*(GB|TB|Gb|gb)?\b/i)
     if (slashMem) {
-      attrs['RAM'] = slashMem[1] + 'GB'
-      const unit = (slashMem[3] || 'GB').toUpperCase()
-      attrs['Память'] = slashMem[2] + unit
+      attrs['RAM'] = slashMem[1]! + 'GB'
+      const unit = (slashMem[3] ?? 'GB').toUpperCase()
+      attrs['Память'] = slashMem[2]! + unit
     } else {
       // iPhone/iPad/Pixel/Xbox/Steam Deck: 256GB, 1TB
       const storageSingle = normalized.match(/\b(\d+\s*(?:GB|TB))\b/i)
       if (storageSingle) {
-        attrs['Память'] = storageSingle[1].replace(/\s+/g, '').toUpperCase()
+        attrs['Память'] = storageSingle[1]!.replace(/\s+/g, '').toUpperCase()
       }
     }
   }
 
   // ─── SIM ───
   const simMatch = normalized.match(/\b(2Sim|eSim|e-Sim|1Sim\+eSim|Dual\s*SIM)\b/i)
-  if (simMatch) attrs['SIM'] = simMatch[1]
+  if (simMatch) attrs['SIM'] = simMatch[1]!
 
   // Fallback: SIM по стране для iPhone
   if (!attrs['SIM'] && /iphone/i.test(normalized)) {
     const countryMatch = fullName.match(/\((Индия|Япония|США|USA|India|Japan|Европа|Europe|ОАЭ|UAE|Таиланд|Thailand|Китай|China|Гонконг|Hong Kong)\)/i)
     if (countryMatch) {
-      const c = countryMatch[1].toLowerCase()
+      const c = countryMatch[1]!.toLowerCase()
       if (['китай', 'china', 'гонконг', 'hong kong'].some(x => c.includes(x))) {
         attrs['SIM'] = '2 SIM'
       } else {
@@ -1133,7 +1133,7 @@ function parseAttributes(fullName: string, brand: string, country: string): Reco
     const watchSize = normalized.match(/\b(40|42|44|45|46|49)\s*(mm|MM)?\b/)
     if (watchSize) attrs['Размер'] = watchSize[1] + 'mm'
     const bandSize = normalized.match(/\b([SML]\/[SML])\b/)
-    if (bandSize) attrs['Ремешок'] = bandSize[1]
+    if (bandSize) attrs['Ремешок'] = bandSize[1]!
   }
 
   // ─── Garmin: size in mm ───
@@ -1184,7 +1184,7 @@ function parseAttributes(fullName: string, brand: string, country: string): Reco
   if (isDyson) {
     const dysonColor = normalized.match(/\b(\w+\/\w+)\b/)
     if (dysonColor) {
-      attrs['Цвет'] = dysonColor[1]
+      attrs['Цвет'] = dysonColor[1]!
     }
   }
   if (!attrs['Цвет']) {
@@ -1203,7 +1203,7 @@ function parseAttributes(fullName: string, brand: string, country: string): Reco
 
   // ─── Console: PS5 revision ───
   const revMatch = normalized.match(/(\d+)\s*ревизия/i)
-  if (revMatch) attrs['Ревизия'] = revMatch[1]
+  if (revMatch) attrs['Ревизия'] = revMatch[1]!
 
   // ─── Accessories / Комплектация ───
   if (/без кейса/i.test(normalized)) attrs['Комплектация'] = 'Без кейса'
@@ -1349,9 +1349,9 @@ export async function checkStalePrices(): Promise<StaleItem[]> {
     const data = await readSheet(sheetName)
     if (data.length === 0) return staleItems
 
-    const COL = mapHeaders(data[0])
+    const COL = mapHeaders(data[0]!)
     for (let i = 1; i < data.length; i++) {
-      const row = data[i]
+      const row = data[i]!
       const name = col(row, COL.fullName)
       const price = col(row, COL.price)
       const dateStr = col(row, COL.updateDate)
@@ -1368,14 +1368,14 @@ export async function checkStalePrices(): Promise<StaleItem[]> {
           // Формат DD.MM.YYYY или DD.MM.YYYY HH:MM
           const parts = dateStr.split('.')
           if (parts.length >= 3) {
-            const dayMonthYear = parts[2].split(' ')
-            const year = parseInt(dayMonthYear[0], 10)
-            const month = parseInt(parts[1], 10) - 1
-            const day = parseInt(parts[0], 10)
+            const dayMonthYear = parts[2]!.split(' ')
+            const year = parseInt(dayMonthYear[0]!, 10)
+            const month = parseInt(parts[1]!, 10) - 1
+            const day = parseInt(parts[0]!, 10)
             let updateDate = new Date(year, month, day)
             if (dayMonthYear[1]) {
-              const timeParts = dayMonthYear[1].split(':')
-              updateDate.setHours(parseInt(timeParts[0], 10) || 0, parseInt(timeParts[1], 10) || 0)
+              const timeParts = dayMonthYear[1]!.split(':')
+              updateDate.setHours(parseInt(timeParts[0] ?? '', 10) || 0, parseInt(timeParts[1] ?? '', 10) || 0)
             }
             isStale = (now - updateDate.getTime()) > SIX_HOURS
           } else {

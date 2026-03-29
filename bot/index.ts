@@ -788,8 +788,8 @@ bot.command('alias', async (ctx) => {
       await ctx.reply('Формат: /alias add Яблоко 16 Про → iPhone 16 Pro\n\nИспользуйте → или -> как разделитель')
       return
     }
-    const aliasText = parts[0].trim()
-    const productSearch = parts[1].trim()
+    const aliasText = parts[0]!.trim()
+    const productSearch = parts[1]!.trim()
 
     if (!aliasText || !productSearch) {
       await ctx.reply('Укажите и алиас, и название товара')
@@ -2122,7 +2122,7 @@ setInterval(async () => {
     let count = 0
     for (const [model, modelPrices] of byModel) {
       if (count >= 30) { lines.push(`\n...и ещё ${byModel.size - 30} моделей`); break }
-      const best = modelPrices[0]
+      const best = modelPrices[0]!
       const markup = Number(best.supplier.markup) || defaultMarkup
       const finalPrice = Math.ceil(Number(best.price) * (1 + markup / 100))
 
@@ -2339,7 +2339,7 @@ bot.action('morning:update_prices', async (ctx) => {
 
 bot.action(/^price_request:send_all:(\d+):(.+)$/, async (ctx) => {
   try { await ctx.answerCbQuery() } catch { /* ignore */ }
-  const query = decodeURIComponent((ctx.match as RegExpMatchArray)[2])
+  const query = decodeURIComponent((ctx.match as RegExpMatchArray)[2]!)
   const sent = await requestPriceFromAllSuppliers(bot, query)
   await ctx.reply(`📨 Запрос отправлен ${sent} поставщикам. Ответы появятся автоматически.`)
 })
