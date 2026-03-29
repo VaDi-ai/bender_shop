@@ -101,20 +101,20 @@ export function setupSalesHandlers(bot: Telegraf): void {
 
   bot.action(/^sale:pick_client:(\d+)$/, async (ctx) => {
     try { await ctx.answerCbQuery() } catch { /* ignore */ }
-    const clientId = parseInt(ctx.match[1], 10)
+    const clientId = parseInt(ctx.match![1]!, 10)
     await startSaleFlow(ctx, clientId)
   })
 
   bot.action(/^res:pick_client:(\d+)$/, async (ctx) => {
     try { await ctx.answerCbQuery() } catch { /* ignore */ }
-    const clientId = parseInt(ctx.match[1], 10)
+    const clientId = parseInt(ctx.match![1]!, 10)
     await startReserveFlow(ctx, clientId)
   })
 
   bot.action(/^sale_nc:use_name:(.+)$/, async (ctx) => {
     try { await ctx.answerCbQuery() } catch { /* ignore */ }
     const userId = getUserId(ctx)
-    const clientName = decodeURIComponent(ctx.match[1])
+    const clientName = decodeURIComponent(ctx.match![1]!)
     salesState.set(userId, { flow: 'sale_nc', step: 'product_method', clientName })
     await ctx.reply(
       `👤 Клиент: ${clientName} (новый)\n\nВыберите способ выбора товара:`,
@@ -129,7 +129,7 @@ export function setupSalesHandlers(bot: Telegraf): void {
   bot.action(/^res_nc:use_name:(.+)$/, async (ctx) => {
     try { await ctx.answerCbQuery() } catch { /* ignore */ }
     const userId = getUserId(ctx)
-    const clientName = decodeURIComponent(ctx.match[1])
+    const clientName = decodeURIComponent(ctx.match![1]!)
     salesState.set(userId, { flow: 'reserve_nc', step: 'product_method', clientName })
     await ctx.reply(
       `👤 Клиент: ${clientName} (новый)\n\nВыберите способ выбора товара:`,
@@ -144,7 +144,7 @@ export function setupSalesHandlers(bot: Telegraf): void {
   // ── Продажа: выбор из списка (категории) ──────────────────────────────────
   bot.action(/^sale:list:(\d+)$/, async (ctx) => {
     try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
-    const clientId = parseInt(ctx.match[1], 10)
+    const clientId = parseInt(ctx.match![1]!, 10)
     const userId = getUserId(ctx)
     const categories = await prisma.category.findMany({ orderBy: { name: 'asc' } })
     if (categories.length === 0) {
@@ -164,7 +164,7 @@ export function setupSalesHandlers(bot: Telegraf): void {
   // ── Резерв: выбор из списка ────────────────────────────────────────────────
   bot.action(/^res:list:(\d+)$/, async (ctx) => {
     try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
-    const clientId = parseInt(ctx.match[1], 10)
+    const clientId = parseInt(ctx.match![1]!, 10)
     const userId = getUserId(ctx)
     const categories = await prisma.category.findMany({ orderBy: { name: 'asc' } })
     if (categories.length === 0) {
@@ -184,7 +184,7 @@ export function setupSalesHandlers(bot: Telegraf): void {
   // ── Продажа: выбор по SKU ──────────────────────────────────────────────────
   bot.action(/^sale:sku:(\d+)$/, async (ctx) => {
     try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
-    const clientId = parseInt(ctx.match[1], 10)
+    const clientId = parseInt(ctx.match![1]!, 10)
     const userId = getUserId(ctx)
     salesState.set(userId, { flow: 'sale', step: 'product_sku', clientId })
     await ctx.reply('🔢 Введите SKU товара:')
@@ -193,7 +193,7 @@ export function setupSalesHandlers(bot: Telegraf): void {
   // ── Резерв: выбор по SKU ───────────────────────────────────────────────────
   bot.action(/^res:sku:(\d+)$/, async (ctx) => {
     try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
-    const clientId = parseInt(ctx.match[1], 10)
+    const clientId = parseInt(ctx.match![1]!, 10)
     const userId = getUserId(ctx)
     salesState.set(userId, { flow: 'reserve', step: 'product_sku', clientId })
     await ctx.reply('🔢 Введите SKU товара:')
@@ -202,8 +202,8 @@ export function setupSalesHandlers(bot: Telegraf): void {
   // ── Продажа: выбор товара из категории ────────────────────────────────────
   bot.action(/^sale:cat:(\d+):(\d+)$/, async (ctx) => {
     try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
-    const clientId = parseInt(ctx.match[1], 10)
-    const categoryId = parseInt(ctx.match[2], 10)
+    const clientId = parseInt(ctx.match![1]!, 10)
+    const categoryId = parseInt(ctx.match![2]!, 10)
     const userId = getUserId(ctx)
     const products = await prisma.product.findMany({
       where: { categoryId, isAvailable: true },
@@ -231,8 +231,8 @@ export function setupSalesHandlers(bot: Telegraf): void {
   // ── Резерв: выбор товара из категории ─────────────────────────────────────
   bot.action(/^res:cat:(\d+):(\d+)$/, async (ctx) => {
     try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
-    const clientId = parseInt(ctx.match[1], 10)
-    const categoryId = parseInt(ctx.match[2], 10)
+    const clientId = parseInt(ctx.match![1]!, 10)
+    const categoryId = parseInt(ctx.match![2]!, 10)
     const userId = getUserId(ctx)
     const products = await prisma.product.findMany({
       where: { categoryId, isAvailable: true },
@@ -260,8 +260,8 @@ export function setupSalesHandlers(bot: Telegraf): void {
   // ── Продажа: выбран товар → шаг количество ────────────────────────────────
   bot.action(/^sale:pick:(\d+):(\d+)$/, async (ctx) => {
     try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
-    const clientId = parseInt(ctx.match[1], 10)
-    const productId = parseInt(ctx.match[2], 10)
+    const clientId = parseInt(ctx.match![1]!, 10)
+    const productId = parseInt(ctx.match![2]!, 10)
     const userId = getUserId(ctx)
     const product = await prisma.product.findUnique({ where: { id: productId } })
     if (!product) return await ctx.reply('Товар не найден.')
@@ -273,8 +273,8 @@ export function setupSalesHandlers(bot: Telegraf): void {
   // ── Резерв: выбран товар → шаг количество ─────────────────────────────────
   bot.action(/^res:pick:(\d+):(\d+)$/, async (ctx) => {
     try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
-    const clientId = parseInt(ctx.match[1], 10)
-    const productId = parseInt(ctx.match[2], 10)
+    const clientId = parseInt(ctx.match![1]!, 10)
+    const productId = parseInt(ctx.match![2]!, 10)
     const userId = getUserId(ctx)
     const product = await prisma.product.findUnique({ where: { id: productId } })
     if (!product) return await ctx.reply('Товар не найден.')
@@ -495,7 +495,7 @@ export function setupSalesHandlers(bot: Telegraf): void {
     const state = salesState.get(userId)
     if (!state || state.flow !== 'sale_nc') return
     const clientName = (state as Extract<SaleNoClientStep, { step: 'category' }>).clientName
-    const categoryId = parseInt(ctx.match[1], 10)
+    const categoryId = parseInt(ctx.match![1]!, 10)
     const products = await prisma.product.findMany({ where: { categoryId, isAvailable: true }, orderBy: { name: 'asc' } })
     salesState.set(userId, { flow: 'sale_nc', step: 'product_pick', clientName, categoryId })
     await ctx.reply(
@@ -516,7 +516,7 @@ export function setupSalesHandlers(bot: Telegraf): void {
     const state = salesState.get(userId)
     if (!state || state.flow !== 'reserve_nc') return
     const clientName = (state as Extract<ReserveNoClientStep, { step: 'category' }>).clientName
-    const categoryId = parseInt(ctx.match[1], 10)
+    const categoryId = parseInt(ctx.match![1]!, 10)
     const products = await prisma.product.findMany({ where: { categoryId, isAvailable: true }, orderBy: { name: 'asc' } })
     salesState.set(userId, { flow: 'reserve_nc', step: 'product_pick', clientName, categoryId })
     await ctx.reply(
@@ -538,7 +538,7 @@ export function setupSalesHandlers(bot: Telegraf): void {
     const state = salesState.get(userId)
     if (!state || state.flow !== 'sale_nc') return
     const clientName = (state as Extract<SaleNoClientStep, { step: 'product_pick' }>).clientName
-    const productId = parseInt(ctx.match[1], 10)
+    const productId = parseInt(ctx.match![1]!, 10)
     const product = await prisma.product.findUnique({ where: { id: productId } })
     if (!product) return await ctx.reply('Товар не найден.')
     salesState.set(userId, { flow: 'sale_nc', step: 'qty', clientName, productId, productName: product.name, price: Number(product.price) })
@@ -552,7 +552,7 @@ export function setupSalesHandlers(bot: Telegraf): void {
     const state = salesState.get(userId)
     if (!state || state.flow !== 'reserve_nc') return
     const clientName = (state as Extract<ReserveNoClientStep, { step: 'product_pick' }>).clientName
-    const productId = parseInt(ctx.match[1], 10)
+    const productId = parseInt(ctx.match![1]!, 10)
     const product = await prisma.product.findUnique({ where: { id: productId } })
     if (!product) return await ctx.reply('Товар не найден.')
     salesState.set(userId, { flow: 'reserve_nc', step: 'qty', clientName, productId, productName: product.name, price: Number(product.price) })
@@ -649,7 +649,7 @@ export function setupSalesHandlers(bot: Telegraf): void {
   // ── Завершить резерв (выдан) ───────────────────────────────────────────────
   bot.action(/^res:do_complete:(\d+)$/, async (ctx) => {
     try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
-    const reservationId = parseInt(ctx.match[1], 10)
+    const reservationId = parseInt(ctx.match![1]!, 10)
     try {
       const reservation = await prisma.reservation.findUnique({ where: { id: reservationId } })
       if (!reservation || reservation.status !== 'active') {
@@ -668,7 +668,7 @@ export function setupSalesHandlers(bot: Telegraf): void {
   // ── Отменить резерв ────────────────────────────────────────────────────────
   bot.action(/^res:do_cancel:(\d+)$/, async (ctx) => {
     try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
-    const reservationId = parseInt(ctx.match[1], 10)
+    const reservationId = parseInt(ctx.match![1]!, 10)
     try {
       const reservation = await prisma.reservation.findUnique({ where: { id: reservationId } })
       if (!reservation || reservation.status !== 'active') {

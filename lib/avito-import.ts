@@ -27,7 +27,7 @@ function parseDate(v: unknown): Date | null {
 function cleanHyperlink(v: unknown): string {
   const s = String(v || '')
   const match = s.match(/=HYPERLINK\([^,]+,\s*"([^"]+)"\)/)
-  return match ? match[1] : s
+  return match ? match[1]! : s
 }
 
 /** Import Avito statistics from Excel buffer. Returns count of imported rows. */

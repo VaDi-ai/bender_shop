@@ -164,7 +164,7 @@ async function showTodayPrices(ctx: Context): Promise<void> {
     // Sort by price ascending
     items.sort((a, b) => Number(a.price) - Number(b.price))
     for (let i = 0; i < items.length; i++) {
-      const p = items[i]
+      const p = items[i]!
       const country = p.country ? ` (${p.country})` : ''
       const best = i === 0 && items.length > 1 ? ' ← лучшая' : ''
       lines.push(`  ${p.supplier.name}: ${Number(p.price).toLocaleString('ru-RU')}₽${country}${best}`)
@@ -195,7 +195,7 @@ export function setupSupplierHandlers(bot: Telegraf): void {
 
   bot.action(/^sup:view:(\d+)$/, async (ctx) => {
     try { await ctx.answerCbQuery() } catch { /* ignore */ }
-    await showSupplierPrices(ctx, parseInt(ctx.match[1], 10))
+    await showSupplierPrices(ctx, parseInt(ctx.match[1]!, 10))
   })
 
   // ── Добавление поставщика ──────────────────────────────────────────────────
@@ -213,7 +213,7 @@ export function setupSupplierHandlers(bot: Telegraf): void {
 
   bot.action(/^sup:edit_name:(\d+)$/, async (ctx) => {
     try { await ctx.answerCbQuery() } catch { /* ignore */ }
-    const supplierId = parseInt(ctx.match[1], 10)
+    const supplierId = parseInt(ctx.match[1]!, 10)
     suppliersState.set(getUserId(ctx), { flow: 'edit_name', supplierId })
     await ctx.reply(
       'Введите новое имя поставщика:',
@@ -223,7 +223,7 @@ export function setupSupplierHandlers(bot: Telegraf): void {
 
   bot.action(/^sup:edit_markup:(\d+)$/, async (ctx) => {
     try { await ctx.answerCbQuery() } catch { /* ignore */ }
-    const supplierId = parseInt(ctx.match[1], 10)
+    const supplierId = parseInt(ctx.match[1]!, 10)
     suppliersState.set(getUserId(ctx), { flow: 'edit_markup', supplierId })
     await ctx.reply(
       'Введите наценку для этого поставщика (%, например 5):',
@@ -235,7 +235,7 @@ export function setupSupplierHandlers(bot: Telegraf): void {
 
   bot.action(/^sup:disable:(\d+)$/, async (ctx) => {
     try { await ctx.answerCbQuery() } catch { /* ignore */ }
-    const id = parseInt(ctx.match[1], 10)
+    const id = parseInt(ctx.match[1]!, 10)
     await prisma.supplier.update({ where: { id }, data: { isActive: false } })
     try { await logSecurityEvent('supplier_updated', { supplierId: id, field: 'isActive', newValue: false, adminId: getUserId(ctx) }, getUserId(ctx)) } catch { /* ignore */ }
     await ctx.reply('❌ Поставщик выключен.')
@@ -244,7 +244,7 @@ export function setupSupplierHandlers(bot: Telegraf): void {
 
   bot.action(/^sup:enable:(\d+)$/, async (ctx) => {
     try { await ctx.answerCbQuery() } catch { /* ignore */ }
-    const id = parseInt(ctx.match[1], 10)
+    const id = parseInt(ctx.match[1]!, 10)
     await prisma.supplier.update({ where: { id }, data: { isActive: true } })
     try { await logSecurityEvent('supplier_updated', { supplierId: id, field: 'isActive', newValue: true, adminId: getUserId(ctx) }, getUserId(ctx)) } catch { /* ignore */ }
     await ctx.reply('✅ Поставщик включён.')
@@ -255,7 +255,7 @@ export function setupSupplierHandlers(bot: Telegraf): void {
 
   bot.action(/^sup:del:(\d+)$/, async (ctx) => {
     try { await ctx.answerCbQuery() } catch { /* ignore */ }
-    const id = parseInt(ctx.match[1], 10)
+    const id = parseInt(ctx.match[1]!, 10)
     const supplier = await prisma.supplier.findUnique({ where: { id } })
     if (!supplier) return
     await ctx.reply(
@@ -271,7 +271,7 @@ export function setupSupplierHandlers(bot: Telegraf): void {
 
   bot.action(/^sup:del_ok:(\d+)$/, async (ctx) => {
     try { await ctx.answerCbQuery('⏳ Удаляю…') } catch { /* ignore */ }
-    const id = parseInt(ctx.match[1], 10)
+    const id = parseInt(ctx.match[1]!, 10)
     const supplier = await prisma.supplier.findUnique({ where: { id } })
     await prisma.supplier.delete({ where: { id } })
     try { await logSecurityEvent('supplier_deleted', { supplierId: id, name: supplier?.name, adminId: getUserId(ctx) }, getUserId(ctx)) } catch { /* ignore */ }
@@ -305,7 +305,7 @@ export function setupSupplierHandlers(bot: Telegraf): void {
     const userId = getUserId(ctx)
     const state = suppliersState.get(userId)
     if (!state || state.flow !== 'add_chatid' || !state.chatId) return
-    const chatType = ctx.match[1]
+    const chatType = ctx.match[1]!
     suppliersState.set(userId, { flow: 'add_markup', name: state.name, chatId: state.chatId, chatType })
     await ctx.reply(
       `Шаг 3 — введите наценку для «${state.name}» (%, по умолчанию 5):\n\nИли отправьте /skip для наценки 5%.`,

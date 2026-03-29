@@ -287,7 +287,7 @@ export async function handleStorefrontPhoto(
   if (!state || state.flow !== 'banner_add' || state.step !== 'photo') return false
 
   const photo = ctx.message.photo
-  const fileId = photo[photo.length - 1].file_id
+  const fileId = photo[photo.length - 1]!.file_id
 
   storefrontState.set(userId, {
     flow: 'banner_add',

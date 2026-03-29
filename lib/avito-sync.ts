@@ -130,10 +130,10 @@ function extractAnchorTokens(s: string): string[] {
   if (!isNeo) {
     // Чип/процессор — обязательный якорь (m3, m4, m5, a16, a18)
     const chipMatch = norm.match(/\b(m\d+|a\d+)\b/i)
-    if (chipMatch) anchors.push(chipMatch[1].toLowerCase())
+    if (chipMatch) anchors.push(chipMatch[1]!.toLowerCase())
     // Модификатор чипа (Pro/Max после m4/m5) — различает M4 vs M4 Pro vs M4 Max
     const chipMod = norm.match(/\bm\d+\s+(pro|max)\b/i)
-    if (chipMod) anchors.push(chipMod[1].toLowerCase())
+    if (chipMod) anchors.push(chipMod[1]!.toLowerCase())
   }
 
   return [...new Set(anchors)]
@@ -151,7 +151,7 @@ function extractConfigTokens(s: string): string[] {
   // Размер экрана (для iPad/MacBook): 11, 13, 14, 15, 16
   if (/ipad|macbook/i.test(norm)) {
     const sizeMatch = norm.match(/\b(11|13|14|15|16)\b/)
-    if (sizeMatch) config.push(sizeMatch[1])
+    if (sizeMatch) config.push(sizeMatch[1]!)
   }
 
   return config
@@ -197,13 +197,13 @@ async function loadSheetProducts(): Promise<SheetProduct[]> {
   const data = await readSheet(sheetName)
   if (data.length === 0) return []
 
-  const COL = mapHeaders(data[0])
+  const COL = mapHeaders(data[0]!)
   const items: SheetProduct[] = []
 
   for (let i = 1; i < data.length; i++) {
-    const row = data[i]
-    const fullName = (row[COL.fullName] ?? '').toString().trim()
-    const priceRaw = (row[COL.price] ?? '').toString().replace(/\s/g, '')
+    const row = data[i]!
+    const fullName = (row[COL.fullName!] ?? '').toString().trim()
+    const priceRaw = (row[COL.price!] ?? '').toString().replace(/\s/g, '')
     const price = parseFloat(priceRaw)
     if (!fullName || isNaN(price) || price <= 0) continue
 
@@ -211,9 +211,9 @@ async function loadSheetProducts(): Promise<SheetProduct[]> {
       rowIndex: i + 1,
       sheetName,
       fullName,
-      color: COL.color !== undefined ? (row[COL.color] ?? '').toString().trim() : '',
-      memory: COL.memory !== undefined ? (row[COL.memory] ?? '').toString().trim() : '',
-      size: COL.size !== undefined ? (row[COL.size] ?? '').toString().trim() : '',
+      color: COL.color !== undefined ? (row[COL.color!] ?? '').toString().trim() : '',
+      memory: COL.memory !== undefined ? (row[COL.memory!] ?? '').toString().trim() : '',
+      size: COL.size !== undefined ? (row[COL.size!] ?? '').toString().trim() : '',
       price,
     })
   }

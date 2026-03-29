@@ -50,7 +50,7 @@ const keys: Record<number, Buffer> = {}
 
 function getLatestKey(): { version: number; key: Buffer } {
   const keys = getKeys()
-  return keys[keys.length - 1]
+  return keys[keys.length - 1]!
 }
 
 function getKeyByVersion(version: number): Buffer {
@@ -92,12 +92,12 @@ export function decrypt(value: string, aad: string = ''): string {
     const rest = value.slice(firstColon + 1)
     const parts = rest.split(':')
     if (parts.length !== 3) throw new Error('Invalid encrypted value format')
-    ;[ivHex, ciphertextHex, tagHex] = parts
+    ;[ivHex, ciphertextHex, tagHex] = parts as [string, string, string]
   } else {
     // Legacy format: iv:ct:tag — use V1 key
     const parts = value.split(':')
     if (parts.length !== 3) throw new Error('Invalid encrypted value format')
-    ;[ivHex, ciphertextHex, tagHex] = parts
+    ;[ivHex, ciphertextHex, tagHex] = parts as [string, string, string]
     key = getKeyByVersion(1)
   }
 
@@ -124,7 +124,7 @@ export function isEncrypted(value: string): boolean {
 /** Returns the key version used to encrypt a value, or null if unrecognized. */
 export function getEncryptedKeyVersion(value: string): number | null {
   const m = value.match(/^v(\d+):/)
-  if (m) return parseInt(m[1], 10)
+  if (m) return parseInt(m[1]!, 10)
   if (/^[0-9a-f]{24}:[0-9a-f]+:[0-9a-f]{32}$/.test(value)) return 1
   return null
 }

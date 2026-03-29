@@ -719,7 +719,7 @@ export function setupPricingHandlers(bot: Telegraf): void {
     const state = pricingState.get(userId)
     if (!state || state.flow !== 'awaiting_supplier_name') return
 
-    const supplierId = parseInt((ctx.match as RegExpMatchArray)[1], 10)
+    const supplierId = parseInt((ctx.match as RegExpMatchArray)[1]!, 10)
     const supplier = await prisma.supplier.findUnique({ where: { id: supplierId } })
     if (!supplier) return
 
@@ -739,7 +739,7 @@ export function setupPricingHandlers(bot: Telegraf): void {
     const state = pricingState.get(userId)
     if (!state || state.flow !== 'awaiting_markup_confirm') return
 
-    const markup = parseInt((ctx.match as RegExpMatchArray)[1], 10)
+    const markup = parseInt((ctx.match as RegExpMatchArray)[1]!, 10)
     state.markup = markup
 
     try {
@@ -1091,19 +1091,19 @@ export function setupPricingHandlers(bot: Telegraf): void {
 
   bot.action(/^pricing:man_page:(\d+)$/, async (ctx) => {
     try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
-    const page = parseInt(ctx.match[1], 10)
+    const page = parseInt(ctx.match[1]!, 10)
     await showManualProductList(ctx, getUserId(ctx), page)
   })
 
   bot.action(/^pricing:man_prod:(\d+)$/, async (ctx) => {
     try { await ctx.answerCbQuery('⏳ Загрузка...') } catch { /* ignore: answerCbQuery may fail if query expired */ }
-    await showManualVariantList(ctx, getUserId(ctx), parseInt(ctx.match[1], 10))
+    await showManualVariantList(ctx, getUserId(ctx), parseInt(ctx.match[1]!, 10))
   })
 
   bot.action(/^pricing:man_v:(\d+)$/, async (ctx) => {
     try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
     const userId = getUserId(ctx)
-    const variantId = parseInt(ctx.match[1], 10)
+    const variantId = parseInt(ctx.match[1]!, 10)
     const variant = await prisma.productVariant.findUnique({
       where: { id: variantId },
       include: { product: true },
@@ -1127,7 +1127,7 @@ export function setupPricingHandlers(bot: Telegraf): void {
   bot.action(/^pricing:man_all:(\d+)$/, async (ctx) => {
     try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
     const userId = getUserId(ctx)
-    const productId = parseInt(ctx.match[1], 10)
+    const productId = parseInt(ctx.match[1]!, 10)
     const product = await prisma.product.findUnique({ where: { id: productId } })
     if (!product) return await ctx.reply('Товар не найден.')
     pricingState.set(userId, {
@@ -1180,7 +1180,7 @@ export function setupPricingHandlers(bot: Telegraf): void {
 
   bot.action(/^pricing:bulk_cat:(\d+)$/, async (ctx) => {
     try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
-    const cat = await prisma.category.findUnique({ where: { id: parseInt(ctx.match[1], 10) } })
+    const cat = await prisma.category.findUnique({ where: { id: parseInt(ctx.match[1]!, 10) } })
     if (!cat) return await ctx.reply('Категория не найдена.')
     pricingState.set(getUserId(ctx), {
       flow: 'bulk_pct',
@@ -1302,7 +1302,7 @@ export function setupPricingHandlers(bot: Telegraf): void {
   bot.action(/^pricing:excl_c:(\d+)$/, async (ctx) => {
     try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
     const userId = getUserId(ctx)
-    const catId = parseInt(ctx.match[1], 10)
+    const catId = parseInt(ctx.match[1]!, 10)
     const state = pricingState.get(userId)
     if (!state || state.flow !== 'preview') return
     const toExclude = state.pendingVariants
@@ -1332,7 +1332,7 @@ export function setupPricingHandlers(bot: Telegraf): void {
   bot.action(/^pricing:excl_p:(\d+)$/, async (ctx) => {
     try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
     const userId = getUserId(ctx)
-    const productId = parseInt(ctx.match[1], 10)
+    const productId = parseInt(ctx.match[1]!, 10)
     const state = pricingState.get(userId)
     if (!state || state.flow !== 'preview') return
     const toExclude = state.pendingVariants
@@ -1656,7 +1656,7 @@ export async function sendDailyCurrencyRates(
     const changes = await updateCurrencyRates()
     if (!changes.length) return null
 
-    const c = changes[0]
+    const c = changes[0]!
     const now = new Date()
     const dateStr = now.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' })
 

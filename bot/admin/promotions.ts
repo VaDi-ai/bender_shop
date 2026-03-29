@@ -584,7 +584,7 @@ export function setupPromotionsHandlers(bot: Telegraf): void {
     const userId = getUserId(ctx)
     const state = promotionsState.get(userId)
     if (!state || state.step !== 'filter_category') return
-    const catName = ctx.match[1]
+    const catName = ctx.match[1]!
     await askDates(ctx, userId, {
       name: state.name,
       discountType: state.discountType,
@@ -600,7 +600,7 @@ export function setupPromotionsHandlers(bot: Telegraf): void {
     const userId = getUserId(ctx)
     const state = promotionsState.get(userId)
     if (!state || state.step !== 'filter_brand') return
-    const brand = ctx.match[1]
+    const brand = ctx.match[1]!
     await askDates(ctx, userId, {
       name: state.name,
       discountType: state.discountType,
@@ -616,7 +616,7 @@ export function setupPromotionsHandlers(bot: Telegraf): void {
     const userId = getUserId(ctx)
     const state = promotionsState.get(userId)
     if (!state || state.step !== 'filter_products') return
-    const prodId = parseInt(ctx.match[1], 10)
+    const prodId = parseInt(ctx.match[1]!, 10)
     const ids = state.selectedProductIds.includes(prodId)
       ? state.selectedProductIds.filter((id) => id !== prodId)
       : [...state.selectedProductIds, prodId]
@@ -706,7 +706,7 @@ export function setupPromotionsHandlers(bot: Telegraf): void {
   // Статистика акции
   bot.action(/^promo:stat:(\d+)$/, async (ctx) => {
     try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
-    const promoId = parseInt(ctx.match[1], 10)
+    const promoId = parseInt(ctx.match[1]!, 10)
     const promo = await prisma.promotion.findUnique({ where: { id: promoId } })
     if (!promo) return await ctx.reply('Акция не найдена.')
 
@@ -740,7 +740,7 @@ export function setupPromotionsHandlers(bot: Telegraf): void {
   // Подтверждение завершения
   bot.action(/^promo:confirm_cancel:(\d+)$/, async (ctx) => {
     try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
-    const promoId = parseInt(ctx.match[1], 10)
+    const promoId = parseInt(ctx.match[1]!, 10)
     const promo = await prisma.promotion.findUnique({ where: { id: promoId } })
     if (!promo) return await ctx.reply('Акция не найдена.')
 
@@ -758,7 +758,7 @@ export function setupPromotionsHandlers(bot: Telegraf): void {
   // Выполнение завершения
   bot.action(/^promo:do_cancel:(\d+)$/, async (ctx) => {
     try { await ctx.answerCbQuery('Завершаю акцию…') } catch { /* ignore: answerCbQuery may fail if query expired */ }
-    const promoId = parseInt(ctx.match[1], 10)
+    const promoId = parseInt(ctx.match[1]!, 10)
     const promo = await prisma.promotion.findUnique({ where: { id: promoId } })
     if (!promo) return await ctx.reply('Акция не найдена.')
 

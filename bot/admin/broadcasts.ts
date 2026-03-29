@@ -104,7 +104,7 @@ async function countRecipients(
     return prisma.client.count({ where: { ...base, tags: { some: { name: target } } } })
   }
 
-  const segId = parseInt(target.split(':')[0], 10)
+  const segId = parseInt(target.split(':')[0]!, 10)
   if (tagFilter) {
     return prisma.client.count({
       where: { ...base, segmentId: segId, tags: { some: { name: tagFilter } } },
@@ -131,7 +131,7 @@ async function getRecipients(
     })
   }
 
-  const segId = parseInt(target.split(':')[0], 10)
+  const segId = parseInt(target.split(':')[0]!, 10)
   if (tagFilter) {
     return prisma.client.findMany({
       where: { ...base, segmentId: segId, tags: { some: { name: tagFilter } } },
@@ -366,7 +366,7 @@ async function executeBroadcast(
   let failed = 0
 
   for (let i = 0; i < recipients.length; i++) {
-    const tgId = recipients[i].externalId!
+    const tgId = recipients[i]!.externalId!
     const result = await sendWithBackoff(() => {
       if (state.mediaType === MediaType.photo && state.mediaFileId) {
         return ctx.telegram.sendPhoto(tgId, state.mediaFileId, { caption: state.caption })
@@ -471,7 +471,7 @@ export function setupBroadcastHandlers(bot: Telegraf): void {
   bot.action(/^bcast:tag_go:(.+)$/, async (ctx) => {
     try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
     const userId = getUserId(ctx)
-    const tagName = ctx.match[1]
+    const tagName = ctx.match[1]!
     const count = await prisma.client.count({
       where: { source: 'telegram', externalId: { not: null }, tags: { some: { name: tagName } } },
     })
@@ -491,7 +491,7 @@ export function setupBroadcastHandlers(bot: Telegraf): void {
 
   bot.action(/^bcast:seg:(\d+)$/, async (ctx) => {
     try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
-    const segId = parseInt(ctx.match[1], 10)
+    const segId = parseInt(ctx.match[1]!, 10)
     const seg = await prisma.segment.findUnique({ where: { id: segId } })
     if (!seg) return await ctx.reply('Сегмент не найден.')
 
@@ -512,7 +512,7 @@ export function setupBroadcastHandlers(bot: Telegraf): void {
   bot.action(/^bcast:seg_go:(\d+)$/, async (ctx) => {
     try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
     const userId = getUserId(ctx)
-    const segId = parseInt(ctx.match[1], 10)
+    const segId = parseInt(ctx.match[1]!, 10)
     const seg = await prisma.segment.findUnique({ where: { id: segId } })
     if (!seg) return await ctx.reply('Сегмент не найден.')
 
@@ -534,15 +534,15 @@ export function setupBroadcastHandlers(bot: Telegraf): void {
   // Выбор тега для фильтрации сегмента
   bot.action(/^bcast:seg_tag:(\d+)$/, async (ctx) => {
     try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
-    const segId = parseInt(ctx.match[1], 10)
+    const segId = parseInt(ctx.match[1]!, 10)
     await showTagsForSegment(ctx, segId)
   })
 
   bot.action(/^bcast:seg_tag_pick:(\d+):(.+)$/, async (ctx) => {
     try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
     const userId = getUserId(ctx)
-    const segId = parseInt(ctx.match[1], 10)
-    const tagName = ctx.match[2]
+    const segId = parseInt(ctx.match[1]!, 10)
+    const tagName = ctx.match[2]!
     const seg = await prisma.segment.findUnique({ where: { id: segId } })
     if (!seg) return await ctx.reply('Сегмент не найден.')
 
@@ -647,7 +647,7 @@ export async function handleBroadcastPhoto(ctx: Context, userId: number): Promis
   const msg = ctx.message as { photo?: Array<{ file_id: string }>; caption?: string }
   if (!msg?.photo?.length) return false
 
-  const fileId = msg.photo[msg.photo.length - 1].file_id
+  const fileId = msg.photo[msg.photo.length - 1]!.file_id
   const previewState: Extract<BroadcastFlowState, { flow: 'preview' }> = {
     flow: 'preview',
     type: state.type,

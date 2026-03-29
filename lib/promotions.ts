@@ -40,7 +40,7 @@ export async function findVariantsByFilter(
   }
 
   if (filterType === FilterType.attribute) {
-    const [key, val] = filterValue.split(':').map((s) => s.trim())
+    const [key, val] = filterValue.split(':').map((s) => s.trim()) as [string, string]
     try {
       const results = await db.productVariant.findMany({
         where: { attributes: { path: [key], equals: val } },

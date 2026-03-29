@@ -84,7 +84,7 @@ export function setupSegmentHandlers(bot: Telegraf): void {
   bot.action(/^segs:rename:(\d+)$/, async (ctx) => {
     try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
     const userId = getUserId(ctx)
-    const segmentId = parseInt(ctx.match[1], 10)
+    const segmentId = parseInt(ctx.match[1]!, 10)
     const seg = await prisma.segment.findUnique({ where: { id: segmentId } })
     if (!seg) return await ctx.reply('Сегмент не найден.')
 
@@ -96,7 +96,7 @@ export function setupSegmentHandlers(bot: Telegraf): void {
   // Подтверждение удаления
   bot.action(/^segs:del_confirm:(\d+)$/, async (ctx) => {
     try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
-    const segmentId = parseInt(ctx.match[1], 10)
+    const segmentId = parseInt(ctx.match[1]!, 10)
 
     const [seg, defaultSeg] = await Promise.all([
       prisma.segment.findUnique({
@@ -134,7 +134,7 @@ export function setupSegmentHandlers(bot: Telegraf): void {
   // Подтверждённое удаление
   bot.action(/^segs:del:(\d+)$/, async (ctx) => {
     try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
-    const segmentId = parseInt(ctx.match[1], 10)
+    const segmentId = parseInt(ctx.match[1]!, 10)
 
     const seg = await prisma.segment.findUnique({ where: { id: segmentId } })
     if (!seg) return await ctx.reply('Сегмент не найден.')
@@ -173,11 +173,11 @@ export function setupSegmentHandlers(bot: Telegraf): void {
       return await ctx.reply('Сессия истекла. Начните заново через меню Сегменты.')
     }
 
-    const color = ctx.match[1]
+    const color = ctx.match[1]!
     const { name } = state
 
     try {
-      await prisma.segment.create({ data: { name, color } })
+      await prisma.segment.create({ data: { name: name!, color } })
       try { await logSecurityEvent('segment_created', { name, color, adminId: userId }, userId) } catch { /* ignore */ }
       segmentsState.delete(userId)
       await ctx.reply(`✅ Сегмент "${color} ${name}" создан.`)

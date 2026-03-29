@@ -452,7 +452,7 @@ export function setupAnalyticsHandlers(bot: Telegraf): void {
     try { await ctx.answerCbQuery('⏳ Загрузка...') } catch { /* ignore: answerCbQuery may fail if query expired */ }
     const userId = getUserId(ctx)
     const target = ctx.match[1] as 'main' | 'top_prod' | 'top_cli' | 'funnel'
-    const period = ctx.match[2]
+    const period = ctx.match[2]!
 
     if (period === 'custom') {
       analyticsState.set(userId, { flow: 'custom_period', target })
