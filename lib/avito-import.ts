@@ -91,6 +91,10 @@ export async function importAvitoSales(buffer: Buffer): Promise<number> {
   const ws = wb.worksheets[0]
   if (!ws) throw new Error('No worksheet found')
 
+  // Detect format by header row
+  const header1 = String(ws.getRow(1).getCell(1).value || '').toLowerCase()
+  const hasDateColumn = header1.includes('дата') || header1.includes('date')
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const rows: any[] = []
   let skipped = 0
@@ -98,23 +102,43 @@ export async function importAvitoSales(buffer: Buffer): Promise<number> {
   ws.eachRow((row, rowNumber) => {
     if (rowNumber === 1) return
     try {
-      const date = parseDate(row.getCell(1).value)
-      if (!date) { skipped++; return }
+      let date: Date
+      let productName: string
+      let quantity: number
+      let costPrice: number
+      let sellPrice: number
+      let extraCost: number
 
-      const costPrice = parseNum(row.getCell(4).value) ?? 0
-      const sellPrice = parseNum(row.getCell(5).value) ?? 0
-      const extraCost = parseNum(row.getCell(6).value) ?? 0
-      const profitCell = parseNum(row.getCell(7).value)
-      const profit = profitCell ?? (sellPrice - costPrice - extraCost)
+      if (hasDateColumn) {
+        // Old format: Дата | Товар | Кол-во | Закупка | Продажа | Доп расход | Заработано
+        const d = parseDate(row.getCell(1).value)
+        if (!d) { skipped++; return }
+        date = d
+        productName = String(row.getCell(2).value || '').trim().slice(0, 200)
+        quantity = (parseNum(row.getCell(3).value) as number) || 1
+        costPrice = parseNum(row.getCell(4).value) ?? 0
+        sellPrice = parseNum(row.getCell(5).value) ?? 0
+        extraCost = parseNum(row.getCell(6).value) ?? 0
+      } else {
+        // New format: Товар | Кол-во | Закупка | Продажа | Доп расход | Выручка
+        date = new Date()
+        productName = String(row.getCell(1).value || '').trim().slice(0, 200)
+        quantity = (parseNum(row.getCell(2).value) as number) || 1
+        costPrice = parseNum(row.getCell(3).value) ?? 0
+        sellPrice = parseNum(row.getCell(4).value) ?? 0
+        extraCost = parseNum(row.getCell(5).value) ?? 0
+      }
+
+      if (!productName || sellPrice === 0) { skipped++; return }
 
       rows.push({
         date,
-        productName: String(row.getCell(2).value || '').slice(0, 200),
-        quantity: (parseNum(row.getCell(3).value) as number) || 1,
+        productName,
+        quantity,
         costPrice,
         sellPrice,
         extraCost,
-        profit,
+        profit: sellPrice - costPrice - extraCost,
       })
     } catch (err) {
       skipped++
