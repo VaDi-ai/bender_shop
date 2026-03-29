@@ -661,6 +661,41 @@ function getAttributes(row: SheetRow): Record<string, string> {
     }
   }
 
+  // 3. Smart defaults from product name
+
+  // Планшеты — Связь из названия (Wi-Fi / LTE / Cellular)
+  const isTablet = row.category === 'Планшеты' || /pad|tablet/i.test(row.fullName)
+  if (isTablet && !attrs['Связь']) {
+    if (/\bLTE\b|\bCellular\b|\b5G\b/i.test(row.fullName)) {
+      attrs['Связь'] = 'LTE'
+    } else if (/\bWi-?Fi\b/i.test(row.fullName)) {
+      attrs['Связь'] = 'Wi-Fi'
+    }
+  }
+
+  // Часы — размер из названия (47mm, 42mm и т.д.)
+  const isWatch = row.category === 'Часы'
+  if (isWatch && !attrs['Размер']) {
+    const sizeMatch = row.fullName.match(/\b(\d{2})\s*mm\b/i)
+    if (sizeMatch) {
+      attrs['Размер'] = sizeMatch[1] + 'mm'
+    }
+  }
+
+  // Цвет — извлечь из названия если нет из колонки
+  if (!attrs['Цвет']) {
+    const colorPattern = /\b(Black|White|Silver|Gray|Grey|Blue|Green|Red|Pink|Purple|Gold|Orange|Yellow|Midnight|Starlight|Obsidian|Porcelain|Titanium|Cream|Brown|Navy|Sand|Teal|Mint|Graphite|Beige|Jade|Cyan|Lavender|Sage|Frost|Indigo)\b/i
+    const colorMatch = row.fullName.match(colorPattern)
+    if (colorMatch) {
+      attrs['Цвет'] = capitalizeAttr(colorMatch[1])
+    }
+  }
+
+  // iPhone — SIM по умолчанию eSIM (если не аксессуар)
+  if (/iphone/i.test(row.fullName) && !attrs['SIM'] && !/стекло|чехол|кейс|защит|case|glass/i.test(row.fullName)) {
+    attrs['SIM'] = 'eSIM'
+  }
+
   return attrs
 }
 

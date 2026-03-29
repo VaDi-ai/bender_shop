@@ -313,7 +313,7 @@ bot.command('audit_attrs', async (ctx) => {
     }
     if (cat === 'Телефоны' && !attrs['Память']) issues.push(`${name}: нет Память`)
     if (cat === 'Телефоны' && !attrs['Цвет']) issues.push(`${name}: нет Цвет`)
-    if (/iphone/i.test(name) && !attrs['SIM']) issues.push(`${name}: нет SIM`)
+    if (/iphone/i.test(name) && !attrs['SIM'] && !/стекло|чехол|кейс|защит|case|glass/i.test(name)) issues.push(`${name}: нет SIM`)
     if (cat === 'Планшеты' && !attrs['Связь']) issues.push(`${name}: нет Связь`)
     if ((cat === 'Ноутбуки' || cat === 'Ноутбуки и компьютеры') && !attrs['Экран']) issues.push(`${name}: нет Экран`)
     if (cat === 'Часы' && !attrs['Размер'] && !/airpods|earpods/i.test(name)) issues.push(`${name}: нет Размер`)

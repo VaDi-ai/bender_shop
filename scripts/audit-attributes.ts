@@ -54,8 +54,8 @@ async function main() {
       issues.push({ productId: p.id, productName: name, category: cat, issue: 'Телефон без атрибута Цвет' })
     }
 
-    // 6. iPhone без SIM
-    if (/iphone/i.test(name) && !attrs['SIM']) {
+    // 6. iPhone без SIM (исключить аксессуары)
+    if (/iphone/i.test(name) && !attrs['SIM'] && !/стекло|чехол|кейс|защит|case|glass/i.test(name)) {
       issues.push({ productId: p.id, productName: name, category: cat, issue: 'iPhone без атрибута SIM' })
     }
 
