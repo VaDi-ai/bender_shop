@@ -18,7 +18,11 @@ function sanitize(obj: Record<string, unknown>): Record<string, unknown> {
   for (const [k, v] of Object.entries(obj)) {
     if (SENSITIVE_KEYS.test(k) && typeof v === 'string') {
       result[k] = v.length > 4 ? v.slice(0, 2) + '***' + v.slice(-2) : '***'
-    } else if (typeof v === 'object' && v !== null && !Array.isArray(v)) {
+    } else if (Array.isArray(v)) {
+      result[k] = v.map(item =>
+        typeof item === 'object' && item !== null ? sanitize(item as Record<string, unknown>) : item,
+      )
+    } else if (typeof v === 'object' && v !== null) {
       result[k] = sanitize(v as Record<string, unknown>)
     } else {
       result[k] = v

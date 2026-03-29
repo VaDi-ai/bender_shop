@@ -72,19 +72,20 @@ export async function importAvitoStats(buffer: Buffer): Promise<number> {
     }
   })
 
-  await prisma.avitoStat.deleteMany({})
-
   let imported = 0
-  for (let i = 0; i < rows.length; i += 50) {
-    const batch = rows.slice(i, i + 50)
-    await prisma.avitoStat.createMany({ data: batch })
-    imported += batch.length
-  }
+  await prisma.$transaction(async (tx) => {
+    await tx.avitoStat.deleteMany({})
+    for (let i = 0; i < rows.length; i += 50) {
+      const batch = rows.slice(i, i + 50)
+      await tx.avitoStat.createMany({ data: batch })
+      imported += batch.length
+    }
+  })
   return imported
 }
 
 /** Import sales from Excel buffer. Returns count of imported rows. */
-export async function importAvitoSales(buffer: Buffer): Promise<number> {
+export async function importAvitoSales(buffer: Buffer): Promise<{ count: number; hasDateColumn: boolean }> {
   const wb = new ExcelJS.Workbook()
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- ExcelJS Buffer type mismatch
   await wb.xlsx.load(buffer as any)
@@ -147,14 +148,16 @@ export async function importAvitoSales(buffer: Buffer): Promise<number> {
   })
 
   if (skipped > 0) log.info('Sales import skipped rows', { skipped })
-
-  await prisma.sale.deleteMany({})
+  if (!hasDateColumn) log.info('Sales import: no date column, using import date')
 
   let imported = 0
-  for (let i = 0; i < rows.length; i += 50) {
-    const batch = rows.slice(i, i + 50)
-    await prisma.sale.createMany({ data: batch })
-    imported += batch.length
-  }
-  return imported
+  await prisma.$transaction(async (tx) => {
+    await tx.sale.deleteMany({})
+    for (let i = 0; i < rows.length; i += 50) {
+      const batch = rows.slice(i, i + 50)
+      await tx.sale.createMany({ data: batch })
+      imported += batch.length
+    }
+  })
+  return { count: imported, hasDateColumn }
 }

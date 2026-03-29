@@ -285,7 +285,7 @@ async function pollAvitoMessages(telegram: Telegram): Promise<void> {
           data: { telegramTopicId: topic.message_thread_id },
         })
         await telegram.sendMessage(CRM_GROUP_ID,
-          `👤 Новый клиент с Avito: ${name}${itemLine}${urlLine}\n💬 ${text}`,
+          `👤 Новый клиент с Avito: ${name}${itemLine}${urlLine}\n💬 ${text}`.slice(0, 4000),
           { message_thread_id: topic.message_thread_id },
         )
       } catch (err) {
@@ -295,7 +295,7 @@ async function pollAvitoMessages(telegram: Telegram): Promise<void> {
     } else {
       try {
         await telegram.sendMessage(CRM_GROUP_ID,
-          `💬 [Avito] ${name}:${itemLine}\n${text}`,
+          `💬 [Avito] ${name}:${itemLine}\n${text}`.slice(0, 4000),
           { message_thread_id: client.telegramTopicId },
         )
       } catch (err: any) {
@@ -308,7 +308,7 @@ async function pollAvitoMessages(telegram: Telegram): Promise<void> {
               data: { telegramTopicId: topic.message_thread_id },
             })
             await telegram.sendMessage(CRM_GROUP_ID,
-              `👤 Топик пересоздан\n💬 [Avito] ${name}:${itemLine}\n${text}`,
+              `👤 Топик пересоздан\n💬 [Avito] ${name}:${itemLine}\n${text}`.slice(0, 4000),
               { message_thread_id: topic.message_thread_id },
             )
           } catch (err2) {

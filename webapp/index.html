@@ -8,6 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap">
+  <link rel="manifest" href="/manifest.json">
   <link rel="preload" href="/no-photo.webp" as="image">
   <link rel="dns-prefetch" href="https://api.telegram.org">
   <meta name="theme-color" content="#0a0a0a">
@@ -2676,14 +2677,14 @@
         const headers = { 'Content-Type': 'application/json' }
         if (tg?.initData) headers['x-telegram-init-data'] = tg.initData
 
-        console.log('[CHECKOUT] Sending order...', JSON.stringify(body))
+        console.log('[CHECKOUT] Sending order...', { items: body.items?.length })
 
         const res = await fetch('/api/orders', { method: 'POST', headers, body: JSON.stringify(body) })
 
         console.log('[CHECKOUT] Response status:', res.status, res.statusText)
 
         const text = await res.text()
-        console.log('[CHECKOUT] Response body:', text)
+        console.log('[CHECKOUT] Response body length:', text.length)
 
         let json = {}
         try { json = JSON.parse(text) } catch(e) {

@@ -12,7 +12,7 @@
 
 Railway executes (from package.json):
 1. `npm install`
-2. `npx prisma db push --accept-data-loss`
+2. `npx prisma db push`
 3. `npx prisma generate`
 4. `npm run build` (TypeScript compilation)
 5. `npm start`

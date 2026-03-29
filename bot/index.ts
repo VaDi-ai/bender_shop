@@ -609,10 +609,15 @@ bot.on(message('document'), async (ctx, next) => {
         const { downloadTelegramFile } = await import('./admin/pricing')
         const buffer = await downloadTelegramFile(ctx, fileId)
         const { importAvitoStats, importAvitoSales } = await import('../lib/avito-import')
-        const count = caption === 'avito stats'
-          ? await importAvitoStats(buffer)
-          : await importAvitoSales(buffer)
-        await ctx.reply(`✅ Импортировано: ${count} записей (${caption})`)
+        if (caption === 'avito stats') {
+          const count = await importAvitoStats(buffer)
+          await ctx.reply(`✅ Импортировано: ${count} записей (avito stats)`)
+        } else {
+          const result = await importAvitoSales(buffer)
+          let msg = `✅ Импортировано: ${result.count} записей (avito sales)`
+          if (!result.hasDateColumn) msg += '\n⚠️ Файл без колонки "Дата" — все записи получили сегодняшнюю дату.'
+          await ctx.reply(msg)
+        }
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err)
         log.error('Avito import failed', { caption, error: msg, stack: err instanceof Error ? err.stack : undefined })

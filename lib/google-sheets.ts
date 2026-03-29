@@ -29,17 +29,36 @@ async function getSheets(): Promise<sheets_v4.Sheets> {
   return sheetsClient
 }
 
+async function withSheetsRetry<T>(fn: () => Promise<T>, retries = 3): Promise<T> {
+  for (let i = 0; i < retries; i++) {
+    try {
+      return await fn()
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      if (i === retries - 1) throw err
+      if (msg.includes('429') || msg.includes('RESOURCE_EXHAUSTED') || msg.includes('rateLimitExceeded')) {
+        await new Promise(r => setTimeout(r, (i + 1) * 2000))
+        continue
+      }
+      throw err
+    }
+  }
+  throw new Error('Sheets retry exhausted')
+}
+
 /**
  * Прочитать все строки с листа.
  * Возвращает массив строк (каждая строка — массив значений ячеек).
  */
 export async function readSheet(sheetName: string): Promise<string[][]> {
-  const sheets = await getSheets()
-  const res = await sheets.spreadsheets.values.get({
-    spreadsheetId: SHEET_ID,
-    range: `'${sheetName}'!A1:Z`,
+  return withSheetsRetry(async () => {
+    const sheets = await getSheets()
+    const res = await sheets.spreadsheets.values.get({
+      spreadsheetId: SHEET_ID,
+      range: `'${sheetName}'!A1:Z`,
+    })
+    return (res.data.values ?? []) as string[][]
   })
-  return (res.data.values ?? []) as string[][]
 }
 
 /**
@@ -59,12 +78,14 @@ export async function writeCell(sheetName: string, cell: string, value: string |
  * Записать диапазон значений.
  */
 export async function writeRange(sheetName: string, range: string, values: (string | number)[][]): Promise<void> {
-  const sheets = await getSheets()
-  await sheets.spreadsheets.values.update({
-    spreadsheetId: SHEET_ID,
-    range: `'${sheetName}'!${range}`,
-    valueInputOption: 'USER_ENTERED',
-    requestBody: { values },
+  return withSheetsRetry(async () => {
+    const sheets = await getSheets()
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: SHEET_ID,
+      range: `'${sheetName}'!${range}`,
+      valueInputOption: 'USER_ENTERED',
+      requestBody: { values },
+    })
   })
 }
 
@@ -86,13 +107,15 @@ export async function appendRows(sheetName: string, values: (string | number)[][
  */
 export async function batchUpdate(data: { range: string; values: (string | number)[][] }[]): Promise<void> {
   if (data.length === 0) return
-  const sheets = await getSheets()
-  await sheets.spreadsheets.values.batchUpdate({
-    spreadsheetId: SHEET_ID,
-    requestBody: {
-      valueInputOption: 'USER_ENTERED',
-      data: data.map(d => ({ range: d.range, values: d.values })),
-    },
+  return withSheetsRetry(async () => {
+    const sheets = await getSheets()
+    await sheets.spreadsheets.values.batchUpdate({
+      spreadsheetId: SHEET_ID,
+      requestBody: {
+        valueInputOption: 'USER_ENTERED',
+        data: data.map(d => ({ range: d.range, values: d.values })),
+      },
+    })
   })
 }
 

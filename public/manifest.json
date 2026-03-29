@@ -1,0 +1,11 @@
+{
+  "name": "Bender Shop",
+  "short_name": "Bender",
+  "start_url": "/shop",
+  "display": "standalone",
+  "background_color": "#0a0a0a",
+  "theme_color": "#0a0a0a",
+  "icons": [
+    { "src": "/no-photo.webp", "sizes": "192x192", "type": "image/webp" }
+  ]
+}
