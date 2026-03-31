@@ -97,11 +97,20 @@ export async function getAvitoUserId(): Promise<number> {
 
 // ─── Получение чатов ──────────────────────────────────────────────────────────
 
+interface AvitoImageSizes {
+  [resolution: string]: string  // e.g. "1280x960": "https://..."
+}
+
 interface AvitoLastMessage {
   id: string
-  type?: string  // text, appCall, image, system, item
+  type?: string  // text, appCall, image, system, item, link
   text?: string
-  content?: { text?: string }
+  content?: {
+    text?: string
+    image?: { sizes?: AvitoImageSizes }
+    images?: Array<{ sizes?: AvitoImageSizes }>
+    link?: { url?: string; text?: string }
+  }
   body?: string
   created: number
   author_id: number
@@ -287,4 +296,92 @@ export async function getAvitoItemStats(
     if (i + BATCH < itemIds.length) await new Promise(r => setTimeout(r, 15_000))
   }
   return results
+}
+
+// ─── Извлечение URL изображения из сообщения ─────────────────────────────────
+
+/** Pick the largest image URL from Avito image sizes map */
+function pickLargestImage(sizes: AvitoImageSizes): string | undefined {
+  // Keys like "1280x960", "640x480" — pick the one with largest first dimension
+  let best: string | undefined
+  let bestW = 0
+  for (const [key, url] of Object.entries(sizes)) {
+    const w = parseInt(key.split('x')[0] ?? '0', 10)
+    if (url && w > bestW) {
+      bestW = w
+      best = url
+    }
+  }
+  return best || Object.values(sizes)[0]
+}
+
+/** Extract all image URLs from an Avito message */
+export function extractAvitoImages(msg: AvitoLastMessage): string[] {
+  const urls: string[] = []
+
+  // type === 'image': content.image.sizes
+  if (msg.content?.image?.sizes) {
+    const url = pickLargestImage(msg.content.image.sizes)
+    if (url) urls.push(url)
+  }
+
+  // content.images[] array (multiple images)
+  if (msg.content?.images) {
+    for (const img of msg.content.images) {
+      if (img.sizes) {
+        const url = pickLargestImage(img.sizes)
+        if (url) urls.push(url)
+      }
+    }
+  }
+
+  // type === 'link' with image URL
+  if (msg.type === 'link' && msg.content?.link?.url) {
+    const linkUrl = msg.content.link.url
+    if (/\.(jpe?g|png|webp|gif)(\?|$)/i.test(linkUrl)) {
+      urls.push(linkUrl)
+    }
+  }
+
+  return urls
+}
+
+// ─── Отправка изображения в чат Avito ────────────────────────────────────────
+
+export async function sendAvitoImage(chatId: string, imageUrl: string): Promise<void> {
+  const token = await getAvitoToken()
+  const userId = await getAvitoUserId()
+
+  // Download the image
+  const imageResponse = await fetch(imageUrl)
+  if (!imageResponse.ok) throw new Error(`Failed to download image: ${imageResponse.status}`)
+  const imageBuffer = Buffer.from(await imageResponse.arrayBuffer())
+
+  // Upload via multipart/form-data
+  const FormData = (await import('form-data')).default
+  const form = new FormData()
+  form.append('image', imageBuffer, { filename: 'photo.jpg', contentType: 'image/jpeg' })
+
+  const uploadUrl = `${AVITO_API}/messenger/v1/accounts/${userId}/chats/${chatId}/messages/images`
+  const uploadRes = await fetch(uploadUrl, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      ...form.getHeaders(),
+    },
+    body: form,
+  })
+
+  if (uploadRes.ok) {
+    log.info('Avito image sent', { chatId })
+    return
+  }
+
+  // Fallback: send image as text link
+  log.warn('Avito image upload failed, sending as link', {
+    chatId,
+    status: uploadRes.status,
+    response: (await uploadRes.text()).slice(0, 200),
+  })
+  await sendAvitoMessage(chatId, `📷 Фото: ${imageUrl}`)
 }

@@ -851,13 +851,31 @@ export function setupClientHandlers(bot: Telegraf): void {
               log.error('Manager reply error', { error: err instanceof Error ? err.message : String(err) })
             }
           } else if (messageId) {
-            // Медиа-ответ менеджера — переслать клиенту через copyMessage
+            // Медиа-ответ менеджера — переслать клиенту
             const client = await prisma.client.findFirst({ where: { telegramTopicId: threadId } })
             if (client?.externalId && client.source === 'telegram') {
               try {
                 await ctx.telegram.copyMessage(client.externalId, CRM_GROUP_ID, messageId)
               } catch (err) {
                 log.error('CRM media copy failed', { error: err instanceof Error ? err.message : String(err) })
+              }
+            } else if (client?.externalId && client.source === 'avito') {
+              // Avito: скачать фото и отправить через Avito API
+              const photo = (rawMsg as Record<string, unknown>)['photo'] as Array<{ file_id: string }> | undefined
+              if (photo && Array.isArray(photo) && photo.length > 0) {
+                try {
+                  const largestPhoto = photo[photo.length - 1]!
+                  const fileLink = await ctx.telegram.getFileLink(largestPhoto.file_id)
+                  const { sendAvitoImage } = await import('../lib/avito')
+                  const chatId = client.externalId.split(':')[1]
+                  if (chatId) {
+                    await sendAvitoImage(chatId, fileLink.href)
+                  }
+                } catch (err) {
+                  log.error('CRM Avito image send failed', { error: err instanceof Error ? err.message : String(err) })
+                  await sendToTopic(ctx.telegram, CRM_GROUP_ID, threadId,
+                    `⚠️ Не удалось отправить фото в Avito: ${err instanceof Error ? err.message : err}`)
+                }
               }
             }
           }

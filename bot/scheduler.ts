@@ -15,7 +15,7 @@ import { Telegraf, Telegram, Markup } from 'telegraf'
 import { Sentry } from '../lib/sentry'
 import log from '../lib/logger'
 import { prisma } from '../lib/prisma'
-import { isAvitoConfigured, getAvitoChats, getAvitoUserId, sendAvitoMessage, type AvitoChat } from '../lib/avito'
+import { isAvitoConfigured, getAvitoChats, getAvitoUserId, sendAvitoMessage, extractAvitoImages, type AvitoChat } from '../lib/avito'
 import { getAIMode, generateAIResponse, storeSuggestion, incrementStat } from './ai/agent'
 import { moderateAIOutput } from '../webhooks/telegram'
 
@@ -231,7 +231,8 @@ async function pollAvitoMessages(telegram: Telegram): Promise<void> {
   for (const chat of chats) {
     const lastMsg = chat.last_message
     if (!lastMsg || lastMsg.direction === 'out') continue
-    if (lastMsg.type && lastMsg.type !== 'text') continue  // only text messages
+    // Allow text and image messages
+    if (lastMsg.type && lastMsg.type !== 'text' && lastMsg.type !== 'image') continue
     if (lastProcessedMsg.get(chat.id) === lastMsg.id) continue
 
     lastProcessedMsg.set(chat.id, lastMsg.id)
@@ -243,6 +244,7 @@ async function pollAvitoMessages(telegram: Telegram): Promise<void> {
 
     const name = buyer.name || 'Avito покупатель'
     const text = extractMessageText(lastMsg) || '(без текста)'
+    const imageUrls = extractAvitoImages(lastMsg)
     const { title: itemTitle, url: itemUrl } = buildItemInfo(chat)
     // externalId = "buyerId:chatId"
     const externalId = `${buyer.id}:${chat.id}`
@@ -320,9 +322,23 @@ async function pollAvitoMessages(telegram: Telegram): Promise<void> {
       }
     }
 
+    // Forward images to CRM topic
+    if (imageUrls.length > 0 && client.telegramTopicId) {
+      for (const imgUrl of imageUrls) {
+        try {
+          await telegram.sendPhoto(CRM_GROUP_ID, imgUrl, {
+            message_thread_id: client.telegramTopicId,
+            caption: `📷 Фото от клиента Avito`,
+          })
+        } catch (err) {
+          log.warn('Failed to forward Avito image to CRM', { error: err instanceof Error ? err.message : String(err) })
+        }
+      }
+    }
+
     // Save message
     await prisma.message.create({
-      data: { clientId: client.id, direction: 'in', text, source: 'avito' },
+      data: { clientId: client.id, direction: 'in', text: imageUrls.length > 0 && !text ? '[Фото]' : text, source: 'avito' },
     })
 
     log.info('Avito new message', { clientId: client.id, textPreview: text.slice(0, 50) })
