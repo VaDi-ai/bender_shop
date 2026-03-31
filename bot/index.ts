@@ -2449,6 +2449,31 @@ setTimeout(async () => {
   }
 }, 30_000)
 
+// ─── Очистка старых загруженных фото (Avito uploads) ────────────────────────
+
+setInterval(async () => {
+  try {
+    const fsMod = await import('fs')
+    const pathMod = await import('path')
+    const uploadsDir = pathMod.join(__dirname, '../public/uploads')
+    if (!fsMod.existsSync(uploadsDir)) return
+    const files = fsMod.readdirSync(uploadsDir)
+    const maxAge = 24 * 60 * 60 * 1000 // 24 hours
+    let removed = 0
+    for (const file of files) {
+      const filePath = pathMod.join(uploadsDir, file)
+      const stat = fsMod.statSync(filePath)
+      if (Date.now() - stat.mtimeMs > maxAge) {
+        fsMod.unlinkSync(filePath)
+        removed++
+      }
+    }
+    if (removed > 0) log.info('Cleaned up old uploads', { removed })
+  } catch (err) {
+    log.error('Upload cleanup error', { error: err instanceof Error ? err.message : String(err) })
+  }
+}, 60 * 60 * 1000).unref() // каждый час
+
 // ─── Инициализация технического топика «📦 Продажи и резервы» ─────────────────
 
 async function ensureSalesTopic(): Promise<void> {

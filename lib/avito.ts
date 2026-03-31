@@ -352,36 +352,79 @@ export async function sendAvitoImage(chatId: string, imageUrl: string): Promise<
   const token = await getAvitoToken()
   const userId = await getAvitoUserId()
 
-  // Download the image
+  // Download the image from Telegram
   const imageResponse = await fetch(imageUrl)
   if (!imageResponse.ok) throw new Error(`Failed to download image: ${imageResponse.status}`)
   const imageBuffer = Buffer.from(await imageResponse.arrayBuffer())
+  const contentType = imageResponse.headers.get('content-type') || 'image/jpeg'
 
-  // Upload via multipart/form-data
-  const FormData = (await import('form-data')).default
-  const form = new FormData()
-  form.append('image', imageBuffer, { filename: 'photo.jpg', contentType: 'image/jpeg' })
+  // Method 1: multipart upload to Avito images endpoint
+  try {
+    const boundary = '----AvitoFormBoundary' + Date.now()
+    const body = Buffer.concat([
+      Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="image"; filename="photo.jpg"\r\nContent-Type: ${contentType}\r\n\r\n`),
+      imageBuffer,
+      Buffer.from(`\r\n--${boundary}--\r\n`),
+    ])
 
-  const uploadUrl = `${AVITO_API}/messenger/v1/accounts/${userId}/chats/${chatId}/messages/images`
-  const uploadRes = await fetch(uploadUrl, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`,
-      ...form.getHeaders(),
-    },
-    body: form,
-  })
+    const uploadUrl = `${AVITO_API}/messenger/v1/accounts/${userId}/chats/${chatId}/images`
+    const res1 = await fetch(uploadUrl, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': `multipart/form-data; boundary=${boundary}`,
+      },
+      body,
+    })
 
-  if (uploadRes.ok) {
-    log.info('Avito image sent', { chatId })
-    return
+    if (res1.ok) {
+      log.info('Avito image sent via upload', { chatId })
+      return
+    }
+    log.warn('Avito image upload failed', { status: res1.status, error: (await res1.text()).slice(0, 200) })
+  } catch (err) {
+    log.warn('Avito image upload error', { error: err instanceof Error ? err.message : String(err) })
   }
 
-  // Fallback: send image as text link
-  log.warn('Avito image upload failed, sending as link', {
-    chatId,
-    status: uploadRes.status,
-    response: (await uploadRes.text()).slice(0, 200),
-  })
-  await sendAvitoMessage(chatId, `📷 Фото: ${imageUrl}`)
+  // Method 2: send as message with type=image
+  try {
+    const msgUrl = `${AVITO_API}/messenger/v1/accounts/${userId}/chats/${chatId}/messages`
+    const res2 = await fetch(msgUrl, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        message: { text: '' },
+        type: 'image',
+        image: { url: imageUrl },
+      }),
+    })
+
+    if (res2.ok) {
+      log.info('Avito image sent via message type:image', { chatId })
+      return
+    }
+    log.warn('Avito image message failed', { status: res2.status, error: (await res2.text()).slice(0, 200) })
+  } catch (err) {
+    log.warn('Avito image message error', { error: err instanceof Error ? err.message : String(err) })
+  }
+
+  // Method 3: host image on our server, send public URL
+  const { writeFileSync, mkdirSync, existsSync } = await import('fs')
+  const pathMod = await import('path')
+
+  const uploadsDir = pathMod.join(__dirname, '../public/uploads')
+  if (!existsSync(uploadsDir)) mkdirSync(uploadsDir, { recursive: true })
+
+  const ext = contentType.includes('png') ? '.png' : contentType.includes('webp') ? '.webp' : '.jpg'
+  const filename = `avito-${Date.now()}${ext}`
+  writeFileSync(pathMod.join(uploadsDir, filename), imageBuffer)
+
+  const baseUrl = process.env.WEBAPP_URL || 'https://bendershop.store'
+  const publicUrl = `${baseUrl}/uploads/${filename}`
+
+  await sendAvitoMessage(chatId, `📷 ${publicUrl}`)
+  log.info('Avito image sent via hosted URL', { chatId, publicUrl })
 }

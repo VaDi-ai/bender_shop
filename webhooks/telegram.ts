@@ -862,17 +862,20 @@ export function setupClientHandlers(bot: Telegraf): void {
             } else if (client?.externalId && client.source === 'avito') {
               // Avito: скачать фото и отправить через Avito API
               const photo = (rawMsg as Record<string, unknown>)['photo'] as Array<{ file_id: string }> | undefined
-              if (photo && Array.isArray(photo) && photo.length > 0) {
+              const avitoChatId = client.externalId.split(':')[1]
+              if (photo && Array.isArray(photo) && photo.length > 0 && avitoChatId) {
                 try {
                   const largestPhoto = photo[photo.length - 1]!
                   const fileLink = await ctx.telegram.getFileLink(largestPhoto.file_id)
                   const { sendAvitoImage } = await import('../lib/avito')
-                  const chatId = client.externalId.split(':')[1]
-                  if (chatId) {
-                    await sendAvitoImage(chatId, fileLink.href)
-                  }
+                  await sendAvitoImage(avitoChatId, fileLink.href)
                 } catch (err) {
                   log.error('CRM Avito image send failed', { error: err instanceof Error ? err.message : String(err) })
+                  // Fallback: notify client that photo was sent
+                  try {
+                    const { sendAvitoMessage } = await import('../lib/avito')
+                    await sendAvitoMessage(avitoChatId, '📷 Отправлено фото (откройте Telegram для просмотра)')
+                  } catch { /* ignore fallback error */ }
                   await sendToTopic(ctx.telegram, CRM_GROUP_ID, threadId,
                     `⚠️ Не удалось отправить фото в Avito: ${err instanceof Error ? err.message : err}`)
                 }
