@@ -99,16 +99,112 @@ type PricingFlow =
   | { flow: 'manual_all_price'; productId: number; productName: string }
   // ── Корректировка цен по курсу USD ──────────────────────────────────────────
   | { flow: 'usd_adjust_preview'; pending: PendingVariant[]; changePct: number }
+  // ── Мастер создания товара из прайса ──────────────────────────────────────
+  | { flow: 'create_from_price'; items: ParsedLine[]; currentIndex: number; supplierName: string; draft: QuickProductDraft }
+  | { flow: 'create_from_price_qty'; items: ParsedLine[]; currentIndex: number; supplierName: string; draft: QuickProductDraft }
+
+type QuickProductDraft = {
+  name: string
+  brand: string
+  category: string | null
+  color: string | null
+  memory: string | null
+  country: string | null
+  costPrice: number
+  retailPrice: number
+  quantity: number
+}
 
 export const pricingState = new Map<number, PricingFlow>()
 
 // ─── Матчинг вариантов ────────────────────────────────────────────────────────
 
-async function matchVariants(parsed: ParsedLine[]): Promise<{ matched: MatchedVariant[]; unmatched: ParsedLine[] }> {
+async function matchVariants(parsed: ParsedLine[]): Promise<{ matched: MatchedVariant[]; unmatched: ParsedLine[]; ignored: ParsedLine[] }> {
   const matched: MatchedVariant[] = []
   const unmatched: ParsedLine[] = []
+  const ignored: ParsedLine[] = []
 
   for (const p of parsed) {
+    // 1. Проверить PriceAlias
+    const aliasFull = (p.model + (p.storage ? ' ' + p.storage : '') + (p.color ? ' ' + p.color : '')).trim().toLowerCase()
+    const alias = await prisma.priceAlias.findFirst({
+      where: {
+        OR: [
+          { alias: aliasFull },
+          { alias: p.model.trim().toLowerCase() },
+          { alias: p.rawLine.trim().toLowerCase() },
+        ],
+      },
+    })
+
+    if (alias?.isIgnored) {
+      ignored.push(p)
+      continue
+    }
+
+    if (alias?.variantId) {
+      const variant = await prisma.productVariant.findUnique({
+        where: { id: alias.variantId },
+        include: { product: true },
+      })
+      if (variant) {
+        matched.push({
+          rawLine: p.rawLine, parsed: p,
+          variantId: variant.id, variantSku: variant.sku,
+          productId: variant.productId, productName: variant.product.name,
+          brand: variant.product.brand ?? undefined,
+          categoryId: variant.product.categoryId ?? undefined,
+          currentPrice: Number(variant.price), supplierPrice: p.price,
+        })
+        continue
+      }
+    }
+
+    if (alias?.productId) {
+      const product = await prisma.product.findUnique({
+        where: { id: alias.productId },
+        include: { variants: true },
+      })
+      if (product) {
+        // Найти подходящий вариант по storage/color
+        let picked: typeof product.variants[0] | undefined
+        for (const variant of product.variants) {
+          const attrs = variant.attributes as Record<string, string>
+          const vals = Object.values(attrs).map(v => v.toLowerCase())
+          if (p.storage && !vals.some(v => v.includes(p.storage!))) continue
+          if (p.color && !vals.some(v => v.includes(p.color!.toLowerCase()))) continue
+          picked = variant
+          break
+        }
+        if (picked) {
+          matched.push({
+            rawLine: p.rawLine, parsed: p,
+            variantId: picked.id, variantSku: picked.sku,
+            productId: product.id, productName: product.name,
+            brand: product.brand ?? undefined,
+            categoryId: product.categoryId ?? undefined,
+            currentPrice: Number(picked.price), supplierPrice: p.price,
+          })
+          continue
+        }
+        // Если вариант не найден по атрибутам — применить ко всем вариантам этого продукта
+        if (product.variants.length > 0) {
+          for (const variant of product.variants) {
+            matched.push({
+              rawLine: p.rawLine, parsed: p,
+              variantId: variant.id, variantSku: variant.sku,
+              productId: product.id, productName: product.name,
+              brand: product.brand ?? undefined,
+              categoryId: product.categoryId ?? undefined,
+              currentPrice: Number(variant.price), supplierPrice: p.price,
+            })
+          }
+          continue
+        }
+      }
+    }
+
+    // 2. Стандартный поиск по имени (без алиаса)
     const products = await prisma.product.findMany({
       where: { name: { contains: p.model, mode: 'insensitive' } },
       include: { variants: true },
@@ -136,7 +232,7 @@ async function matchVariants(parsed: ParsedLine[]): Promise<{ matched: MatchedVa
     }
     found ? matched.push(found) : unmatched.push(p)
   }
-  return { matched, unmatched }
+  return { matched, unmatched, ignored }
 }
 
 // ─── Форматирование ───────────────────────────────────────────────────────────
@@ -295,6 +391,18 @@ async function applyChanges(ctx: Context, userId: number): Promise<void> {
       })
       try { await logSecurityEvent('price_changed', { variantId: v.variantId, variantSku: v.variantSku, oldPrice: v.currentPrice, newPrice: v.newPrice, source: state.source, adminId: userId }, userId) } catch { /* logging failure should not break the operation */ }
       updated++
+
+      // Автосохранение алиаса для обучения парсера (только для flow от поставщика)
+      if (state.source === 'message' && v.comment?.startsWith('cost:')) {
+        try {
+          const aliasText = v.productName.toLowerCase()
+          await prisma.priceAlias.upsert({
+            where: { alias: aliasText },
+            create: { alias: aliasText, productId: v.productId, variantId: v.variantId },
+            update: { productId: v.productId, variantId: v.variantId, isIgnored: false },
+          }).catch(() => {})
+        } catch { /* ignore alias save errors */ }
+      }
     } catch {
       errors.push(v.variantSku)
     }
@@ -655,7 +763,7 @@ async function processSupplierPrice(
 
   try {
     // 1. Сопоставить позиции из прайса с товарами в БД
-    const { matched, unmatched } = await matchVariants(parsed)
+    const { matched, unmatched, ignored } = await matchVariants(parsed)
 
     // 2. TODO(commit-4): сохранять закупочные цены в SupplierPrice.
     // Текущая модель SupplierPrice (supplierId/model/storage/color/price/rawMessage/parsedAt)
@@ -667,6 +775,7 @@ async function processSupplierPrice(
     const unmatchedNote = unmatched.length > 0
       ? `\n\n⚠️ Не найдено (${unmatched.length}):\n${unmatchedLines}${unmatched.length > 5 ? `\n  … и ещё ${unmatched.length - 5}` : ''}`
       : ''
+    const ignoredNote = ignored.length > 0 ? `\n🚫 Игнорируется: ${ignored.length}` : ''
 
     pricingState.set(userId, {
       flow: 'awaiting_markup_or_rules',
@@ -688,12 +797,16 @@ async function processSupplierPrice(
         `✅ Прайс «${supplierName}» обработан:`,
         `📦 Найдено в каталоге: ${matched.length} из ${parsed.length}`,
         unmatchedNote,
+        ignoredNote,
         '',
         'Выберите способ расчёта рекомендованных цен:',
-      ].filter(s => s !== undefined).join('\n'),
+      ].filter(s => s !== undefined && s !== '').join('\n'),
       Markup.inlineKeyboard([
         [rulesButton],
         [Markup.button.callback('📈 Разовый %', 'pricing:apply_pct_input')],
+        ...(unmatched.length > 0 ? [[
+          Markup.button.callback('🆕 Создать новые (' + unmatched.length + ')', 'pricing:create_new'),
+        ]] : []),
         [Markup.button.callback('❌ Отмена', 'pricing:cancel')],
       ]),
     )
@@ -702,6 +815,93 @@ async function processSupplierPrice(
     await ctx.reply('❌ Ошибка обработки прайса: ' + (err instanceof Error ? err.message : 'Неизвестная ошибка'))
     pricingState.delete(userId)
   }
+}
+
+// ─── Мастер создания товара из прайса: helpers ──────────────────────────────
+
+function detectBrandFromName(name: string): string {
+  const brands = ['Apple', 'Samsung', 'Xiaomi', 'Huawei', 'Honor', 'Google', 'Sony', 'Lenovo', 'ASUS', 'OnePlus', 'Oppo', 'Vivo', 'Realme', 'Nothing', 'Motorola', 'Nokia', 'LG', 'Garmin', 'JBL', 'Marshall', 'Dyson', 'DJI']
+  const lower = name.toLowerCase()
+  return brands.find(b => lower.includes(b.toLowerCase())) || ''
+}
+
+function detectCategoryFromName(name: string): string | null {
+  const lower = name.toLowerCase()
+  if (/iphone|galaxy\s*s|galaxy\s*a|pixel|redmi|poco|oneplus/i.test(lower)) return 'Телефоны'
+  if (/ipad|tab\s|matepad|galaxy\s*tab/i.test(lower)) return 'Планшеты'
+  if (/macbook|laptop|thinkpad|zenbook|vivobook/i.test(lower)) return 'Ноутбуки'
+  if (/watch|часы|band|fenix|venu/i.test(lower)) return 'Часы'
+  if (/airpods|buds|headphone|наушник|pods|jbl|marshall/i.test(lower)) return 'Аудио'
+  if (/playstation|ps5|xbox|switch|nintendo/i.test(lower)) return 'Игры приставки'
+  if (/imac|mac\s*mini|mac\s*pro|mac\s*studio/i.test(lower)) return 'Настольные компьютеры'
+  return null
+}
+
+async function showCreateCard(ctx: Context, userId: number, items: ParsedLine[], index: number, supplierName: string): Promise<void> {
+  if (index >= items.length) {
+    await ctx.reply('✅ Все позиции обработаны.',
+      Markup.inlineKeyboard([[Markup.button.callback('🔙 Меню цен', 'pricing:menu')]]))
+    pricingState.delete(userId)
+    return
+  }
+
+  const p = items[index]!
+  const brand = detectBrandFromName(p.model)
+  const category = detectCategoryFromName(p.model)
+  const rules = await loadRules()
+  const retailPrice = rules.length > 0 ? applyMarkupRules(p.price, rules) : p.price
+  const DEFAULT_QTY = parseInt(process.env.DEFAULT_STOCK_QTY || '3', 10)
+
+  const draft: QuickProductDraft = {
+    name: p.model + (p.storage ? ' ' + p.storage : '') + (p.color ? ' ' + p.color : ''),
+    brand,
+    category,
+    color: p.color || null,
+    memory: p.storage || null,
+    country: null,
+    costPrice: p.price,
+    retailPrice,
+    quantity: DEFAULT_QTY,
+  }
+
+  pricingState.set(userId, {
+    flow: 'create_from_price',
+    items,
+    currentIndex: index,
+    supplierName,
+    draft,
+  })
+
+  const catDisplay = draft.category || '⚠️ не определена'
+  const lines = [
+    `🆕 Новый товар (${index + 1} из ${items.length})`,
+    '',
+    '📝 Название: ' + draft.name,
+    '🏷 Бренд: ' + (draft.brand || '⚠️ не определён'),
+    '📦 Категория: ' + catDisplay,
+    '🎨 Цвет: ' + (draft.color || '—'),
+    '💾 Память: ' + (draft.memory || '—'),
+    '💵 Закупка: ' + draft.costPrice.toLocaleString('ru-RU') + ' ₽',
+    '💰 Рекомендованная: ' + draft.retailPrice.toLocaleString('ru-RU') + ' ₽',
+    '📊 Кол-во: ' + draft.quantity + ' шт',
+    '',
+    'Что исправить?',
+  ]
+
+  await ctx.reply(lines.join('\n'), Markup.inlineKeyboard([
+    [
+      Markup.button.callback('📦 Категория', 'pricing:qc_category'),
+      Markup.button.callback('📊 Кол-во', 'pricing:qc_qty'),
+    ],
+    [
+      Markup.button.callback('✅ Создать', 'pricing:qc_confirm'),
+      Markup.button.callback('⏭ Пропустить', 'pricing:qc_skip'),
+    ],
+    [
+      Markup.button.callback('🚫 Игнорировать всегда', 'pricing:qc_ignore'),
+      Markup.button.callback('❌ Отмена', 'pricing:cancel'),
+    ],
+  ]))
 }
 
 // ─── Регистрация обработчиков ─────────────────────────────────────────────────
@@ -960,6 +1160,302 @@ export function setupPricingHandlers(bot: Telegraf): void {
     })
 
     await showPreview(ctx, userId)
+  })
+
+  // ── Мастер создания новых товаров ──────────────────────────────────────
+
+  bot.action('pricing:create_new', async (ctx) => {
+    try { await ctx.answerCbQuery() } catch { /* ignore */ }
+    const userId = getUserId(ctx)
+    const state = pricingState.get(userId)
+    if (!state || state.flow !== 'awaiting_markup_or_rules') return
+
+    if (state.unmatched.length === 0) {
+      await ctx.reply('Все позиции уже найдены в каталоге.')
+      return
+    }
+
+    await ctx.reply(
+      `🆕 Создание ${state.unmatched.length} новых товаров\n\nВыберите режим:`,
+      Markup.inlineKeyboard([
+        [Markup.button.callback('📋 По одному (с подтверждением)', 'pricing:create_one_by_one')],
+        [Markup.button.callback('🚀 Создать все сразу (AI угадает категории)', 'pricing:create_all_bulk')],
+        [Markup.button.callback('🔙 Назад', 'pricing:cancel')],
+      ]),
+    )
+  })
+
+  bot.action('pricing:create_one_by_one', async (ctx) => {
+    try { await ctx.answerCbQuery() } catch { /* ignore */ }
+    const userId = getUserId(ctx)
+    const state = pricingState.get(userId)
+    if (!state || state.flow !== 'awaiting_markup_or_rules') return
+
+    await showCreateCard(ctx, userId, state.unmatched, 0, state.supplierName)
+  })
+
+  // ── Мастер создания: выбор категории ──────────────────────────────────
+
+  bot.action('pricing:qc_category', async (ctx) => {
+    try { await ctx.answerCbQuery() } catch { /* ignore */ }
+    const userId = getUserId(ctx)
+    const state = pricingState.get(userId)
+    if (!state || state.flow !== 'create_from_price') return
+
+    const cats = await prisma.category.findMany({ orderBy: { name: 'asc' } })
+    const buttons = cats.map(c => [
+      Markup.button.callback(c.name, 'pricing:qc_cat_set:' + c.id),
+    ])
+    buttons.push([Markup.button.callback('🔙 К карточке', 'pricing:qc_back')])
+
+    await ctx.reply('Выберите категорию:', Markup.inlineKeyboard(buttons))
+  })
+
+  bot.action(/^pricing:qc_cat_set:(\d+)$/, async (ctx) => {
+    try { await ctx.answerCbQuery() } catch { /* ignore */ }
+    const userId = getUserId(ctx)
+    const state = pricingState.get(userId)
+    if (!state || state.flow !== 'create_from_price') return
+
+    const catId = parseInt((ctx.match as RegExpMatchArray)[1]!, 10)
+    const cat = await prisma.category.findUnique({ where: { id: catId } })
+    if (cat) state.draft.category = cat.name
+
+    await showCreateCard(ctx, userId, state.items, state.currentIndex, state.supplierName)
+  })
+
+  bot.action('pricing:qc_back', async (ctx) => {
+    try { await ctx.answerCbQuery() } catch { /* ignore */ }
+    const userId = getUserId(ctx)
+    const state = pricingState.get(userId)
+    if (!state || (state.flow !== 'create_from_price' && state.flow !== 'create_from_price_qty')) return
+    // state.flow может быть create_from_price_qty если прилетели из ввода количества
+    const items = (state as Extract<PricingFlow, { flow: 'create_from_price' } | { flow: 'create_from_price_qty' }>).items
+    const currentIndex = (state as Extract<PricingFlow, { flow: 'create_from_price' } | { flow: 'create_from_price_qty' }>).currentIndex
+    const supplierName = (state as Extract<PricingFlow, { flow: 'create_from_price' } | { flow: 'create_from_price_qty' }>).supplierName
+    await showCreateCard(ctx, userId, items, currentIndex, supplierName)
+  })
+
+  // ── Мастер создания: ввод количества ──────────────────────────────────
+
+  bot.action('pricing:qc_qty', async (ctx) => {
+    try { await ctx.answerCbQuery() } catch { /* ignore */ }
+    const userId = getUserId(ctx)
+    const state = pricingState.get(userId)
+    if (!state || state.flow !== 'create_from_price') return
+    await ctx.reply('Введите количество:',
+      Markup.inlineKeyboard([[Markup.button.callback('🔙 К карточке', 'pricing:qc_back')]]))
+    pricingState.set(userId, {
+      flow: 'create_from_price_qty',
+      items: state.items,
+      currentIndex: state.currentIndex,
+      supplierName: state.supplierName,
+      draft: state.draft,
+    })
+  })
+
+  // ── Мастер создания: подтверждение ────────────────────────────────────
+
+  bot.action('pricing:qc_confirm', async (ctx) => {
+    try { await ctx.answerCbQuery('⏳ Создаю...') } catch { /* ignore */ }
+    const userId = getUserId(ctx)
+    const state = pricingState.get(userId)
+    if (!state || state.flow !== 'create_from_price') return
+
+    const d = state.draft
+    if (!d.category) {
+      await ctx.reply('⚠️ Укажите категорию перед созданием.',
+        Markup.inlineKeyboard([[Markup.button.callback('📦 Категория', 'pricing:qc_category')]]))
+      return
+    }
+
+    try {
+      const category = await prisma.category.upsert({
+        where: { name: d.category },
+        create: { name: d.category },
+        update: {},
+      })
+
+      const catNum = String(category.id).padStart(2, '0')
+      const productSku = catNum + '-' + Date.now().toString(36).slice(-4) + '-' + Math.random().toString(36).slice(-3)
+      const variantSku = productSku + '-' + Math.random().toString(36).slice(-3)
+
+      const attrs: Record<string, string> = {}
+      if (d.color) attrs['Цвет'] = d.color
+      if (d.memory) attrs['Память'] = d.memory
+
+      const { Decimal } = await import('@prisma/client/runtime/client')
+
+      const product = await prisma.product.create({
+        data: {
+          sku: productSku,
+          name: d.name,
+          brand: d.brand || null,
+          categoryId: category.id,
+          price: new Decimal(d.retailPrice),
+          stock: d.quantity,
+          quantity: d.quantity,
+          isAvailable: d.quantity > 0,
+          attributes: Object.keys(attrs).length > 0
+            ? Object.fromEntries(Object.entries(attrs).map(([k, v]) => [k, [v]]))
+            : {},
+          photos: [],
+        },
+      })
+
+      await prisma.productVariant.create({
+        data: {
+          productId: product.id,
+          sku: variantSku,
+          price: new Decimal(d.retailPrice),
+          costPrice: new Decimal(d.costPrice),
+          lastSyncedCostPrice: new Decimal(d.costPrice),
+          quantity: d.quantity,
+          inStock: d.quantity > 0,
+          attributes: { ...attrs, fullName: d.name },
+          photos: [],
+        },
+      })
+
+      const aliasKey = d.name.trim().toLowerCase()
+      await prisma.priceAlias.upsert({
+        where: { alias: aliasKey },
+        create: { alias: aliasKey, productId: product.id },
+        update: { productId: product.id, isIgnored: false },
+      }).catch(() => {})
+
+      await ctx.reply('✅ Товар создан: ' + d.name + ' (' + d.category + ')')
+
+      await showCreateCard(ctx, userId, state.items, state.currentIndex + 1, state.supplierName)
+    } catch (err) {
+      log.error('Quick create product error', { error: err instanceof Error ? err.message : String(err) })
+      await ctx.reply('❌ Ошибка: ' + (err instanceof Error ? err.message : 'Неизвестная ошибка'))
+    }
+  })
+
+  // ── Мастер создания: пропустить ───────────────────────────────────────
+
+  bot.action('pricing:qc_skip', async (ctx) => {
+    try { await ctx.answerCbQuery() } catch { /* ignore */ }
+    const userId = getUserId(ctx)
+    const state = pricingState.get(userId)
+    if (!state || state.flow !== 'create_from_price') return
+    await showCreateCard(ctx, userId, state.items, state.currentIndex + 1, state.supplierName)
+  })
+
+  // ── Мастер создания: игнорировать всегда ──────────────────────────────
+
+  bot.action('pricing:qc_ignore', async (ctx) => {
+    try { await ctx.answerCbQuery() } catch { /* ignore */ }
+    const userId = getUserId(ctx)
+    const state = pricingState.get(userId)
+    if (!state || state.flow !== 'create_from_price') return
+
+    const p = state.items[state.currentIndex]
+    if (p) {
+      const aliasKey = p.rawLine.trim().toLowerCase()
+      await prisma.priceAlias.upsert({
+        where: { alias: aliasKey },
+        create: { alias: aliasKey, isIgnored: true },
+        update: { isIgnored: true, productId: null, variantId: null },
+      }).catch(() => {})
+      await ctx.reply('🚫 «' + p.rawLine.slice(0, 50) + '» будет игнорироваться.')
+    }
+
+    await showCreateCard(ctx, userId, state.items, state.currentIndex + 1, state.supplierName)
+  })
+
+  // ── Массовое создание всех новых ──────────────────────────────────────
+
+  bot.action('pricing:create_all_bulk', async (ctx) => {
+    try { await ctx.answerCbQuery('⏳ Создаю...') } catch { /* ignore */ }
+    const userId = getUserId(ctx)
+    const state = pricingState.get(userId)
+    if (!state || state.flow !== 'awaiting_markup_or_rules') return
+
+    const rules = await loadRules()
+    const DEFAULT_QTY = parseInt(process.env.DEFAULT_STOCK_QTY || '3', 10)
+    let created = 0
+    let errors = 0
+
+    const { Decimal } = await import('@prisma/client/runtime/client')
+
+    for (const p of state.unmatched) {
+      try {
+        const brand = detectBrandFromName(p.model)
+        const catName = detectCategoryFromName(p.model) || 'Другое'
+        const retailPrice = rules.length > 0 ? applyMarkupRules(p.price, rules) : p.price
+
+        const category = await prisma.category.upsert({
+          where: { name: catName },
+          create: { name: catName },
+          update: {},
+        })
+
+        const catNum = String(category.id).padStart(2, '0')
+        const productSku = catNum + '-' + Date.now().toString(36).slice(-4) + '-' + Math.random().toString(36).slice(-3)
+        const variantSku = productSku + '-' + Math.random().toString(36).slice(-3)
+
+        const name = p.model + (p.storage ? ' ' + p.storage : '') + (p.color ? ' ' + p.color : '')
+        const attrs: Record<string, string> = {}
+        if (p.color) attrs['Цвет'] = p.color
+        if (p.storage) attrs['Память'] = p.storage
+
+        const product = await prisma.product.create({
+          data: {
+            sku: productSku,
+            name,
+            brand: brand || null,
+            categoryId: category.id,
+            price: new Decimal(retailPrice),
+            stock: DEFAULT_QTY,
+            quantity: DEFAULT_QTY,
+            isAvailable: true,
+            attributes: Object.keys(attrs).length > 0
+              ? Object.fromEntries(Object.entries(attrs).map(([k, v]) => [k, [v]]))
+              : {},
+            photos: [],
+          },
+        })
+
+        await prisma.productVariant.create({
+          data: {
+            productId: product.id,
+            sku: variantSku,
+            price: new Decimal(retailPrice),
+            costPrice: new Decimal(p.price),
+            lastSyncedCostPrice: new Decimal(p.price),
+            quantity: DEFAULT_QTY,
+            inStock: true,
+            attributes: { ...attrs, fullName: name },
+            photos: [],
+          },
+        })
+
+        await prisma.priceAlias.upsert({
+          where: { alias: name.trim().toLowerCase() },
+          create: { alias: name.trim().toLowerCase(), productId: product.id },
+          update: { productId: product.id, isIgnored: false },
+        }).catch(() => {})
+
+        created++
+      } catch (err) {
+        log.error('Bulk create error', { model: p.model, error: err instanceof Error ? err.message : String(err) })
+        errors++
+      }
+    }
+
+    pricingState.delete(userId)
+    await ctx.reply(
+      [
+        '✅ Массовое создание завершено:',
+        '📦 Создано: ' + created,
+        errors > 0 ? '❌ Ошибок: ' + errors : '',
+        '🤖 Категории определены автоматически по AI-эвристике.',
+        'Проверьте категории в 📦 Товароучёт → по категориям.',
+      ].filter(Boolean).join('\n'),
+      Markup.inlineKeyboard([[Markup.button.callback('🔙 Меню цен', 'pricing:menu')]]),
+    )
   })
 
   // ── Курс доллара ──────────────────────────────────────────────────────────
@@ -1923,6 +2419,25 @@ export async function handlePricingMessage(
       ]),
     )
     pricingState.delete(userId)
+    return true
+  }
+
+  // ── Мастер создания: ввод количества ────────────────────────────────────
+  if (state.flow === 'create_from_price_qty') {
+    const qty = parseInt(text, 10)
+    if (isNaN(qty) || qty <= 0) {
+      await ctx.reply('Введите положительное число.')
+      return true
+    }
+    const updated = { ...state.draft, quantity: qty }
+    pricingState.set(userId, {
+      flow: 'create_from_price',
+      items: state.items,
+      currentIndex: state.currentIndex,
+      supplierName: state.supplierName,
+      draft: updated,
+    })
+    await showCreateCard(ctx, userId, state.items, state.currentIndex, state.supplierName)
     return true
   }
 
