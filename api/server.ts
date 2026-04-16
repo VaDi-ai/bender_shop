@@ -586,12 +586,34 @@ export function startApiServer(bot?: Telegraf): void {
       const downloadUrl = `https://api.telegram.org/file/bot${BOT_TOKEN}/${filePath}`
       await new Promise<void>((resolve, reject) => {
         const request = https
-          .get(downloadUrl, (tgRes) => {
-            res.setHeader('Content-Type', getImageContentType(filePath))
-            res.setHeader('Cache-Control', 'public, max-age=86400')
-            tgRes.pipe(res)
-            tgRes.on('end', resolve)
-            tgRes.on('error', reject)
+          .get(downloadUrl, async (tgRes) => {
+            try {
+              const chunks: Buffer[] = []
+              for await (const chunk of tgRes) {
+                chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk))
+              }
+              const inputBuffer = Buffer.concat(chunks)
+
+              try {
+                const sharp = (await import('sharp')).default
+                const optimized = await sharp(inputBuffer)
+                  .resize(1920, 1080, { fit: 'inside', withoutEnlargement: true })
+                  .webp({ quality: 85 })
+                  .toBuffer()
+
+                res.setHeader('Content-Type', 'image/webp')
+                res.setHeader('Cache-Control', 'public, max-age=86400')
+                res.end(optimized)
+              } catch {
+                // Fallback: sharp не справился — отдать оригинал
+                res.setHeader('Content-Type', getImageContentType(filePath))
+                res.setHeader('Cache-Control', 'public, max-age=86400')
+                res.end(inputBuffer)
+              }
+              resolve()
+            } catch (err) {
+              reject(err)
+            }
           })
           .on('error', reject)
         request.setTimeout(10_000, () => {

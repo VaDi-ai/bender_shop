@@ -58,6 +58,7 @@ export type PendingVariant = {
   currentPrice: number
   newPrice: number
   comment?: string
+  costPrice?: number   // Закупочная цена от поставщика (для записи в БД при apply)
 }
 
 type PricingSource = 'message' | 'file' | 'markup' | 'manual' | 'currency_update'
@@ -65,7 +66,6 @@ type PricingSource = 'message' | 'file' | 'markup' | 'manual' | 'currency_update
 type PricingFlow =
   | { flow: 'awaiting_message'; rate?: number }
   | { flow: 'awaiting_supplier_name'; parsed: ParsedLine[] }
-  | { flow: 'awaiting_markup_confirm'; supplierName: string; parsed: ParsedLine[]; markup: number }
   | { flow: 'awaiting_markup'; matches: MatchedVariant[]; unmatched: ParsedLine[]; rate?: number }
   | { flow: 'awaiting_markup_or_rules'; supplierName: string; matches: MatchedVariant[]; unmatched: ParsedLine[] }
   | { flow: 'bulk_pct'; filterType: 'all' | 'category'; filterValue: string; filterLabel: string }
@@ -369,13 +369,10 @@ async function applyChanges(ctx: Context, userId: number): Promise<void> {
   for (const v of active) {
     try {
       const updateData: Record<string, any> = { price: v.newPrice }
-      // Если в comment передана закупочная цена (flow от поставщика) — сохранить в ProductVariant
-      if (v.comment && v.comment.startsWith('cost:')) {
-        const cost = parseFloat(v.comment.replace('cost:', ''))
-        if (!isNaN(cost) && cost > 0) {
-          updateData.costPrice = cost
-          updateData.lastSyncedCostPrice = cost
-        }
+      // Если передана закупочная цена (flow от поставщика) — сохранить в ProductVariant
+      if (v.costPrice && v.costPrice > 0) {
+        updateData.costPrice = v.costPrice
+        updateData.lastSyncedCostPrice = v.costPrice
       }
       await prisma.productVariant.update({ where: { id: v.variantId }, data: updateData })
       await prisma.priceChange.create({
@@ -393,7 +390,7 @@ async function applyChanges(ctx: Context, userId: number): Promise<void> {
       updated++
 
       // Автосохранение алиаса для обучения парсера (только для flow от поставщика)
-      if (state.source === 'message' && v.comment?.startsWith('cost:')) {
+      if (state.source === 'message' && v.costPrice && v.costPrice > 0) {
         try {
           const aliasText = v.productName.toLowerCase()
           await prisma.priceAlias.upsert({
@@ -419,7 +416,7 @@ async function applyChanges(ctx: Context, userId: number): Promise<void> {
       const sheetUpdates: { range: string; values: (string | number)[][] }[] = []
 
       for (const v of active) {
-        const costRaw = v.comment?.startsWith('cost:') ? parseFloat(v.comment.replace('cost:', '')) : null
+        const costRaw = v.costPrice ?? null
         if (costRaw === null || isNaN(costRaw)) continue
 
         // Колонка E (index 4) = «Название модели»
@@ -712,45 +709,6 @@ async function getSupplierButtons(): Promise<ReturnType<typeof Markup.button.cal
   return suppliers.map(s => [Markup.button.callback(`🏭 ${s.name}`, `pricing:supplier_select:${s.id}`)])
 }
 
-// ─── Поиск лучших цен из листов поставщиков ──────────────────────────────────
-
-async function findBestPricesFromSheets(): Promise<Array<{ model: string; price: number; supplierName: string }>> {
-  const { getSheetNames, readSheet } = await import('../../lib/google-sheets')
-
-  const allSheets = await getSheetNames()
-  const supplierSheets = allSheets.filter(name => name.startsWith('Поставщик: '))
-
-  const priceMap = new Map<string, { price: number; supplierName: string }>()
-
-  for (const sheetName of supplierSheets) {
-    const supplierName = sheetName.replace('Поставщик: ', '')
-    try {
-      const data = await readSheet(sheetName)
-      for (let i = 1; i < data.length; i++) {
-        const model = (data[i]?.[2] ?? '').trim()
-        const priceRaw = (data[i]?.[3] ?? '').toString().replace(/\s/g, '')
-        const price = parseFloat(priceRaw)
-
-        if (!model || isNaN(price) || price <= 0) continue
-
-        const key = model.toLowerCase()
-        const existing = priceMap.get(key)
-        if (!existing || price < existing.price) {
-          priceMap.set(key, { price, supplierName })
-        }
-      }
-    } catch (err) {
-      log.error('Pricing supplier sheet read error', { sheetName, error: err instanceof Error ? err.message : String(err) })
-    }
-  }
-
-  return Array.from(priceMap.entries()).map(([model, data]) => ({
-    model,
-    price: data.price,
-    supplierName: data.supplierName,
-  }))
-}
-
 // ─── Обработка прайса поставщика → Google Sheets ─────────────────────────────
 
 async function processSupplierPrice(
@@ -959,117 +917,6 @@ export function setupPricingHandlers(bot: Telegraf): void {
     await ctx.reply('Введите имя поставщика:')
   })
 
-  // ── Выбор наценки ──────────────────────────────────────────────────────
-
-  bot.action(/^pricing:markup:(\d+)$/, async (ctx) => {
-    try { await ctx.answerCbQuery() } catch { /* ignore */ }
-    const userId = getUserId(ctx)
-    const state = pricingState.get(userId)
-    if (!state || state.flow !== 'awaiting_markup_confirm') return
-
-    const markup = parseInt((ctx.match as RegExpMatchArray)[1]!, 10)
-    state.markup = markup
-
-    try {
-      await ctx.editMessageText(
-        ctx.callbackQuery?.message && 'text' in ctx.callbackQuery.message
-          ? (ctx.callbackQuery.message.text?.replace(/\d+%\)$/, `${markup}%)`) ?? '')
-          : '',
-        Markup.inlineKeyboard([
-          [
-            Markup.button.callback('3%', 'pricing:markup:3'),
-            Markup.button.callback('5%', 'pricing:markup:5'),
-            Markup.button.callback('7%', 'pricing:markup:7'),
-            Markup.button.callback('10%', 'pricing:markup:10'),
-          ],
-          [Markup.button.callback(`✅ Обновить цены (${markup}%)`, 'pricing:apply_sheets')],
-          [Markup.button.callback('❌ Отмена', 'pricing:cancel')],
-        ]),
-      )
-    } catch { /* ignore edit errors */ }
-  })
-
-  // ── Обновить цены в таблице и БД ───────────────────────────────────────
-
-  bot.action('pricing:apply_sheets', async (ctx) => {
-    try { await ctx.answerCbQuery() } catch { /* ignore */ }
-    const userId = getUserId(ctx)
-    const state = pricingState.get(userId)
-    if (!state || state.flow !== 'awaiting_markup_confirm') return
-
-    await ctx.reply('⏳ Обновляю цены в таблице и на витрине...')
-
-    try {
-      const { readSheet, batchUpdate: batchUpdateSheets } = await import('../../lib/google-sheets')
-      const { syncProductsFromSheets } = await import('../../lib/sheets-sync')
-
-      const bestPrices = await findBestPricesFromSheets()
-      const now = new Date().toLocaleDateString('ru-RU', { timeZone: 'Europe/Moscow' })
-
-      const PRODUCT_SHEETS = ['Товарное наличие вариант 1', 'Аксессуары', 'Услуги']
-      let pricesUpdated = 0
-
-      for (const sheetName of PRODUCT_SHEETS) {
-        try {
-          const data = await readSheet(sheetName)
-          const sheetUpdates: { range: string; values: (string | number)[][] }[] = []
-
-          for (let i = 1; i < data.length; i++) {
-            const fullName = (data[i]?.[3] ?? '').trim().toLowerCase()
-            if (!fullName) continue
-
-            const best = bestPrices.find(bp => fullName.includes(bp.model.toLowerCase()))
-            if (best) {
-              const recommendedPrice = Math.round(best.price * (1 + state.markup / 100))
-              const rowNum = i + 1
-
-              sheetUpdates.push({ range: `'${sheetName}'!L${rowNum}`, values: [[recommendedPrice]] })
-              sheetUpdates.push({ range: `'${sheetName}'!N${rowNum}:O${rowNum}`, values: [[best.supplierName, now]] })
-              pricesUpdated++
-            }
-          }
-
-          if (sheetUpdates.length > 0) {
-            await batchUpdateSheets(sheetUpdates)
-          }
-        } catch (err) {
-          log.error('Pricing sheet update error', { sheetName, error: err instanceof Error ? err.message : String(err) })
-        }
-      }
-
-      const syncResult = await syncProductsFromSheets()
-
-      // Мгновенная синхронизация цен с Avito
-      let avitoLine = ''
-      try {
-        const { syncPricesToAvito } = await import('../../lib/avito-sync')
-        const avitoResult = await syncPricesToAvito()
-        if (avitoResult.updated > 0 || avitoResult.failed > 0) {
-          avitoLine = `\n📢 Avito: ${avitoResult.updated} цен обновлено${avitoResult.failed > 0 ? `, ${avitoResult.failed} ошибок` : ''}`
-        }
-      } catch (e) {
-        log.error('Pricing Avito sync error', { error: e instanceof Error ? e.message : String(e) })
-      }
-
-      pricingState.delete(userId)
-
-      await ctx.reply([
-        '✅ Цены обновлены!',
-        '',
-        `📊 Рекомендованных цен записано: ${pricesUpdated}`,
-        `🔄 Синхронизация: ${syncResult.updated} обновлено в БД`,
-        `📈 Наценка: ${state.markup}%`,
-        `🏭 На основе прайса: ${state.supplierName}`,
-        avitoLine,
-      ].filter(Boolean).join('\n'))
-
-    } catch (err) {
-      log.error('Pricing apply sheets error', { error: err instanceof Error ? err.message : String(err) })
-      await ctx.reply(`❌ Ошибка: ${err instanceof Error ? err.message : 'Неизвестная ошибка'}`)
-      pricingState.delete(userId)
-    }
-  })
-
   // ── Применить правила наценки к прайсу поставщика ───────────────────────
 
   bot.action('pricing:apply_rules', async (ctx) => {
@@ -1089,7 +936,7 @@ export function setupPricingHandlers(bot: Telegraf): void {
         brand: m.brand, categoryId: m.categoryId, variantSku: m.variantSku,
         attrs: attsParts.join(', '),
         currentPrice: m.currentPrice, newPrice,
-        comment: 'cost:' + m.supplierPrice,  // передаём закупочную для записи в БД
+        costPrice: m.supplierPrice,  // закупочная — для записи costPrice в БД при apply
       }
     })
 
@@ -1147,7 +994,7 @@ export function setupPricingHandlers(bot: Telegraf): void {
     // Добавить costPrice в comment для записи в БД при apply
     for (let i = 0; i < pending.length; i++) {
       const m = state.matches[i]
-      if (m) pending[i]!.comment = 'cost:' + m.supplierPrice
+      if (m) pending[i]!.costPrice = m.supplierPrice
     }
 
     pricingState.set(userId, {
@@ -2149,24 +1996,6 @@ export async function handlePricingMessage(
     return true
   }
 
-  // Ввод % наценки вручную (при awaiting_markup_confirm)
-  if (state.flow === 'awaiting_markup_confirm') {
-    const val = parseFloat(text.replace(',', '.'))
-    if (isNaN(val) || val < 0 || val > 300) {
-      await ctx.reply('Введите процент от 0 до 300:')
-      return true
-    }
-    state.markup = val
-    await ctx.reply(
-      `Наценка: ${val}%`,
-      Markup.inlineKeyboard([
-        [Markup.button.callback(`✅ Обновить цены (${val}%)`, 'pricing:apply_sheets')],
-        [Markup.button.callback('❌ Отмена', 'pricing:cancel')],
-      ]),
-    )
-    return true
-  }
-
   // Ввод % наценки для разового расчёта (supplier prices → pending preview)
   if (state.flow === 'awaiting_markup') {
     const markup = parseInt(text, 10)
@@ -2177,7 +2006,7 @@ export async function handlePricingMessage(
     const pending = buildPendingFromMatches(state.matches, markup, state.rate ?? null)
     for (let i = 0; i < pending.length; i++) {
       const m = state.matches[i]
-      if (m) pending[i]!.comment = 'cost:' + m.supplierPrice
+      if (m) pending[i]!.costPrice = m.supplierPrice
     }
     pricingState.set(userId, {
       flow: 'preview',

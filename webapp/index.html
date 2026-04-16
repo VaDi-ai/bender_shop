@@ -152,25 +152,25 @@
 
     /* ── Hero slider ──────────────────────────────────────────────────────── */
     .hero-slider { position: relative; width: 100%; height: 60vh; overflow: hidden; background: #0a0a0a; }
-    .hero-slider::after { content: ''; position: absolute; inset: 0; background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.05) 2px, rgba(0,0,0,0.05) 4px); pointer-events: none; z-index: 3; }
+    .hero-slider::after { display: none; }
     .hero-slider-fallback { position: absolute; inset: 0; background: linear-gradient(135deg, #0a0a0a 0%, #111111 100%); display: flex; align-items: center; justify-content: center; z-index: 1; }
     .hero-slider-fallback-text { font-family: 'JetBrains Mono', monospace; font-size: clamp(32px, 8vw, 90px); color: #fff; text-shadow: 0 0 40px rgba(168,255,62,0.15); letter-spacing: 6px; }
     .hero-slider-fallback-text span { color: var(--accent); text-shadow: var(--neon); }
     .hero-slide { position: absolute; inset: 0; opacity: 0; transition: opacity 800ms ease; background-size: cover; background-position: center; display: flex; align-items: flex-end; z-index: 1; }
     .hero-slide.active { opacity: 1; }
-    .hero-slide-caption { position: relative; z-index: 2; width: 100%; padding: 32px 36px; background: linear-gradient(to top, rgba(0,0,0,0.75) 0%, transparent 100%); }
-    .hero-slide-title { font-family: 'JetBrains Mono', monospace; font-size: clamp(20px, 4vw, 52px); color: #fff; text-shadow: 0 0 10px #a8ff3e, 0 0 30px rgba(168,255,62,0.4); letter-spacing: 2px; line-height: 1.1; }
-    .hero-slide-subtitle { font-size: clamp(11px, 2vw, 15px); color: rgba(255,255,255,0.7); letter-spacing: 2px; margin-top: 6px; }
+    .hero-slide-caption { position: relative; z-index: 2; width: 100%; padding: 20px 24px; background: linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.4) 60%, transparent 100%); }
+    .hero-slide-title { font-family: 'JetBrains Mono', monospace; font-size: clamp(18px, 3.5vw, 36px); color: #fff; text-shadow: 0 2px 8px rgba(0,0,0,0.8), 0 0 2px rgba(0,0,0,0.9); letter-spacing: 1px; line-height: 1.2; font-weight: 700; }
+    .hero-slide-subtitle { font-size: clamp(11px, 1.8vw, 14px); color: rgba(255,255,255,0.85); letter-spacing: 1px; margin-top: 4px; text-shadow: 0 1px 4px rgba(0,0,0,0.7); }
     .slider-bottom-fade { position: absolute; bottom: 0; left: 0; right: 0; height: 80px; background: linear-gradient(to top, rgba(10,10,10,0.85) 0%, transparent 100%); z-index: 5; pointer-events: none; }
     .slider-controls { position: absolute; bottom: 14px; right: 16px; display: flex; align-items: center; gap: 8px; pointer-events: all; }
     .slider-dots { display: flex; align-items: center; gap: 6px; }
     .slider-dot { width: 8px; height: 8px; border-radius: 50%; background: rgba(255,255,255,0.35); cursor: pointer; transition: width 0.3s ease, border-radius 0.3s ease; overflow: hidden; flex-shrink: 0; position: relative; }
-    .slider-dot.active { width: 48px; border-radius: 4px; background: rgba(255,255,255,0.15); }
+    .slider-dot.active { width: 24px; border-radius: 4px; background: rgba(255,255,255,0.15); }
     @keyframes fillProgress { from { width: 0 } to { width: 100% } }
     .slider-dot .fill { position: absolute; top: 0; left: 0; height: 100%; width: 0; background: #a8ff3e; animation: fillProgress 5s linear forwards; }
     .slider-nav { display: flex; gap: 4px; }
     .slider-nav.hidden { display: none; }
-    .slider-nav-btn { width: 32px; height: 32px; min-width: 44px; min-height: 44px; background: rgba(10,10,10,0.6); border: 1px solid rgba(255,255,255,0.2); color: #ffffff; font-size: 18px; display: flex; align-items: center; justify-content: center; cursor: pointer; user-select: none; transition: border-color 0.2s; }
+    .slider-nav-btn { width: 28px; height: 28px; min-width: 28px; min-height: 28px; background: rgba(10,10,10,0.45); border: 1px solid rgba(255,255,255,0.15); color: rgba(255,255,255,0.7); font-size: 14px; border-radius: 6px; display: flex; align-items: center; justify-content: center; cursor: pointer; user-select: none; transition: border-color 0.2s, background 0.2s; backdrop-filter: blur(4px); }
     .slider-nav-btn:hover { border-color: #a8ff3e; }
 
     /* ── Category compact grid ──────────────────────────────────────── */
