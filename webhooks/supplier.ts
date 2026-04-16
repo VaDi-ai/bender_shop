@@ -197,12 +197,12 @@ export async function findBestPrice(query: string): Promise<{
   const defaultMarkup = parseFloat(defaultMarkupStr ?? '5')
 
   return prices.map(p => {
-    const markup = Number(p.supplier.markup) || defaultMarkup
+    const markup = p.supplier ? (Number(p.supplier.markup) || defaultMarkup) : defaultMarkup
     const basePrice = Number(p.price)
     const finalPrice = roundPrice(basePrice * (1 + markup / 100))
 
     return {
-      supplier: p.supplier.name,
+      supplier: p.supplier?.name ?? p.supplierName ?? 'неизвестный',
       model: p.model,
       storage: p.storage,
       color: p.color,

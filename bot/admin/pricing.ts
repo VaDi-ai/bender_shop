@@ -102,6 +102,7 @@ type PricingFlow =
   // ── Мастер создания товара из прайса ──────────────────────────────────────
   | { flow: 'create_from_price'; items: ParsedLine[]; currentIndex: number; supplierName: string; draft: QuickProductDraft }
   | { flow: 'create_from_price_qty'; items: ParsedLine[]; currentIndex: number; supplierName: string; draft: QuickProductDraft }
+  | { flow: 'create_from_price_search'; items: ParsedLine[]; currentIndex: number; supplierName: string; draft: QuickProductDraft }
 
 type QuickProductDraft = {
   name: string
@@ -419,14 +420,29 @@ async function applyChanges(ctx: Context, userId: number): Promise<void> {
         const costRaw = v.costPrice ?? null
         if (costRaw === null || isNaN(costRaw)) continue
 
+        // Берём точный fullName варианта из attributes — это то имя, по которому
+        // sheets-sync кладёт строку в таблицу. Исключает false-positive fuzzy-match.
+        let targetFullName: string | null = null
+        try {
+          const variant = await prisma.productVariant.findUnique({
+            where: { id: v.variantId },
+            select: { attributes: true },
+          })
+          const attrs = variant?.attributes as Record<string, unknown> | null
+          if (attrs && typeof attrs.fullName === 'string') {
+            targetFullName = attrs.fullName
+          }
+        } catch { /* ignore */ }
+
+        // Fallback на имя продукта если fullName не найден
+        const searchName = targetFullName || v.productName
+
         // Колонка E (index 4) = «Название модели»
         for (let i = 1; i < data.length; i++) {
-          const fullName = (data[i]?.[4] ?? '').toString().trim()
-          if (!fullName) continue
-          const fullLc = fullName.toLowerCase()
-          const nameLc = v.productName.toLowerCase()
-          const nameHead = nameLc.split(' ').slice(0, 3).join(' ')
-          if (fullLc.includes(nameLc) || (nameHead && fullLc.includes(nameHead))) {
+          const cellName = (data[i]?.[4] ?? '').toString().trim()
+          if (!cellName) continue
+
+          if (cellName === searchName || cellName.toLowerCase() === searchName.toLowerCase()) {
             const rowNum = i + 1
             const supplierLabel = state.label || ''
             sheetUpdates.push({ range: "'" + PRODUCT_SHEET_NAME + "'!" + WRITEBACK_COLS.costPrice + rowNum, values: [[costRaw]] })
@@ -723,10 +739,25 @@ async function processSupplierPrice(
     // 1. Сопоставить позиции из прайса с товарами в БД
     const { matched, unmatched, ignored } = await matchVariants(parsed)
 
-    // 2. TODO(commit-4): сохранять закупочные цены в SupplierPrice.
-    // Текущая модель SupplierPrice (supplierId/model/storage/color/price/rawMessage/parsedAt)
-    // не содержит полей variantId/supplierName/productName/updatedAt, нужных для прямой записи
-    // привязки к варианту. Пропускаем запись здесь; история цен пишется в PriceChange при applyChanges.
+    // 2. Сохранить закупочные цены в SupplierPrice (история)
+    for (const m of matched) {
+      try {
+        await prisma.supplierPrice.create({
+          data: {
+            supplierName,
+            productName: m.parsed.rawLine,
+            variantId: m.variantId,
+            model: m.parsed.model,
+            storage: m.parsed.storage || null,
+            color: m.parsed.color || null,
+            price: m.supplierPrice,
+            rawMessage: m.parsed.rawLine,
+          },
+        })
+      } catch (err) {
+        log.debug('SupplierPrice create skipped', { model: m.parsed.model, error: err instanceof Error ? err.message : String(err) })
+      }
+    }
 
     // 3. Показать результат и предложить способ наценки
     const unmatchedLines = unmatched.slice(0, 5).map(u => `  • ${u.rawLine}`).join('\n')
@@ -853,6 +884,9 @@ async function showCreateCard(ctx: Context, userId: number, items: ParsedLine[],
     ],
     [
       Markup.button.callback('✅ Создать', 'pricing:qc_confirm'),
+      Markup.button.callback('🔍 Найти', 'pricing:qc_search'),
+    ],
+    [
       Markup.button.callback('⏭ Пропустить', 'pricing:qc_skip'),
     ],
     [
@@ -1075,12 +1109,13 @@ export function setupPricingHandlers(bot: Telegraf): void {
     try { await ctx.answerCbQuery() } catch { /* ignore */ }
     const userId = getUserId(ctx)
     const state = pricingState.get(userId)
-    if (!state || (state.flow !== 'create_from_price' && state.flow !== 'create_from_price_qty')) return
-    // state.flow может быть create_from_price_qty если прилетели из ввода количества
-    const items = (state as Extract<PricingFlow, { flow: 'create_from_price' } | { flow: 'create_from_price_qty' }>).items
-    const currentIndex = (state as Extract<PricingFlow, { flow: 'create_from_price' } | { flow: 'create_from_price_qty' }>).currentIndex
-    const supplierName = (state as Extract<PricingFlow, { flow: 'create_from_price' } | { flow: 'create_from_price_qty' }>).supplierName
-    await showCreateCard(ctx, userId, items, currentIndex, supplierName)
+    if (
+      !state ||
+      (state.flow !== 'create_from_price' &&
+        state.flow !== 'create_from_price_qty' &&
+        state.flow !== 'create_from_price_search')
+    ) return
+    await showCreateCard(ctx, userId, state.items, state.currentIndex, state.supplierName)
   })
 
   // ── Мастер создания: ввод количества ──────────────────────────────────
@@ -1208,6 +1243,72 @@ export function setupPricingHandlers(bot: Telegraf): void {
       }).catch(() => {})
       await ctx.reply('🚫 «' + p.rawLine.slice(0, 50) + '» будет игнорироваться.')
     }
+
+    await showCreateCard(ctx, userId, state.items, state.currentIndex + 1, state.supplierName)
+  })
+
+  // ── Мастер создания: поиск существующего товара ───────────────────────
+
+  bot.action('pricing:qc_search', async (ctx) => {
+    try { await ctx.answerCbQuery() } catch { /* ignore */ }
+    const userId = getUserId(ctx)
+    const state = pricingState.get(userId)
+    if (!state || state.flow !== 'create_from_price') return
+
+    const p = state.items[state.currentIndex]
+    if (!p) return
+
+    const candidates = await prisma.product.findMany({
+      where: { name: { contains: p.model.split(' ').slice(0, 2).join(' '), mode: 'insensitive' } },
+      take: 8,
+      orderBy: { name: 'asc' },
+      include: { category: true },
+    })
+
+    if (candidates.length === 0) {
+      await ctx.reply('🔍 Ничего не найдено по «' + p.model + '». Введите поисковый запрос:')
+      pricingState.set(userId, {
+        flow: 'create_from_price_search',
+        items: state.items,
+        currentIndex: state.currentIndex,
+        supplierName: state.supplierName,
+        draft: state.draft,
+      })
+      return
+    }
+
+    const buttons = candidates.map(c => [
+      Markup.button.callback(
+        (c.name + (c.category ? ' [' + c.category.name + ']' : '')).slice(0, 64),
+        'pricing:qc_link:' + c.id,
+      ),
+    ])
+    buttons.push([Markup.button.callback('🔙 К карточке', 'pricing:qc_back')])
+
+    await ctx.reply('🔍 Найдено. Выберите товар для привязки:', Markup.inlineKeyboard(buttons))
+  })
+
+  bot.action(/^pricing:qc_link:(\d+)$/, async (ctx) => {
+    try { await ctx.answerCbQuery() } catch { /* ignore */ }
+    const userId = getUserId(ctx)
+    const state = pricingState.get(userId)
+    if (!state || (state.flow !== 'create_from_price' && state.flow !== 'create_from_price_search')) return
+
+    const productId = parseInt((ctx.match as RegExpMatchArray)[1]!, 10)
+    const product = await prisma.product.findUnique({ where: { id: productId } })
+    if (!product) { await ctx.reply('Товар не найден.'); return }
+
+    const p = state.items[state.currentIndex]
+    if (!p) return
+
+    const aliasKey = p.rawLine.trim().toLowerCase()
+    await prisma.priceAlias.upsert({
+      where: { alias: aliasKey },
+      create: { alias: aliasKey, productId: product.id },
+      update: { productId: product.id, isIgnored: false },
+    }).catch(() => {})
+
+    await ctx.reply('✅ Привязано: «' + p.model + '» → ' + product.name + '\nАлиас сохранён — в следующий раз сматчится автоматически.')
 
     await showCreateCard(ctx, userId, state.items, state.currentIndex + 1, state.supplierName)
   })
@@ -1825,7 +1926,8 @@ export function setupPricingHandlers(bot: Telegraf): void {
 
     await ctx.reply(lines.join('\n'), Markup.inlineKeyboard([
       [Markup.button.callback('➕ Добавить', 'pricing:rules_add')],
-      [Markup.button.callback('🗑 Удалить', 'pricing:rules_del'), Markup.button.callback('🧪 Тест', 'pricing:rules_test')],
+      [Markup.button.callback('✏️ Изменить', 'pricing:rules_edit'), Markup.button.callback('🗑 Удалить', 'pricing:rules_del')],
+      [Markup.button.callback('🧪 Тест', 'pricing:rules_test')],
       [Markup.button.callback('🔙 Меню цен', 'pricing:menu')],
     ]))
   })
@@ -1867,6 +1969,41 @@ export function setupPricingHandlers(bot: Telegraf): void {
     await ctx.reply('Выберите правило для удаления:', Markup.inlineKeyboard(buttons))
   })
 
+  // ── Редактирование правила ────────────────────────────────────────────
+
+  bot.action('pricing:rules_edit', async (ctx) => {
+    try { await ctx.answerCbQuery() } catch { /* ignore */ }
+    const rules = await loadRules()
+    if (rules.length === 0) {
+      await ctx.reply('Нет правил для редактирования.')
+      return
+    }
+    const buttons = rules.map((r, i) => [
+      Markup.button.callback(formatRule(r, i).slice(0, 64), 'pricing:rules_edit_pick:' + r.id),
+    ])
+    buttons.push([Markup.button.callback('🔙 Назад', 'pricing:rules')])
+    await ctx.reply('Выберите правило для редактирования (изменится сумма/процент наценки):', Markup.inlineKeyboard(buttons))
+  })
+
+  bot.action(/^pricing:rules_edit_pick:(\d+)$/, async (ctx) => {
+    try { await ctx.answerCbQuery() } catch { /* ignore */ }
+    const userId = getUserId(ctx)
+    const ruleId = parseInt((ctx.match as RegExpMatchArray)[1]!, 10)
+    const rule = await prisma.markupRule.findUnique({ where: { id: ruleId } })
+    if (!rule) { await ctx.reply('Правило не найдено.'); return }
+
+    pricingState.set(userId, { flow: 'rules_edit_value', ruleId })
+
+    const unit = rule.mode === 'percent' ? '%' : '₽'
+    const from = Number(rule.minCost).toLocaleString('ru-RU')
+    const to = rule.maxCost !== null ? Number(rule.maxCost).toLocaleString('ru-RU') + ' ₽' : '∞'
+
+    await ctx.reply(
+      `✏️ Редактирование правила: ${from} – ${to}\nТекущая наценка: ${rule.mode === 'percent' ? '+' + Number(rule.value) + '%' : '+' + Number(rule.value).toLocaleString('ru-RU') + ' ₽'}\n\nВведите новое значение наценки (${unit}):`,
+      Markup.inlineKeyboard([[Markup.button.callback('❌ Отмена', 'pricing:rules')]]),
+    )
+  })
+
   bot.action(/^pricing:rules_del_confirm:(\d+)$/, async (ctx) => {
     try { await ctx.answerCbQuery() } catch { /* ignore */ }
     const ruleId = parseInt((ctx.match as RegExpMatchArray)[1]!, 10)
@@ -1885,7 +2022,8 @@ export function setupPricingHandlers(bot: Telegraf): void {
     }
     await ctx.reply(lines.join('\n'), Markup.inlineKeyboard([
       [Markup.button.callback('➕ Добавить', 'pricing:rules_add')],
-      [Markup.button.callback('🗑 Удалить', 'pricing:rules_del'), Markup.button.callback('🧪 Тест', 'pricing:rules_test')],
+      [Markup.button.callback('✏️ Изменить', 'pricing:rules_edit'), Markup.button.callback('🗑 Удалить', 'pricing:rules_del')],
+      [Markup.button.callback('🧪 Тест', 'pricing:rules_test')],
       [Markup.button.callback('🔙 Меню цен', 'pricing:menu')],
     ]))
   })
@@ -2214,6 +2352,37 @@ export async function handlePricingMessage(
     return true
   }
 
+  if (state.flow === 'rules_edit_value') {
+    const val = parseFloat(text.replace(/\s/g, '').replace(',', '.'))
+    if (isNaN(val) || val <= 0) {
+      await ctx.reply('❌ Введите положительное число.')
+      return true
+    }
+
+    try {
+      await prisma.markupRule.update({
+        where: { id: state.ruleId },
+        data: { value: val },
+      })
+
+      pricingState.delete(userId)
+
+      const rules = await loadRules()
+      const validation = validateRules(rules)
+
+      await ctx.reply(
+        `✅ Правило обновлено: наценка = ${val}\n\n${validation.ok ? '✅ Покрытие полное' : '⚠️ ' + validation.error}`,
+        Markup.inlineKeyboard([
+          [Markup.button.callback('📊 Все правила', 'pricing:rules')],
+          [Markup.button.callback('🔙 Меню цен', 'pricing:menu')],
+        ]),
+      )
+    } catch (err) {
+      await ctx.reply('❌ Ошибка: ' + (err instanceof Error ? err.message : 'Неизвестная ошибка'))
+    }
+    return true
+  }
+
   if (state.flow === 'rules_test') {
     const val = parseFloat(text.replace(/\s/g, '').replace(',', '.'))
     if (isNaN(val) || val <= 0) {
@@ -2248,6 +2417,38 @@ export async function handlePricingMessage(
       ]),
     )
     pricingState.delete(userId)
+    return true
+  }
+
+  // ── Мастер создания: текстовый поиск по каталогу ────────────────────────
+  if (state.flow === 'create_from_price_search') {
+    const query = text.trim()
+    if (query.length < 2) {
+      await ctx.reply('Введите минимум 2 символа для поиска.')
+      return true
+    }
+
+    const candidates = await prisma.product.findMany({
+      where: { name: { contains: query, mode: 'insensitive' } },
+      take: 10,
+      orderBy: { name: 'asc' },
+      include: { category: true },
+    })
+
+    if (candidates.length === 0) {
+      await ctx.reply('🔍 Ничего не найдено по «' + query + '». Попробуйте другой запрос или вернитесь к созданию.',
+        Markup.inlineKeyboard([[Markup.button.callback('🔙 К карточке', 'pricing:qc_back')]]))
+      return true
+    }
+
+    const buttons = candidates.map(c => [
+      Markup.button.callback(
+        (c.name + (c.category ? ' [' + c.category.name + ']' : '')).slice(0, 64),
+        'pricing:qc_link:' + c.id,
+      ),
+    ])
+    buttons.push([Markup.button.callback('🔙 К карточке', 'pricing:qc_back')])
+    await ctx.reply('🔍 Результаты:', Markup.inlineKeyboard(buttons))
     return true
   }
 

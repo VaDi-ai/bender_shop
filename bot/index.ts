@@ -2137,11 +2137,12 @@ setInterval(async () => {
     for (const [model, modelPrices] of byModel) {
       if (count >= 30) { lines.push(`\n...и ещё ${byModel.size - 30} моделей`); break }
       const best = modelPrices[0]!
-      const markup = Number(best.supplier.markup) || defaultMarkup
+      const markup = best.supplier ? (Number(best.supplier.markup) || defaultMarkup) : defaultMarkup
       const finalPrice = Math.ceil(Number(best.price) * (1 + markup / 100))
+      const supplierLabel = best.supplier?.name ?? best.supplierName ?? 'неизвестный'
 
       lines.push(`${model}${best.color ? ' ' + best.color : ''}${best.country ? ' ' + best.country : ''}`)
-      lines.push(`  💰 ${Number(best.price).toLocaleString('ru-RU')}₽ → ${finalPrice.toLocaleString('ru-RU')}₽ (+${markup}%) от ${best.supplier.name}`)
+      lines.push(`  💰 ${Number(best.price).toLocaleString('ru-RU')}₽ → ${finalPrice.toLocaleString('ru-RU')}₽ (+${markup}%) от ${supplierLabel}`)
 
       if (modelPrices.length > 1) {
         lines.push(`  📊 ещё ${modelPrices.length - 1} предложений`)
@@ -2318,7 +2319,7 @@ bot.action('morning:update_prices', async (ctx) => {
       if (productName.includes(bestPrice.model.toLowerCase()) &&
           (!bestPrice.storage || storage.toLowerCase().includes(bestPrice.storage.toLowerCase().replace(/\s/g, '')))) {
 
-        const markup = Number(bestPrice.supplier.markup) || defaultMarkup
+        const markup = bestPrice.supplier ? (Number(bestPrice.supplier.markup) || defaultMarkup) : defaultMarkup
         const newPrice = Math.ceil(Number(bestPrice.price) * (1 + markup / 100))
         const oldPrice = Number(variant.price)
 

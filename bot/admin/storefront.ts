@@ -221,7 +221,7 @@ export async function handleStorefrontMessage(
 
   // ── Добавление баннера: шаг title ─────────────────────────────────────────
   if (state.flow === 'banner_add' && state.step === 'title') {
-    const title = text === '—' ? null : text
+    const title = text === '—' ? null : text.trim().slice(0, 40)
     storefrontState.set(userId, {
       flow: 'banner_add',
       step: 'subtitle',

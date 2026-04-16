@@ -167,7 +167,8 @@ async function showTodayPrices(ctx: Context): Promise<void> {
       const p = items[i]!
       const country = p.country ? ` (${p.country})` : ''
       const best = i === 0 && items.length > 1 ? ' ← лучшая' : ''
-      lines.push(`  ${p.supplier.name}: ${Number(p.price).toLocaleString('ru-RU')}₽${country}${best}`)
+      const supplierLabel = p.supplier?.name ?? p.supplierName ?? 'неизвестный'
+      lines.push(`  ${supplierLabel}: ${Number(p.price).toLocaleString('ru-RU')}₽${country}${best}`)
     }
     lines.push('')
   }

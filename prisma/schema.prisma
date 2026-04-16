@@ -476,8 +476,8 @@ model Supplier {
 }
 
 model SupplierPrice {
-  id         Int @id @default(autoincrement())
-  supplierId Int
+  id         Int  @id @default(autoincrement())
+  supplierId Int?
 
   model   String
   storage String?
@@ -487,17 +487,23 @@ model SupplierPrice {
   country String?
   price   Decimal @db.Decimal(12, 2)
 
+  // Привязка к варианту и поставщику при прямой записи из pricing flow
+  variantId    Int?
+  supplierName String?
+  productName  String?
+
   rawMessage String
   messageId  Int?
   isActive   Boolean  @default(true)
   parsedAt   DateTime @default(now())
 
-  supplier Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  supplier Supplier? @relation(fields: [supplierId], references: [id], onDelete: Cascade)
 
   @@index([supplierId])
   @@index([model])
   @@index([parsedAt])
   @@index([isActive, model])
+  @@index([variantId])
 }
 
 model SecurityLog {
