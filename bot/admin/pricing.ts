@@ -22,6 +22,7 @@ import {
   loadRules, validateRules, applyMarkupRules,
   formatRule,
 } from '../../lib/markup-rules'
+import { WRITEBACK_COLS } from '../../lib/sheets-sync'
 
 // ─── Типы ─────────────────────────────────────────────────────────────────────
 
@@ -66,6 +67,7 @@ type PricingFlow =
   | { flow: 'awaiting_supplier_name'; parsed: ParsedLine[] }
   | { flow: 'awaiting_markup_confirm'; supplierName: string; parsed: ParsedLine[]; markup: number }
   | { flow: 'awaiting_markup'; matches: MatchedVariant[]; unmatched: ParsedLine[]; rate?: number }
+  | { flow: 'awaiting_markup_or_rules'; supplierName: string; matches: MatchedVariant[]; unmatched: ParsedLine[] }
   | { flow: 'bulk_pct'; filterType: 'all' | 'category'; filterValue: string; filterLabel: string }
   | {
       flow: 'preview'
@@ -270,7 +272,16 @@ async function applyChanges(ctx: Context, userId: number): Promise<void> {
 
   for (const v of active) {
     try {
-      await prisma.productVariant.update({ where: { id: v.variantId }, data: { price: v.newPrice } })
+      const updateData: Record<string, any> = { price: v.newPrice }
+      // Если в comment передана закупочная цена (flow от поставщика) — сохранить в ProductVariant
+      if (v.comment && v.comment.startsWith('cost:')) {
+        const cost = parseFloat(v.comment.replace('cost:', ''))
+        if (!isNaN(cost) && cost > 0) {
+          updateData.costPrice = cost
+          updateData.lastSyncedCostPrice = cost
+        }
+      }
+      await prisma.productVariant.update({ where: { id: v.variantId }, data: updateData })
       await prisma.priceChange.create({
         data: {
           variantId: v.variantId,
@@ -286,6 +297,48 @@ async function applyChanges(ctx: Context, userId: number): Promise<void> {
       updated++
     } catch {
       errors.push(v.variantSku)
+    }
+  }
+
+  // ── Записать обновлённые цены в Google Sheets (только для flow от поставщика) ──
+  if (state.source === 'message') {
+    try {
+      const { readSheet, batchUpdate: batchUpdateSheets } = await import('../../lib/google-sheets')
+      const PRODUCT_SHEET_NAME = process.env.PRODUCT_SHEET_NAME || 'Лист1'
+      const data = await readSheet(PRODUCT_SHEET_NAME)
+      const now = new Date().toLocaleDateString('ru-RU', { timeZone: 'Europe/Moscow' })
+
+      const sheetUpdates: { range: string; values: (string | number)[][] }[] = []
+
+      for (const v of active) {
+        const costRaw = v.comment?.startsWith('cost:') ? parseFloat(v.comment.replace('cost:', '')) : null
+        if (costRaw === null || isNaN(costRaw)) continue
+
+        // Колонка E (index 4) = «Название модели»
+        for (let i = 1; i < data.length; i++) {
+          const fullName = (data[i]?.[4] ?? '').toString().trim()
+          if (!fullName) continue
+          const fullLc = fullName.toLowerCase()
+          const nameLc = v.productName.toLowerCase()
+          const nameHead = nameLc.split(' ').slice(0, 3).join(' ')
+          if (fullLc.includes(nameLc) || (nameHead && fullLc.includes(nameHead))) {
+            const rowNum = i + 1
+            const supplierLabel = state.label || ''
+            sheetUpdates.push({ range: "'" + PRODUCT_SHEET_NAME + "'!" + WRITEBACK_COLS.costPrice + rowNum, values: [[costRaw]] })
+            sheetUpdates.push({ range: "'" + PRODUCT_SHEET_NAME + "'!" + WRITEBACK_COLS.price + rowNum, values: [[v.newPrice]] })
+            sheetUpdates.push({ range: "'" + PRODUCT_SHEET_NAME + "'!" + WRITEBACK_COLS.supplier + rowNum + ':' + WRITEBACK_COLS.date + rowNum, values: [[supplierLabel, now]] })
+            break
+          }
+        }
+      }
+
+      if (sheetUpdates.length > 0) {
+        await batchUpdateSheets(sheetUpdates)
+        log.info('Pricing wrote to sheets', { updates: sheetUpdates.length })
+      }
+    } catch (err) {
+      log.error('Pricing sheets writeback error', { error: err instanceof Error ? err.message : String(err) })
+      // Не блокируем — цены в БД уже обновлены, таблица актуализируется при следующем sync
     }
   }
 
@@ -598,93 +651,55 @@ async function processSupplierPrice(
   supplierName: string,
   parsed: ParsedLine[],
 ): Promise<void> {
-  await ctx.reply(`⏳ Обрабатываю прайс от «${supplierName}»...`)
+  await ctx.reply('⏳ Сопоставляю с каталогом...')
 
   try {
-    const { createSheetIfNotExists, readSheet, writeRange, appendRows, batchUpdate } = await import('../../lib/google-sheets')
+    // 1. Сопоставить позиции из прайса с товарами в БД
+    const { matched, unmatched } = await matchVariants(parsed)
 
-    // 1. Создать лист поставщика если нет
-    const sheetName = `Поставщик: ${supplierName}`
-    await createSheetIfNotExists(sheetName)
+    // 2. TODO(commit-4): сохранять закупочные цены в SupplierPrice.
+    // Текущая модель SupplierPrice (supplierId/model/storage/color/price/rawMessage/parsedAt)
+    // не содержит полей variantId/supplierName/productName/updatedAt, нужных для прямой записи
+    // привязки к варианту. Пропускаем запись здесь; история цен пишется в PriceChange при applyChanges.
 
-    // 2. Прочитать существующие позиции на листе поставщика
-    const existing = await readSheet(sheetName)
-    const hasHeader = existing.length > 0 && existing[0]?.[0] === 'Бренд'
+    // 3. Показать результат и предложить способ наценки
+    const unmatchedLines = unmatched.slice(0, 5).map(u => `  • ${u.rawLine}`).join('\n')
+    const unmatchedNote = unmatched.length > 0
+      ? `\n\n⚠️ Не найдено (${unmatched.length}):\n${unmatchedLines}${unmatched.length > 5 ? `\n  … и ещё ${unmatched.length - 5}` : ''}`
+      : ''
 
-    if (!hasHeader) {
-      await writeRange(sheetName, 'A1:E1', [['Бренд', 'Категория', 'Название модели', 'Закупочная цена', 'Дата изменения']])
-    }
-
-    // 3. Обновить или добавить позиции
-    const now = new Date().toLocaleDateString('ru-RU', { timeZone: 'Europe/Moscow' })
-    const existingModels = new Map<string, number>()
-    for (let i = 1; i < existing.length; i++) {
-      const name = (existing[i]?.[2] ?? '').trim()
-      if (name) existingModels.set(name.toLowerCase(), i + 1)
-    }
-
-    const newRows: (string | number)[][] = []
-    let updatedCount = 0
-    const batchUpdates: { range: string; values: (string | number)[][] }[] = []
-
-    for (const p of parsed) {
-      const fullName = [p.model, p.storage, p.color].filter(Boolean).join(' ')
-      const brand = detectBrand(p.model)
-      const category = detectCategory(p.model)
-      const existingRow = existingModels.get(fullName.toLowerCase())
-
-      if (existingRow) {
-        batchUpdates.push({ range: `'${sheetName}'!D${existingRow}:E${existingRow}`, values: [[p.price, now]] })
-        updatedCount++
-      } else {
-        newRows.push([brand, category, fullName, p.price, now])
-      }
-    }
-
-    if (batchUpdates.length > 0) {
-      await batchUpdate(batchUpdates)
-    }
-
-    if (newRows.length > 0) {
-      await appendRows(sheetName, newRows)
-    }
-
-    // 4. Найти лучшие цены среди ВСЕХ поставщиков
-    const bestPrices = await findBestPricesFromSheets()
-
-    // 5. Спросить наценку
-    const defaultMarkup = 5
     pricingState.set(userId, {
-      flow: 'awaiting_markup_confirm',
+      flow: 'awaiting_markup_or_rules',
       supplierName,
-      parsed,
-      markup: defaultMarkup,
+      matches: matched,
+      unmatched,
     })
+
+    // Проверим есть ли настроенные правила
+    const rules = await loadRules()
+    const rulesValid = validateRules(rules)
+
+    const rulesButton = rulesValid.ok
+      ? Markup.button.callback('📊 По правилам наценки', 'pricing:apply_rules')
+      : Markup.button.callback('📊 Правила (⚠️ не настроены)', 'pricing:rules')
 
     await ctx.reply(
       [
         `✅ Прайс «${supplierName}» обработан:`,
-        `📝 Обновлено: ${updatedCount} | Добавлено: ${newRows.length}`,
+        `📦 Найдено в каталоге: ${matched.length} из ${parsed.length}`,
+        unmatchedNote,
         '',
-        `💰 Найдено лучших цен: ${bestPrices.length}`,
-        '',
-        `Наценка по умолчанию: ${defaultMarkup}%`,
-        'Введите другой % наценки или нажмите кнопку:',
-      ].join('\n'),
+        'Выберите способ расчёта рекомендованных цен:',
+      ].filter(s => s !== undefined).join('\n'),
       Markup.inlineKeyboard([
-        [
-          Markup.button.callback('3%', 'pricing:markup:3'),
-          Markup.button.callback('5%', 'pricing:markup:5'),
-          Markup.button.callback('7%', 'pricing:markup:7'),
-          Markup.button.callback('10%', 'pricing:markup:10'),
-        ],
-        [Markup.button.callback(`✅ Обновить цены (${defaultMarkup}%)`, 'pricing:apply_sheets')],
+        [rulesButton],
+        [Markup.button.callback('📈 Разовый %', 'pricing:apply_pct_input')],
         [Markup.button.callback('❌ Отмена', 'pricing:cancel')],
       ]),
     )
   } catch (err) {
     log.error('Pricing process supplier price error', { error: err instanceof Error ? err.message : String(err) })
-    await ctx.reply(`❌ Ошибка обработки прайса: ${err instanceof Error ? err.message : 'Неизвестная ошибка'}`)
+    await ctx.reply('❌ Ошибка обработки прайса: ' + (err instanceof Error ? err.message : 'Неизвестная ошибка'))
     pricingState.delete(userId)
   }
 }
@@ -853,6 +868,98 @@ export function setupPricingHandlers(bot: Telegraf): void {
       await ctx.reply(`❌ Ошибка: ${err instanceof Error ? err.message : 'Неизвестная ошибка'}`)
       pricingState.delete(userId)
     }
+  })
+
+  // ── Применить правила наценки к прайсу поставщика ───────────────────────
+
+  bot.action('pricing:apply_rules', async (ctx) => {
+    try { await ctx.answerCbQuery('⏳ Рассчитываю...') } catch { /* ignore */ }
+    const userId = getUserId(ctx)
+    const state = pricingState.get(userId)
+    if (!state || state.flow !== 'awaiting_markup_or_rules') return
+
+    const rules = await loadRules()
+
+    const pending: PendingVariant[] = state.matches.map(m => {
+      const newPrice = applyMarkupRules(m.supplierPrice, rules)
+      const p = m.parsed
+      const attsParts = [p.storage ? p.storage + ' ГБ' : null, p.color].filter(Boolean)
+      return {
+        variantId: m.variantId, productId: m.productId, productName: m.productName,
+        brand: m.brand, categoryId: m.categoryId, variantSku: m.variantSku,
+        attrs: attsParts.join(', '),
+        currentPrice: m.currentPrice, newPrice,
+        comment: 'cost:' + m.supplierPrice,  // передаём закупочную для записи в БД
+      }
+    })
+
+    pricingState.set(userId, {
+      flow: 'preview',
+      source: 'message',
+      markup: null,
+      label: 'По правилам наценки (' + state.supplierName + ')',
+      pendingVariants: pending,
+      excludedVariantIds: [],
+    })
+
+    await showPreview(ctx, userId)
+  })
+
+  // ── Разовый % — ввод процента ──────────────────────────────────────────
+
+  bot.action('pricing:apply_pct_input', async (ctx) => {
+    try { await ctx.answerCbQuery() } catch { /* ignore */ }
+    const userId = getUserId(ctx)
+    const state = pricingState.get(userId)
+    if (!state || state.flow !== 'awaiting_markup_or_rules') return
+
+    // Переключаемся на flow с выбором %
+    pricingState.set(userId, {
+      flow: 'awaiting_markup',
+      matches: state.matches,
+      unmatched: state.unmatched,
+    })
+
+    await ctx.reply(
+      'Введите процент наценки или выберите:',
+      Markup.inlineKeyboard([
+        [
+          Markup.button.callback('3%', 'pricing:pct:3'),
+          Markup.button.callback('5%', 'pricing:pct:5'),
+          Markup.button.callback('7%', 'pricing:pct:7'),
+          Markup.button.callback('10%', 'pricing:pct:10'),
+        ],
+        [Markup.button.callback('❌ Отмена', 'pricing:cancel')],
+      ]),
+    )
+  })
+
+  // ── Быстрые кнопки % ──────────────────────────────────────────────────
+
+  bot.action(/^pricing:pct:(\d+)$/, async (ctx) => {
+    try { await ctx.answerCbQuery() } catch { /* ignore */ }
+    const userId = getUserId(ctx)
+    const state = pricingState.get(userId)
+    if (!state || state.flow !== 'awaiting_markup') return
+
+    const markup = parseInt((ctx.match as RegExpMatchArray)[1]!, 10)
+    const pending = buildPendingFromMatches(state.matches, markup, state.rate ?? null)
+    // Добавить costPrice в comment для записи в БД при apply
+    for (let i = 0; i < pending.length; i++) {
+      const m = state.matches[i]
+      if (m) pending[i]!.comment = 'cost:' + m.supplierPrice
+    }
+
+    pricingState.set(userId, {
+      flow: 'preview',
+      source: 'message',
+      markup,
+      label: markup + '% (' + (state.matches[0]?.productName || 'поставщик') + ')',
+      pendingVariants: pending,
+      excludedVariantIds: [],
+    })
+
+    await showPreview(ctx, userId)
   })
 
   // ── Курс доллара ──────────────────────────────────────────────────────────
@@ -1561,6 +1668,30 @@ export async function handlePricingMessage(
         [Markup.button.callback('❌ Отмена', 'pricing:cancel')],
       ]),
     )
+    return true
+  }
+
+  // Ввод % наценки для разового расчёта (supplier prices → pending preview)
+  if (state.flow === 'awaiting_markup') {
+    const markup = parseInt(text, 10)
+    if (isNaN(markup) || markup <= 0 || markup > 100) {
+      await ctx.reply('Введите число от 1 до 100 (процент наценки):')
+      return true
+    }
+    const pending = buildPendingFromMatches(state.matches, markup, state.rate ?? null)
+    for (let i = 0; i < pending.length; i++) {
+      const m = state.matches[i]
+      if (m) pending[i]!.comment = 'cost:' + m.supplierPrice
+    }
+    pricingState.set(userId, {
+      flow: 'preview',
+      source: 'message',
+      markup,
+      label: markup + '%',
+      pendingVariants: pending,
+      excludedVariantIds: [],
+    })
+    await showPreview(ctx, userId)
     return true
   }
 

@@ -11,6 +11,11 @@ import { Sentry } from './sentry'
 import log from './logger'
 import { prisma } from './prisma'
 import { readSheet, getSheetNames } from './google-sheets'
+import {
+  applyMarkupRules as _applyMarkupRules,
+  loadRules as _loadRules,
+  type MarkupRuleData,
+} from './markup-rules'
 
 export function capitalizeAttr(val: string): string {
   if (!val) return val
@@ -25,6 +30,8 @@ export function capitalizeAttr(val: string): string {
 const DEFAULT_QTY = parseInt(process.env.DEFAULT_STOCK_QTY || '3', 10) // если «В наличие» пусто
 
 const PRODUCT_SHEET_NAME = process.env.PRODUCT_SHEET_NAME || 'Лист1'
+
+const MARKUP_RULES_ENABLED = process.env.MARKUP_RULES_ENABLED === 'true'
 
 // Column letters for writeback (supplier, date, description, specs)
 // Updated for new sheet layout: L=Закупочная, M=Рекомендованная, O=Поставщик, P=Дата, Q=Фото
@@ -241,6 +248,7 @@ export async function syncProductsFromSheets(shouldAbort?: () => boolean): Promi
 
   type VariantData = {
     fullName: string
+    costPrice: number | null
     price: number
     quantity: number
     attrs: Record<string, string>
@@ -283,6 +291,7 @@ export async function syncProductsFromSheets(shouldAbort?: () => boolean): Promi
 
     groups.get(key)!.variants.push({
       fullName: row.fullName,
+      costPrice: row.costPrice,
       price: row.price,
       quantity: row.quantity,
       attrs,
@@ -318,6 +327,21 @@ export async function syncProductsFromSheets(shouldAbort?: () => boolean): Promi
   const seenVariantIds = new Set<number>()
   const startTime = Date.now()
   let groupIdx = 0
+
+  // Кеш правил наценки на время одной синхронизации
+  let cachedRules: MarkupRuleData[] | null = null
+  if (MARKUP_RULES_ENABLED) {
+    try {
+      cachedRules = await _loadRules()
+    } catch (err) {
+      log.warn('Failed to preload markup rules', { error: err instanceof Error ? err.message : String(err) })
+      cachedRules = []
+    }
+  }
+  const cachedApplyRules = (cost: number): number => _applyMarkupRules(cost, cachedRules ?? [])
+
+  // Очередь обратной записи пересчитанных рекомендованных цен в Google Sheets
+  const sheetWritebacks: Array<{ rowIndex: number; price: number }> = []
 
   for (const [key, group] of groups) {
     if (shouldAbort?.()) {
@@ -434,15 +458,49 @@ export async function syncProductsFromSheets(shouldAbort?: () => boolean): Promi
       function buildPrismaOp(entry: VariantOp) {
         const v = entry.variant
         if (entry.existing) {
+          const updateData: Record<string, any> = {
+            productId: product.id,
+            quantity: v.quantity,
+            inStock: v.quantity > 0,
+            attributes: { ...v.attrs, fullName: v.fullName },
+          }
+
+          if (MARKUP_RULES_ENABLED) {
+            const sheetCost = v.costPrice
+            const lastKnown = entry.existing.lastSyncedCostPrice !== null
+              ? Number(entry.existing.lastSyncedCostPrice)
+              : null
+            const dbPrice = Number(entry.existing.price)
+            const sheetPrice = v.price
+
+            if (sheetCost !== null && sheetCost > 0 && sheetCost !== lastKnown) {
+              // Закупочная изменилась → пересчитать рекомендованную по правилам
+              const newPrice = cachedApplyRules(sheetCost)
+              updateData.costPrice = new Decimal(sheetCost)
+              updateData.lastSyncedCostPrice = new Decimal(sheetCost)
+              updateData.price = new Decimal(newPrice)
+              sheetWritebacks.push({ rowIndex: v.rowIndex, price: newPrice })
+            } else if (sheetPrice !== dbPrice && sheetPrice > 0) {
+              // Рекомендованная изменилась вручную → уважать
+              updateData.price = new Decimal(sheetPrice)
+            } else {
+              // Ничего не изменилось — обычное обновление цены из таблицы
+              updateData.price = new Decimal(v.price)
+            }
+
+            // Первичная фиксация costPrice, если в БД ещё нет снимка
+            if (sheetCost !== null && sheetCost > 0 && lastKnown === null) {
+              updateData.costPrice = new Decimal(sheetCost)
+              updateData.lastSyncedCostPrice = new Decimal(sheetCost)
+            }
+          } else {
+            // Feature-флаг выключен — обычное поведение (цена из таблицы)
+            updateData.price = new Decimal(v.price)
+          }
+
           return prisma.productVariant.update({
             where: { id: entry.existing.id },
-            data: {
-              productId: product.id,
-              price: new Decimal(v.price),
-              quantity: v.quantity,
-              inStock: v.quantity > 0,
-              attributes: { ...v.attrs, fullName: v.fullName },
-            },
+            data: updateData,
           })
         }
         const variantSku = `${product.sku}-${Date.now().toString(36).slice(-3)}${Math.random().toString(36).slice(-2)}`
@@ -455,6 +513,8 @@ export async function syncProductsFromSheets(shouldAbort?: () => boolean): Promi
             inStock: v.quantity > 0,
             attributes: { ...v.attrs, fullName: v.fullName },
             photos: [],
+            costPrice: v.costPrice !== null ? new Decimal(v.costPrice) : null,
+            lastSyncedCostPrice: v.costPrice !== null ? new Decimal(v.costPrice) : null,
           },
         })
       }
@@ -485,6 +545,21 @@ export async function syncProductsFromSheets(shouldAbort?: () => boolean): Promi
       const msg = `Product "${group.productName}" (${group.category}): ${err}`
       errors.push(msg)
       log.error('Sheets sync product error', { product: group.productName, error: String(err) })
+    }
+  }
+
+  // ── Writeback recalculated prices to Google Sheets ───────────────────
+  if (MARKUP_RULES_ENABLED && sheetWritebacks.length > 0) {
+    try {
+      const { batchUpdate: batchUpdateSheets } = await import('./google-sheets')
+      const updates = sheetWritebacks.map(wb => ({
+        range: "'" + PRODUCT_SHEET_NAME + "'!" + WRITEBACK_COLS.price + wb.rowIndex,
+        values: [[wb.price]],
+      }))
+      await batchUpdateSheets(updates)
+      log.info('Sheets sync wrote back recalculated prices', { count: updates.length })
+    } catch (err) {
+      log.error('Sheets sync writeback error', { error: err instanceof Error ? err.message : String(err) })
     }
   }
 
