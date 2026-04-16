@@ -2709,8 +2709,12 @@
         const savedItems = items.map(i => ({ name: i.name, qty: i.qty }))
         cart = []; updateBadge(); closeCart()
         showOrderSuccess(orderId, savedItems, totalAmt, payMethod, deliveryType, deliveryAddress)
-        // Закрыть Mini App через 3 секунды чтобы пользователь увидел подтверждение
-        setTimeout(() => { if (tg && tg.close) tg.close() }, 3000)
+        // Сбросить submit-флаг и текст кнопки чтобы клиент мог оформить ещё один заказ
+        // после нажатия "Продолжить покупки". Без этого флаг останется true и повторный
+        // checkout заблокируется на строке "if (window.__isSubmitting) return".
+        window.__isSubmitting = false
+        btn.classList.remove('disabled'); btnSpan.textContent = 'ОФОРМИТЬ'
+        // Mini App остаётся открытым — клиент сам выбирает "Продолжить покупки" или "Закрыть"
       } catch(err) {
         console.error('[CHECKOUT] CATCH error:', err)
         window.__isSubmitting = false

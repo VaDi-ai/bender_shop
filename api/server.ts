@@ -27,7 +27,7 @@ import { getApiKeyValue } from '../lib/api-key-store'
 import { handleInstagramVerification } from '../webhooks/instagram'
 import { DeliveryType } from '../generated/prisma/client'
 import { Decimal } from '@prisma/client/runtime/client'
-import { fmtPrice } from '../lib/format'
+import { fmtPrice, formatProductNameWithAttrs } from '../lib/format'
 import log from '../lib/logger'
 import { trackEvent } from '../lib/events'
 
@@ -1020,7 +1020,11 @@ export function startApiServer(bot?: Telegraf): void {
           enrichedItems.push({
             variantId: variant.id,
             productId: variant.productId,
-            name: variant.product.name,
+            // Сохраняем имя товара вместе с атрибутами варианта в OrderItem.productName.
+            // Это автоматически подтянет атрибуты во все уведомления: админам в топик
+            // продаж, админам в личку, в CRM-топик клиента, в личку клиенту.
+            // Старые заказы остаются со своими именами — несогласованность приемлема.
+            name: formatProductNameWithAttrs(variant.product.name, variant.attributes),
             price: variantPrice.toFixed(2),
             quantity: item.quantity,
             newQty: variant.quantity - item.quantity,

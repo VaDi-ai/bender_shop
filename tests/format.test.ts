@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { fmtPrice, pluralize } from '../lib/format'
+import { fmtPrice, pluralize, formatVariantAttrs, formatProductNameWithAttrs } from '../lib/format'
 
 describe('fmtPrice', () => {
   it('formats thousands with separator', () => {
@@ -35,5 +35,71 @@ describe('pluralize', () => {
 
   it('21 товар', () => {
     expect(pluralize(21, 'товар', 'товара', 'товаров')).toBe('21 товар')
+  })
+})
+
+describe('formatVariantAttrs', () => {
+  it('форматирует объект атрибутов через " / "', () => {
+    expect(formatVariantAttrs({ 'Цвет': 'Silver', 'Память': '256GB' }))
+      .toBe('Silver / 256GB')
+  })
+
+  it('пропускает null и undefined значения', () => {
+    expect(formatVariantAttrs({ 'Цвет': 'Silver', 'Память': null, 'SIM': undefined, 'Страна': 'США' }))
+      .toBe('Silver / США')
+  })
+
+  it('пропускает пустые строки и строки из пробелов', () => {
+    expect(formatVariantAttrs({ 'Цвет': 'Silver', 'Память': '', 'SIM': '   ' }))
+      .toBe('Silver')
+  })
+
+  it('обрезает пробелы в значениях', () => {
+    expect(formatVariantAttrs({ 'Цвет': '  Silver  ', 'Память': ' 256GB' }))
+      .toBe('Silver / 256GB')
+  })
+
+  it('возвращает пустую строку для null/undefined/примитивов', () => {
+    expect(formatVariantAttrs(null)).toBe('')
+    expect(formatVariantAttrs(undefined)).toBe('')
+    expect(formatVariantAttrs('строка')).toBe('')
+    expect(formatVariantAttrs(42)).toBe('')
+    expect(formatVariantAttrs(true)).toBe('')
+  })
+
+  it('возвращает пустую строку для массивов', () => {
+    expect(formatVariantAttrs(['Silver', '256GB'])).toBe('')
+  })
+
+  it('возвращает пустую строку для пустого объекта', () => {
+    expect(formatVariantAttrs({})).toBe('')
+  })
+
+  it('сохраняет порядок ключей JSON', () => {
+    expect(formatVariantAttrs({ 'Память': '256GB', 'Цвет': 'Silver', 'SIM': 'eSIM' }))
+      .toBe('256GB / Silver / eSIM')
+  })
+
+  it('преобразует числовые значения в строки', () => {
+    expect(formatVariantAttrs({ 'Размер': 40, 'Цвет': 'Black' }))
+      .toBe('40 / Black')
+  })
+})
+
+describe('formatProductNameWithAttrs', () => {
+  it('добавляет атрибуты в скобках после имени', () => {
+    expect(formatProductNameWithAttrs('iPhone 17 Pro', { 'Цвет': 'Silver', 'Память': '256GB' }))
+      .toBe('iPhone 17 Pro (Silver / 256GB)')
+  })
+
+  it('возвращает только имя если атрибуты пустые', () => {
+    expect(formatProductNameWithAttrs('iPhone 17 Pro', {})).toBe('iPhone 17 Pro')
+    expect(formatProductNameWithAttrs('iPhone 17 Pro', null)).toBe('iPhone 17 Pro')
+    expect(formatProductNameWithAttrs('iPhone 17 Pro', undefined)).toBe('iPhone 17 Pro')
+  })
+
+  it('возвращает только имя если все значения атрибутов пустые', () => {
+    expect(formatProductNameWithAttrs('AirPods Pro', { 'Цвет': '', 'Размер': null }))
+      .toBe('AirPods Pro')
   })
 })
