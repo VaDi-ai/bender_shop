@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { extractProductName } from '../lib/sheets-sync'
+import { extractProductName, parsePhotoUrls } from '../lib/sheets-sync'
 
 describe('extractProductName', () => {
   it('iPhone: removes color, memory, country', () => {
@@ -30,5 +30,42 @@ describe('extractProductName', () => {
   it('Apple Watch: removes size, band, material', () => {
     expect(extractProductName('Apple Watch Ultra 2 49 Black Ti Black Ocean Band', 'Apple'))
       .toBe('Apple Watch Ultra 2')
+  })
+})
+
+describe('parsePhotoUrls', () => {
+  it('парсит одну URL', () => {
+    expect(parsePhotoUrls('https://example.com/photo.jpg'))
+      .toEqual(['https://example.com/photo.jpg'])
+  })
+
+  it('парсит несколько URL через запятую', () => {
+    expect(parsePhotoUrls('https://a.com/1.jpg, https://b.com/2.jpg, https://c.com/3.jpg'))
+      .toEqual(['https://a.com/1.jpg', 'https://b.com/2.jpg', 'https://c.com/3.jpg'])
+  })
+
+  it('обрабатывает URL с query string содержащим запятую', () => {
+    expect(parsePhotoUrls('https://a.com/photo?size=100,200'))
+      .toEqual(['https://a.com/photo?size=100,200'])
+  })
+
+  it('возвращает пустой массив для пустой строки', () => {
+    expect(parsePhotoUrls('')).toEqual([])
+    expect(parsePhotoUrls('   ')).toEqual([])
+  })
+
+  it('фильтрует невалидные значения', () => {
+    expect(parsePhotoUrls('not-a-url, https://valid.com/photo.jpg'))
+      .toEqual(['https://valid.com/photo.jpg'])
+  })
+
+  it('обрезает пробелы', () => {
+    expect(parsePhotoUrls('  https://a.com/1.jpg ,  https://b.com/2.jpg  '))
+      .toEqual(['https://a.com/1.jpg', 'https://b.com/2.jpg'])
+  })
+
+  it('поддерживает http (без s)', () => {
+    expect(parsePhotoUrls('http://insecure.com/photo.jpg'))
+      .toEqual(['http://insecure.com/photo.jpg'])
   })
 })

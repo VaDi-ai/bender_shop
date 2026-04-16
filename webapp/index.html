@@ -1266,6 +1266,7 @@
     function totalWithFee() { const s = subtotal(); return payMethod === 'card' ? s * 1.14 : s }
     function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;') }
     function photoUrl(fid) { return '/api/banner/' + encodeURIComponent(fid) }
+    function resolvePhoto(f) { return (typeof f === 'string' && f.startsWith('http')) ? f : photoUrl(f) }
 
     // ── Variant helpers ───────────────────────────────────────────────────────
     function findVariant(product, selectedAttrs) {
@@ -1280,10 +1281,10 @@
 
     function getProductPhotos(p, variant) {
       if (variant && Array.isArray(variant.photos) && variant.photos.length) {
-        return variant.photos.map(photoUrl)
+        return variant.photos.map(resolvePhoto)
       }
       if (Array.isArray(p.photos) && p.photos.length) {
-        return p.photos.map(photoUrl)
+        return p.photos.map(resolvePhoto)
       }
       return p.photoUrl ? [p.photoUrl] : []
     }
@@ -1745,7 +1746,7 @@
 
       section.style.display = 'block'
       scroll.innerHTML = hits.map(p => {
-        const photo = p.photos && p.photos[0] ? photoUrl(p.photos[0]) : null
+        const photo = p.photos && p.photos[0] ? resolvePhoto(p.photos[0]) : null
         const imgHtml = photo
           ? `<img src="${photo}" alt="" loading="lazy">`
           : `<img src="/no-photo.webp" alt="" onerror="this.onerror=null;this.src='/no-photo.png'">`
@@ -2431,7 +2432,7 @@
 
       section.style.display = ''
       grid.innerHTML = recs.map(p => {
-        const photo = p.photos && p.photos[0] ? photoUrl(p.photos[0]) : null
+        const photo = p.photos && p.photos[0] ? resolvePhoto(p.photos[0]) : null
         const imgHtml = photo
           ? `<img src="${photo}" alt="" loading="lazy">`
           : '<img src="/no-photo.webp" alt="" style="opacity:0.6" onerror="this.onerror=null;this.src=\'/no-photo.png\'">'
@@ -2525,9 +2526,9 @@
 
       let itemPhotoUrl = null
       if (variant && Array.isArray(variant.photos) && variant.photos.length) {
-        itemPhotoUrl = photoUrl(variant.photos[0])
+        itemPhotoUrl = resolvePhoto(variant.photos[0])
       } else if (Array.isArray(p.photos) && p.photos.length) {
-        itemPhotoUrl = photoUrl(p.photos[0])
+        itemPhotoUrl = resolvePhoto(p.photos[0])
       } else if (p.photoUrl) {
         itemPhotoUrl = p.photoUrl
       }

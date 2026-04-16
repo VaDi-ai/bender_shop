@@ -27,6 +27,17 @@ export function capitalizeAttr(val: string): string {
   return t.charAt(0).toUpperCase() + t.slice(1)
 }
 
+/**
+ * Парсит строку фото из ячейки Google Sheets.
+ * Несколько URL разделяются запятой (перед http).
+ * Фильтруются только валидные https:// URL.
+ */
+export function parsePhotoUrls(cell: string): string[] {
+  if (!cell?.trim()) return []
+  const parts = cell.split(/,\s*(?=https?:\/\/)/)
+  return parts.map(u => u.trim()).filter(u => /^https?:\/\//.test(u))
+}
+
 const DEFAULT_QTY = parseInt(process.env.DEFAULT_STOCK_QTY || '3', 10) // если «В наличие» пусто
 
 const PRODUCT_SHEET_NAME = process.env.PRODUCT_SHEET_NAME || 'Лист1'
@@ -254,6 +265,7 @@ export async function syncProductsFromSheets(shouldAbort?: () => boolean): Promi
     attrs: Record<string, string>
     rowIndex: number
     sheetName: string
+    photoUrls: string[]
   }
   type GroupedProduct = {
     productName: string
@@ -297,6 +309,7 @@ export async function syncProductsFromSheets(shouldAbort?: () => boolean): Promi
       attrs,
       rowIndex: row.rowIndex,
       sheetName: row.sheetName,
+      photoUrls: parsePhotoUrls(row.photo),
     })
   }
 
@@ -448,6 +461,25 @@ export async function syncProductsFromSheets(shouldAbort?: () => boolean): Promi
         updated++
       }
 
+      // ── Photo inheritance by color ────────────────────────────────────────
+      // Все варианты одного цвета должны иметь одинаковые фото.
+      // Если в разных строках одного цвета указаны разные фото — берём первое непустое.
+      const photosByColor = new Map<string, string[]>()
+      for (const v of group.variants) {
+        const color = (v.attrs['Цвет'] || '').toLowerCase()
+        if (!color) continue
+        if (v.photoUrls.length > 0 && !photosByColor.has(color)) {
+          photosByColor.set(color, v.photoUrls)
+        }
+      }
+      for (const v of group.variants) {
+        const color = (v.attrs['Цвет'] || '').toLowerCase()
+        if (color && v.photoUrls.length === 0) {
+          const inherited = photosByColor.get(color)
+          if (inherited) v.photoUrls = inherited
+        }
+      }
+
       // Create/update variants (batched in transactions with sequential fallback)
       type VariantOp = { variant: typeof group.variants[0]; existing: typeof existingVariants[0] | undefined }
       const variantOps: VariantOp[] = group.variants.map(v => ({
@@ -463,6 +495,12 @@ export async function syncProductsFromSheets(shouldAbort?: () => boolean): Promi
             quantity: v.quantity,
             inStock: v.quantity > 0,
             attributes: { ...v.attrs, fullName: v.fullName },
+          }
+
+          // Если есть фото из таблицы — перезаписать photos
+          if (v.photoUrls.length > 0) {
+            updateData.photos = v.photoUrls
+            updateData.photoUrls = v.photoUrls
           }
 
           if (MARKUP_RULES_ENABLED) {
@@ -512,7 +550,8 @@ export async function syncProductsFromSheets(shouldAbort?: () => boolean): Promi
             quantity: v.quantity,
             inStock: v.quantity > 0,
             attributes: { ...v.attrs, fullName: v.fullName },
-            photos: [],
+            photos: v.photoUrls.length > 0 ? v.photoUrls : [],
+            photoUrls: v.photoUrls.length > 0 ? v.photoUrls : [],
             costPrice: v.costPrice !== null ? new Decimal(v.costPrice) : null,
             lastSyncedCostPrice: v.costPrice !== null ? new Decimal(v.costPrice) : null,
           },
@@ -540,6 +579,15 @@ export async function syncProductsFromSheets(shouldAbort?: () => boolean): Promi
             }
           }
         }
+      }
+
+      // Update product main photo from first variant with photos
+      const firstVariantWithPhoto = group.variants.find(v => v.photoUrls.length > 0)
+      if (firstVariantWithPhoto && firstVariantWithPhoto.photoUrls[0]) {
+        await prisma.product.update({
+          where: { id: product.id },
+          data: { photoUrl: firstVariantWithPhoto.photoUrls[0] },
+        }).catch(() => {})
       }
     } catch (err) {
       const msg = `Product "${group.productName}" (${group.category}): ${err}`
