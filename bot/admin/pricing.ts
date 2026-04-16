@@ -18,6 +18,10 @@ import {
 } from '../../lib/ai-parser'
 import { getUserId } from '../helpers'
 import { logSecurityEvent } from '../../lib/security-log'
+import {
+  loadRules, validateRules, applyMarkupRules,
+  formatRule,
+} from '../../lib/markup-rules'
 
 // ─── Типы ─────────────────────────────────────────────────────────────────────
 
@@ -71,6 +75,14 @@ type PricingFlow =
       pendingVariants: PendingVariant[]
       excludedVariantIds: number[]
     }
+  | { flow: 'rules_add_min' }
+  | { flow: 'rules_add_max'; minCost: number }
+  | { flow: 'rules_add_mode'; minCost: number; maxCost: number | null }
+  | { flow: 'rules_add_value'; minCost: number; maxCost: number | null; mode: string }
+  | { flow: 'rules_edit_pick' }
+  | { flow: 'rules_edit_value'; ruleId: number }
+  | { flow: 'rules_delete_pick' }
+  | { flow: 'rules_test' }
   | { flow: 'awaiting_file' }
   | { flow: 'manual_product_pick'; page: number }
   | { flow: 'manual_variant_pick'; productId: number; productName: string }
@@ -163,6 +175,7 @@ export async function showPricingMenu(ctx: Context): Promise<void> {
     '💰 Управление ценами',
     Markup.inlineKeyboard([
       [Markup.button.callback('📨 Из сообщения поставщика', 'pricing:msg')],
+      [Markup.button.callback('📊 Правила наценки', 'pricing:rules')],
       [Markup.button.callback('💱 Курс доллара', 'pricing:rate')],
       [Markup.button.callback('🔙 Назад', 'back:main')],
     ]),
@@ -1343,6 +1356,124 @@ export function setupPricingHandlers(bot: Telegraf): void {
     await ctx.reply(`✅ Исключено ${toExclude.length} вариантов товара`)
     await showExcludeMenu(ctx, userId)
   })
+
+  // ── 📊 Правила наценки ──────────────────────────────────────────────────
+
+  bot.action('pricing:rules', async (ctx) => {
+    try { await ctx.answerCbQuery() } catch { /* ignore */ }
+    const rules = await loadRules()
+    const validation = validateRules(rules)
+
+    const lines = ['📊 Правила наценки\n']
+    if (rules.length === 0) {
+      lines.push('Правил пока нет. Добавьте первое правило.')
+    } else {
+      rules.forEach((r, i) => lines.push(formatRule(r, i)))
+      lines.push('')
+      lines.push(validation.ok ? '✅ Покрытие полное' : `⚠️ ${validation.error}`)
+    }
+
+    await ctx.reply(lines.join('\n'), Markup.inlineKeyboard([
+      [Markup.button.callback('➕ Добавить', 'pricing:rules_add')],
+      [Markup.button.callback('🗑 Удалить', 'pricing:rules_del'), Markup.button.callback('🧪 Тест', 'pricing:rules_test')],
+      [Markup.button.callback('🔙 Меню цен', 'pricing:menu')],
+    ]))
+  })
+
+  // ── Добавление правила: шаг 1 — минимальная цена ──────────────────────
+
+  bot.action('pricing:rules_add', async (ctx) => {
+    try { await ctx.answerCbQuery() } catch { /* ignore */ }
+    const userId = getUserId(ctx)
+
+    // Подсказка: если правил нет, первое должно начинаться с 0
+    const rules = await loadRules()
+    const enabled = rules.filter(r => r.enabled).sort((a, b) => a.minCost - b.minCost)
+    const nextMin = enabled.length > 0 && enabled[enabled.length - 1]!.maxCost !== null
+      ? enabled[enabled.length - 1]!.maxCost
+      : (enabled.length === 0 ? 0 : null)
+
+    const hint = nextMin !== null ? `\n💡 Подсказка: следующий интервал начинается с ${nextMin}` : ''
+    pricingState.set(userId, { flow: 'rules_add_min' })
+    await ctx.reply(
+      `➕ Новое правило\n\nШаг 1 — введите минимальную закупочную цену (от):${hint}\n\nНапример: 0 или 5000`,
+      Markup.inlineKeyboard([[Markup.button.callback('❌ Отмена', 'pricing:rules')]]),
+    )
+  })
+
+  // ── Удаление правила ──────────────────────────────────────────────────
+
+  bot.action('pricing:rules_del', async (ctx) => {
+    try { await ctx.answerCbQuery() } catch { /* ignore */ }
+    const rules = await loadRules()
+    if (rules.length === 0) {
+      await ctx.reply('Нет правил для удаления.')
+      return
+    }
+    const buttons = rules.map((r, i) => [
+      Markup.button.callback(`🗑 ${formatRule(r, i)}`.slice(0, 64), `pricing:rules_del_confirm:${r.id}`)
+    ])
+    buttons.push([Markup.button.callback('🔙 Назад', 'pricing:rules')])
+    await ctx.reply('Выберите правило для удаления:', Markup.inlineKeyboard(buttons))
+  })
+
+  bot.action(/^pricing:rules_del_confirm:(\d+)$/, async (ctx) => {
+    try { await ctx.answerCbQuery() } catch { /* ignore */ }
+    const ruleId = parseInt((ctx.match as RegExpMatchArray)[1]!, 10)
+    await prisma.markupRule.delete({ where: { id: ruleId } }).catch(() => {})
+    await ctx.reply('✅ Правило удалено.')
+    // Показать обновлённый список
+    const rules = await loadRules()
+    const validation = validateRules(rules)
+    const lines = ['📊 Правила наценки\n']
+    if (rules.length === 0) {
+      lines.push('Правил нет.')
+    } else {
+      rules.forEach((r, i) => lines.push(formatRule(r, i)))
+      lines.push('')
+      lines.push(validation.ok ? '✅ Покрытие полное' : `⚠️ ${validation.error}`)
+    }
+    await ctx.reply(lines.join('\n'), Markup.inlineKeyboard([
+      [Markup.button.callback('➕ Добавить', 'pricing:rules_add')],
+      [Markup.button.callback('🗑 Удалить', 'pricing:rules_del'), Markup.button.callback('🧪 Тест', 'pricing:rules_test')],
+      [Markup.button.callback('🔙 Меню цен', 'pricing:menu')],
+    ]))
+  })
+
+  // ── Тестирование правил ───────────────────────────────────────────────
+
+  bot.action('pricing:rules_test', async (ctx) => {
+    try { await ctx.answerCbQuery() } catch { /* ignore */ }
+    const userId = getUserId(ctx)
+    pricingState.set(userId, { flow: 'rules_test' })
+    await ctx.reply(
+      '🧪 Тестирование правил\n\nВведите закупочную цену для проверки:\n\nНапример: 8500 или 45000',
+      Markup.inlineKeyboard([[Markup.button.callback('🔙 Назад', 'pricing:rules')]]),
+    )
+  })
+
+  // ── Выбор типа наценки (fixed / percent) ──────────────────────────────
+
+  bot.action(/^pricing:rules_mode:(fixed|percent)$/, async (ctx) => {
+    try { await ctx.answerCbQuery() } catch { /* ignore */ }
+    const userId = getUserId(ctx)
+    const state = pricingState.get(userId)
+    if (!state || state.flow !== 'rules_add_mode') return
+
+    const mode = (ctx.match as RegExpMatchArray)[1]!
+    pricingState.set(userId, {
+      flow: 'rules_add_value',
+      minCost: state.minCost,
+      maxCost: state.maxCost,
+      mode,
+    })
+
+    const unit = mode === 'percent' ? '%' : '₽'
+    await ctx.reply(
+      `Шаг 4 — введите размер наценки (${unit}):\n\nНапример: ${mode === 'percent' ? '7 или 10' : '1000 или 2500'}`,
+      Markup.inlineKeyboard([[Markup.button.callback('❌ Отмена', 'pricing:rules')]]),
+    )
+  })
 }
 
 // ─── Обработчик текстовых сообщений ──────────────────────────────────────────
@@ -1537,6 +1668,130 @@ export async function handlePricingMessage(
       excludedVariantIds: [],
     })
     await showPreview(ctx, userId)
+    return true
+  }
+
+  // ── Правила наценки: ввод данных ────────────────────────────────────────
+
+  if (state.flow === 'rules_add_min') {
+    const val = parseFloat(text.replace(/\s/g, '').replace(',', '.'))
+    if (isNaN(val) || val < 0) {
+      await ctx.reply('❌ Введите положительное число. Например: 0 или 5000')
+      return true
+    }
+    pricingState.set(userId, { flow: 'rules_add_max', minCost: val })
+    await ctx.reply(
+      `Шаг 2 — введите максимальную закупочную цену (до):\n\nДля последнего правила (до бесконечности) отправьте: 0 или слово «бесконечность»\n\nНапример: 5000 или 10000 или 0`,
+      Markup.inlineKeyboard([[Markup.button.callback('❌ Отмена', 'pricing:rules')]]),
+    )
+    return true
+  }
+
+  if (state.flow === 'rules_add_max') {
+    const trimmed = text.trim().toLowerCase()
+    let maxCost: number | null = null
+    if (trimmed === '0' || trimmed === 'бесконечность' || trimmed === 'inf' || trimmed === '∞') {
+      maxCost = null
+    } else {
+      const val = parseFloat(trimmed.replace(/\s/g, '').replace(',', '.'))
+      if (isNaN(val) || val <= 0) {
+        await ctx.reply('❌ Введите положительное число или 0 для бесконечности.')
+        return true
+      }
+      if (val <= state.minCost) {
+        await ctx.reply(`❌ Максимум (${val}) должен быть больше минимума (${state.minCost}).`)
+        return true
+      }
+      maxCost = val
+    }
+    pricingState.set(userId, { flow: 'rules_add_mode', minCost: state.minCost, maxCost })
+    await ctx.reply(
+      'Шаг 3 — тип наценки:',
+      Markup.inlineKeyboard([
+        [Markup.button.callback('💵 Фиксированная сумма (+₽)', 'pricing:rules_mode:fixed')],
+        [Markup.button.callback('📊 Процент (%)', 'pricing:rules_mode:percent')],
+        [Markup.button.callback('❌ Отмена', 'pricing:rules')],
+      ]),
+    )
+    return true
+  }
+
+  if (state.flow === 'rules_add_value') {
+    const val = parseFloat(text.replace(/\s/g, '').replace(',', '.'))
+    if (isNaN(val) || val <= 0) {
+      await ctx.reply('❌ Введите положительное число.')
+      return true
+    }
+
+    // Создать правило
+    await prisma.markupRule.create({
+      data: {
+        minCost: state.minCost,
+        maxCost: state.maxCost,
+        mode: state.mode,
+        value: val,
+      },
+    })
+
+    pricingState.delete(userId)
+
+    // Валидация после добавления
+    const rules = await loadRules()
+    const validation = validateRules(rules)
+
+    const from = state.minCost.toLocaleString('ru-RU')
+    const to = state.maxCost !== null ? state.maxCost.toLocaleString('ru-RU') + ' ₽' : '∞'
+    const action = state.mode === 'percent' ? `+${val}%` : `+${val.toLocaleString('ru-RU')} ₽`
+
+    await ctx.reply(
+      [
+        `✅ Правило добавлено: ${from} – ${to} → ${action}`,
+        '',
+        validation.ok ? '✅ Покрытие полное' : `⚠️ ${validation.error}`,
+      ].join('\n'),
+      Markup.inlineKeyboard([
+        [Markup.button.callback('📊 Все правила', 'pricing:rules')],
+        [Markup.button.callback('➕ Добавить ещё', 'pricing:rules_add')],
+        [Markup.button.callback('🔙 Меню цен', 'pricing:menu')],
+      ]),
+    )
+    return true
+  }
+
+  if (state.flow === 'rules_test') {
+    const val = parseFloat(text.replace(/\s/g, '').replace(',', '.'))
+    if (isNaN(val) || val <= 0) {
+      await ctx.reply('❌ Введите положительное число.')
+      return true
+    }
+    const rules = await loadRules()
+    const result = applyMarkupRules(val, rules)
+    const diff = result - val
+    const enabled = rules.filter(r => r.enabled).sort((a, b) => a.minCost - b.minCost)
+    const matched = enabled.find(r => r.minCost <= val && (r.maxCost === null || val < r.maxCost))
+
+    const ruleDesc = matched
+      ? `Правило: ${matched.minCost.toLocaleString('ru-RU')} – ${matched.maxCost !== null ? matched.maxCost.toLocaleString('ru-RU') + ' ₽' : '∞'} → ${matched.mode === 'percent' ? '+' + matched.value + '%' : '+' + matched.value.toLocaleString('ru-RU') + ' ₽'}`
+      : 'Подходящее правило не найдено'
+
+    await ctx.reply(
+      [
+        `🧪 Тест наценки:`,
+        '',
+        `💵 Закупка: ${val.toLocaleString('ru-RU')} ₽`,
+        `💰 Рекомендованная: ${result.toLocaleString('ru-RU')} ₽`,
+        `📈 Наценка: +${diff.toLocaleString('ru-RU')} ₽`,
+        '',
+        ruleDesc,
+        `(округление _90 вверх)`,
+      ].join('\n'),
+      Markup.inlineKeyboard([
+        [Markup.button.callback('🧪 Ещё тест', 'pricing:rules_test')],
+        [Markup.button.callback('📊 Все правила', 'pricing:rules')],
+        [Markup.button.callback('🔙 Меню цен', 'pricing:menu')],
+      ]),
+    )
+    pricingState.delete(userId)
     return true
   }
 
