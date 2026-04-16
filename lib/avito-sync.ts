@@ -190,8 +190,9 @@ function matchScoreWeighted(avitoTitle: string, sheetName: string): number {
 // ─── Load sheet data ──────────────────────────────────────────────────────────
 
 async function loadSheetProducts(): Promise<SheetProduct[]> {
+  const PRODUCT_SHEET_NAME = process.env.PRODUCT_SHEET_NAME || 'Лист1'
   const allSheets = await getSheetNames()
-  const sheetName = allSheets[0]
+  const sheetName = allSheets.includes(PRODUCT_SHEET_NAME) ? PRODUCT_SHEET_NAME : allSheets[0]
   if (!sheetName) return []
 
   const data = await readSheet(sheetName)

@@ -24,13 +24,18 @@ export function capitalizeAttr(val: string): string {
 
 const DEFAULT_QTY = parseInt(process.env.DEFAULT_STOCK_QTY || '3', 10) // если «В наличие» пусто
 
+const PRODUCT_SHEET_NAME = process.env.PRODUCT_SHEET_NAME || 'Лист1'
+
 // Column letters for writeback (supplier, date, description, specs)
+// Updated for new sheet layout: L=Закупочная, M=Рекомендованная, O=Поставщик, P=Дата, Q=Фото
 export const WRITEBACK_COLS = {
-  description: 'J',   // Описание
-  specs: 'K',         // Характеристики
-  price: 'L',         // Рекомендованная стоимость
-  supplier: 'N',      // Лучший поставщик
-  date: 'O',          // Дата обновления
+  description: 'J',   // не изменилось
+  specs: 'K',         // не изменилось
+  costPrice: 'L',     // Закупочная цена (НОВАЯ колонка)
+  price: 'M',         // Рекомендованная стоимость (была L, сдвинулась на M)
+  supplier: 'O',      // Лучший поставщик (был N, сдвинулся на O)
+  date: 'P',          // Дата обновления (был O, сдвинулся на P)
+  photo: 'Q',         // Фото (НОВАЯ колонка)
 }
 
 // ─── Dynamic column mapping from header row ──────────────────────────────────
@@ -45,15 +50,19 @@ const EXPECTED_HEADERS: Record<string, string[]> = {
   country:     ['Страна', 'Country'],
   description: ['Описание', 'Description'],
   specs:       ['Характеристики', 'Specs'],
+  costPrice:   ['Закупочная цена', 'Закупка', 'Cost'],
   price:       ['Рекомендованная стоимость', 'Цена', 'Price'],
   quantity:    ['В наличие', 'Количество', 'Qty', 'Stock'],
+  supplier:    ['Лучший поставщик', 'Supplier'],
   updateDate:  ['Дата обновления', 'Updated'],
+  photo:       ['Фото', 'Photo', 'Image'],
 }
 
-// Fallback indices matching the original hardcoded layout
+// Fallback indices matching the new sheet layout
 const FALLBACK_INDICES: Record<string, number> = {
   brand: 1, category: 3, fullName: 4, color: 5, memory: 6, size: 7,
-  country: 8, description: 9, specs: 10, price: 11, quantity: 12, updateDate: 14,
+  country: 8, description: 9, specs: 10, costPrice: 11, price: 12,
+  quantity: 13, supplier: 14, updateDate: 15, photo: 16,
 }
 
 export type ColumnMap = Record<string, number>
@@ -88,16 +97,19 @@ function col(row: any[], idx: number | undefined): string {
 
 export interface SheetRow {
   brand: string
-  category: string      // «Общая категория» (для сайта)
-  fullName: string      // «Название модели»
-  color: string         // из колонки F
-  memory: string        // из колонки G
-  size: string          // из колонки H
-  country: string       // из колонки I
-  description: string   // из колонки J (бот заполняет)
-  specs: string         // из колонки K (бот заполняет)
-  price: number
+  category: string           // «Общая категория» (для сайта)
+  fullName: string           // «Название модели»
+  color: string              // из колонки F
+  memory: string             // из колонки G
+  size: string               // из колонки H
+  country: string            // из колонки I
+  description: string        // из колонки J (бот заполняет)
+  specs: string              // из колонки K (бот заполняет)
+  costPrice: number | null   // Закупочная цена (L), null если пусто
+  price: number              // Рекомендованная стоимость (M)
   quantity: number
+  supplier: string           // Лучший поставщик (O)
+  photo: string              // URL фото (Q), пусто если нет
   sheetName: string
   rowIndex: number
 }
@@ -107,7 +119,10 @@ export interface SheetRow {
  */
 export async function readAllProducts(): Promise<SheetRow[]> {
   const allSheets = await getSheetNames()
-  const sheetName = allSheets[0] // Первый лист
+  const sheetName = allSheets.includes(PRODUCT_SHEET_NAME)
+    ? PRODUCT_SHEET_NAME
+    : allSheets[0]  // Fallback на первый лист если PRODUCT_SHEET_NAME не найден
+
   if (!sheetName) return []
 
   const data = await readSheet(sheetName)
@@ -134,6 +149,14 @@ export async function readAllProducts(): Promise<SheetRow[]> {
       if (!isNaN(q)) quantity = q
     }
 
+    // Закупочная цена (может быть пустой)
+    const costRaw = col(row, COL.costPrice).replace(/\s/g, '').replace(',', '.')
+    let costPrice: number | null = null
+    if (costRaw !== '') {
+      const c = parseFloat(costRaw)
+      if (!isNaN(c) && c > 0) costPrice = c
+    }
+
     rows.push({
       brand:       col(row, COL.brand),
       category:    col(row, COL.category) || 'Другое',
@@ -144,8 +167,11 @@ export async function readAllProducts(): Promise<SheetRow[]> {
       country:     col(row, COL.country),
       description: col(row, COL.description),
       specs:       col(row, COL.specs),
+      costPrice,
       price,
       quantity,
+      supplier:    col(row, COL.supplier),
+      photo:       col(row, COL.photo),
       sheetName,
       rowIndex: i + 1,
     })
@@ -1344,7 +1370,7 @@ export async function checkStalePrices(): Promise<StaleItem[]> {
   const staleItems: StaleItem[] = []
 
   const allSheets = await getSheetNames()
-  const sheetName = allSheets[0]
+  const sheetName = allSheets.includes(PRODUCT_SHEET_NAME) ? PRODUCT_SHEET_NAME : allSheets[0]
   if (!sheetName) return staleItems
 
   try {

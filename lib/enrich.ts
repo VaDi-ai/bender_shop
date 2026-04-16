@@ -247,8 +247,9 @@ async function writeEnrichToSheets(
   try {
     const { readSheet, getSheetNames, batchUpdate } = await import('./google-sheets')
 
+    const PRODUCT_SHEET_NAME = process.env.PRODUCT_SHEET_NAME || 'Лист1'
     const allSheets = await getSheetNames()
-    const sheetName = allSheets[0]
+    const sheetName = allSheets.includes(PRODUCT_SHEET_NAME) ? PRODUCT_SHEET_NAME : allSheets[0]
     if (!sheetName) return 0
 
     // Collect all fullNames from product variants

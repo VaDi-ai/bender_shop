@@ -43,8 +43,9 @@ describe('Sheets sync logic', () => {
 
   it('falls back to hardcoded indices when headers not found', () => {
     const headers = ['', 'X', 'Y', 'Z', 'W', 'V']
-    // price header not found → fallback to index 11
+    // price header not found → fallback to index 12 (new sheet layout: L=cost, M=price)
     const COL = mapHeaders(headers)
-    expect(COL.price).toBe(11)
+    expect(COL.price).toBe(12)
+    expect(COL.costPrice).toBe(11)
   })
 })

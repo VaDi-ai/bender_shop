@@ -20,7 +20,7 @@ enum ClientSource {
 }
 
 enum MessageDirection {
-  in  // входящее от клиента
+  in // входящее от клиента
   out // исходящее от магазина
 }
 
@@ -32,10 +32,10 @@ enum TaskStatus {
 }
 
 enum TemplateType {
-  followup      // догрев
-  offer         // оффер / КП
-  reactivation  // реактивация
-  announcement  // объявление / акция
+  followup // догрев
+  offer // оффер / КП
+  reactivation // реактивация
+  announcement // объявление / акция
 }
 
 enum ReservationStatus {
@@ -102,31 +102,31 @@ model Segment {
   id        Int      @id @default(autoincrement())
   name      String   @unique
   isDefault Boolean  @default(false)
-  color     String   // например "🔵"
+  color     String // например "🔵"
   createdAt DateTime @default(now())
 
   clients Client[]
 }
 
 model Client {
-  id              Int      @id @default(autoincrement())
-  name            String
-  source          ClientSource
-  externalId      String?       // ID на внешней платформе (Avito, Instagram и т.д.)
-  segmentId       Int?
-  notes           String?
-  telegramUsername String?        // @username в Telegram
-  telegramTopicId Int?          // ID темы в группе Telegram CRM
-  pinnedMessageId Int?          // ID закреплённого сообщения с панелью управления
+  id               Int          @id @default(autoincrement())
+  name             String
+  source           ClientSource
+  externalId       String? // ID на внешней платформе (Avito, Instagram и т.д.)
+  segmentId        Int?
+  notes            String?
+  telegramUsername String? // @username в Telegram
+  telegramTopicId  Int? // ID темы в группе Telegram CRM
+  pinnedMessageId  Int? // ID закреплённого сообщения с панелью управления
 
   // Расширенные контактные данные (phone, email, birthDate encrypted at app layer via lib/client-crypto.ts)
-  phone           String?
-  fullName        String?
-  email           String?
-  birthDate       String?
+  phone            String?
+  fullName         String?
+  email            String?
+  birthDate        String?
   lastPurchaseDate DateTime?
-  totalPurchases  Int      @default(0)
-  totalRevenue    Decimal  @default(0) @db.Decimal(14, 2)
+  totalPurchases   Int       @default(0)
+  totalRevenue     Decimal   @default(0) @db.Decimal(14, 2)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -140,8 +140,8 @@ model Client {
 
   @@unique([source, externalId]) // один клиент per платформа
   @@index([segmentId])
-  @@index([phone])   // encrypted — index kept for potential prefix/existence checks
-  @@index([email])   // encrypted — index kept for potential prefix/existence checks
+  @@index([phone]) // encrypted — index kept for potential prefix/existence checks
+  @@index([email]) // encrypted — index kept for potential prefix/existence checks
   @@index([telegramTopicId])
   @@index([createdAt])
 }
@@ -151,7 +151,7 @@ model Message {
   clientId  Int
   direction MessageDirection
   text      String
-  source    ClientSource     // через какой канал пришло сообщение
+  source    ClientSource // через какой канал пришло сообщение
   isRead    Boolean          @default(false)
   createdAt DateTime         @default(now())
 
@@ -166,7 +166,7 @@ model Tag {
   id         Int    @id @default(autoincrement())
   clientId   Int
   name       String
-  autoAction Json?  // { trigger: string, templateId: number, delayHours: number }
+  autoAction Json? // { trigger: string, templateId: number, delayHours: number }
 
   client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
 
@@ -178,8 +178,8 @@ model Tag {
 model Task {
   id           Int        @id @default(autoincrement())
   clientId     Int
-  action       String     // "send_message", "change_segment", "notify_manager" и т.д.
-  payload      Json       // произвольные параметры действия
+  action       String // "send_message", "change_segment", "notify_manager" и т.д.
+  payload      Json // произвольные параметры действия
   scheduledAt  DateTime
   status       TaskStatus @default(pending)
   attemptCount Int        @default(0)
@@ -195,51 +195,51 @@ model Task {
 model Template {
   id   Int          @id @default(autoincrement())
   name String       @unique
-  text String       // поддерживает переменные: {{name}}, {{product}} и т.д.
+  text String // поддерживает переменные: {{name}}, {{product}} и т.д.
   type TemplateType
 }
 
 model Category {
-  id        Int       @id @default(autoincrement())
-  name      String    @unique
-  textSide  String    @default("left")
+  id        Int      @id @default(autoincrement())
+  name      String   @unique
+  textSide  String   @default("left")
   imageFile String?
-  createdAt DateTime  @default(now())
+  createdAt DateTime @default(now())
 
-  products  Product[]
+  products Product[]
 }
 
 model Product {
-  id          Int       @id @default(autoincrement())
-  sku         String    @unique  // артикул товара
+  id          Int      @id @default(autoincrement())
+  sku         String   @unique // артикул товара
   name        String
   description String?
-  price       Decimal   @db.Decimal(12, 2)
+  price       Decimal  @db.Decimal(12, 2)
   // A9: stock = total physical units received into inventory; quantity = units currently available
   // to sell (decremented on sale together with stock). reserved = units held for active
   // reservations (incremented on reserve create, decremented on reserve cancel/complete).
   // stock and quantity are decremented together when a sale is confirmed via atomicSale().
-  stock       Int       @default(0)
-  quantity    Int       @default(0)
-  reserved    Int       @default(0)
+  stock       Int      @default(0)
+  quantity    Int      @default(0)
+  reserved    Int      @default(0)
   categoryId  Int?
-  photoUrl    String?   // URL главного фото (обратная совместимость)
-  photos      String[]  // массив file_id фото товара
-  isAvailable Boolean   @default(true)
-  isFeatured  Boolean   @default(false)
+  photoUrl    String? // URL главного фото (обратная совместимость)
+  photos      String[] // массив file_id фото товара
+  isAvailable Boolean  @default(true)
+  isFeatured  Boolean  @default(false)
 
   // Торговые предложения
-  attributes Json?     // { "Память": ["128GB","256GB"], "Цвет": ["Черный","Белый"] }
-  specs       Json?     // { "Процессор": "A18", "Экран": "6.1 дюйм" }
-  badge       String?   // "ХИТ", "НОВИНКА", "АКЦИЯ"
-  brand       String?   // бренд / производитель (Apple, Samsung и т.д.)
-  avitoItemId   BigInt?   // ID объявления на Avito (заполняется при маппинге)
-  avitoEnabled  Boolean   @default(false) // Включён ли товар для Avito
+  attributes   Json? // { "Память": ["128GB","256GB"], "Цвет": ["Черный","Белый"] }
+  specs        Json? // { "Процессор": "A18", "Экран": "6.1 дюйм" }
+  badge        String? // "ХИТ", "НОВИНКА", "АКЦИЯ"
+  brand        String? // бренд / производитель (Apple, Samsung и т.д.)
+  avitoItemId  BigInt? // ID объявления на Avito (заполняется при маппинге)
+  avitoEnabled Boolean @default(false) // Включён ли товар для Avito
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  category     Category?      @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  category     Category?        @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   reservations Reservation[]
   variants     ProductVariant[]
 
@@ -253,15 +253,20 @@ model Product {
 }
 
 model ProductVariant {
-  id        Int     @id @default(autoincrement())
-  productId Int
-  sku       String  @unique  // артикул варианта
-  price     Decimal @db.Decimal(12, 2)
-  quantity  Int     @default(0)   // доступное количество
+  id         Int      @id @default(autoincrement())
+  productId  Int
+  sku        String   @unique // артикул варианта
+  price      Decimal  @db.Decimal(12, 2)
+  quantity   Int      @default(0) // доступное количество
   // Variant-level reserved count is not tracked here; use Product.reserved for total reserved units.
-  inStock   Boolean @default(true)
-  attributes Json   // { "Память": "256GB", "Цвет": "Черный" }
-  photos    String[]              // массив file_id фото (специфичные для варианта)
+  inStock    Boolean  @default(true)
+  attributes Json // { "Память": "256GB", "Цвет": "Черный" }
+  photos     String[] // массив file_id фото (специфичные для варианта)
+
+  // ── Pricing & sync fields (Commit 2) ──────────────────────────────────
+  costPrice           Decimal? @db.Decimal(12, 2) // Закупочная цена от поставщика
+  lastSyncedCostPrice Decimal? @db.Decimal(12, 2) // Снимок закупки при последней синхронизации
+  photoUrls           String[] // URL фото с хостинга (из колонки Q)
 
   createdAt DateTime @default(now())
 
@@ -280,9 +285,9 @@ model StockMovement {
   id        Int               @id @default(autoincrement())
   variantId Int
   type      StockMovementType // A11
-  quantity  Int               // всегда положительное число
+  quantity  Int // всегда положительное число
   comment   String?
-  createdBy String?           // telegram userId кто сделал операцию
+  createdBy String? // telegram userId кто сделал операцию
   createdAt DateTime          @default(now())
 
   // Restrict: deleting a variant that has stock movements would destroy audit history.
@@ -291,24 +296,24 @@ model StockMovement {
   @@index([variantId])
   @@index([createdAt])
   @@index([variantId, createdAt])
-  @@index([type])             // A8
+  @@index([type]) // A8
 }
 
 model Order {
-  id              Int          @id @default(autoincrement())
+  id              Int           @id @default(autoincrement())
   clientId        Int?
-  telegramId      String       // Telegram user ID из WebApp
-  totalAmount     Decimal      @db.Decimal(12, 2)
+  telegramId      String // Telegram user ID из WebApp
+  totalAmount     Decimal       @db.Decimal(12, 2)
   payment         OrderPayment // A11
-  status          OrderStatus  @default(new) // A11
+  status          OrderStatus   @default(new) // A11
   customerName    String?
   customerPhone   String?
   deliveryType    DeliveryType?
   deliveryAddress String?
   customerComment String?
-  createdAt       DateTime     @default(now())
+  createdAt       DateTime      @default(now())
 
-  client Client?      @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  client Client?     @relation(fields: [clientId], references: [id], onDelete: SetNull)
   items  OrderItem[]
 
   @@index([telegramId])
@@ -357,7 +362,7 @@ model Reservation {
 
 model ApiKey {
   id         Int      @id @default(autoincrement())
-  service    String   @unique  // например "sales_topic"
+  service    String   @unique // например "sales_topic"
   value      String
   keyVersion Int      @default(1)
   createdAt  DateTime @default(now())
@@ -373,24 +378,24 @@ model HeroBanner {
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
 
-  @@index([isActive, order])  // A7
+  @@index([isActive, order]) // A7
 }
 
 model BroadcastLog {
-  id               Int      @id @default(autoincrement())
-  type             BroadcastType
-  target           String   // тег, название сегмента или "all"
-  messageText      String?
-  mediaFileId      String?
-  mediaType        MediaType?
-  totalSent        Int
-  totalFailed      Int
-  createdAt        DateTime @default(now())
-  createdBy        String   // telegram userId администратора
-  adminTelegramId  BigInt?
+  id              Int           @id @default(autoincrement())
+  type            BroadcastType
+  target          String // тег, название сегмента или "all"
+  messageText     String?
+  mediaFileId     String?
+  mediaType       MediaType?
+  totalSent       Int
+  totalFailed     Int
+  createdAt       DateTime      @default(now())
+  createdBy       String // telegram userId администратора
+  adminTelegramId BigInt?
 
-  @@index([createdBy])        // A6
-  @@index([type])             // A6
+  @@index([createdBy]) // A6
+  @@index([type]) // A6
   @@index([adminTelegramId])
 }
 
@@ -401,16 +406,16 @@ model Promotion {
   discountValue    Decimal      @db.Decimal(12, 2)
   filterType       FilterType
   filterValue      String
-  isActive         Boolean          @default(true)
+  isActive         Boolean      @default(true)
   startsAt         DateTime?
   endsAt           DateTime?
-  createdAt        DateTime         @default(now())
-  updatedAt        DateTime         @updatedAt
-  notificationSent Boolean          @default(false)
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+  notificationSent Boolean      @default(false)
 
   prices PromotionPrice[]
 
-  @@index([isActive])         // A5
+  @@index([isActive]) // A5
   @@index([startsAt, endsAt]) // A5
 }
 
@@ -424,7 +429,7 @@ model PromotionPrice {
   variant   ProductVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
 
   @@unique([promotionId, variantId])
-  @@index([variantId])      // A4
+  @@index([variantId]) // A4
 }
 
 model PriceChange {
@@ -432,9 +437,9 @@ model PriceChange {
   variantId Int
   oldPrice  Decimal  @db.Decimal(12, 2)
   newPrice  Decimal  @db.Decimal(12, 2)
-  source    String   // "message" | "file" | "markup" | "manual" | "currency_update"
+  source    String // "message" | "file" | "markup" | "manual" | "currency_update"
   markup    Decimal? @db.Decimal(6, 2) // наценка в %
-  comment   String?  // комментарий из файла (колонка G)
+  comment   String? // комментарий из файла (колонка G)
   createdAt DateTime @default(now())
   createdBy String
 
@@ -450,20 +455,19 @@ model CurrencyRate {
   rate         Decimal  @db.Decimal(12, 4)
   previousRate Decimal? @db.Decimal(12, 4)
   updatedAt    DateTime @updatedAt
-
 }
 
 model Supplier {
-  id          Int      @id @default(autoincrement())
-  name        String   @unique
-  chatId      String   @unique
-  chatType    String   @default("group") // "group" | "channel" | "private"
-  isActive    Boolean  @default(true)
-  markup      Decimal  @default(5) @db.Decimal(5, 2)
+  id          Int       @id @default(autoincrement())
+  name        String    @unique
+  chatId      String    @unique
+  chatType    String    @default("group") // "group" | "channel" | "private"
+  isActive    Boolean   @default(true)
+  markup      Decimal   @default(5) @db.Decimal(5, 2)
   notes       String?
   lastPriceAt DateTime?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   prices SupplierPrice[]
 
@@ -472,16 +476,16 @@ model Supplier {
 }
 
 model SupplierPrice {
-  id         Int      @id @default(autoincrement())
+  id         Int @id @default(autoincrement())
   supplierId Int
 
-  model      String
-  storage    String?
-  ram        String?
-  color      String?
-  simType    String?
-  country    String?
-  price      Decimal  @db.Decimal(12, 2)
+  model   String
+  storage String?
+  ram     String?
+  color   String?
+  simType String?
+  country String?
+  price   Decimal @db.Decimal(12, 2)
 
   rawMessage String
   messageId  Int?
@@ -601,4 +605,21 @@ model AvitoItemStat {
   @@unique([avitoItemId, date])
   @@index([avitoItemId])
   @@index([date])
+}
+
+/// Правила наценки по интервалам закупочных цен.
+/// Интервал [minCost, maxCost). maxCost=null означает бесконечность.
+/// mode='fixed' -> price = cost + value; mode='percent' -> price = cost * (1 + value/100).
+model MarkupRule {
+  id        Int      @id @default(autoincrement())
+  minCost   Decimal  @db.Decimal(12, 2) // включительно
+  maxCost   Decimal? @db.Decimal(12, 2) // исключительно, null = бесконечность
+  mode      String   @default("fixed") // 'fixed' | 'percent'
+  value     Decimal  @db.Decimal(12, 2) // сумма в рублях (fixed) или процент (percent)
+  enabled   Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([enabled])
+  @@index([minCost])
 }
