@@ -429,8 +429,8 @@ export function startApiServer(bot?: Telegraf): void {
   // Заливка zip-архива с готовыми WebP-фотками в PHOTOS_DIR.
   // Auth: requireAdminHmac (HMAC от BOT_TOKEN + 5-минутный timestamp).
   // Парсер: express.raw application/zip, лимит 250 MB.
-  // Распаковка: tar -xf во временную папку, copy в PHOTOS_DIR с защитой от
-  // path traversal (берём path.basename, кладём плоско).
+  // Распаковка: adm-zip (чистый JS, не зависит от системного tar/unzip),
+  // copy в PHOTOS_DIR с защитой от path traversal (берём path.basename, кладём плоско).
   //
   // Возвращает JSON { uploaded, skipped, errors, photosDir }.
   // skipped = файл с тем же mtime≥ что у нового => не перезаписываем.
@@ -465,29 +465,27 @@ export function startApiServer(bot?: Telegraf): void {
 
       // Распаковка в tmp dir
       const os = await import('os')
-      const tmpZip = path.join(os.tmpdir(), `bender-upload-${Date.now()}-${crypto.randomBytes(4).toString('hex')}.zip`)
       const tmpExtract = path.join(os.tmpdir(), `bender-extract-${Date.now()}-${crypto.randomBytes(4).toString('hex')}`)
 
       let cleanedTmp = false
       const cleanup = (): void => {
         if (cleanedTmp) return
         cleanedTmp = true
-        try { fs.rmSync(tmpZip, { force: true }) } catch { /* ignore */ }
         try { fs.rmSync(tmpExtract, { recursive: true, force: true }) } catch { /* ignore */ }
       }
 
       try {
-        fs.writeFileSync(tmpZip, body)
         fs.mkdirSync(tmpExtract, { recursive: true })
 
-        // tar -xf поддерживает zip на Linux (через libarchive) и Windows 10+
-        const { execFileSync } = await import('child_process')
+        // adm-zip: чистый JS, не зависит от системного tar/unzip (GNU tar zip не понимает).
+        const AdmZip = (await import('adm-zip')).default
         try {
-          execFileSync('tar', ['-xf', tmpZip, '-C', tmpExtract], { stdio: 'pipe' })
+          const zip = new AdmZip(body)
+          zip.extractAllTo(tmpExtract, /* overwrite */ true)
         } catch (err) {
-          log.error('tar extraction failed', { err: err instanceof Error ? err.message : String(err) })
+          log.error('zip extraction failed', { err: err instanceof Error ? err.message : String(err) })
           cleanup()
-          res.status(400).json({ error: 'Failed to extract zip (tar -xf)' })
+          res.status(400).json({ error: `Failed to extract zip: ${err instanceof Error ? err.message : String(err)}` })
           return
         }
 
