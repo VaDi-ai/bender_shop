@@ -38,10 +38,13 @@ R-test/
 R-test-out/
 R-padded/
 R-final/
+staging-flat/
+staging-named/
 Фото/
 Фото_ready/
 Новая папка/
 _tmp_*/
+_smoketest_*/
 
 # Source archives (not part of repo)
 /*.zip
