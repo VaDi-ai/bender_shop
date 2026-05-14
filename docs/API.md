@@ -80,6 +80,28 @@ Instagram webhook verification (challenge response).
 ### GET /api/avito/feed
 Avito XML feed for autoload listings.
 
+## Admin Endpoints
+
+Auth: HMAC-SHA256 от `BOT_TOKEN` поверх `<timestamp>:<sha256(body)>`. Заголовки:
+- `X-Admin-Timestamp` — unix-секунды, replay-окно 5 минут
+- `X-Admin-Signature` — hex(hmac-sha256)
+
+Локальная обёртка: `scripts/upload-photos.ts` (`npm run upload-photos -- <zip>`) — формирует подпись автоматически.
+
+### POST /admin/photos/upload
+Заливка zip с готовыми WebP в `PHOTOS_DIR`. Лимит — 250 MB.
+
+**Headers:** `Content-Type: application/zip` + admin HMAC.
+
+**Body:** raw bytes zip-архива.
+
+**Response:** `{ uploaded, skipped, errors, photosDir }`. `skipped` — файлы у которых mtime в `PHOTOS_DIR` уже >= mtime в zip.
+
+### GET /admin/photos/info
+Статус `PHOTOS_DIR` на сервере.
+
+**Response:** `{ photosDir, exists, configured, count, bytes, sizeMb, latestMtime }`.
+
 ## Admin Bot Commands
 
 | Command | Description |

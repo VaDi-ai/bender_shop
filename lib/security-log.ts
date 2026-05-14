@@ -39,6 +39,9 @@ export type SecurityEvent =
   | 'supplier_updated'
   | 'supplier_deleted'
   | 'supplier_markup_changed'
+  | 'admin_hmac_stale'
+  | 'invalid_admin_hmac'
+  | 'photos_uploaded'
 
 // ─── Ссылка на бот для реалтайм-алертов ──────────────────────────────────────
 
@@ -95,6 +98,9 @@ const EVENT_DESCRIPTIONS: Record<SecurityEvent, string> = {
   supplier_updated:           '🏭 Обновлён поставщик',
   supplier_deleted:           '🏭 Удалён поставщик',
   supplier_markup_changed:    '🏭 Изменена наценка по умолчанию',
+  admin_hmac_stale:           '🕒 Просроченная подпись /admin (replay-защита)',
+  invalid_admin_hmac:         '🔑 Неверная HMAC-подпись /admin',
+  photos_uploaded:            '🖼️ Загружен пакет фото товаров',
 }
 
 const SENSITIVE_KEY_PATTERNS = ['token', 'key', 'hash', 'secret']

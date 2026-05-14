@@ -1,29 +1,31 @@
 /**
  * Match product photos to Google Sheets rows.
  *
+ * Два режима работы:
+ *
+ * 1) **Offline (xlsx)** — читает скачанный xlsx, пишет обновлённый xlsx + отчёты.
+ *      ts-node scripts/match-photos-to-sheets.ts <photos_dir> <input_xlsx> <output_dir> <base_url>
+ *
+ * 2) **Sheets-direct** — читает строки из Google Sheets через сервисный аккаунт,
+ *    пишет URL'ы прямо в колонку Q через batchUpdate API.
+ *      ts-node scripts/match-photos-to-sheets.ts <photos_dir> --sheet <output_dir> <base_url> [--write] [--sheet-name=Лист1]
+ *
+ *      Без --write: только отчёты (dry-run). С --write: реально дописывает колонку Q.
+ *      По умолчанию имя листа берётся из PRODUCT_SHEET_NAME env или 'Лист1'.
+ *
  * Алгоритм:
  *   1. Парсим имя каждого файла в семантические поля (brand, family, size, color, etc.)
  *      — per-brand парсеры (Apple Watch / iPhone / Samsung / Dyson / generic).
- *   2. Для каждой строки Sheets берём готовые поля (Бренд / Категория / Цвет / Размер).
+ *   2. Для каждой строки берём готовые поля (Бренд / Категория / Цвет / Размер).
  *   3. Группируем строки в Map<key, row[]> где key = "brand|family|size|color".
  *   4. Для каждого фото:
  *        — точный match (все 4 поля) → confidence 100, URL в колонку Q.
  *        — partial match (3 из 4) → confidence 75, URL в колонку Q + помечаем для ревью.
  *        — иначе → нет матча, попадает в orphans.csv.
- *   5. Сохраняем обновлённый xlsx + два отчёта (matched.csv, orphans.csv).
- *
- * Использование:
- *   ts-node scripts/match-photos-to-sheets.ts <photos_dir> <input_xlsx> <output_dir> <base_url>
- *
- * Например:
- *   ts-node scripts/match-photos-to-sheets.ts \
- *     ./photos-processed \
- *     ./Товарное_наличие.xlsx \
- *     ./match-output \
- *     https://bendershop.store/photos
+ *   5. Сохраняем результат через выбранный SheetAdapter + два отчёта (matched.csv, orphans.csv).
  *
  * На выходе в output_dir:
- *   - Товарное_наличие_with_photos.xlsx (с заполненной колонкой Q)
+ *   - <name>_with_photos.xlsx (только в offline режиме)
  *   - matched.csv (фото → строки Sheets, с confidence)
  *   - orphans.csv (фото без надёжного матча — для ручного разбора)
  *   - unmatched_rows.csv (строки Sheets, для которых не нашлось фото)
@@ -514,121 +516,350 @@ function matchPhoto(photo: PhotoMeta, byKey: Map<string, SheetRow[]>): MatchResu
   return { photo: photo.filename, rows: [], confidence: 0, reason: 'no match' }
 }
 
-// ── Загрузка xlsx ────────────────────────────────────────────────────────────
+// ── Адаптер для источника данных (xlsx или Google Sheets) ────────────────────
 
-async function loadSheet(xlsxPath: string): Promise<{
-  workbook: ExcelJS.Workbook
-  worksheet: ExcelJS.Worksheet
+/**
+ * Унифицированный интерфейс над xlsx и Google Sheets API. Обе реализации
+ * читают строки → отдают `rows`, копят set-операции на колонке «Фото» (Q),
+ * затем сохраняют результат своим способом (xlsx-файл или batchUpdate).
+ */
+interface SheetAdapter {
   rows: SheetRow[]
-  cols: { name: string; idx: number }[]
-}> {
-  const wb = new ExcelJS.Workbook()
-  await wb.xlsx.readFile(xlsxPath)
-  const ws = wb.getWorksheet('Лист1') ?? wb.worksheets[0]
-  if (!ws) throw new Error('No worksheet found in xlsx')
+  /** 1-based индекс колонки «Фото» (как в xlsx). */
+  photoColIdx: number
+  /** Получить текущее значение колонки «Фото» для строки (для аккумулирования с запятой). */
+  getPhotoCell(rowIdx: number): string
+  /** Записать новое значение в колонку «Фото» строки. */
+  setPhotoCell(rowIdx: number, value: string): void
+  /** Сохранить результат. Возвращает описание того, что сделали. */
+  save(): Promise<string>
+}
 
-  // header row = 1
-  const header = ws.getRow(1)
-  const findCol = (...names: string[]): number => {
-    for (let i = 1; i <= header.cellCount; i++) {
-      const v = String(header.getCell(i).value ?? '').trim()
-      if (names.some(n => v === n)) return i
+/** Имена колонок, общие для обоих источников. */
+const COL_HEADERS = {
+  brand: ['Бренд', 'Brand'],
+  category: ['Общая категория', 'Категория', 'Category'],
+  fullName: ['Название модели', 'Название', 'Model'],
+  color: ['Цвет', 'Color'],
+  size: ['Размер', 'Size'],
+  photo: ['Фото', 'Photo'],
+} as const
+
+function colLetter(idx1: number): string {
+  // Поддержка только 1..26 (для нашей схемы хватает: max колонка Q = 17)
+  if (idx1 < 1 || idx1 > 26) throw new Error(`Unsupported column index: ${idx1}`)
+  return String.fromCharCode('A'.charCodeAt(0) + idx1 - 1)
+}
+
+// ── Xlsx adapter ─────────────────────────────────────────────────────────────
+
+class XlsxAdapter implements SheetAdapter {
+  rows: SheetRow[] = []
+  photoColIdx = 0
+  private workbook!: ExcelJS.Workbook
+  private worksheet!: ExcelJS.Worksheet
+  private outputPath: string
+
+  constructor(outputPath: string) {
+    this.outputPath = outputPath
+  }
+
+  async load(xlsxPath: string): Promise<void> {
+    this.workbook = new ExcelJS.Workbook()
+    await this.workbook.xlsx.readFile(xlsxPath)
+    const ws = this.workbook.getWorksheet('Лист1') ?? this.workbook.worksheets[0]
+    if (!ws) throw new Error('No worksheet found in xlsx')
+    this.worksheet = ws
+
+    const header = ws.getRow(1)
+    const findCol = (names: readonly string[]): number => {
+      for (let i = 1; i <= header.cellCount; i++) {
+        const v = String(header.getCell(i).value ?? '').trim()
+        if (names.some(n => v === n)) return i
+      }
+      return -1
     }
-    return -1
-  }
-  const cols = {
-    brand: findCol('Бренд', 'Brand'),
-    category: findCol('Категория', 'Category'),
-    fullName: findCol('Название модели', 'Название', 'Model'),
-    color: findCol('Цвет', 'Color'),
-    size: findCol('Размер', 'Size'),
-    photo: findCol('Фото', 'Photo'),
-  }
-  for (const [k, v] of Object.entries(cols)) {
-    if (v < 0) throw new Error(`Column not found: ${k}`)
+    const cols = {
+      brand: findCol(COL_HEADERS.brand),
+      category: findCol(COL_HEADERS.category),
+      fullName: findCol(COL_HEADERS.fullName),
+      color: findCol(COL_HEADERS.color),
+      size: findCol(COL_HEADERS.size),
+      photo: findCol(COL_HEADERS.photo),
+    }
+    for (const [k, v] of Object.entries(cols)) {
+      if (v < 0) throw new Error(`Column not found in xlsx: ${k}`)
+    }
+    this.photoColIdx = cols.photo
+
+    for (let r = 2; r <= ws.rowCount; r++) {
+      const row = ws.getRow(r)
+      const brand = String(row.getCell(cols.brand).value ?? '').trim()
+      const fullName = String(row.getCell(cols.fullName).value ?? '').trim()
+      if (!brand || !fullName) continue
+      const category = String(row.getCell(cols.category).value ?? '').trim()
+      const color = String(row.getCell(cols.color).value ?? '').trim()
+      const size = String(row.getCell(cols.size).value ?? '').trim()
+      this.rows.push({
+        rowIdx: r,
+        brand,
+        category,
+        fullName,
+        color,
+        size: normSize(size),
+        family: extractFamily(brand, category, fullName),
+      })
+    }
   }
 
-  const rows: SheetRow[] = []
-  for (let r = 2; r <= ws.rowCount; r++) {
-    const row = ws.getRow(r)
-    const brand = String(row.getCell(cols.brand).value ?? '').trim()
-    const fullName = String(row.getCell(cols.fullName).value ?? '').trim()
-    if (!brand || !fullName) continue
-    const category = String(row.getCell(cols.category).value ?? '').trim()
-    const color = String(row.getCell(cols.color).value ?? '').trim()
-    const size = String(row.getCell(cols.size).value ?? '').trim()
-    rows.push({
-      rowIdx: r,
-      brand,
-      category,
-      fullName,
-      color,
-      size: normSize(size),
-      family: extractFamily(brand, category, fullName),
+  getPhotoCell(rowIdx: number): string {
+    const cell = this.worksheet.getRow(rowIdx).getCell(this.photoColIdx)
+    return String(cell.value ?? '').trim()
+  }
+
+  setPhotoCell(rowIdx: number, value: string): void {
+    const cell = this.worksheet.getRow(rowIdx).getCell(this.photoColIdx)
+    cell.value = value
+  }
+
+  async save(): Promise<string> {
+    await this.workbook.xlsx.writeFile(this.outputPath)
+    return this.outputPath
+  }
+}
+
+// ── Google Sheets adapter ────────────────────────────────────────────────────
+
+/**
+ * Читает строки напрямую из Google Sheets через сервисный аккаунт. Запись
+ * — батч-апдейтом в колонку Q (один API-вызов на весь diff). В dry-run
+ * режиме save() ничего не пишет, только репортит план.
+ */
+class SheetsAdapter implements SheetAdapter {
+  rows: SheetRow[] = []
+  photoColIdx = 0
+  private sheetName: string
+  private dryRun: boolean
+  /** Текущее содержимое колонки «Фото» по rowIdx. */
+  private currentPhoto = new Map<number, string>()
+  /** Diff: значения, которые надо записать обратно. */
+  private updates = new Map<number, string>()
+
+  constructor(sheetName: string, dryRun: boolean) {
+    this.sheetName = sheetName
+    this.dryRun = dryRun
+  }
+
+  async load(): Promise<void> {
+    // Ленивый require — чтобы offline-режим не требовал GOOGLE_SERVICE_ACCOUNT_KEY.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { readSheet } = await import('../lib/google-sheets')
+
+    const raw = await readSheet(this.sheetName)
+    if (raw.length === 0) throw new Error(`Sheet '${this.sheetName}' is empty`)
+
+    const header = raw[0] ?? []
+    const findCol = (names: readonly string[]): number => {
+      for (let i = 0; i < header.length; i++) {
+        const v = String(header[i] ?? '').trim()
+        if (names.some(n => v === n)) return i
+      }
+      return -1
+    }
+    const cols = {
+      brand: findCol(COL_HEADERS.brand),
+      category: findCol(COL_HEADERS.category),
+      fullName: findCol(COL_HEADERS.fullName),
+      color: findCol(COL_HEADERS.color),
+      size: findCol(COL_HEADERS.size),
+      photo: findCol(COL_HEADERS.photo),
+    }
+    for (const [k, v] of Object.entries(cols)) {
+      if (v < 0) throw new Error(`Column not found in Sheet '${this.sheetName}': ${k}`)
+    }
+    // Конвертируем 0-based индекс в 1-based (xlsx-стиль) — чтобы matching-логика не различалась.
+    this.photoColIdx = cols.photo + 1
+
+    for (let r = 1; r < raw.length; r++) {
+      const row = raw[r] ?? []
+      const brand = String(row[cols.brand] ?? '').trim()
+      const fullName = String(row[cols.fullName] ?? '').trim()
+      if (!brand || !fullName) continue
+      const category = String(row[cols.category] ?? '').trim()
+      const color = String(row[cols.color] ?? '').trim()
+      const size = String(row[cols.size] ?? '').trim()
+      const photo = String(row[cols.photo] ?? '').trim()
+      // rowIdx — 1-based номер строки в Sheets (как в xlsx: header=1, данные с 2)
+      const rowIdx = r + 1
+      this.rows.push({
+        rowIdx,
+        brand,
+        category,
+        fullName,
+        color,
+        size: normSize(size),
+        family: extractFamily(brand, category, fullName),
+      })
+      this.currentPhoto.set(rowIdx, photo)
+    }
+  }
+
+  getPhotoCell(rowIdx: number): string {
+    // Если уже было изменение — возвращаем его (для аккумулирования через запятую)
+    if (this.updates.has(rowIdx)) return this.updates.get(rowIdx)!
+    return this.currentPhoto.get(rowIdx) ?? ''
+  }
+
+  setPhotoCell(rowIdx: number, value: string): void {
+    this.updates.set(rowIdx, value)
+  }
+
+  async save(): Promise<string> {
+    if (this.updates.size === 0) return 'no updates'
+    if (this.dryRun) {
+      return `dry-run: ${this.updates.size} cells would be updated in '${this.sheetName}'`
+    }
+
+    const letter = colLetter(this.photoColIdx)
+    // Группируем подряд идущие строки в один range, чтобы уменьшить количество ranges.
+    const sortedRows = [...this.updates.keys()].sort((a, b) => a - b)
+    type RunData = { range: string; values: (string | number)[][] }
+    const ranges: RunData[] = []
+    let runStart = sortedRows[0]!
+    let runValues: string[] = [this.updates.get(runStart)!]
+    for (let i = 1; i < sortedRows.length; i++) {
+      const r = sortedRows[i]!
+      const prev = sortedRows[i - 1]!
+      if (r === prev + 1) {
+        runValues.push(this.updates.get(r)!)
+      } else {
+        const end = prev
+        ranges.push({
+          range: `${letter}${runStart}:${letter}${end}`,
+          values: runValues.map(v => [v]),
+        })
+        runStart = r
+        runValues = [this.updates.get(r)!]
+      }
+    }
+    const lastEnd = sortedRows[sortedRows.length - 1]!
+    ranges.push({
+      range: `${letter}${runStart}:${letter}${lastEnd}`,
+      values: runValues.map(v => [v]),
     })
-  }
 
-  return {
-    workbook: wb,
-    worksheet: ws,
-    rows,
-    cols: [
-      { name: 'photo', idx: cols.photo },
-    ],
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { batchUpdate } = await import('../lib/google-sheets')
+    // Префиксуем именем листа для batchUpdate
+    const data = ranges.map(r => ({
+      range: `'${this.sheetName}'!${r.range}`,
+      values: r.values,
+    }))
+    await batchUpdate(data)
+    return `updated ${this.updates.size} cells in '${this.sheetName}' (${ranges.length} ranges)`
   }
 }
 
 // ── Main ─────────────────────────────────────────────────────────────────────
 
+interface CliArgs {
+  photosDir: string
+  outputDir: string
+  baseUrl: string
+  mode: 'xlsx' | 'sheets'
+  xlsxPath?: string         // только для xlsx mode
+  sheetName?: string        // только для sheets mode
+  write?: boolean           // sheets mode: реально писать в Sheets
+}
+
+function printUsage(): void {
+  console.error('Usage:')
+  console.error('  Offline (xlsx):')
+  console.error('    ts-node scripts/match-photos-to-sheets.ts <photos_dir> <input_xlsx> <output_dir> <base_url>')
+  console.error('')
+  console.error('  Sheets-direct:')
+  console.error('    ts-node scripts/match-photos-to-sheets.ts <photos_dir> --sheet <output_dir> <base_url> [--write] [--sheet-name=Лист1]')
+  console.error('')
+  console.error('  Без --write — dry-run (только отчёты, Sheets не трогаем).')
+  console.error('  PRODUCT_SHEET_NAME env используется как default имя листа.')
+}
+
+function parseArgs(argv: string[]): CliArgs | null {
+  if (argv.length < 5) return null
+  const photosDir = argv[2]
+  const second = argv[3]
+  const outputDir = argv[4]
+  const baseUrl = argv[5]
+  if (!photosDir || !second || !outputDir || !baseUrl) return null
+
+  if (second === '--sheet') {
+    let sheetName = process.env.PRODUCT_SHEET_NAME || 'Лист1'
+    let write = false
+    for (let i = 6; i < argv.length; i++) {
+      const a = argv[i] ?? ''
+      if (a === '--write') write = true
+      else if (a.startsWith('--sheet-name=')) sheetName = a.split('=', 2)[1] ?? sheetName
+    }
+    return { photosDir, outputDir, baseUrl, mode: 'sheets', sheetName, write }
+  }
+
+  return { photosDir, outputDir, baseUrl, mode: 'xlsx', xlsxPath: second }
+}
+
 async function main() {
-  const photosDir = process.argv[2]
-  const xlsxPath = process.argv[3]
-  const outputDir = process.argv[4]
-  const baseUrl = process.argv[5]
-
-  if (!photosDir || !xlsxPath || !outputDir || !baseUrl) {
-    console.error('Usage: ts-node scripts/match-photos-to-sheets.ts <photos_dir> <input_xlsx> <output_dir> <base_url>')
-    console.error('Example:')
-    console.error('  ts-node scripts/match-photos-to-sheets.ts ./photos ./prices.xlsx ./out https://bendershop.store/photos')
+  const args = parseArgs(process.argv)
+  if (!args) {
+    printUsage()
     process.exit(1)
   }
 
-  if (!fs.existsSync(photosDir)) {
-    console.error(`Photos dir not found: ${photosDir}`)
+  if (!fs.existsSync(args.photosDir)) {
+    console.error(`Photos dir not found: ${args.photosDir}`)
     process.exit(1)
   }
-  if (!fs.existsSync(xlsxPath)) {
-    console.error(`xlsx not found: ${xlsxPath}`)
-    process.exit(1)
+
+  // Initialize adapter
+  let adapter: SheetAdapter
+  if (args.mode === 'xlsx') {
+    if (!fs.existsSync(args.xlsxPath!)) {
+      console.error(`xlsx not found: ${args.xlsxPath}`)
+      process.exit(1)
+    }
+    fs.mkdirSync(args.outputDir, { recursive: true })
+    const outXlsx = path.join(args.outputDir, path.basename(args.xlsxPath!, '.xlsx') + '_with_photos.xlsx')
+    const xlsxAdapter = new XlsxAdapter(outXlsx)
+    console.log(`Loading ${args.xlsxPath}...`)
+    await xlsxAdapter.load(args.xlsxPath!)
+    adapter = xlsxAdapter
+  } else {
+    fs.mkdirSync(args.outputDir, { recursive: true })
+    const sheetsAdapter = new SheetsAdapter(args.sheetName!, !args.write)
+    console.log(`Reading Google Sheets: '${args.sheetName}'${args.write ? '' : ' (dry-run)'}`)
+    await sheetsAdapter.load()
+    adapter = sheetsAdapter
   }
-  fs.mkdirSync(outputDir, { recursive: true })
+  console.log(`Sheet rows: ${adapter.rows.length}`)
 
   // 1. Загрузить и распарсить фото
-  const photoFiles = fs.readdirSync(photosDir).filter(f => /\.(png|webp|jpg|jpeg)$/i.test(f))
+  const photoFiles = fs.readdirSync(args.photosDir).filter(f => /\.(png|webp|jpg|jpeg)$/i.test(f))
   console.log(`Photos: ${photoFiles.length}`)
   const photos = photoFiles.map(f => parsePhoto(f))
 
-  // 2. Загрузить и распарсить Sheets
-  console.log(`Loading ${xlsxPath}...`)
-  const { workbook, worksheet, rows, cols } = await loadSheet(xlsxPath)
-  console.log(`Sheet rows: ${rows.length}`)
-
-  // 3. Сгруппировать строки по composite key
+  // 2. Сгруппировать строки по composite key
   const byKey = new Map<string, SheetRow[]>()
-  for (const row of rows) {
+  for (const row of adapter.rows) {
     const key = makeKey(row.brand, row.family, row.size, row.color)
     const list = byKey.get(key) ?? []
     list.push(row)
     byKey.set(key, list)
   }
-  console.log(`Unique keys in sheet: ${byKey.size}`)
+  console.log(`Unique keys: ${byKey.size}`)
 
-  // 4. Match каждое фото
+  // 3. Match каждое фото
   const matches: MatchResult[] = photos.map(p => matchPhoto(p, byKey))
 
-  // 5. Распределить по статусам
+  // 4. Распределить по статусам и накопить изменения в адаптере
   const matchedRowIds = new Set<number>()
-  const photoCol = cols.find(c => c.name === 'photo')!.idx
   let writtenCount = 0
   let exactConf = 0, midConf = 0, prefixConf = 0, lowConf = 0, none = 0
 
@@ -639,64 +870,63 @@ async function main() {
     else if (m.confidence >= 70) prefixConf++
     else lowConf++
 
-    // Высокая+средняя+prefix-with-color уверенность пишет URL в xlsx
+    // Высокая+средняя+prefix-with-color уверенность пишет URL
     if (m.confidence >= 70) {
-      const url = `${baseUrl.replace(/\/$/, '')}/${encodeURIComponent(m.photo).replace(/\.png$/i, '.webp')}`
+      const url = `${args.baseUrl.replace(/\/$/, '')}/${encodeURIComponent(m.photo).replace(/\.png$/i, '.webp')}`
       for (const rIdx of m.rows) {
-        const cell = worksheet.getRow(rIdx).getCell(photoCol)
-        const existing = String(cell.value ?? '').trim()
-        // если в ячейке уже что-то есть — добавляем через запятую (поддерживается parsePhotoUrls)
-        cell.value = existing ? `${existing}, ${url}` : url
+        const existing = adapter.getPhotoCell(rIdx)
+        // если в ячейке уже что-то есть — добавляем через запятую (parsePhotoUrls в sheets-sync.ts это поддерживает)
+        const newValue = existing ? `${existing}, ${url}` : url
+        adapter.setPhotoCell(rIdx, newValue)
         matchedRowIds.add(rIdx)
         writtenCount++
       }
     }
   }
 
-  // 6. Сохранить xlsx
-  const outXlsx = path.join(outputDir, path.basename(xlsxPath, '.xlsx') + '_with_photos.xlsx')
-  await workbook.xlsx.writeFile(outXlsx)
+  // 5. Сохранить через адаптер
+  const saveResult = await adapter.save()
 
-  // 7. Отчёты
+  // 6. Отчёты
   const matchedCsv = ['filename,confidence,reason,row_indices,row_names']
   const orphansCsv = ['filename,brand,family,size,color,reason']
   for (let i = 0; i < photos.length; i++) {
     const p = photos[i]!
     const m = matches[i]!
     if (m.confidence >= 70) {
-      const names = m.rows.slice(0, 3).map(r => rows.find(row => row.rowIdx === r)?.fullName ?? '?').join(' | ')
+      const names = m.rows.slice(0, 3).map(r => adapter.rows.find(row => row.rowIdx === r)?.fullName ?? '?').join(' | ')
       matchedCsv.push(`"${p.filename}",${m.confidence},"${m.reason}","${m.rows.join(';')}","${names}"`)
     } else {
       orphansCsv.push(`"${p.filename}","${p.brand}","${p.family}","${p.size}","${p.color}","${m.reason}"`)
     }
   }
 
-  // Строки Sheets без фото
+  // Строки без фото
   const unmatchedRowsCsv = ['row_idx,brand,category,fullName,color,size,family']
-  for (const row of rows) {
+  for (const row of adapter.rows) {
     if (!matchedRowIds.has(row.rowIdx)) {
       unmatchedRowsCsv.push(`${row.rowIdx},"${row.brand}","${row.category}","${row.fullName}","${row.color}","${row.size}","${row.family}"`)
     }
   }
 
-  fs.writeFileSync(path.join(outputDir, 'matched.csv'), matchedCsv.join('\n'), 'utf-8')
-  fs.writeFileSync(path.join(outputDir, 'orphans.csv'), orphansCsv.join('\n'), 'utf-8')
-  fs.writeFileSync(path.join(outputDir, 'unmatched_rows.csv'), unmatchedRowsCsv.join('\n'), 'utf-8')
+  fs.writeFileSync(path.join(args.outputDir, 'matched.csv'), matchedCsv.join('\n'), 'utf-8')
+  fs.writeFileSync(path.join(args.outputDir, 'orphans.csv'), orphansCsv.join('\n'), 'utf-8')
+  fs.writeFileSync(path.join(args.outputDir, 'unmatched_rows.csv'), unmatchedRowsCsv.join('\n'), 'utf-8')
 
-  // 8. Summary
+  // 7. Summary
   console.log('\n=== Match results ===')
   console.log(`  exact (conf 100):           ${exactConf} photos`)
   console.log(`  no-size / family+color (75-85): ${midConf} photos`)
   console.log(`  prefix family + color (70): ${prefixConf} photos`)
   console.log(`  family only (50, NOT written): ${lowConf} photos`)
   console.log(`  no match:                   ${none} photos`)
-  console.log(`\n  URLs written: ${writtenCount} (across ${matchedRowIds.size} of ${rows.length} rows)`)
-  console.log(`  Coverage: ${(100 * matchedRowIds.size / rows.length).toFixed(1)}% of sheet rows`)
-  console.log(`\n  Output:`)
-  console.log(`    ${outXlsx}`)
-  console.log(`    ${path.join(outputDir, 'matched.csv')}`)
-  console.log(`    ${path.join(outputDir, 'orphans.csv')}`)
-  console.log(`    ${path.join(outputDir, 'unmatched_rows.csv')}`)
+  console.log(`\n  URLs written: ${writtenCount} (across ${matchedRowIds.size} of ${adapter.rows.length} rows)`)
+  console.log(`  Coverage: ${(100 * matchedRowIds.size / Math.max(1, adapter.rows.length)).toFixed(1)}% of sheet rows`)
+  console.log(`\n  Save: ${saveResult}`)
+  console.log(`  Reports:`)
+  console.log(`    ${path.join(args.outputDir, 'matched.csv')}`)
+  console.log(`    ${path.join(args.outputDir, 'orphans.csv')}`)
+  console.log(`    ${path.join(args.outputDir, 'unmatched_rows.csv')}`)
 }
 
 main().catch(err => {

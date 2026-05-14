@@ -122,6 +122,59 @@ function requireTelegramAuth(req: Request, res: Response, next: NextFunction): v
   next()
 }
 
+// ─── Middleware: Admin HMAC auth (для CLI-загрузок без Mini App) ───────────────
+//
+// Используется на /admin/photos/upload и других CLI-only endpoint'ах.
+// Клиент (scripts/upload-photos.ts) считает HMAC-SHA256(BOT_TOKEN, ts:bodyHash)
+// и шлёт его в заголовках. Сервер проверяет:
+//   - подпись совпадает (timingSafeEqual)
+//   - timestamp не старше 5 минут (anti-replay)
+//   - body hash совпадает с тем что использован в подписи
+//
+// Знание BOT_TOKEN = доверие; этот же токен используется для Telegram bot.
+function requireAdminHmac(req: Request, res: Response, next: NextFunction): void {
+  const ts = String(req.headers['x-admin-timestamp'] ?? '')
+  const sig = String(req.headers['x-admin-signature'] ?? '')
+
+  if (!ts || !sig) {
+    res.status(401).json({ error: 'Admin signature required' })
+    return
+  }
+
+  const tsNum = parseInt(ts, 10)
+  if (!Number.isFinite(tsNum)) {
+    res.status(401).json({ error: 'Bad timestamp' })
+    return
+  }
+  const nowSec = Math.floor(Date.now() / 1000)
+  if (Math.abs(nowSec - tsNum) > 300) {
+    logSecurityEvent('admin_hmac_stale', { ip: req.ip, age: nowSec - tsNum })
+    res.status(401).json({ error: 'Timestamp out of range' })
+    return
+  }
+
+  // express.raw кладёт body в Buffer. Если body не пришло — fallback на пустой буфер.
+  const body: Buffer = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0)
+  const bodyHash = crypto.createHash('sha256').update(body).digest('hex')
+  const expected = crypto.createHmac('sha256', BOT_TOKEN).update(`${ts}:${bodyHash}`).digest('hex')
+
+  let ok = false
+  try {
+    const a = Buffer.from(sig, 'hex')
+    const b = Buffer.from(expected, 'hex')
+    ok = a.length === b.length && crypto.timingSafeEqual(a, b)
+  } catch {
+    ok = false
+  }
+
+  if (!ok) {
+    logSecurityEvent('invalid_admin_hmac', { ip: req.ip, tsAge: nowSec - tsNum, bodyLen: body.length })
+    res.status(401).json({ error: 'Bad signature' })
+    return
+  }
+  next()
+}
+
 // ─── Запуск сервера ───────────────────────────────────────────────────────────
 
 export function startApiServer(bot?: Telegraf): void {
@@ -226,6 +279,12 @@ export function startApiServer(bot?: Telegraf): void {
   const trackLimiter = rateLimit({ windowMs: 60_000, max: 100 })
   app.use('/api/track', trackLimiter)
 
+  // /admin/photos/upload — заливка zip с фотками владельцем магазина.
+  // HMAC-подпись от BOT_TOKEN (см. requireAdminHmac ниже) → ADMIN_IDS не
+  // нужен на стороне API, доверие основано на знании BOT_TOKEN.
+  // Лимит мягкий (10/мин) на случай повторов из-за обрывов сети.
+  const adminUploadLimiter = rateLimit({ windowMs: 60_000, max: 10 })
+
   // ── Таймаут для долгих запросов ───────────────────────────────────────────
   app.use((_req, res, next) => {
     res.setTimeout(10_000, () => {
@@ -322,6 +381,182 @@ export function startApiServer(bot?: Telegraf): void {
     fallthrough: true,
     index: false,
   }))
+
+  // ── GET /admin/photos/info ───────────────────────────────────────────────────
+  //
+  // Возвращает статус PHOTOS_DIR (количество файлов, общий размер, последнее
+  // обновление). Используется владельцем для проверки что upload реально
+  // долетел до Volume. Защита та же что у upload — HMAC от BOT_TOKEN.
+  app.get('/admin/photos/info', adminUploadLimiter, requireAdminHmac, (_req, res) => {
+    if (!process.env.PHOTOS_DIR) {
+      res.json({ photosDir: null, exists: false, configured: false })
+      return
+    }
+    if (!fs.existsSync(photosDir)) {
+      res.json({ photosDir, exists: false, configured: true })
+      return
+    }
+    let count = 0
+    let bytes = 0
+    let latestMtime = 0
+    try {
+      for (const name of fs.readdirSync(photosDir)) {
+        const full = path.join(photosDir, name)
+        const st = fs.statSync(full)
+        if (!st.isFile()) continue
+        count++
+        bytes += st.size
+        if (st.mtimeMs > latestMtime) latestMtime = st.mtimeMs
+      }
+    } catch (err) {
+      log.error('Failed to read PHOTOS_DIR', { err: err instanceof Error ? err.message : String(err) })
+      res.status(500).json({ error: 'Failed to read PHOTOS_DIR' })
+      return
+    }
+    res.json({
+      photosDir,
+      exists: true,
+      configured: true,
+      count,
+      bytes,
+      sizeMb: +(bytes / 1024 / 1024).toFixed(2),
+      latestMtime: latestMtime > 0 ? new Date(latestMtime).toISOString() : null,
+    })
+  })
+
+  // ── POST /admin/photos/upload ────────────────────────────────────────────────
+  //
+  // Заливка zip-архива с готовыми WebP-фотками в PHOTOS_DIR.
+  // Auth: requireAdminHmac (HMAC от BOT_TOKEN + 5-минутный timestamp).
+  // Парсер: express.raw application/zip, лимит 250 MB.
+  // Распаковка: tar -xf во временную папку, copy в PHOTOS_DIR с защитой от
+  // path traversal (берём path.basename, кладём плоско).
+  //
+  // Возвращает JSON { uploaded, skipped, errors, photosDir }.
+  // skipped = файл с тем же mtime≥ что у нового => не перезаписываем.
+  // Локальная обёртка: `npm run upload-photos <zip>` (scripts/upload-photos.ts).
+  app.post(
+    '/admin/photos/upload',
+    adminUploadLimiter,
+    express.raw({ type: 'application/zip', limit: '250mb' }),
+    requireAdminHmac,
+    async (req: Request, res: Response) => {
+      const body = req.body as Buffer
+      if (!Buffer.isBuffer(body) || body.length === 0) {
+        res.status(400).json({ error: 'Empty body. Use Content-Type: application/zip.' })
+        return
+      }
+
+      // Защита: PHOTOS_DIR должен быть задан и существовать. Если нет —
+      // делать ничего нельзя, т.к. иначе /photos/* вернёт 404 для свежих файлов.
+      if (!process.env.PHOTOS_DIR) {
+        res.status(503).json({ error: 'PHOTOS_DIR is not configured on this server' })
+        return
+      }
+      if (!fs.existsSync(photosDir)) {
+        try {
+          fs.mkdirSync(photosDir, { recursive: true })
+        } catch (err) {
+          log.error('Failed to create PHOTOS_DIR', { photosDir, err: err instanceof Error ? err.message : String(err) })
+          res.status(500).json({ error: 'PHOTOS_DIR missing and could not be created' })
+          return
+        }
+      }
+
+      // Распаковка в tmp dir
+      const os = await import('os')
+      const tmpZip = path.join(os.tmpdir(), `bender-upload-${Date.now()}-${crypto.randomBytes(4).toString('hex')}.zip`)
+      const tmpExtract = path.join(os.tmpdir(), `bender-extract-${Date.now()}-${crypto.randomBytes(4).toString('hex')}`)
+
+      let cleanedTmp = false
+      const cleanup = (): void => {
+        if (cleanedTmp) return
+        cleanedTmp = true
+        try { fs.rmSync(tmpZip, { force: true }) } catch { /* ignore */ }
+        try { fs.rmSync(tmpExtract, { recursive: true, force: true }) } catch { /* ignore */ }
+      }
+
+      try {
+        fs.writeFileSync(tmpZip, body)
+        fs.mkdirSync(tmpExtract, { recursive: true })
+
+        // tar -xf поддерживает zip на Linux (через libarchive) и Windows 10+
+        const { execFileSync } = await import('child_process')
+        try {
+          execFileSync('tar', ['-xf', tmpZip, '-C', tmpExtract], { stdio: 'pipe' })
+        } catch (err) {
+          log.error('tar extraction failed', { err: err instanceof Error ? err.message : String(err) })
+          cleanup()
+          res.status(400).json({ error: 'Failed to extract zip (tar -xf)' })
+          return
+        }
+
+        // Рекурсивно собираем все image-файлы, плоско копируем в photosDir.
+        // Path traversal-защита: используем только basename, никаких ../ не возможно.
+        const IMAGE_EXTS = new Set(['.webp', '.png', '.jpg', '.jpeg'])
+        let uploaded = 0
+        let skipped = 0
+        const errors: string[] = []
+
+        const walk = (dir: string): void => {
+          for (const name of fs.readdirSync(dir)) {
+            const full = path.join(dir, name)
+            let st: fs.Stats
+            try {
+              st = fs.lstatSync(full)
+            } catch {
+              continue
+            }
+            if (st.isSymbolicLink()) {
+              continue
+            }
+            if (st.isDirectory()) {
+              walk(full)
+              continue
+            }
+            if (!st.isFile()) continue
+            const ext = path.extname(name).toLowerCase()
+            if (!IMAGE_EXTS.has(ext)) continue
+
+            const destName = path.basename(name)
+            const destPath = path.join(photosDir, destName)
+
+            try {
+              if (fs.existsSync(destPath)) {
+                const dstSt = fs.statSync(destPath)
+                if (dstSt.mtimeMs >= st.mtimeMs) {
+                  skipped++
+                  continue
+                }
+              }
+              fs.copyFileSync(full, destPath)
+              uploaded++
+            } catch (err) {
+              errors.push(`${destName}: ${err instanceof Error ? err.message : String(err)}`)
+            }
+          }
+        }
+        walk(tmpExtract)
+
+        cleanup()
+
+        log.info('Admin photos upload', { uploaded, skipped, errors: errors.length, sizeBytes: body.length })
+        await logSecurityEvent('photos_uploaded', { uploaded, skipped, errors: errors.length, sizeMb: +(body.length / 1024 / 1024).toFixed(2) })
+        res.json({
+          uploaded,
+          skipped,
+          errors,
+          photosDir,
+        })
+      } catch (err) {
+        cleanup()
+        log.error('Photos upload failed', { err: err instanceof Error ? err.message : String(err) })
+        if (!res.headersSent) {
+          res.status(500).json({ error: err instanceof Error ? err.message : 'upload failed' })
+        }
+      }
+    }
+  )
 
   app.get('/shop', (_req, res) => {
     if (!indexHtml) {

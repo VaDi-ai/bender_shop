@@ -67,17 +67,51 @@ GET /health returns 200 if DB is connected, 503 otherwise.
 
 После этого URL `https://bendershop.store/photos/<filename>.webp` отдаёт файлы из Volume. Если Volume пуст или `PHOTOS_DIR` не задан — route возвращает 404 и пишет warning в лог (см. `api/server.ts`).
 
-### Загрузка фото
-Подготовка локально через `npm run pad-images <input> <output>` (см. ARCHITECTURE.md). Загрузка на Volume — через Railway CLI:
-```bash
-# Подключиться к shell контейнера
-railway shell
+### Загрузка фото — варианты
 
+**Вариант 1: HTTP-загрузка (рекомендуется).** Локально готовишь WebP, пакуешь в zip, шлёшь POST `/admin/photos/upload`. Подпись HMAC-SHA256 от `BOT_TOKEN` (anti-replay через 5-минутный timestamp). Готовая обёртка:
+
+```bash
+# Папку с готовыми webp паковать в zip
+# PowerShell:
+Compress-Archive -Path .\R-final\*.webp -DestinationPath .\photos.zip -Force
+# bash:
+(cd R-final && zip -r ../photos.zip *.webp)
+
+# Заливаем (требует BOT_TOKEN в .env)
+npm run upload-photos -- ./photos.zip
+# или: npm run upload-photos -- ./photos.zip --url=https://staging.example.com
+```
+
+Сервер распаковывает zip во временную папку, копирует image-файлы (`.webp .png .jpg .jpeg`) плоско в `PHOTOS_DIR`. Symlinks игнорируются, имена нормализуются через `path.basename` — path traversal невозможен. Лимит размера body — 250 MB.
+
+Проверить статус Volume:
+```bash
+# GET /admin/photos/info через тот же HMAC (можно через curl + scripts/upload-photos.ts если расширить, либо через RC tool)
+```
+
+**Вариант 2: Railway CLI** (для разовой массовой заливки):
+```bash
+railway shell
 # Скопировать локальные WebP файлы в смонтированный Volume
 # (вариант через scp или временный rsync — зависит от Railway-плагина)
 ```
 
 Проверка: `curl -I https://bendershop.store/photos/<filename>.webp` должен вернуть 200.
+
+### Прямая запись URL в Google Sheets
+
+После заливки фото на Volume — нужно прописать их URL'ы в колонку «Фото» (Q) Google Sheets, чтобы `/sync` подтянул их в каталог:
+
+```bash
+# Dry-run (только отчёт)
+npm run match-photos -- ./R-final --sheet ./reports https://bendershop.store/photos
+
+# Реальная запись в Sheets
+npm run match-photos -- ./R-final --sheet ./reports https://bendershop.store/photos --write
+```
+
+Использует тот же `GOOGLE_SERVICE_ACCOUNT_KEY` + `GOOGLE_SHEET_ID` что и `/sync`. Batch-update в один API-вызов (несколько диапазонов), retry на 429.
 
 ## Database Migrations
 
