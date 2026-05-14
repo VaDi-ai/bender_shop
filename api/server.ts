@@ -190,10 +190,16 @@ export function startApiServer(bot?: Telegraf): void {
   )
 
   // ── Rate limiting ──────────────────────────────────────────────────────────
+  // Глобальный лимит покрывает все запросы. Исключение — /photos: каталог может
+  // содержать 50+ изображений на странице, и каждое отображение каталога иначе
+  // мгновенно проедало бы половину лимита (100/min). Защита от перебора /photos
+  // обеспечивается тем, что фото — статические файлы (нет дорогих запросов
+  // к БД), плюс кеш-заголовки на 1 день уменьшают количество запросов.
   const globalLimiter = rateLimit({
     windowMs: 60 * 1000,
     max: 100,
     message: { error: 'Слишком много запросов. Подождите минуту.' },
+    skip: (req) => req.path.startsWith('/photos/'),
   })
   app.use(globalLimiter)
 
@@ -294,6 +300,28 @@ export function startApiServer(bot?: Telegraf): void {
 
   // Static: category images
   app.use('/categories', express.static(path.join(__dirname, '../../public/categories')))
+
+  // Static: product photos.
+  //
+  // PHOTOS_DIR указывает на директорию с фото товаров (квадратные WebP, подготовленные
+  // через scripts/pad-to-square.ts). На Railway это mount path для Volume
+  // (например /data/photos) — фото живут отдельно от репо и не раздувают git.
+  // Локально без переменной — отдаётся из public/uploads/products (для разработки).
+  //
+  // Cache: 1 день в браузере + ETag для revalidation (default Express). Не immutable,
+  // т.к. имена файлов человекочитаемые (apple_watch_s11_42_titanium.webp), и менеджер
+  // может обновить фото того же товара под тем же именем — нужно чтобы клиенты узнали.
+  const photosDir = process.env.PHOTOS_DIR
+    ? path.resolve(process.env.PHOTOS_DIR)
+    : path.join(__dirname, '../../public/uploads/products')
+  if (!fs.existsSync(photosDir)) {
+    log.warn('PHOTOS_DIR does not exist, /photos route will return 404', { photosDir })
+  }
+  app.use('/photos', express.static(photosDir, {
+    maxAge: '1d',
+    fallthrough: true,
+    index: false,
+  }))
 
   app.get('/shop', (_req, res) => {
     if (!indexHtml) {

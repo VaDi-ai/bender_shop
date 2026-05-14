@@ -31,3 +31,17 @@ Thumbs.db
 
 # Claude Code
 .claude/
+
+# Product photos (local staging — see docs/DEPLOYMENT.md)
+R/
+R-test/
+R-test-out/
+R-padded/
+R-final/
+Фото/
+Фото_ready/
+Новая папка/
+_tmp_*/
+
+# Source archives (not part of repo)
+/*.zip

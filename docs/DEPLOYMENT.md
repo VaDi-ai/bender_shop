@@ -55,6 +55,30 @@ GET /health returns 200 if DB is connected, 503 otherwise.
 - **Logs**: structured JSON via pino (Railway captures stdout)
 - **Bot**: /sync for manual Google Sheets sync trigger
 
+## Product Photos (Railway Volume)
+
+Фото товаров живут на Railway Volume отдельно от репозитория — иначе git раздувается и каждый деплой копирует ~50 MB изображений.
+
+### Setup
+1. Railway dashboard → service → Settings → Volumes → **New Volume**
+2. Mount path: `/data/photos`
+3. Variables → добавить `PHOTOS_DIR=/data/photos`
+4. Redeploy сервиса (Volume монтируется при старте)
+
+После этого URL `https://bendershop.store/photos/<filename>.webp` отдаёт файлы из Volume. Если Volume пуст или `PHOTOS_DIR` не задан — route возвращает 404 и пишет warning в лог (см. `api/server.ts`).
+
+### Загрузка фото
+Подготовка локально через `npm run pad-images <input> <output>` (см. ARCHITECTURE.md). Загрузка на Volume — через Railway CLI:
+```bash
+# Подключиться к shell контейнера
+railway shell
+
+# Скопировать локальные WebP файлы в смонтированный Volume
+# (вариант через scp или временный rsync — зависит от Railway-плагина)
+```
+
+Проверка: `curl -I https://bendershop.store/photos/<filename>.webp` должен вернуть 200.
+
 ## Database Migrations
 
 After schema changes in `prisma/schema.prisma`:

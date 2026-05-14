@@ -73,3 +73,4 @@
 | DEFAULT_STOCK_QTY | Default stock quantity when sheet is empty | 3 |
 | SHEETS_FULL_RESET | Clear all products before sync (use with caution) | false |
 | STOCK_WRITEOFF_ENABLED | Enable automatic stock writeoff on sale | false |
+| PHOTOS_DIR | Absolute path to product photos (Railway Volume mount) | public/uploads/products |
