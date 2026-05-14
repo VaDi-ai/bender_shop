@@ -198,6 +198,26 @@ async function main(): Promise<void> {
   let matched = 0
   let ambiguous = 0
   let notFound = 0
+  let collisions = 0
+  /** Уже использованные финальные имена — гарантия уникальности на диске. */
+  const usedNames = new Set<string>()
+
+  /**
+   * Возвращает уникальное имя для outDir: если базовое имя уже занято,
+   * добавляет flat_stem перед расширением как disambiguator. Если и это
+   * занято — `__dup_N`. flat_stem сам по себе уникален в пределах flat-папки.
+   */
+  function uniqueName(base: string, flatStem: string): string {
+    if (!usedNames.has(base)) return base
+    const parsed = path.parse(base)
+    const candidate = `${parsed.name}__${flatStem}${parsed.ext}`
+    if (!usedNames.has(candidate)) return candidate
+    for (let n = 2; n < 100; n++) {
+      const fallback = `${parsed.name}__${flatStem}__dup${n}${parsed.ext}`
+      if (!usedNames.has(fallback)) return fallback
+    }
+    throw new Error(`Cannot find unique name for ${base}`)
+  }
 
   for (const flatFile of flatFiles) {
     const flatStem = techStemFromFlat(flatFile)
@@ -207,7 +227,10 @@ async function main(): Promise<void> {
     const r = resolveFlatName(flatStem, index)
 
     if (r.status === 'matched' && r.resolvedName) {
-      const outName = withFlatExtension(r.resolvedName, flatExt)
+      const baseOut = withFlatExtension(r.resolvedName, flatExt)
+      const outName = uniqueName(baseOut, flatStem)
+      if (outName !== baseOut) collisions++
+      usedNames.add(outName)
       const outPath = path.join(outDir, outName)
       fs.copyFileSync(flatPath, outPath)
       matched++
@@ -220,7 +243,10 @@ async function main(): Promise<void> {
       ambiguous++
       // Берём первый кандидат, но помечаем в отчёте — нужен ручной разбор
       const fallback = r.candidates[0]!
-      const outName = withFlatExtension(fallback, flatExt)
+      const baseOut = withFlatExtension(fallback, flatExt)
+      const outName = uniqueName(baseOut, flatStem)
+      if (outName !== baseOut) collisions++
+      usedNames.add(outName)
       const outPath = path.join(outDir, outName)
       fs.copyFileSync(flatPath, outPath)
       const candidatesStr = r.candidates.slice(0, 5).join(' | ').replace(/"/g, '""')
@@ -230,10 +256,12 @@ async function main(): Promise<void> {
     }
 
     // not_found — копируем под оригинальным именем, чтобы файл не потерялся
-    const outPath = path.join(outDir, flatFile)
+    const outName = uniqueName(flatFile, flatStem)
+    usedNames.add(outName)
+    const outPath = path.join(outDir, outName)
     fs.copyFileSync(flatPath, outPath)
     notFound++
-    reportRows.push(`"${flatFile}","${flatFile}",not_found,""`)
+    reportRows.push(`"${flatFile}","${outName}",not_found,""`)
     console.log(`  MISS   ${flatFile.slice(0, 50).padEnd(50)}`)
   }
 
@@ -244,6 +272,9 @@ async function main(): Promise<void> {
   console.log(`  matched:    ${matched}`)
   console.log(`  ambiguous:  ${ambiguous}  (взят первый кандидат — проверь _restore-report.csv)`)
   console.log(`  not_found:  ${notFound}   (файл скопирован под исходным именем — generic-парсер match-photos попробует разобрать)`)
+  if (collisions > 0) {
+    console.log(`  collisions: ${collisions}  (несколько flat-файлов → одно reference-имя; добавлен flat_stem суффикс для уникальности)`)
+  }
   console.log(`\nReport: ${reportPath}`)
 }
 
