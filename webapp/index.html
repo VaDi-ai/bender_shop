@@ -21,8 +21,12 @@
     :root {
       --bg:        #0a0a0a;
       --surface:   #1a1a1a;
-      /* Зона под фото (letterbox при object-fit: contain) — темнее карточки */
-      --photo-matte: #0c0c0c;
+      /* Подложка модалки — темнее витрины, чтобы «лист» товара читался отдельно */
+      --modal-canvas: #050508;
+      /* «Сцена» под фото (letterbox) — заметно темнее панели карточки */
+      --photo-matte: #040404;
+      /* Панель с текстом в модалке — чуть светлее холста, отрезана от фото */
+      --modal-panel:  #1c1c1e;
       --border:    #333333;
       --text:      #ffffff;
       --hint:      #888888;
@@ -450,16 +454,29 @@
     @keyframes cardIn { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
 
     .product-card {
-      background: var(--surface); border: 1px solid #2a2a2a;
+      background: var(--surface);
+      border: 1px solid rgba(255,255,255,0.07);
       border-radius: 16px; overflow: hidden; display: flex; flex-direction: column;
       animation: cardIn 350ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
       transition: border-color 0.2s, box-shadow 0.2s; cursor: pointer;
+      box-shadow:
+        0 2px 0 rgba(255,255,255,0.04) inset,
+        0 12px 40px rgba(0,0,0,0.55),
+        0 0 0 1px rgba(0,0,0,0.45);
     }
-    .product-card:hover { border-color: rgba(255,255,255,0.4); box-shadow: 0 0 15px rgba(255,255,255,0.08); }
-    .product-card:active { box-shadow: 0 0 20px rgba(255,255,255,0.15); }
+    .product-card:hover { border-color: rgba(255,255,255,0.22); box-shadow: 0 2px 0 rgba(255,255,255,0.06) inset, 0 16px 48px rgba(0,0,0,0.65), 0 0 0 1px rgba(168,255,62,0.12); }
+    .product-card:active { box-shadow: 0 12px 36px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.08); }
 
-    /* Photo wrap: мат под фото темнее панели карточки (--surface) */
-    .product-photo-wrap { position: relative; width: 100%; aspect-ratio: 1 / 1; background: var(--photo-matte); overflow: hidden; border-radius: 16px 16px 0 0; box-shadow: inset 0 0 0 2px rgba(0,0,0,0.55); }
+    /* Photo wrap: «сцена» темнее карточки + разделитель до блока цены */
+    .product-photo-wrap {
+      position: relative; width: 100%; aspect-ratio: 1 / 1;
+      background: var(--photo-matte);
+      overflow: hidden; border-radius: 16px 16px 0 0;
+      border-bottom: 1px solid rgba(255,255,255,0.075);
+      box-shadow:
+        inset 0 0 0 1px rgba(255,255,255,0.04),
+        inset 0 -20px 28px -18px rgba(0,0,0,0.65);
+    }
     .product-photo { width: 100%; height: 100%; object-fit: contain; display: block; pointer-events: none; transition: opacity 0.15s; background: transparent; }
     .product-photo-ph { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 40px; pointer-events: none; background: var(--photo-matte); }
     .product-badge {
@@ -478,7 +495,12 @@
     .product-hover-dots span { width: 6px; height: 6px; border-radius: 50%; background: rgba(255,255,255,0.4); transition: background 0.2s; }
     .product-hover-dots span.active { background: var(--accent); }
 
-    .product-info { padding: 10px; flex: 1; display: flex; flex-direction: column; gap: 5px; }
+    .product-info {
+      padding: 10px; flex: 1; display: flex; flex-direction: column; gap: 5px;
+      background:
+        linear-gradient(180deg, rgba(255,255,255,0.045) 0%, rgba(255,255,255,0) 14px),
+        var(--surface);
+    }
     .product-name { font-size: 12px; font-weight: 500; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; color: var(--text); }
     .product-price { font-family: 'JetBrains Mono', monospace; font-size: 16px; color: var(--accent); margin-top: auto; }
     .product-price.ask-manager { font-family: inherit; font-size: 12px; color: #ff9500; }
@@ -519,7 +541,7 @@
       transition: opacity 300ms ease, transform 300ms ease;
     }
     .product-modal.open { opacity: 1; transform: translateY(0); pointer-events: all; }
-    .modal-scroll { flex: 1; overflow-y: auto; background: #0a0a0a; position: relative; }
+    .modal-scroll { flex: 1; overflow-y: auto; background: var(--modal-canvas); position: relative; }
     .modal-scroll::-webkit-scrollbar { width: 3px; }
     .modal-scroll::-webkit-scrollbar-thumb { background: #222; }
     .modal-close-btn {
@@ -531,8 +553,16 @@
     }
     .modal-close-btn:hover { border-color: var(--accent); color: var(--accent); }
 
-    /* Карусель в модалке — мат темнее карточки */
-    .modal-carousel { position: relative; width: 100%; max-height: 55vh; background: var(--photo-matte); flex-shrink: 0; overflow: hidden; box-shadow: inset 0 0 0 2px rgba(0,0,0,0.55); }
+    /* Карусель: сцена + отрыв от панели текста */
+    .modal-carousel {
+      position: relative; width: 100%; max-height: 55vh;
+      background: var(--photo-matte);
+      flex-shrink: 0; overflow: hidden;
+      border-bottom: 1px solid rgba(255,255,255,0.09);
+      box-shadow:
+        inset 0 0 0 1px rgba(255,255,255,0.035),
+        0 14px 36px rgba(0,0,0,0.55);
+    }
     .modal-carousel-img { width: 100%; height: 100%; object-fit: contain; display: block; background: transparent; }
     .modal-carousel-ph { width: 100%; height: 280px; display: flex; align-items: center; justify-content: center; font-size: 72px; background: var(--photo-matte); }
     .product-photo-wrap, .modal-carousel { background-color: var(--photo-matte) !important; }
@@ -564,7 +594,13 @@
     }
 
     /* Modal body */
-    .modal-body { padding: 20px 20px 16px; }
+    .modal-body {
+      padding: 22px 20px 16px;
+      background: var(--modal-panel);
+      border-top: 1px solid rgba(255,255,255,0.08);
+      box-shadow: 0 -12px 32px rgba(0,0,0,0.45);
+      position: relative;
+    }
     .modal-product-name { font-family: 'JetBrains Mono', monospace; font-size: clamp(20px, 5vw, 36px); color: #fff; letter-spacing: 2px; line-height: 1.1; margin-bottom: 8px; }
     .modal-product-price { font-family: 'JetBrains Mono', monospace; font-size: 26px; color: var(--accent); text-shadow: var(--neon); margin-bottom: 8px; }
 
@@ -632,7 +668,7 @@
     .modal-product-desc { font-size: 14px; color: #aaaaaa; line-height: 1.6; letter-spacing: 0.5px; }
 
     /* Modal footer */
-    .modal-footer { flex-shrink: 0; background: rgba(10,10,10,0.97); border-top: 1px solid #1a1a1a; padding: 16px 20px; }
+    .modal-footer { flex-shrink: 0; background: rgba(5,5,6,0.98); border-top: 1px solid rgba(255,255,255,0.08); padding: 16px 20px; }
 
     /* ── Cart sidebar ─────────────────────────────────────────────────────── */
     .cart-sidebar { position: fixed; top: 0; right: 0; width: min(400px, 100vw); height: 100%; z-index: 600; background: #0a0a0a; border-left: 2px solid var(--accent); box-shadow: -4px 0 40px rgba(168,255,62,0.08); transform: translateX(100%); transition: transform 400ms cubic-bezier(0.16, 1, 0.3, 1); display: flex; flex-direction: column; padding-top: var(--header-h); }
@@ -750,7 +786,7 @@
       .slider-nav-btn { width: 28px; height: 28px; font-size: 16px; }
       .cart-sidebar { width: 100vw; }
       .modal-carousel { max-height: 50vh; }
-      .modal-body { padding: 16px 16px 12px; }
+      .modal-body { padding: 20px 16px 14px; }
     }
     @media (max-width: 480px) {
       .hero-slider { height: 40vh; }
@@ -861,7 +897,7 @@
         max-width: 480px;
         width: 480px;
         flex: none;
-        background: var(--bg);
+        background: var(--modal-canvas);
       }
       .product-modal .modal-footer {
         position: fixed;
