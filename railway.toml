@@ -1,4 +1,7 @@
 # https://docs.railway.com/guides/config-as-code
+#
+# ВАЖНО: persistent Volume в сервисе не должен монтироваться в /app или /app/dist —
+# иначе остаётся старый dist и в логах снова prisma.region / битые ApiKey.
 [build]
 builder = "NIXPACKS"
 

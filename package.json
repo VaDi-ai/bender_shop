@@ -1,13 +1,13 @@
 {
   "name": "bender-shop",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "",
   "main": "dist/bot/index.js",
   "scripts": {
     "start": "node dist/bot/index.js",
     "dev": "ts-node bot/index.ts",
     "prebuild": "prisma generate",
-    "build": "tsc && node dist/scripts/optimize-images.js || true",
+    "build": "tsc && node scripts/verify-dist.cjs",
     "db:migrate": "prisma migrate dev",
     "db:generate": "prisma generate",
     "db:studio": "prisma studio",
