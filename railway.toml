@@ -7,3 +7,5 @@ builder = "NIXPACKS"
 healthcheckPath = "/health"
 healthcheckTimeout = 120
 startCommand = "node dist/bot/index.js"
+# Синхронизация схемы с БД (в репо нет migrations — db push; при появлении migrate заменить на migrate deploy).
+releaseCommand = "npx prisma db push"

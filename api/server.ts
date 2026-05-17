@@ -7,7 +7,7 @@
  *   POST /api/orders              — создание заказа в БД (требует Telegram auth)
  */
 
-import 'dotenv/config'
+import '../lib/load-env'
 import { initSentry, Sentry } from '../lib/sentry'
 initSentry()
 import crypto from 'crypto'

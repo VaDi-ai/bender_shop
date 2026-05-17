@@ -3,13 +3,13 @@
  *
  * Application-level AES-256-GCM encryption for sensitive values stored in DB.
  *
- * Key configuration (in order of priority):
- *   ENCRYPTION_KEY_V2 — latest key (64-char hex, 32 bytes)
- *   ENCRYPTION_KEY_V1 — V1 key (64-char hex, 32 bytes)
- *   ENCRYPTION_KEY    — legacy fallback, treated as V1
+ * Key configuration:
+ *   ENCRYPTION_KEY_V2 … V10 — явные версии
+ *   ENCRYPTION_KEY — legacy; если нет V1..V10, считается V1; если V1 задан и отличается,
+ *     при расшифровке перебираются оба (типичный сбой Railway: в БД данные от старого ключа).
  *
  * Versioned format: v{N}:{iv_hex}:{ciphertext_hex}:{authtag_hex}
- * Legacy format:    {iv_hex}:{ciphertext_hex}:{authtag_hex}  ← treated as V1
+ * Legacy format:    {iv_hex}:{ciphertext_hex}:{authtag_hex}  ← V1
  *
  * Generate a key: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
  */
@@ -20,32 +20,68 @@ const ALGORITHM = 'aes-256-gcm'
 const IV_BYTES = 12
 const TAG_BYTES = 16
 
-function getKeys(): { version: number; key: Buffer }[] {
-const keys: Record<number, Buffer> = {}
+function parseHexKey64(val: string, label: string): Buffer {
+  if (!/^[0-9a-fA-F]{64}$/.test(val)) throw new Error(`${label} must be 64-char hex`)
+  return Buffer.from(val, 'hex')
+}
 
-  // Support ENCRYPTION_KEY_V1, ENCRYPTION_KEY_V2, etc.
+/** Нумерованные ключи V1..V10 из env (только для шифрования / версий ≥2). */
+function getNumberedVersionKeys(): Record<number, Buffer> {
+  const keys: Record<number, Buffer> = {}
   for (let v = 1; v <= 10; v++) {
     const val = process.env[`ENCRYPTION_KEY_V${v}`]
-    if (val) {
-      if (!/^[0-9a-fA-F]{64}$/.test(val)) throw new Error(`ENCRYPTION_KEY_V${v} must be 64-char hex`)
-      keys[v] = Buffer.from(val, 'hex')
-    }
+    if (val) keys[v] = parseHexKey64(val, `ENCRYPTION_KEY_V${v}`)
+  }
+  return keys
+}
+
+function getLegacyKey(): Buffer | null {
+  const legacyVal = process.env.ENCRYPTION_KEY
+  if (!legacyVal) return null
+  return parseHexKey64(legacyVal, 'ENCRYPTION_KEY')
+}
+
+/**
+ * Карта версий для encrypt() и для decrypt версий > 1.
+ * V1 в карте: пронумерованный V1 или, если его нет, legacy.
+ */
+function getKeys(): { version: number; key: Buffer }[] {
+  const numbered = getNumberedVersionKeys()
+  const legacy = getLegacyKey()
+
+  if (Object.keys(numbered).length === 0) {
+    if (!legacy) throw new Error('No encryption key configured. Set ENCRYPTION_KEY or ENCRYPTION_KEY_V1.')
+    return [{ version: 1, key: legacy }]
   }
 
-  // Fallback: plain ENCRYPTION_KEY treated as V1
-  if (Object.keys(keys).length === 0 && process.env.ENCRYPTION_KEY) {
-    const legacyVal = process.env.ENCRYPTION_KEY
-    if (!/^[0-9a-fA-F]{64}$/.test(legacyVal)) throw new Error('ENCRYPTION_KEY must be 64-char hex')
-    keys[1] = Buffer.from(legacyVal, 'hex')
-  }
+  const merged: Record<number, Buffer> = { ...numbered }
+  if (!merged[1] && legacy) merged[1] = legacy
 
-  if (Object.keys(keys).length === 0) {
+  if (Object.keys(merged).length === 0) {
     throw new Error('No encryption key configured. Set ENCRYPTION_KEY or ENCRYPTION_KEY_V1.')
   }
 
-  return Object.entries(keys)
+  return Object.entries(merged)
     .map(([v, key]) => ({ version: parseInt(v, 10), key }))
     .sort((a, b) => a.version - b.version)
+}
+
+/** Все кандидаты для расшифровки V1 (legacy и v1:…), порядок: V1 из env, затем ENCRYPTION_KEY если отличается. */
+function getV1DecryptKeys(): Buffer[] {
+  const numbered = getNumberedVersionKeys()
+  const legacy = getLegacyKey()
+  const out: Buffer[] = []
+  const push = (b: Buffer) => {
+    if (!out.some((x) => x.equals(b))) out.push(b)
+  }
+  if (numbered[1]) push(numbered[1])
+  if (legacy) push(legacy)
+  if (out.length === 0) {
+    const k = getKeys().find((x) => x.version === 1)
+    if (k) push(k.key)
+  }
+  if (out.length === 0) throw new Error('No encryption key configured for V1.')
+  return out
 }
 
 function getLatestKey(): { version: number; key: Buffer } {
@@ -58,6 +94,21 @@ function getKeyByVersion(version: number): Buffer {
   const found = keys.find((k) => k.version === version)
   if (!found) throw new Error(`Encryption key version ${version} not configured`)
   return found.key
+}
+
+function decryptRaw(key: Buffer, ivHex: string, ciphertextHex: string, tagHex: string, aad: string): string {
+  const iv = Buffer.from(ivHex, 'hex')
+  const ciphertext = Buffer.from(ciphertextHex, 'hex')
+  const tag = Buffer.from(tagHex, 'hex')
+
+  if (iv.length !== IV_BYTES || tag.length !== TAG_BYTES) {
+    throw new Error('Invalid encrypted value: wrong IV or tag length')
+  }
+
+  const decipher = createDecipheriv(ALGORITHM, key, iv)
+  if (aad) decipher.setAAD(Buffer.from(aad, 'utf8'))
+  decipher.setAuthTag(tag)
+  return decipher.update(ciphertext).toString('utf8') + decipher.final('utf8')
 }
 
 /**
@@ -80,39 +131,49 @@ export function encrypt(text: string, aad: string = ''): string {
  * Throws if the format is invalid or authentication fails.
  */
 export function decrypt(value: string, aad: string = ''): string {
-  let key: Buffer
   let ivHex: string, ciphertextHex: string, tagHex: string
 
   if (/^v\d+:/.test(value)) {
-    // Versioned format: v{N}:iv:ct:tag
     const firstColon = value.indexOf(':')
     const version = parseInt(value.slice(1, firstColon), 10)
     if (isNaN(version)) throw new Error('Invalid version in encrypted value')
-    key = getKeyByVersion(version)
     const rest = value.slice(firstColon + 1)
     const parts = rest.split(':')
     if (parts.length !== 3) throw new Error('Invalid encrypted value format')
     ;[ivHex, ciphertextHex, tagHex] = parts as [string, string, string]
-  } else {
-    // Legacy format: iv:ct:tag — use V1 key
-    const parts = value.split(':')
-    if (parts.length !== 3) throw new Error('Invalid encrypted value format')
-    ;[ivHex, ciphertextHex, tagHex] = parts as [string, string, string]
-    key = getKeyByVersion(1)
+
+    if (version === 1) {
+      return decryptV1TryKeys(ivHex, ciphertextHex, tagHex, aad)
+    }
+    const key = getKeyByVersion(version)
+    return decryptRaw(key, ivHex, ciphertextHex, tagHex, aad)
   }
 
-  const iv = Buffer.from(ivHex, 'hex')
-  const ciphertext = Buffer.from(ciphertextHex, 'hex')
-  const tag = Buffer.from(tagHex, 'hex')
+  const parts = value.split(':')
+  if (parts.length !== 3) throw new Error('Invalid encrypted value format')
+  ;[ivHex, ciphertextHex, tagHex] = parts as [string, string, string]
+  return decryptV1TryKeys(ivHex, ciphertextHex, tagHex, aad)
+}
 
-  if (iv.length !== IV_BYTES || tag.length !== TAG_BYTES) {
-    throw new Error('Invalid encrypted value: wrong IV or tag length')
+function decryptV1TryKeys(ivHex: string, ciphertextHex: string, tagHex: string, aad: string): string {
+  const keys = getV1DecryptKeys()
+  let last: Error | undefined
+  for (const key of keys) {
+    try {
+      return decryptRaw(key, ivHex, ciphertextHex, tagHex, aad)
+    } catch (e1) {
+      if (aad) {
+        try {
+          return decryptRaw(key, ivHex, ciphertextHex, tagHex, '')
+        } catch (e2) {
+          last = e2 instanceof Error ? e2 : new Error(String(e2))
+        }
+      } else {
+        last = e1 instanceof Error ? e1 : new Error(String(e1))
+      }
+    }
   }
-
-  const decipher = createDecipheriv(ALGORITHM, key, iv)
-  if (aad) decipher.setAAD(Buffer.from(aad, 'utf8'))
-  decipher.setAuthTag(tag)
-  return decipher.update(ciphertext).toString('utf8') + decipher.final('utf8')
+  throw last ?? new Error('V1 decrypt failed')
 }
 
 /** Returns true if the value looks like an encrypted blob (versioned or legacy). */

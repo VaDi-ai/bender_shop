@@ -1,4 +1,4 @@
-import 'dotenv/config'
+import '../lib/load-env'
 import { initSentry, Sentry } from '../lib/sentry'
 initSentry()
 
@@ -118,6 +118,13 @@ if (!BOT_TOKEN) {
 const ADMIN_IDS = (process.env.ADMIN_IDS ?? '').split(',').map((id) => Number(id.trim())).filter(Boolean)
 if (ADMIN_IDS.length === 0 || ADMIN_IDS.some(isNaN)) {
   throw new Error('ADMIN_IDS must be comma-separated list of valid Telegram user IDs')
+}
+
+// Сразу поднимаем OpenRouter из env (до async-загрузки из БД), чтобы parser/agent не жили с пустым ключом.
+const envOpenRouterKey = process.env.OPENROUTER_API_KEY?.trim()
+if (envOpenRouterKey) {
+  reinitAgentClient(envOpenRouterKey)
+  reinitParserClient(envOpenRouterKey)
 }
 
 const bot = new Telegraf(BOT_TOKEN)
@@ -1775,12 +1782,13 @@ const httpServer = startApiServer(process.env.NODE_ENV === 'production' ? bot : 
 
 ;(async () => {
   try {
-    const savedKey = await getApiKeyValue('openrouter_key')
-    if (savedKey) {
-      process.env.OPENROUTER_API_KEY = savedKey
-      reinitAgentClient(savedKey)
-      reinitParserClient(savedKey)
-      log.info('OpenRouter key loaded from DB')
+    const dbKey = (await getApiKeyValue('openrouter_key'))?.trim()
+    const key = dbKey || process.env.OPENROUTER_API_KEY?.trim()
+    if (key) {
+      process.env.OPENROUTER_API_KEY = key
+      reinitAgentClient(key)
+      reinitParserClient(key)
+      log.info(dbKey ? 'OpenRouter key loaded from DB' : 'OpenRouter key from env only')
     }
   } catch (e) {
     log.error('Load OpenRouter key error', { error: e instanceof Error ? e.message : String(e) })
