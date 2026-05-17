@@ -14,10 +14,12 @@ const s = fs.readFileSync(p, 'utf8')
 
 if (/\bprisma\w*\.region\.upsert\s*\(/.test(s)) {
   console.error('verify-dist: do not use prisma.region.upsert with adapter-pg; use raw SQL ShopRegion')
+  console.error('verify-dist: on Railway, unmount Volume from /app or /app/dist; use e.g. /data/photos + PHOTOS_DIR')
   process.exit(1)
 }
 if (!/ShopRegion/.test(s)) {
   console.error('verify-dist: dist must contain ShopRegion (raw SQL seed)')
+  console.error('verify-dist: on Railway, unmount Volume from /app or /app/dist; use e.g. /data/photos + PHOTOS_DIR')
   process.exit(1)
 }
 

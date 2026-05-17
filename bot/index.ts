@@ -2570,6 +2570,14 @@ async function ensureSalesTopic(): Promise<void> {
       return
     }
 
+    const staleRow = await prisma.apiKey.findUnique({ where: { service: 'sales_topic' } })
+    if (staleRow) {
+      log.error(
+        'sales_topic: в ApiKey есть строка, но значение не расшифровывается (ключ/БД). Удали её в Postgres или поправь ENCRYPTION_KEY; иначе при каждом старте создавался бы новый топик.',
+      )
+      return
+    }
+
     const topic = await bot.telegram.createForumTopic(CRM_GROUP_ID, '📦 Продажи и резервы')
     const threadId = topic.message_thread_id
 

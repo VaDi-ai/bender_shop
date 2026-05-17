@@ -11,5 +11,7 @@ healthcheckPath = "/health"
 healthcheckTimeout = 120
 # Prisma 7: у db push нет флага --skip-generate (ломало контейнер).
 # generate + push: на Railway dist иногда собирается без актуального generated-клиента относительно schema.
-startCommand = "npx prisma generate && npx prisma db push && node dist/bot/index.js"
+# Повторная проверка dist на старте: если Volume смонтирован на /app, подложится старый
+# dist/bot/index.js → бессмысленные P2021 Region и пр. Сборка уже гоняет verify-dist.
+startCommand = "npx prisma generate && npx prisma db push && node scripts/verify-dist.cjs && node dist/bot/index.js"
 releaseCommand = "npx prisma generate && npx prisma db push"
