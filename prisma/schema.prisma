@@ -209,8 +209,8 @@ model Category {
   products Product[]
 }
 
-/// Регион витрины / доставки (отдельная таблица ShopRegion, не путать с legacy public."Region").
-model ShopRegion {
+/// Регион витрины / доставки. В Postgres таблица `ShopRegion`, не legacy `Region`.
+model Region {
   id        Int      @id @default(autoincrement())
   code      String   @unique
   name      String
@@ -223,6 +223,7 @@ model ShopRegion {
 
   @@index([isActive])
   @@index([sortOrder])
+  @@map("ShopRegion")
 }
 
 model Product {

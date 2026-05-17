@@ -1,6 +1,7 @@
 /**
- * Сборка должна содержать актуальный код (shopRegion, не legacy prisma.region).
- * Если Railway смонтировал volume поверх /app или /app/dist, в рантайме остаётся старый dist — этот шаг на билде падает, если исходники и dist расходятся.
+ * dist/bot/index.js должен вызывать prisma.region (модель Region, @@map("ShopRegion")).
+ * Запрет: prisma.shopRegion — иначе рассинхрон с схемой.
+ * Если volume перетирает /app/dist старым билдом — проверка на этапе build не спасёт; см. railway.toml.
  */
 const fs = require('fs')
 const path = require('path')
@@ -12,12 +13,12 @@ if (!fs.existsSync(p)) {
 }
 const s = fs.readFileSync(p, 'utf8')
 
-if (/\bprisma\w*\.region\./.test(s)) {
-  console.error('verify-dist: dist/bot/index.js still references prisma*.region (rebuild / check volume mount on /app)')
+if (/\bprisma\w*\.shopRegion\./.test(s)) {
+  console.error('verify-dist: dist must not use prisma.shopRegion (use prisma.region + @@map)')
   process.exit(1)
 }
-if (!/\bshopRegion\b/.test(s)) {
-  console.error('verify-dist: dist/bot/index.js must reference shopRegion')
+if (!/\bprisma\w*\.region\./.test(s)) {
+  console.error('verify-dist: dist must reference prisma.region (Region seed)')
   process.exit(1)
 }
 

@@ -2520,7 +2520,7 @@ const DEFAULT_REGIONS: { code: string; name: string; sortOrder: number; flag: st
 async function seedDefaultRegions(): Promise<void> {
   try {
     for (const r of DEFAULT_REGIONS) {
-      await prisma.shopRegion.upsert({
+      await prisma.region.upsert({
         where: { code: r.code },
         create: {
           code: r.code,
