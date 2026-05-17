@@ -16,11 +16,12 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    img { background-color: #1a1a1a; }
+    img { background-color: var(--surface); }
 
     :root {
       --bg:        #0a0a0a;
-      --surface:   #1a1a1a;
+      /* Ближе к iOS secondarySystemBackground */
+      --surface:   #1c1c1e;
       /* Подложка модалки — темнее витрины, чтобы «лист» товара читался отдельно */
       --modal-canvas: #050508;
       /* «Сцена» под фото (letterbox) — заметно темнее панели карточки */
@@ -33,6 +34,20 @@
       --accent:    #a8ff3e;
       --accent-fg: #0a0a0a;
       --neon:      0 0 7px #a8ff3e, 0 0 20px #a8ff3e, 0 0 45px rgba(168,255,62,0.5);
+      --neon-soft: 0 0 24px rgba(168, 255, 62, 0.22);
+      /* Спокойные кривые и скругления в духе Human Interface */
+      --radius-card: 22px;
+      --ease-out: cubic-bezier(0.25, 0.1, 0.25, 1);
+      --shadow-card:
+        0 1px 0 rgba(255, 255, 255, 0.11) inset,
+        0 0 0 0.5px rgba(255, 255, 255, 0.05),
+        0 2px 8px rgba(0, 0, 0, 0.22),
+        0 14px 40px rgba(0, 0, 0, 0.38);
+      --shadow-card-hover:
+        0 1px 0 rgba(255, 255, 255, 0.14) inset,
+        0 0 0 0.5px rgba(255, 255, 255, 0.08),
+        0 4px 12px rgba(0, 0, 0, 0.28),
+        0 20px 48px rgba(0, 0, 0, 0.45);
       --header-h:  60px;
       --marquee-h: 48px;
     }
@@ -51,6 +66,9 @@
       padding-left: env(safe-area-inset-left);
       padding-right: env(safe-area-inset-right);
       cursor: none;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      text-rendering: optimizeLegibility;
     }
 
     @media (pointer: coarse) {
@@ -449,33 +467,41 @@
     .cat-filter-tab.active { border-color: #a8ff3e; color: #a8ff3e; background: rgba(168,255,62,0.05); }
 
     /* ── Product grid ─────────────────────────────────────────────────────── */
-    .products { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 16px 16px 0; }
+    .products { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; padding: 18px 16px 0; }
     .state-msg { grid-column: 1 / -1; text-align: center; padding: 48px 0; color: var(--hint); font-size: 14px; letter-spacing: 2px; }
-    @keyframes cardIn { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+    @keyframes cardIn { from { transform: translateY(12px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
 
     .product-card {
       background: var(--surface);
-      border: 1px solid rgba(255,255,255,0.07);
-      border-radius: 16px; overflow: hidden; display: flex; flex-direction: column;
-      animation: cardIn 350ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
-      transition: border-color 0.2s, box-shadow 0.2s; cursor: pointer;
-      box-shadow:
-        0 2px 0 rgba(255,255,255,0.04) inset,
-        0 12px 40px rgba(0,0,0,0.55),
-        0 0 0 1px rgba(0,0,0,0.45);
+      border: 0.5px solid rgba(255,255,255,0.09);
+      border-radius: var(--radius-card); overflow: hidden; display: flex; flex-direction: column;
+      animation: cardIn 420ms var(--ease-out) both;
+      transition: border-color 0.35s var(--ease-out), box-shadow 0.35s var(--ease-out), transform 0.35s var(--ease-out); cursor: pointer;
+      box-shadow: var(--shadow-card);
+      will-change: transform;
     }
-    .product-card:hover { border-color: rgba(255,255,255,0.22); box-shadow: 0 2px 0 rgba(255,255,255,0.06) inset, 0 16px 48px rgba(0,0,0,0.65), 0 0 0 1px rgba(168,255,62,0.12); }
-    .product-card:active { box-shadow: 0 12px 36px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.08); }
+    .product-card:hover {
+      border-color: rgba(255,255,255,0.16);
+      box-shadow: var(--shadow-card-hover);
+      transform: translateY(-2px);
+    }
+    .product-card:active {
+      transform: translateY(0);
+      transition-duration: 0.12s;
+    }
 
-    /* Photo wrap: «сцена» темнее карточки + разделитель до блока цены */
+    /* Photo wrap: лёгкий «studio» градиент + разделитель */
     .product-photo-wrap {
       position: relative; width: 100%; aspect-ratio: 1 / 1;
-      background: var(--photo-matte);
-      overflow: hidden; border-radius: 16px 16px 0 0;
-      border-bottom: 1px solid rgba(255,255,255,0.075);
+      background:
+        radial-gradient(ellipse 88% 72% at 50% 38%, rgba(38, 38, 42, 0.35) 0%, transparent 58%),
+        radial-gradient(ellipse 100% 90% at 50% 100%, rgba(0,0,0,0.45) 0%, transparent 55%),
+        var(--photo-matte);
+      overflow: hidden; border-radius: var(--radius-card) var(--radius-card) 0 0;
+      border-bottom: 0.5px solid rgba(255,255,255,0.09);
       box-shadow:
-        inset 0 0 0 1px rgba(255,255,255,0.04),
-        inset 0 -20px 28px -18px rgba(0,0,0,0.65);
+        inset 0 1px 0 rgba(255,255,255,0.06),
+        inset 0 -24px 32px -20px rgba(0,0,0,0.55);
     }
     .product-photo { width: 100%; height: 100%; object-fit: contain; display: block; pointer-events: none; transition: opacity 0.15s; background: transparent; }
     .product-photo-ph { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 40px; pointer-events: none; background: var(--photo-matte); }
@@ -496,13 +522,22 @@
     .product-hover-dots span.active { background: var(--accent); }
 
     .product-info {
-      padding: 10px; flex: 1; display: flex; flex-direction: column; gap: 5px;
+      padding: 12px 12px 11px; flex: 1; display: flex; flex-direction: column; gap: 6px;
       background:
-        linear-gradient(180deg, rgba(255,255,255,0.045) 0%, rgba(255,255,255,0) 14px),
+        linear-gradient(180deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0) 18px),
         var(--surface);
     }
-    .product-name { font-size: 12px; font-weight: 500; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; color: var(--text); }
-    .product-price { font-family: 'JetBrains Mono', monospace; font-size: 16px; color: var(--accent); margin-top: auto; }
+    .product-name {
+      font-size: 13px; font-weight: 400; line-height: 1.35; letter-spacing: -0.02em;
+      display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+      color: rgba(255,255,255,0.94);
+    }
+    .product-price {
+      font-family: 'JetBrains Mono', monospace; font-size: 15px; font-weight: 600;
+      font-variant-numeric: tabular-nums;
+      color: var(--accent); margin-top: auto;
+      letter-spacing: -0.02em;
+    }
     .product-price.ask-manager { font-family: inherit; font-size: 12px; color: #ff9500; }
     .product-attr-chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
     .product-attr-chip {
@@ -546,33 +581,51 @@
     .modal-scroll::-webkit-scrollbar-thumb { background: #222; }
     .modal-close-btn {
       position: absolute; top: 16px; right: 16px; z-index: 10;
-      width: 40px; height: 40px; min-width: 44px; min-height: 44px; background: rgba(10,10,10,0.85);
-      border: 1px solid #2a2a2a; color: var(--text); font-size: 20px; cursor: pointer;
+      width: 40px; height: 40px; min-width: 44px; min-height: 44px;
+      background: rgba(28, 28, 30, 0.65);
+      border: 0.5px solid rgba(255,255,255,0.12); color: rgba(255,255,255,0.92); font-size: 18px; cursor: pointer;
       display: flex; align-items: center; justify-content: center;
-      transition: border-color 0.2s, color 0.2s;
+      border-radius: 50%;
+      backdrop-filter: saturate(180%) blur(20px);
+      -webkit-backdrop-filter: saturate(180%) blur(20px);
+      transition: border-color 0.25s var(--ease-out), color 0.25s var(--ease-out), background 0.25s var(--ease-out);
     }
-    .modal-close-btn:hover { border-color: var(--accent); color: var(--accent); }
+    .modal-close-btn:hover { border-color: rgba(255,255,255,0.28); color: #fff; background: rgba(44, 44, 48, 0.72); }
 
-    /* Карусель: сцена + отрыв от панели текста */
+    /* Карусель: та же «сцена», спокойнее отделена от панели */
     .modal-carousel {
       position: relative; width: 100%; max-height: 55vh;
-      background: var(--photo-matte);
+      background:
+        radial-gradient(ellipse 88% 72% at 50% 38%, rgba(38, 38, 42, 0.35) 0%, transparent 58%),
+        radial-gradient(ellipse 100% 90% at 50% 100%, rgba(0,0,0,0.45) 0%, transparent 55%),
+        var(--photo-matte);
       flex-shrink: 0; overflow: hidden;
-      border-bottom: 1px solid rgba(255,255,255,0.09);
+      border-bottom: 0.5px solid rgba(255,255,255,0.1);
       box-shadow:
-        inset 0 0 0 1px rgba(255,255,255,0.035),
-        0 14px 36px rgba(0,0,0,0.55);
+        inset 0 1px 0 rgba(255,255,255,0.05),
+        0 12px 40px rgba(0, 0, 0, 0.4);
     }
     .modal-carousel-img { width: 100%; height: 100%; object-fit: contain; display: block; background: transparent; }
     .modal-carousel-ph { width: 100%; height: 280px; display: flex; align-items: center; justify-content: center; font-size: 72px; background: var(--photo-matte); }
     .product-photo-wrap, .modal-carousel { background-color: var(--photo-matte) !important; }
     .product-photo, .modal-carousel-img { background-color: transparent !important; }
-    .cart-item-thumb, img[src*="/api/"] { background-color: #1a1a1a !important; }
+    .cart-item-thumb, img[src*="/api/"] { background-color: var(--surface) !important; }
     .modal-carousel-arrow {
       position: absolute; top: 50%; transform: translateY(-50%);
-      z-index: 5; width: 40px; height: 40px; background: rgba(0,0,0,0.6);
-      border: 1px solid rgba(168,255,62,0.3); color: #a8ff3e; font-size: 22px;
+      z-index: 5; width: 40px; height: 40px;
+      background: rgba(28, 28, 30, 0.55);
+      border: 0.5px solid rgba(255,255,255,0.14);
+      color: rgba(255,255,255,0.9); font-size: 20px; font-weight: 300;
+      border-radius: 50%;
+      backdrop-filter: saturate(180%) blur(18px);
+      -webkit-backdrop-filter: saturate(180%) blur(18px);
       display: flex; align-items: center; justify-content: center; cursor: pointer;
+      transition: background 0.25s var(--ease-out), border-color 0.25s var(--ease-out), color 0.25s var(--ease-out);
+    }
+    .modal-carousel-arrow:hover {
+      background: rgba(44, 44, 48, 0.72);
+      border-color: rgba(255,255,255,0.22);
+      color: #fff;
     }
     .modal-carousel-arrow.hidden { display: none; }
     .modal-carousel-prev { left: 10px; }
@@ -581,8 +634,8 @@
       position: absolute; bottom: 10px; left: 0; right: 0;
       display: flex; justify-content: center; gap: 6px; z-index: 5;
     }
-    .modal-carousel-dot { width: 7px; height: 7px; border-radius: 50%; background: rgba(255,255,255,0.35); cursor: pointer; transition: background 0.2s, transform 0.2s; }
-    .modal-carousel-dot.active { background: var(--accent); transform: scale(1.3); }
+    .modal-carousel-dot { width: 6px; height: 6px; border-radius: 50%; background: rgba(255,255,255,0.22); cursor: pointer; transition: background 0.25s var(--ease-out), transform 0.25s var(--ease-out), width 0.25s var(--ease-out), border-radius 0.25s var(--ease-out); }
+    .modal-carousel-dot.active { background: rgba(255,255,255,0.92); transform: none; width: 18px; border-radius: 4px; }
 
     /* Badge in modal */
     .modal-badge {
@@ -595,14 +648,33 @@
 
     /* Modal body */
     .modal-body {
-      padding: 22px 20px 16px;
-      background: var(--modal-panel);
-      border-top: 1px solid rgba(255,255,255,0.08);
-      box-shadow: 0 -12px 32px rgba(0,0,0,0.45);
+      padding: 24px 20px 18px;
+      background:
+        linear-gradient(180deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0) 14px),
+        var(--modal-panel);
+      border-top: 0.5px solid rgba(255,255,255,0.11);
+      box-shadow: 0 -8px 40px rgba(0,0,0,0.35);
       position: relative;
     }
-    .modal-product-name { font-family: 'JetBrains Mono', monospace; font-size: clamp(20px, 5vw, 36px); color: #fff; letter-spacing: 2px; line-height: 1.1; margin-bottom: 8px; }
-    .modal-product-price { font-family: 'JetBrains Mono', monospace; font-size: 26px; color: var(--accent); text-shadow: var(--neon); margin-bottom: 8px; }
+    .modal-product-name {
+      font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, sans-serif;
+      font-size: clamp(22px, 5.5vw, 34px);
+      font-weight: 600;
+      letter-spacing: -0.035em;
+      color: rgba(255,255,255,0.98);
+      line-height: 1.12;
+      margin-bottom: 8px;
+    }
+    .modal-product-price {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: clamp(22px, 5vw, 28px);
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+      color: var(--accent);
+      text-shadow: var(--neon-soft);
+      margin-bottom: 8px;
+      letter-spacing: -0.03em;
+    }
 
     /* Attrs section */
     .modal-attrs-section { margin: 16px 0 8px; }
@@ -610,12 +682,14 @@
     .modal-attr-label { font-size: 11px; color: var(--hint); letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 8px; }
     .modal-attr-row { display: flex; flex-wrap: wrap; gap: 8px; }
     .modal-attr-btn {
-      padding: 7px 14px; background: transparent; border: 1px solid #333;
-      color: var(--text); font-size: 13px; cursor: pointer; user-select: none;
-      transition: border-color 0.15s, background 0.15s, color 0.15s;
+      padding: 8px 15px; background: rgba(255,255,255,0.04); border: 0.5px solid rgba(255,255,255,0.12);
+      border-radius: 10px;
+      color: var(--text); font-size: 13px; font-weight: 400;
+      cursor: pointer; user-select: none;
+      transition: border-color 0.2s var(--ease-out), background 0.2s var(--ease-out), color 0.2s var(--ease-out), transform 0.2s var(--ease-out);
     }
-    .modal-attr-btn:hover { border-color: rgba(168,255,62,0.5); }
-    .modal-attr-btn.active { border-color: var(--accent); background: var(--accent); color: var(--accent-fg); }
+    .modal-attr-btn:hover { border-color: rgba(255,255,255,0.22); background: rgba(255,255,255,0.06); }
+    .modal-attr-btn.active { border-color: var(--accent); background: var(--accent); color: var(--accent-fg); font-weight: 500; }
     .modal-attr-btn.unavailable { opacity: 0.28; cursor: not-allowed; }
     .modal-attr-btn.unavailable:hover { border-color: #333; }
     .modal-attr-btn.info { border-color: #333; color: #999; cursor: default; pointer-events: none; }
@@ -786,7 +860,7 @@
       .slider-nav-btn { width: 28px; height: 28px; font-size: 16px; }
       .cart-sidebar { width: 100vw; }
       .modal-carousel { max-height: 50vh; }
-      .modal-body { padding: 20px 16px 14px; }
+      .modal-body { padding: 22px 16px 16px; }
     }
     @media (max-width: 480px) {
       .hero-slider { height: 40vh; }
