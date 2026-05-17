@@ -224,8 +224,19 @@ bot.on(message('text'), async (ctx, next) => {
 
 const WEBAPP_URL = process.env.WEBAPP_URL
 
+/** Публичный origin для webhook: Telegram ждёт хост без path, а WEBAPP_URL обычно `https://домен/shop`. */
+function getWebhookPublicOrigin(): string {
+  const raw = process.env.WEBAPP_URL || 'https://bendershop.store'
+  try {
+    const u = new URL(raw)
+    return `${u.protocol}//${u.host}`
+  } catch {
+    return 'https://bendershop.store'
+  }
+}
+
 if (process.env.NODE_ENV === 'production' && !process.env.WEBHOOK_SECRET) {
-  throw new Error('WEBHOOK_SECRET is required when WEBHOOK_URL is set')
+  throw new Error('WEBHOOK_SECRET is required in production (webhook mode)')
 }
 
 // /start с payload shop или startapp=shop — открыть Mini App
@@ -1724,12 +1735,18 @@ bot.hears('🔑 API Ключи', async (ctx) => {
 if (process.env.NODE_ENV === 'production') {
   bot.launch({
     webhook: {
-      domain: process.env.WEBAPP_URL || 'https://bendershop.store',
+      domain: getWebhookPublicOrigin(),
       path: '/webhook/telegram',
       secretToken: process.env.WEBHOOK_SECRET,
     },
     allowedUpdates: ['message', 'callback_query', 'chat_member'],
-  }).catch(err => { log.error('Launch error', { error: err instanceof Error ? err.message : String(err) }); process.exit(1) })
+  }).catch(err => {
+    log.error('Launch error', {
+      error: err instanceof Error ? err.message : String(err),
+      webhookDomain: getWebhookPublicOrigin(),
+    })
+    process.exit(1)
+  })
 } else {
   bot.launch().catch((err) => { log.error('Bot launch failed', { error: err instanceof Error ? err.message : String(err) }); process.exit(1) })
 }
