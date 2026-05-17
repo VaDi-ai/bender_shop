@@ -1,7 +1,6 @@
 /**
- * dist/bot/index.js должен вызывать prisma.region (модель Region, @@map("ShopRegion")).
- * Запрет: prisma.shopRegion — иначе рассинхрон с схемой.
- * Если volume перетирает /app/dist старым билдом — проверка на этапе build не спасёт; см. railway.toml.
+ * dist/bot/index.js: сид регионов — только сырой SQL в "ShopRegion".
+ * Нельзя prisma*.region.upsert: с @prisma/adapter-pg запрос уезжает в public."Region".
  */
 const fs = require('fs')
 const path = require('path')
@@ -13,12 +12,12 @@ if (!fs.existsSync(p)) {
 }
 const s = fs.readFileSync(p, 'utf8')
 
-if (/\bprisma\w*\.shopRegion\./.test(s)) {
-  console.error('verify-dist: dist must not use prisma.shopRegion (use prisma.region + @@map)')
+if (/\bprisma\w*\.region\.upsert\s*\(/.test(s)) {
+  console.error('verify-dist: do not use prisma.region.upsert with adapter-pg; use raw SQL ShopRegion')
   process.exit(1)
 }
-if (!/\bprisma\w*\.region\./.test(s)) {
-  console.error('verify-dist: dist must reference prisma.region (Region seed)')
+if (!/ShopRegion/.test(s)) {
+  console.error('verify-dist: dist must contain ShopRegion (raw SQL seed)')
   process.exit(1)
 }
 

@@ -14,7 +14,6 @@ const pool = new Pool({
   connectionTimeoutMillis: 10000,
 })
 
-// A1: Telegram admin alert on pool errors
 let _poolAlertBot: import('telegraf').Telegraf | null = null
 let _poolAlertAdminIds: number[] = []
 

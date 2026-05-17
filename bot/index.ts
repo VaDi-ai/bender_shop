@@ -2519,23 +2519,36 @@ const DEFAULT_REGIONS: { code: string; name: string; sortOrder: number; flag: st
 
 async function seedDefaultRegions(): Promise<void> {
   try {
+    // Prisma 7 + @prisma/adapter-pg игнорирует @@map для Region → пишет в public."Region".
+    // Явный SQL в "ShopRegion" совпадает со schema (model Region @@map("ShopRegion")).
+    await prisma.$executeRawUnsafe(`
+CREATE TABLE IF NOT EXISTS "ShopRegion" (
+  "id" SERIAL NOT NULL,
+  "code" TEXT NOT NULL,
+  "name" TEXT NOT NULL,
+  "flag" TEXT,
+  "currency" VARCHAR(3),
+  "sortOrder" INTEGER NOT NULL DEFAULT 0,
+  "isActive" BOOLEAN NOT NULL DEFAULT true,
+  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT "ShopRegion_pkey" PRIMARY KEY ("id")
+);`)
+    await prisma.$executeRawUnsafe(`CREATE UNIQUE INDEX IF NOT EXISTS "ShopRegion_code_key" ON "ShopRegion"("code");`)
+    await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "ShopRegion_isActive_idx" ON "ShopRegion"("isActive");`)
+    await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "ShopRegion_sortOrder_idx" ON "ShopRegion"("sortOrder");`)
+
     for (const r of DEFAULT_REGIONS) {
-      await prisma.region.upsert({
-        where: { code: r.code },
-        create: {
-          code: r.code,
-          name: r.name,
-          sortOrder: r.sortOrder,
-          flag: r.flag,
-          currency: r.currency,
-        },
-        update: {
-          name: r.name,
-          sortOrder: r.sortOrder,
-          flag: r.flag,
-          currency: r.currency,
-        },
-      })
+      await prisma.$executeRaw`
+        INSERT INTO "ShopRegion" ("code", "name", "sortOrder", "flag", "currency", "isActive", "createdAt", "updatedAt")
+        VALUES (${r.code}, ${r.name}, ${r.sortOrder}, ${r.flag}, ${r.currency}, true, NOW(), NOW())
+        ON CONFLICT ("code") DO UPDATE SET
+          "name" = EXCLUDED."name",
+          "sortOrder" = EXCLUDED."sortOrder",
+          "flag" = EXCLUDED."flag",
+          "currency" = EXCLUDED."currency",
+          "updatedAt" = NOW();
+      `
     }
   } catch (err) {
     log.error('Region seeder failed', { error: err instanceof Error ? err.message : String(err) })
