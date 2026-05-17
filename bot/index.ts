@@ -1,5 +1,5 @@
 import 'dotenv/config'
-import { initSentry } from '../lib/sentry'
+import { initSentry, Sentry } from '../lib/sentry'
 initSentry()
 
 // ─── Typed temp storage with TTL (replaces globalThis hacks) ─────────────────
@@ -1769,7 +1769,7 @@ if (WEBAPP_URL) {
 }
 
 startScheduler(bot)
-startApiServer(process.env.NODE_ENV === 'production' ? bot : undefined)
+const httpServer = startApiServer(process.env.NODE_ENV === 'production' ? bot : undefined)
 
 // ─── Загрузка OpenRouter ключа из БД ─────────────────────────────────────────
 
@@ -2568,6 +2568,19 @@ async function gracefulShutdown(signal: string): Promise<void> {
     await new Promise((r) => setTimeout(r, 200))
   }
 
+  try {
+    await new Promise<void>((resolve) => {
+      httpServer.close(() => resolve())
+    })
+    log.info('HTTP server closed')
+  } catch (e) {
+    log.error('Shutdown: HTTP close failed', { error: e instanceof Error ? e.message : String(e) })
+  }
+  try {
+    if (process.env.SENTRY_DSN) await Sentry.close(2000)
+  } catch (e) {
+    log.error('Shutdown: Sentry.close failed', { error: e instanceof Error ? e.message : String(e) })
+  }
   try { await serializeAISuggestions() } catch (e) { log.error('Shutdown: serializeAISuggestions failed', { error: e instanceof Error ? e.message : String(e) }) }
   try { bot.stop(signal) } catch (e) { log.error('Shutdown: bot.stop failed', { error: e instanceof Error ? e.message : String(e) }) }
   try { await prisma.$disconnect() } catch (e) { log.error('Shutdown: prisma disconnect failed', { error: e instanceof Error ? e.message : String(e) }) }

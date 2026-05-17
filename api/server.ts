@@ -15,6 +15,7 @@ import fs from 'fs'
 import https from 'https'
 import path from 'path'
 import express, { Request, Response, NextFunction } from 'express'
+import type { Server } from 'http'
 import helmet from 'helmet'
 import cors from 'cors'
 import rateLimit from 'express-rate-limit'
@@ -177,7 +178,7 @@ function requireAdminHmac(req: Request, res: Response, next: NextFunction): void
 
 // ─── Запуск сервера ───────────────────────────────────────────────────────────
 
-export function startApiServer(bot?: Telegraf): void {
+export function startApiServer(bot?: Telegraf): Server {
   const app = express()
   app.set('trust proxy', 1)
 
@@ -1577,17 +1578,5 @@ export function startApiServer(bot?: Telegraf): void {
   })
   server.on('error', (err) => { log.error('Listen failed', { error: err.message }); process.exit(1) })
 
-  // Graceful HTTP drain: stop accepting connections, allow up to 10s to finish in-flight requests
-  const closeServer = async () => {
-    server.close()
-    await Sentry.close(2000)
-    try { await prisma.$disconnect() } catch { /* ignore */ }
-    log.info('Prisma disconnected')
-    setTimeout(() => {
-      log.error('Force exit after 10s drain timeout')
-      process.exit(1)
-    }, 10_000)
-  }
-  process.once('SIGTERM', closeServer)
-  process.once('SIGINT', closeServer)
+  return server
 }
