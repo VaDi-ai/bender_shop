@@ -209,6 +209,20 @@ model Category {
   products Product[]
 }
 
+/// Регион / зона (витрина, доставка). Сидируется при старте бота.
+model Region {
+  id        Int      @id @default(autoincrement())
+  code      String   @unique
+  name      String
+  sortOrder Int      @default(0)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([isActive])
+  @@index([sortOrder])
+}
+
 model Product {
   id          Int      @id @default(autoincrement())
   sku         String   @unique // артикул товара

@@ -15,20 +15,28 @@ import log from './logger'
  * Returns null if the record does not exist or ciphertext cannot be authenticated (wrong key / corrupt row).
  */
 export async function getApiKeyValue(service: string): Promise<string | null> {
-  const record = await prisma.apiKey.findUnique({ where: { service } })
-  if (!record) return null
   try {
-    return decrypt(record.value, service)  // try with AAD
-  } catch {
+    const record = await prisma.apiKey.findUnique({ where: { service } })
+    if (!record) return null
     try {
-      return decrypt(record.value)  // fallback without AAD for old data
-    } catch (e) {
-      log.warn('ApiKey decrypt failed', {
-        service,
-        error: e instanceof Error ? e.message : String(e),
-      })
-      return null
+      return decrypt(record.value, service)  // try with AAD
+    } catch {
+      try {
+        return decrypt(record.value)  // fallback without AAD for old data
+      } catch (e) {
+        log.warn('ApiKey decrypt failed', {
+          service,
+          error: e instanceof Error ? e.message : String(e),
+        })
+        return null
+      }
     }
+  } catch (e) {
+    log.error('ApiKey read failed', {
+      service,
+      error: e instanceof Error ? e.message : String(e),
+    })
+    return null
   }
 }
 

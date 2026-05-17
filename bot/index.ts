@@ -231,15 +231,26 @@ bot.on(message('text'), async (ctx, next) => {
 
 const WEBAPP_URL = process.env.WEBAPP_URL
 
-/** Публичный origin для webhook: Telegram ждёт хост без path, а WEBAPP_URL обычно `https://домен/shop`. */
+/** Публичный origin для webhook. Telegram резолвит этот хост при setWebhook. */
 function getWebhookPublicOrigin(): string {
-  const raw = process.env.WEBAPP_URL || 'https://bendershop.store'
-  try {
-    const u = new URL(raw)
-    return `${u.protocol}//${u.host}`
-  } catch {
-    return 'https://bendershop.store'
+  const candidates = [
+    process.env.WEBHOOK_PUBLIC_ORIGIN,
+    process.env.WEBHOOK_URL,
+    process.env.WEBAPP_URL,
+  ]
+  for (const raw of candidates) {
+    if (!raw?.trim()) continue
+    const withProto = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`
+    try {
+      const u = new URL(withProto)
+      if (u.hostname) return `${u.protocol}//${u.host}`
+    } catch {
+      /* next */
+    }
   }
+  const railway = process.env.RAILWAY_PUBLIC_DOMAIN?.trim()
+  if (railway) return `https://${railway}`
+  return 'https://bendershop.store'
 }
 
 if (process.env.NODE_ENV === 'production' && !process.env.WEBHOOK_SECRET) {
@@ -2501,6 +2512,29 @@ setInterval(async () => {
 }, 60 * 60 * 1000).unref() // каждый час
 
 // ─── Инициализация технического топика «📦 Продажи и резервы» ─────────────────
+
+/** Минимальный набор регионов (таблица Region должна существовать — prisma db push). */
+const DEFAULT_REGIONS: { code: string; name: string; sortOrder: number }[] = [
+  { code: 'default', name: 'Россия', sortOrder: 0 },
+]
+
+async function seedDefaultRegions(): Promise<void> {
+  try {
+    for (const r of DEFAULT_REGIONS) {
+      await prisma.region.upsert({
+        where: { code: r.code },
+        create: { code: r.code, name: r.name, sortOrder: r.sortOrder },
+        update: { name: r.name, sortOrder: r.sortOrder },
+      })
+    }
+  } catch (err) {
+    log.error('Region seeder failed', { error: err instanceof Error ? err.message : String(err) })
+  }
+}
+
+;(async () => {
+  await seedDefaultRegions()
+})().catch((err) => log.error('Region seed task failed', { error: err instanceof Error ? err.message : String(err) }))
 
 async function ensureSalesTopic(): Promise<void> {
   try {
