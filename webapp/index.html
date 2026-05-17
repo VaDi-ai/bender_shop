@@ -456,10 +456,10 @@
     .product-card:hover { border-color: rgba(255,255,255,0.4); box-shadow: 0 0 15px rgba(255,255,255,0.08); }
     .product-card:active { box-shadow: 0 0 20px rgba(255,255,255,0.15); }
 
-    /* Photo wrap with badge & hover dots */
-    .product-photo-wrap { position: relative; width: 100%; aspect-ratio: 1 / 1; background: radial-gradient(ellipse 120% 100% at 50% 0%, #2a2a2e 0%, #121214 55%, #0a0a0c 100%); overflow: hidden; border-radius: 16px 16px 0 0; }
+    /* Photo wrap: плоский фон + тёмная внутренняя «рамка» (cutout без лишнего затемнения картинки) */
+    .product-photo-wrap { position: relative; width: 100%; aspect-ratio: 1 / 1; background: #1a1a1a; overflow: hidden; border-radius: 16px 16px 0 0; box-shadow: inset 0 0 0 2px #0a0a0c; }
     .product-photo { width: 100%; height: 100%; object-fit: contain; display: block; pointer-events: none; transition: opacity 0.15s; background: transparent; }
-    .product-photo-ph { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 40px; pointer-events: none; background: radial-gradient(ellipse 120% 100% at 50% 0%, #2a2a2e 0%, #121214 55%, #0a0a0c 100%); }
+    .product-photo-ph { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 40px; pointer-events: none; background: #1a1a1a; }
     .product-badge {
       position: absolute; top: 8px; left: 8px; z-index: 2;
       background: #0a0a0a; color: var(--accent);
@@ -529,15 +529,13 @@
     }
     .modal-close-btn:hover { border-color: var(--accent); color: var(--accent); }
 
-    /* Photo carousel — тёмный «витринный» фон (прозрачные PNG смотрятся цельно) */
-    .modal-carousel { position: relative; width: 100%; max-height: 55vh; background: radial-gradient(ellipse 120% 100% at 50% 0%, #2a2a2e 0%, #121214 55%, #0a0a0c 100%); flex-shrink: 0; overflow: hidden; }
+    /* Карусель в модалке — как карточка: плоский фон + тёмная внутренняя рамка */
+    .modal-carousel { position: relative; width: 100%; max-height: 55vh; background: #1a1a1a; flex-shrink: 0; overflow: hidden; box-shadow: inset 0 0 0 2px #0a0a0c; }
     .modal-carousel-img { width: 100%; height: 100%; object-fit: contain; display: block; background: transparent; }
-    .modal-carousel-ph { width: 100%; height: 280px; display: flex; align-items: center; justify-content: center; font-size: 72px; background: radial-gradient(ellipse 120% 100% at 50% 0%, #2a2a2e 0%, #121214 55%, #0a0a0c 100%); }
-    /* Витринный градиент под фото; сами img — прозрачные (cutout PNG/WebP). Telegram /api/* — плоский фон. */
-    .product-photo-wrap, .modal-carousel { background: radial-gradient(ellipse 120% 100% at 50% 0%, #2a2a2e 0%, #121214 55%, #0a0a0c 100%) !important; }
+    .modal-carousel-ph { width: 100%; height: 280px; display: flex; align-items: center; justify-content: center; font-size: 72px; background: #1a1a1a; }
+    .product-photo-wrap, .modal-carousel { background-color: #1a1a1a !important; }
     .product-photo, .modal-carousel-img { background-color: transparent !important; }
-    .cart-item-thumb { background: radial-gradient(ellipse 100% 100% at 50% 50%, #252528 0%, #0e0e10 100%) !important; }
-    img[src*="/api/"] { background-color: #1a1a1a !important; }
+    .cart-item-thumb, img[src*="/api/"] { background-color: #1a1a1a !important; }
     .modal-carousel-arrow {
       position: absolute; top: 50%; transform: translateY(-50%);
       z-index: 5; width: 40px; height: 40px; background: rgba(0,0,0,0.6);
@@ -1024,7 +1022,7 @@
       <div class="modal-carousel" id="modalCarousel">
         <div class="modal-badge" id="modalBadge" style="display:none"></div>
         <div class="modal-carousel-ph" id="modalCarouselPh"><img src="/no-photo.webp" alt="" style="width:100%;height:100%;object-fit:cover;opacity:0.6;" onerror="this.onerror=null;this.src='/no-photo.png'"></div>
-        <img class="modal-carousel-img" id="modalCarouselImg" src="" alt="" style="display:none;background-color:#1a1a1a" loading="lazy">
+        <img class="modal-carousel-img" id="modalCarouselImg" src="" alt="" style="display:none" loading="lazy">
         <button class="modal-carousel-arrow modal-carousel-prev hidden" id="modalCarouselPrev">‹</button>
         <button class="modal-carousel-arrow modal-carousel-next hidden" id="modalCarouselNext">›</button>
         <div class="modal-carousel-dots" id="modalCarouselDots"></div>
@@ -1283,27 +1281,19 @@
     }
 
     function getProductPhotos(p, variant) {
-      if (variant && Array.isArray(variant.photos) && variant.photos.length) {
-        return variant.photos.map(resolvePhoto)
+      // Конкретное ТП: только его фото; пусто → [] (плейсхолдер), без подмеса других вариантов/товара.
+      if (variant) {
+        if (Array.isArray(variant.photos) && variant.photos.length) {
+          return variant.photos.map(resolvePhoto)
+        }
+        return []
       }
+      // Превью товара без выбранного ТП
       if (Array.isArray(p.photos) && p.photos.length) {
         return p.photos.map(resolvePhoto)
       }
-      // Фото из таблицы лежат на вариантах; без выбранного варианта показываем объединение (карусель).
-      if (p.variants && p.variants.length) {
-        const seen = new Set()
-        const urls = []
-        for (const v of p.variants) {
-          if (!v.inStock) continue
-          const arr = Array.isArray(v.photos) ? v.photos : []
-          for (const ph of arr) {
-            const u = resolvePhoto(ph)
-            if (!seen.has(u)) { seen.add(u); urls.push(u) }
-          }
-        }
-        if (urls.length) return urls
-      }
-      return p.photoUrl ? [resolvePhoto(p.photoUrl)] : []
+      if (p.photoUrl) return [resolvePhoto(p.photoUrl)]
+      return []
     }
 
     function minVariantPrice(p) {
@@ -2100,40 +2090,81 @@
         }
       }
 
-      // Update card photo — показываем фото варианта если есть, иначе фото товара
+      // Фото ТП: только у выбранного варианта; нет фото → плейсхолдер (не превью всего товара)
       const p = allProducts.find(x => x.id === productId)
       if (p) {
         const newPhotos = getProductPhotos(p, variant)
         const photoWrap = card.querySelector('.product-photo-wrap')
-        const cardImg   = card.querySelector('.product-photo')
-        if (photoWrap) photoWrap.dataset.photos = JSON.stringify(newPhotos)
-        if (cardImg && newPhotos.length > 0) cardImg.src = newPhotos[0]
+        if (!photoWrap) return
+        photoWrap.dataset.photos = JSON.stringify(newPhotos)
+        let cardImg = photoWrap.querySelector('.product-photo')
+        let phEl = photoWrap.querySelector('.product-photo-ph')
+        const dotsEl = photoWrap.querySelector('.product-hover-dots')
+        const phInner = '<img src="/no-photo.webp" alt="" style="width:100%;height:100%;object-fit:cover;opacity:0.6;" onerror="this.onerror=null;this.src=\'/no-photo.png\'">'
+
+        if (newPhotos.length > 0) {
+          if (phEl) phEl.style.display = 'none'
+          if (!cardImg) {
+            cardImg = document.createElement('img')
+            cardImg.className = 'product-photo'
+            cardImg.alt = ''
+            photoWrap.insertBefore(cardImg, dotsEl || null)
+          }
+          cardImg.style.display = 'block'
+          cardImg.src = newPhotos[0]
+          if (dotsEl) {
+            if (newPhotos.length > 1) {
+              dotsEl.style.display = 'flex'
+              dotsEl.innerHTML = newPhotos.slice(0, Math.min(newPhotos.length, 8)).map((_, j) => `<span class="${j === 0 ? 'active' : ''}"></span>`).join('')
+            } else {
+              dotsEl.innerHTML = ''
+              dotsEl.style.display = 'none'
+            }
+          }
+        } else {
+          if (cardImg) cardImg.style.display = 'none'
+          if (!phEl) {
+            phEl = document.createElement('div')
+            phEl.className = 'product-photo-ph'
+            phEl.innerHTML = phInner
+            photoWrap.insertBefore(phEl, dotsEl || null)
+          } else {
+            phEl.style.display = 'flex'
+          }
+          if (dotsEl) {
+            dotsEl.innerHTML = ''
+            dotsEl.style.display = 'none'
+          }
+        }
       }
-    }
 
     function setupCardHoverCycling() {
       document.querySelectorAll('.product-photo-wrap[data-photos]').forEach(wrap => {
         let timer = null
         let idx   = 0
-        const img  = wrap.querySelector('.product-photo')
-        const dots = wrap.querySelectorAll('.product-hover-dots span')
-        let photos = []
-        try { photos = JSON.parse(wrap.dataset.photos.replace(/&quot;/g, '"')) } catch { return }
-        if (photos.length <= 1) return
-
         wrap.addEventListener('mouseenter', () => {
-          idx = 0
+          let photos = []
+          try { photos = JSON.parse(wrap.dataset.photos.replace(/&quot;/g, '"')) } catch { return }
+          if (photos.length <= 1) return
+          const img = wrap.querySelector('.product-photo')
+          if (!img || img.style.display === 'none') return
+          const dots = wrap.querySelectorAll('.product-hover-dots span')
           const n = photos.length
           const dlen = dots.length || 1
+          idx = 0
           timer = setInterval(() => {
             idx = (idx + 1) % n
-            if (img) img.src = photos[idx]
+            img.src = photos[idx]
             dots.forEach((d, i) => d.classList.toggle('active', i === (idx % dlen)))
           }, 800)
         })
         wrap.addEventListener('mouseleave', () => {
-          clearInterval(timer); timer = null; idx = 0
-          if (img && photos[0]) img.src = photos[0]
+          clearInterval(timer); timer = null
+          let photos = []
+          try { photos = JSON.parse(wrap.dataset.photos.replace(/&quot;/g, '"')) } catch { return }
+          const img = wrap.querySelector('.product-photo')
+          const dots = wrap.querySelectorAll('.product-hover-dots span')
+          if (img && photos[0] && img.style.display !== 'none') img.src = photos[0]
           dots.forEach((d, i) => d.classList.toggle('active', i === 0))
         })
       })
