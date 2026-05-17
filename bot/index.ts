@@ -133,6 +133,9 @@ initAdminNotifications(bot, ADMIN_IDS)
 initSecurityAlerts(bot, ADMIN_IDS)
 initPrismaAlerts(bot, ADMIN_IDS)
 
+/** Маркер в логах: если не видно при старте — в контейнере всё ещё старый dist (кэш билда, другой коммит, не тот репозиторий). */
+log.info('Boot: region seed path', { implementation: 'ShopRegion-raw-sql' })
+
 // ─── Режим техработ (in-memory) ───────────────────────────────────────────────
 
 let maintenanceMode = false

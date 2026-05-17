@@ -4,6 +4,8 @@
 # иначе остаётся старый dist и в логах снова prisma.region / битые ApiKey.
 [build]
 builder = "NIXPACKS"
+# Явная сборка: без свежего `tsc` в образе не будет dist/, а старый кэш Nixpacks теоретически мог подставить артефакт.
+buildCommand = "npm run build"
 
 [deploy]
 # Явный healthcheck быстрее редиректа / → /shop; без npm-обёртки меньше шума по SIGTERM.
