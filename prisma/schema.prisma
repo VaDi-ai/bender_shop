@@ -209,8 +209,8 @@ model Category {
   products Product[]
 }
 
-/// Регион витрины / доставки. Таблица в БД — ShopRegion (не `Region`), чтобы не биться о старый мусор в public."Region".
-model Region {
+/// Регион витрины / доставки (отдельная таблица ShopRegion, не путать с legacy public."Region").
+model ShopRegion {
   id        Int      @id @default(autoincrement())
   code      String   @unique
   name      String
@@ -223,7 +223,6 @@ model Region {
 
   @@index([isActive])
   @@index([sortOrder])
-  @@map("ShopRegion")
 }
 
 model Product {

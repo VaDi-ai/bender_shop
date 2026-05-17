@@ -10,6 +10,18 @@ import { prisma } from './prisma'
 import { encrypt, decrypt, getEncryptedKeyVersion } from './crypto'
 import log from './logger'
 
+function tryDecryptStoredValue(value: string, service: string): string | null {
+  try {
+    return decrypt(value, service)
+  } catch {
+    try {
+      return decrypt(value)
+    } catch {
+      return null
+    }
+  }
+}
+
 /**
  * Read a stored ApiKey value, decrypting it.
  * Returns null if the record does not exist or ciphertext cannot be authenticated (wrong key / corrupt row).
@@ -18,19 +30,11 @@ export async function getApiKeyValue(service: string): Promise<string | null> {
   try {
     const record = await prisma.apiKey.findUnique({ where: { service } })
     if (!record) return null
-    try {
-      return decrypt(record.value, service)  // try with AAD
-    } catch {
-      try {
-        return decrypt(record.value)  // fallback without AAD for old data
-      } catch (e) {
-        log.warn('ApiKey decrypt failed', {
-          service,
-          error: e instanceof Error ? e.message : String(e),
-        })
-        return null
-      }
+    const plain = tryDecryptStoredValue(record.value, service)
+    if (plain === null) {
+      log.warn('ApiKey decrypt failed', { service })
     }
+    return plain
   } catch (e) {
     log.error('ApiKey read failed', {
       service,

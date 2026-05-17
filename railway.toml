@@ -7,5 +7,6 @@ builder = "NIXPACKS"
 healthcheckPath = "/health"
 healthcheckTimeout = 120
 # Prisma 7: у db push нет флага --skip-generate (ломало контейнер).
-startCommand = "npx prisma db push && node dist/bot/index.js"
-releaseCommand = "npx prisma db push"
+# generate + push: на Railway dist иногда собирается без актуального generated-клиента относительно schema.
+startCommand = "npx prisma generate && npx prisma db push && node dist/bot/index.js"
+releaseCommand = "npx prisma generate && npx prisma db push"
