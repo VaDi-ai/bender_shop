@@ -6,6 +6,6 @@ builder = "NIXPACKS"
 # Явный healthcheck быстрее редиректа / → /shop; без npm-обёртки меньше шума по SIGTERM.
 healthcheckPath = "/health"
 healthcheckTimeout = 120
-startCommand = "npx prisma db push --skip-generate && node dist/bot/index.js"
-# Дублируем на фазе release (если включена в проекте).
-releaseCommand = "npx prisma db push --skip-generate"
+# Prisma 7: у db push нет флага --skip-generate (ломало контейнер).
+startCommand = "npx prisma db push && node dist/bot/index.js"
+releaseCommand = "npx prisma db push"
