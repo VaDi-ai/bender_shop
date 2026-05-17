@@ -457,9 +457,9 @@
     .product-card:active { box-shadow: 0 0 20px rgba(255,255,255,0.15); }
 
     /* Photo wrap with badge & hover dots */
-    .product-photo-wrap { position: relative; width: 100%; aspect-ratio: 1 / 1; background: #1a1a1a; overflow: hidden; border-radius: 16px 16px 0 0; }
-    .product-photo { width: 100%; height: 100%; object-fit: contain; display: block; pointer-events: none; transition: opacity 0.15s; background: #1a1a1a; }
-    .product-photo-ph { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 40px; pointer-events: none; background: #1a1a1a; }
+    .product-photo-wrap { position: relative; width: 100%; aspect-ratio: 1 / 1; background: radial-gradient(ellipse 120% 100% at 50% 0%, #2a2a2e 0%, #121214 55%, #0a0a0c 100%); overflow: hidden; border-radius: 16px 16px 0 0; }
+    .product-photo { width: 100%; height: 100%; object-fit: contain; display: block; pointer-events: none; transition: opacity 0.15s; background: transparent; }
+    .product-photo-ph { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 40px; pointer-events: none; background: radial-gradient(ellipse 120% 100% at 50% 0%, #2a2a2e 0%, #121214 55%, #0a0a0c 100%); }
     .product-badge {
       position: absolute; top: 8px; left: 8px; z-index: 2;
       background: #0a0a0a; color: var(--accent);
@@ -529,11 +529,14 @@
     }
     .modal-close-btn:hover { border-color: var(--accent); color: var(--accent); }
 
-    /* Photo carousel */
-    .modal-carousel { position: relative; width: 100%; max-height: 55vh; background: #1a1a1a; flex-shrink: 0; overflow: hidden; }
-    .modal-carousel-img { width: 100%; height: 100%; object-fit: contain; display: block; background: #1a1a1a; }
-    .modal-carousel-ph { width: 100%; height: 280px; display: flex; align-items: center; justify-content: center; font-size: 72px; background: #1a1a1a; }
-    .product-photo, .product-photo-wrap, .modal-carousel-img, .modal-carousel, .cart-item-thumb,
+    /* Photo carousel — тёмный «витринный» фон (прозрачные PNG смотрятся цельно) */
+    .modal-carousel { position: relative; width: 100%; max-height: 55vh; background: radial-gradient(ellipse 120% 100% at 50% 0%, #2a2a2e 0%, #121214 55%, #0a0a0c 100%); flex-shrink: 0; overflow: hidden; }
+    .modal-carousel-img { width: 100%; height: 100%; object-fit: contain; display: block; background: transparent; }
+    .modal-carousel-ph { width: 100%; height: 280px; display: flex; align-items: center; justify-content: center; font-size: 72px; background: radial-gradient(ellipse 120% 100% at 50% 0%, #2a2a2e 0%, #121214 55%, #0a0a0c 100%); }
+    /* Витринный градиент под фото; сами img — прозрачные (cutout PNG/WebP). Telegram /api/* — плоский фон. */
+    .product-photo-wrap, .modal-carousel { background: radial-gradient(ellipse 120% 100% at 50% 0%, #2a2a2e 0%, #121214 55%, #0a0a0c 100%) !important; }
+    .product-photo, .modal-carousel-img { background-color: transparent !important; }
+    .cart-item-thumb { background: radial-gradient(ellipse 100% 100% at 50% 50%, #252528 0%, #0e0e10 100%) !important; }
     img[src*="/api/"] { background-color: #1a1a1a !important; }
     .modal-carousel-arrow {
       position: absolute; top: 50%; transform: translateY(-50%);
@@ -1286,7 +1289,21 @@
       if (Array.isArray(p.photos) && p.photos.length) {
         return p.photos.map(resolvePhoto)
       }
-      return p.photoUrl ? [p.photoUrl] : []
+      // Фото из таблицы лежат на вариантах; без выбранного варианта показываем объединение (карусель).
+      if (p.variants && p.variants.length) {
+        const seen = new Set()
+        const urls = []
+        for (const v of p.variants) {
+          if (!v.inStock) continue
+          const arr = Array.isArray(v.photos) ? v.photos : []
+          for (const ph of arr) {
+            const u = resolvePhoto(ph)
+            if (!seen.has(u)) { seen.add(u); urls.push(u) }
+          }
+        }
+        if (urls.length) return urls
+      }
+      return p.photoUrl ? [resolvePhoto(p.photoUrl)] : []
     }
 
     function minVariantPrice(p) {
@@ -1940,13 +1957,13 @@
 
         // Photo area
         const photosData = JSON.stringify(photos).replace(/'/g, '&#39;').replace(/"/g, '&quot;')
-        const photoAreaHtml = `<div class="product-photo-wrap" data-photos="${photosData}" style="background-color:#1a1a1a">
+        const photoAreaHtml = `<div class="product-photo-wrap" data-photos="${photosData}">
   ${badgeHtml}
   ${mainPhoto
-    ? `<img class="product-photo" src="${esc(mainPhoto)}" alt=""${i >= 6 ? ' loading="lazy"' : ''} style="background-color:#1a1a1a">`
+    ? `<img class="product-photo" src="${esc(mainPhoto)}" alt=""${i >= 6 ? ' loading="lazy"' : ''}>`
     : '<div class="product-photo-ph"><img src="/no-photo.webp" alt="" style="width:100%;height:100%;object-fit:cover;opacity:0.6;" onerror="this.onerror=null;this.src=\'/no-photo.png\'"></div>'}
   ${photos.length > 1
-    ? `<div class="product-hover-dots">${photos.slice(0, 3).map((_, j) => `<span class="${j === 0 ? 'active' : ''}"></span>`).join('')}</div>`
+    ? `<div class="product-hover-dots">${photos.slice(0, Math.min(photos.length, 8)).map((_, j) => `<span class="${j === 0 ? 'active' : ''}"></span>`).join('')}</div>`
     : ''}
 </div>`
 
@@ -2106,10 +2123,12 @@
 
         wrap.addEventListener('mouseenter', () => {
           idx = 0
+          const n = photos.length
+          const dlen = dots.length || 1
           timer = setInterval(() => {
-            idx = (idx + 1) % Math.min(photos.length, 3)
+            idx = (idx + 1) % n
             if (img) img.src = photos[idx]
-            dots.forEach((d, i) => d.classList.toggle('active', i === idx))
+            dots.forEach((d, i) => d.classList.toggle('active', i === (idx % dlen)))
           }, 800)
         })
         wrap.addEventListener('mouseleave', () => {

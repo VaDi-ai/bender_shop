@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { extractProductName, parsePhotoUrls } from '../lib/sheets-sync'
+import { extractProductName, parsePhotoUrls, mergeVariantPhotoUrls } from '../lib/sheets-sync'
 
 describe('extractProductName', () => {
   it('iPhone: removes color, memory, country', () => {
@@ -67,5 +67,18 @@ describe('parsePhotoUrls', () => {
   it('поддерживает http (без s)', () => {
     expect(parsePhotoUrls('http://insecure.com/photo.jpg'))
       .toEqual(['http://insecure.com/photo.jpg'])
+  })
+})
+
+describe('mergeVariantPhotoUrls', () => {
+  it('склеивает уникальные URL в порядке встречи', () => {
+    expect(mergeVariantPhotoUrls([
+      { photoUrls: ['https://a/1.webp', 'https://a/2.webp'] },
+      { photoUrls: ['https://a/1.webp', 'https://a/3.webp'] },
+    ])).toEqual(['https://a/1.webp', 'https://a/2.webp', 'https://a/3.webp'])
+  })
+
+  it('пустые варианты не ломают', () => {
+    expect(mergeVariantPhotoUrls([{ photoUrls: [] }, { photoUrls: ['https://x/y'] }])).toEqual(['https://x/y'])
   })
 })

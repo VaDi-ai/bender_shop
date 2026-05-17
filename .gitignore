@@ -11,6 +11,7 @@ node_modules
 *.key
 bendershop-*.json
 *-service-account.json
+.secrets/
 
 # Backups with PII
 backup-*.json

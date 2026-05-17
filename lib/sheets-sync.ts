@@ -38,6 +38,21 @@ export function parsePhotoUrls(cell: string): string[] {
   return parts.map(u => u.trim()).filter(u => /^https?:\/\//.test(u))
 }
 
+/** Уникальные URL фото по всем вариантам (порядок: как в таблице, без дублей). */
+export function mergeVariantPhotoUrls(variants: { photoUrls: string[] }[]): string[] {
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const v of variants) {
+    for (const raw of v.photoUrls) {
+      const u = String(raw ?? '').trim()
+      if (!u || seen.has(u)) continue
+      seen.add(u)
+      out.push(u)
+    }
+  }
+  return out
+}
+
 const DEFAULT_QTY = parseInt(process.env.DEFAULT_STOCK_QTY || '3', 10) // если «В наличие» пусто
 
 const PRODUCT_SHEET_NAME = process.env.PRODUCT_SHEET_NAME || 'Лист1'
@@ -581,12 +596,13 @@ export async function syncProductsFromSheets(shouldAbort?: () => boolean): Promi
         }
       }
 
-      // Update product main photo from first variant with photos
-      const firstVariantWithPhoto = group.variants.find(v => v.photoUrls.length > 0)
-      if (firstVariantWithPhoto && firstVariantWithPhoto.photoUrls[0]) {
+      // Карусель в магазине: на уровне Product храним объединение URL со всех вариантов
+      // (в таблице фото часто только у строк вариантов; раньше в Product попадало одно preview).
+      const mergedPhotos = mergeVariantPhotoUrls(group.variants)
+      if (mergedPhotos.length > 0) {
         await prisma.product.update({
           where: { id: product.id },
-          data: { photoUrl: firstVariantWithPhoto.photoUrls[0] },
+          data: { photos: mergedPhotos, photoUrl: mergedPhotos[0]! },
         }).catch(() => {})
       }
     } catch (err) {

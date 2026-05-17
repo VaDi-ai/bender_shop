@@ -4,19 +4,41 @@
  * Чтение и запись в Google таблицу через сервисный аккаунт.
  */
 
+import fs from 'fs'
 import { google, sheets_v4 } from 'googleapis'
 
 const SHEET_ID = process.env.GOOGLE_SHEET_ID ?? ''
+const SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
 
 function getAuth() {
-  const keyJson = process.env.GOOGLE_SERVICE_ACCOUNT_KEY
-  if (!keyJson) throw new Error('GOOGLE_SERVICE_ACCOUNT_KEY not set')
+  // Приоритет — путь к JSON-файлу (надёжно работает локально, без проблем с
+  // dotenv-экранированием private_key). На Railway переменная задана как
+  // сырая JSON-строка → попадаем во вторую ветку.
+  const keyFile = process.env.GOOGLE_SERVICE_ACCOUNT_KEY_FILE
+  if (keyFile) {
+    if (!fs.existsSync(keyFile)) {
+      throw new Error(`GOOGLE_SERVICE_ACCOUNT_KEY_FILE points to missing file: ${keyFile}`)
+    }
+    return new google.auth.GoogleAuth({ keyFile, scopes: SCOPES })
+  }
 
-  const key = JSON.parse(keyJson)
-  return new google.auth.GoogleAuth({
-    credentials: key,
-    scopes: ['https://www.googleapis.com/auth/spreadsheets'],
-  })
+  const keyJson = process.env.GOOGLE_SERVICE_ACCOUNT_KEY
+  if (!keyJson) throw new Error('GOOGLE_SERVICE_ACCOUNT_KEY (or _KEY_FILE) not set')
+
+  // Если значение лежит в .env с экранированием (`\"` остаётся как `\"` потому
+  // что dotenv не разэкранирует кавычки внутри двойных кавычек), первый
+  // JSON.parse падает. Пытаемся снять только экранирование кавычек.
+  let key: Record<string, unknown>
+  try {
+    key = JSON.parse(keyJson) as Record<string, unknown>
+  } catch {
+    try {
+      key = JSON.parse(keyJson.replace(/\\"/g, '"')) as Record<string, unknown>
+    } catch (err) {
+      throw new Error(`GOOGLE_SERVICE_ACCOUNT_KEY is not valid JSON: ${err instanceof Error ? err.message : String(err)}. Используй GOOGLE_SERVICE_ACCOUNT_KEY_FILE с путём к JSON-файлу.`)
+    }
+  }
+  return new google.auth.GoogleAuth({ credentials: key, scopes: SCOPES })
 }
 
 let sheetsClient: sheets_v4.Sheets | null = null

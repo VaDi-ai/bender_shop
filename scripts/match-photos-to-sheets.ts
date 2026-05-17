@@ -30,6 +30,7 @@
  *   - orphans.csv (фото без надёжного матча — для ручного разбора)
  *   - unmatched_rows.csv (строки Sheets, для которых не нашлось фото)
  */
+import 'dotenv/config'
 import ExcelJS from 'exceljs'
 import fs from 'fs'
 import path from 'path'
@@ -157,7 +158,7 @@ function parseAppleWatch(filename: string): PhotoMeta | null {
     // fallback: имена типа "S11 Gold Titanium" или "Ultra 3 Black AL Black"
     const detailNorm = splitGluedColor(detail.toLowerCase())
     // Колоры частые: gold, silver, black, blue, midnight, starlight, jet black, etc.
-    const colorMatch = detailNorm.match(/(jet black|space gray|rose gold|titanium natural|midnight|starlight|silver|gold|black|blue|natural|slate|charcoal)/i)
+    const colorMatch = detailNorm.match(/(jet black|space gray|rose gold|titanium natural|midnight|starlight|ultramarine|desert|frost|deep purple|orange|red|green|blue|silver|gold|black|slate|natural|charcoal|pink|yellow|purple|white)/i)
     if (colorMatch) color = normColor(colorMatch[1]!)
   }
 
@@ -299,7 +300,7 @@ function parseGeneric(filename: string): PhotoMeta | null {
   // 2) parts[2] часто содержит цвет в конце: "S25 Edge Titanium icyBlue" → "icyBlue"
   // 3) parts[1] для коротких имён типа "blue-cooper" (Dyson)
   let color = ''
-  const COMMON_COLORS = /\b(jet ?black|space ?gray|space ?black|rose ?gold|sky ?blue|icy ?blue|light ?gold|titanium natural|midnight|starlight|silver|gold|black|white|blue|red|green|pink|purple|orange|yellow|gray|grey|natural|slate|charcoal|copper|bronze|nickel|ceramic|topaz|amber|jasper|prussian|vinca|teal|graphite|sand|olive|navy|cream)\b/i
+  const COMMON_COLORS = /\b(jet ?black|space ?gray|space ?black|rose ?gold|sky ?blue|icy ?blue|light ?gold|titanium natural|midnight|starlight|deep ?purple|ultramarine|desert|frost|haze|mint|lime|orange|PRODUCT ?RED|red|coral|lavender|indigo|forest|slate|ebony|champagne|bronze|silver|gold|black|white|blue|pink|purple|yellow|gray|grey|natural|charcoal|copper|nickel|ceramic|topaz|amber|jasper|prussian|vinca|teal|graphite|sand|olive|navy|cream)\b/i
 
   // Source 1: последняя часть стема после всех __ (tech-detail)
   const lastPart = parts[parts.length - 1] ?? ''
@@ -375,8 +376,16 @@ function extractFamily(brand: string, category: string, fullName: string): strin
       if (m) return `macbook ${m[1]!.toLowerCase()}`
     }
     if (/ipad/i.test(name)) {
-      const m = name.match(/ipad\s+(air|pro|mini)?/i)
-      return m && m[1] ? `ipad ${m[1].toLowerCase()}` : 'ipad'
+      if (/\bipad\s+mini\b/i.test(name)) return 'ipad mini'
+      const airSz = name.match(/\bipad\s+air\s+(?:m\d+\s+)?(\d{1,2})\b/i)
+      if (airSz) return `ipad air ${airSz[1]}`
+      if (/\bipad\s+air\b/i.test(name)) return 'ipad air'
+      const proSz = name.match(/\bipad\s+pro\s+(?:m\d+\s+)?(\d{1,2})\b/i)
+      if (proSz) return `ipad pro ${proSz[1]}`
+      if (/\bipad\s+pro\b/i.test(name)) return 'ipad pro'
+      const plain = name.match(/\bipad\s+\(?\s*(\d{1,2})\s*(?:\(|a\d+)/i)
+      if (plain) return `ipad ${plain[1]}`
+      return 'ipad'
     }
   }
 
@@ -770,6 +779,8 @@ interface CliArgs {
   xlsxPath?: string         // только для xlsx mode
   sheetName?: string        // только для sheets mode
   write?: boolean           // sheets mode: реально писать в Sheets
+  /** Минимальный confidence для записи URL (по умолчанию 70; 50 = включая family-only). */
+  minConfidence: number
 }
 
 function printUsage(): void {
@@ -781,6 +792,7 @@ function printUsage(): void {
   console.error('    ts-node scripts/match-photos-to-sheets.ts <photos_dir> --sheet <output_dir> <base_url> [--write] [--sheet-name=Лист1]')
   console.error('')
   console.error('  Без --write — dry-run (только отчёты, Sheets не трогаем).')
+  console.error('  --min-confidence=70  порог записи (70=по умолчанию; 50=добавить family-only матчи, требует ревью).')
   console.error('  PRODUCT_SHEET_NAME env используется как default имя листа.')
 }
 
@@ -795,15 +807,20 @@ function parseArgs(argv: string[]): CliArgs | null {
   if (second === '--sheet') {
     let sheetName = process.env.PRODUCT_SHEET_NAME || 'Лист1'
     let write = false
+    let minConfidence = 70
     for (let i = 6; i < argv.length; i++) {
       const a = argv[i] ?? ''
       if (a === '--write') write = true
       else if (a.startsWith('--sheet-name=')) sheetName = a.split('=', 2)[1] ?? sheetName
+      else if (a.startsWith('--min-confidence=')) {
+        const n = parseInt(a.split('=', 2)[1] ?? '70', 10)
+        if (!Number.isNaN(n) && n >= 0 && n <= 100) minConfidence = n
+      }
     }
-    return { photosDir, outputDir, baseUrl, mode: 'sheets', sheetName, write }
+    return { photosDir, outputDir, baseUrl, mode: 'sheets', sheetName, write, minConfidence }
   }
 
-  return { photosDir, outputDir, baseUrl, mode: 'xlsx', xlsxPath: second }
+  return { photosDir, outputDir, baseUrl, mode: 'xlsx', xlsxPath: second, minConfidence: 70 }
 }
 
 async function main() {
@@ -839,6 +856,9 @@ async function main() {
     adapter = sheetsAdapter
   }
   console.log(`Sheet rows: ${adapter.rows.length}`)
+  if (args.mode === 'sheets') {
+    console.log(`min-confidence: ${args.minConfidence} (--min-confidence= для изменения)`)
+  }
 
   // 1. Загрузить и распарсить фото
   const photoFiles = fs.readdirSync(args.photosDir).filter(f => /\.(png|webp|jpg|jpeg)$/i.test(f))
@@ -870,8 +890,8 @@ async function main() {
     else if (m.confidence >= 70) prefixConf++
     else lowConf++
 
-    // Высокая+средняя+prefix-with-color уверенность пишет URL
-    if (m.confidence >= 70) {
+    // Запись от min-confidence (по умолчанию 70; 50 = family-only — проверяйте orphans/reports)
+    if (m.confidence >= args.minConfidence) {
       const url = `${args.baseUrl.replace(/\/$/, '')}/${encodeURIComponent(m.photo).replace(/\.png$/i, '.webp')}`
       for (const rIdx of m.rows) {
         const existing = adapter.getPhotoCell(rIdx)
@@ -893,9 +913,11 @@ async function main() {
   for (let i = 0; i < photos.length; i++) {
     const p = photos[i]!
     const m = matches[i]!
-    if (m.confidence >= 70) {
+    if (m.confidence >= args.minConfidence) {
       const names = m.rows.slice(0, 3).map(r => adapter.rows.find(row => row.rowIdx === r)?.fullName ?? '?').join(' | ')
       matchedCsv.push(`"${p.filename}",${m.confidence},"${m.reason}","${m.rows.join(';')}","${names}"`)
+    } else if (m.confidence > 0) {
+      orphansCsv.push(`"${p.filename}","${p.brand}","${p.family}","${p.size}","${p.color}","below threshold (${m.confidence})"`)
     } else {
       orphansCsv.push(`"${p.filename}","${p.brand}","${p.family}","${p.size}","${p.color}","${m.reason}"`)
     }
@@ -918,7 +940,7 @@ async function main() {
   console.log(`  exact (conf 100):           ${exactConf} photos`)
   console.log(`  no-size / family+color (75-85): ${midConf} photos`)
   console.log(`  prefix family + color (70): ${prefixConf} photos`)
-  console.log(`  family only (50, NOT written): ${lowConf} photos`)
+  console.log(`  family only (50):           ${lowConf} photos${args.minConfidence <= 50 ? ' (written)' : ' (not written — add --min-confidence=50 to include)'}`)
   console.log(`  no match:                   ${none} photos`)
   console.log(`\n  URLs written: ${writtenCount} (across ${matchedRowIds.size} of ${adapter.rows.length} rows)`)
   console.log(`  Coverage: ${(100 * matchedRowIds.size / Math.max(1, adapter.rows.length)).toFixed(1)}% of sheet rows`)
