@@ -2513,8 +2513,8 @@ setInterval(async () => {
 
 // ─── Инициализация технического топика «📦 Продажи и резервы» ─────────────────
 
-const DEFAULT_REGIONS: { code: string; name: string; sortOrder: number; flag: string | null }[] = [
-  { code: 'default', name: 'Россия', sortOrder: 0, flag: '🇷🇺' },
+const DEFAULT_REGIONS: { code: string; name: string; sortOrder: number; flag: string | null; currency: string | null }[] = [
+  { code: 'default', name: 'Россия', sortOrder: 0, flag: '🇷🇺', currency: 'RUB' },
 ]
 
 async function seedDefaultRegions(): Promise<void> {
@@ -2527,11 +2527,13 @@ async function seedDefaultRegions(): Promise<void> {
           name: r.name,
           sortOrder: r.sortOrder,
           flag: r.flag,
+          currency: r.currency,
         },
         update: {
           name: r.name,
           sortOrder: r.sortOrder,
           flag: r.flag,
+          currency: r.currency,
         },
       })
     }
