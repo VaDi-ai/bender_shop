@@ -210,10 +210,12 @@ model Category {
 }
 
 /// Регион / зона (витрина, доставка). Сидируется при старте бота.
+/// Поле `flag` — эмодзи/обозначение; было в ранних деплоях, без него Prisma‑клиент и БД расходились.
 model Region {
   id        Int      @id @default(autoincrement())
   code      String   @unique
   name      String
+  flag      String? // например 🇷🇺; nullable — старые строки без флага
   sortOrder Int      @default(0)
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())

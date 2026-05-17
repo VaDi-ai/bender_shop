@@ -2513,9 +2513,8 @@ setInterval(async () => {
 
 // ─── Инициализация технического топика «📦 Продажи и резервы» ─────────────────
 
-/** Минимальный набор регионов (таблица Region должна существовать — prisma db push). */
-const DEFAULT_REGIONS: { code: string; name: string; sortOrder: number }[] = [
-  { code: 'default', name: 'Россия', sortOrder: 0 },
+const DEFAULT_REGIONS: { code: string; name: string; sortOrder: number; flag: string | null }[] = [
+  { code: 'default', name: 'Россия', sortOrder: 0, flag: '🇷🇺' },
 ]
 
 async function seedDefaultRegions(): Promise<void> {
@@ -2523,8 +2522,17 @@ async function seedDefaultRegions(): Promise<void> {
     for (const r of DEFAULT_REGIONS) {
       await prisma.region.upsert({
         where: { code: r.code },
-        create: { code: r.code, name: r.name, sortOrder: r.sortOrder },
-        update: { name: r.name, sortOrder: r.sortOrder },
+        create: {
+          code: r.code,
+          name: r.name,
+          sortOrder: r.sortOrder,
+          flag: r.flag,
+        },
+        update: {
+          name: r.name,
+          sortOrder: r.sortOrder,
+          flag: r.flag,
+        },
       })
     }
   } catch (err) {
