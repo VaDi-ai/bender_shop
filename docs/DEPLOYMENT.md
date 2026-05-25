@@ -67,6 +67,28 @@ GET /health returns 200 if DB is connected, 503 otherwise.
 
 После этого URL `https://bendershop.store/photos/<filename>.webp` отдаёт файлы из Volume. Если Volume пуст или `PHOTOS_DIR` не задан — route возвращает 404 и пишет warning в лог (см. `api/server.ts`).
 
+### Удачный цикл: сток должен быть **и в Sheets, и на Volume**
+
+Кратко: **сначала залить файлы на сервер**, потом (или параллельно) прописать **те же** плоские имена в колонку «Фото», затем **`/sync`**. Если в таблице есть URL, а файла с таким именем на CDN нет — в мини-приложении будет плейсхолдер (часто **много** одинаковых, если в ячейке перечислено много разных адресов и все они 404).
+
+1. Одна общая распакованная папка, как для матчинга (`Samsung Stock\`, `Apple Stock (Обработка)\`, …).
+
+2. **Упаковать и залить** (ключи в архиве = относительные пути как на диске):
+   ```bash
+   npm run zip-photos-for-upload -- "C:\path\to\bender-photos-clean" ./photos-upload.zip
+   npm run upload-photos -- ./photos-upload.zip
+   ```
+
+3. **Матчинг в Google Sheets** (на агенте много строк — см. память для Node ≥8 GB):
+   ```powershell
+   $env:NODE_OPTIONS="--max-old-space-size=8192"
+   npm run match-photos -- "C:\path\to\bender-photos-clean" --sheet ./reports https://bendershop.store/photos --write --clear-photos --min-confidence=64
+   ```
+
+4. **`/sync`** в боте.
+
+5. Проверка: для одного-двух новых имён из отчёта `curl.exe -I "https://bendershop.store/photos/<percent-encoded-flat-name>"` → **200**.
+
 ### Загрузка фото — варианты
 
 **Вариант 1: HTTP-загрузка (рекомендуется).** Локально готовишь WebP, пакуешь в zip, шлёшь POST `/admin/photos/upload`. Подпись HMAC-SHA256 от `BOT_TOKEN` (anti-replay через 5-минутный timestamp). Готовая обёртка:

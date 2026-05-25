@@ -18,6 +18,7 @@
     "clear-products": "ts-node scripts/clear-test-products.ts",
     "restore-paths": "ts-node scripts/restore-paths.ts",
     "upload-photos": "ts-node scripts/upload-photos.ts",
+    "zip-photos-for-upload": "ts-node scripts/zip-photos-for-upload.ts",
     "match-photos": "ts-node scripts/match-photos-to-sheets.ts",
     "clear-sheet-photos": "ts-node scripts/clear-sheet-photo-column.ts",
     "import:avito": "ts-node scripts/import-avito-stats.ts",

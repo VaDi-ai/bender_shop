@@ -47,6 +47,46 @@ import path from 'path'
 
 import { flattenRelativePhotoPath } from '../lib/photo-flat-name'
 
+/** Как parsePhotoUrls (sheets-sync): вытащить список URL из ячейки для дедупа без зависимости от всего prisma-стека. */
+function urlsInCommaPhotoCell(cell: string): string[] {
+  const trimmed = (cell ?? '').replace(/^\uFEFF/, '').trim()
+  if (!trimmed) return []
+  const segments = trimmed.split(/,\s*(?=https?:\/\/|\/[^\s,]+\.(?:webp|png|jpg|jpeg))/i)
+  const out: string[] = []
+  for (const seg of segments) {
+    let p = seg.trim().replace(/^\uFEFF/, '').replace(/^["']+|["']+$/g, '')
+    if (!p) continue
+    if (/^https?:\/\//i.test(p)) {
+      out.push(p)
+      continue
+    }
+    if (p.startsWith('/') && /\.(webp|png|jpg|jpeg)(\?[^\s]*)?$/i.test(p)) out.push(p)
+  }
+  return out
+}
+
+/** Добавить URL без дублей — одна строка не раздувается повторением того же адреса. */
+function appendPhotoCellUrl(existingTrimmed: string, url: string): string {
+  const cur = urlsInCommaPhotoCell(existingTrimmed)
+  if (cur.some(u => u === url)) return existingTrimmed
+  return existingTrimmed ? `${existingTrimmed.trimEnd()}, ${url}` : url
+}
+
+/** «Galaxy Buds 4» не смешиваем со строками «Buds 4 Pro/FE/+ …» только из-за префикса семейства. */
+function galaxyBudsBroadPhotoAgainstSpecificSheet(photoFam: string, sheetFam: string): boolean {
+  if (!/\bgalaxy\s+buds\b/.test(photoFam) || !/\bgalaxy\s+buds\b/.test(sheetFam)) return false
+  if (!sheetFam.startsWith(photoFam + ' ')) return false
+  const remainder = sheetFam.slice(photoFam.length + 1).trimStart()
+  if (!remainder) return false
+  const ph = photoFam.toLowerCase()
+  if (/\bpro\b/i.test(remainder) && !/\bpro\b/.test(ph)) return true
+  if (/\bfe\b/i.test(remainder) && !/\bfe\b/.test(ph)) return true
+  if (/\blive\b/i.test(remainder) && !/\blive\b/.test(ph)) return true
+  if (/\bedge\b/i.test(remainder) && !/\bedge\b/.test(ph)) return true
+  if (/\bgalaxy\s+buds\s*\+\b/i.test(sheetFam) && !/\bgalaxy\s+buds\s*\+\b/i.test(ph)) return true
+  return false
+}
+
 // ── Типы ─────────────────────────────────────────────────────────────────────
 interface PhotoMeta {
   filename: string
@@ -769,6 +809,7 @@ function matchPhoto(photo: PhotoMeta, byKey: Map<string, SheetRow[]>, sheetRows:
       const [b, f, , c] = key.split('|')
       if (b !== photo.brand.toLowerCase()) continue
       const sheetFam = f ?? ''
+      if (galaxyBudsBroadPhotoAgainstSpecificSheet(photoFam, sheetFam)) continue
       // одно семейство — префикс другого, минимум 2 общих слова
       const matches = (
         sheetFam.startsWith(photoFam + ' ') ||
@@ -1301,8 +1342,8 @@ async function main() {
       const url = `${args.baseUrl.replace(/\/$/, '')}/${urlFilename}`
       for (const rIdx of m.rows) {
         const existing = adapter.getPhotoCell(rIdx)
-        // если в ячейке уже что-то есть — добавляем через запятую (parsePhotoUrls в sheets-sync.ts это поддерживает)
-        const newValue = existing ? `${existing}, ${url}` : url
+        // Если в ячейке уже что-то есть — дописываем через запятую; дублей того же URL нет (как после синка).
+        const newValue = appendPhotoCellUrl(existing, url)
         adapter.setPhotoCell(rIdx, newValue)
         matchedRowIds.add(rIdx)
         writtenCount++

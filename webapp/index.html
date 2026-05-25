@@ -1388,6 +1388,21 @@
       return photoUrl(raw)
     }
 
+    /** Убирает дубли URL и ограничивает карусель (много битых ссылок = «кипа» одинаковых плейсхолдеров). */
+    const MAX_PRODUCT_PHOTOS_IN_UI = 24
+    function dedupeResolvedPhotos(urls) {
+      const seen = new Set()
+      const out = []
+      for (const u of urls) {
+        const s = typeof u === 'string' ? u.trim() : ''
+        if (!s || seen.has(s)) continue
+        seen.add(s)
+        out.push(s)
+        if (out.length >= MAX_PRODUCT_PHOTOS_IN_UI) break
+      }
+      return out
+    }
+
     /** Сброс ошибки перед сменой src (hover-карусель, смена ТП). */
     function resetProductImgFallback(el) {
       if (!el || el.tagName !== 'IMG') return
@@ -1436,17 +1451,17 @@
       // Конкретное ТП: только его фото; пусто → [] (плейсхолдер), без подмеса других вариантов/товара.
       if (variant) {
         if (Array.isArray(variant.photos) && variant.photos.length) {
-          return variant.photos.map(resolvePhoto)
+          return dedupeResolvedPhotos(variant.photos.map(resolvePhoto))
         }
-        if (Array.isArray(p.photos) && p.photos.length) return p.photos.map(resolvePhoto)
-        if (p.photoUrl) return [resolvePhoto(p.photoUrl)]
+        if (Array.isArray(p.photos) && p.photos.length) return dedupeResolvedPhotos(p.photos.map(resolvePhoto))
+        if (p.photoUrl) return dedupeResolvedPhotos([resolvePhoto(p.photoUrl)])
         return []
       }
       // Превью товара без выбранного ТП
       if (Array.isArray(p.photos) && p.photos.length) {
-        return p.photos.map(resolvePhoto)
+        return dedupeResolvedPhotos(p.photos.map(resolvePhoto))
       }
-      if (p.photoUrl) return [resolvePhoto(p.photoUrl)]
+      if (p.photoUrl) return dedupeResolvedPhotos([resolvePhoto(p.photoUrl)])
       return []
     }
 
