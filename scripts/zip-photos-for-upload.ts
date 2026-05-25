@@ -31,7 +31,16 @@ function main(): void {
       : path.resolve(process.cwd(), outArg)
     : path.resolve(process.cwd(), 'photos-upload.zip')
 
-  if (!inDir || !fs.existsSync(inDir) || !fs.statSync(inDir).isDirectory()) usage()
+  if (!process.argv[2]) usage()
+  if (!inDir || !fs.existsSync(inDir)) {
+    console.error(`Directory not found: ${inDir}`)
+    console.error('Use the real фото-folder path (not the example C:\\path\\to\\…).')
+    usage()
+  }
+  if (!fs.statSync(inDir).isDirectory()) {
+    console.error(`Not a directory: ${inDir}`)
+    usage()
+  }
 
   const zip = new AdmZip()
   zip.addLocalFolder(inDir)

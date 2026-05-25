@@ -1177,6 +1177,30 @@ function printUsage(): void {
   console.error('  --clear-photos — перед матчем обнулить «Фото» у всех строк (полное обновление; без флага — новые URL дописываются к старым).')
   console.error('  --min-confidence=70  порог записи (70=по умолчанию; 64 включает слабые title-матчи; 50=family-only).')
   console.error('  PRODUCT_SHEET_NAME env используется как default имя листа.')
+  console.error('')
+  console.error('  Важно: <base_url> — полный URL с протоколом (пример https://bendershop.store/photos).')
+  console.error('  Частые опечатки PowerShell: --sheet (не --shees…); после --sheet идут ДВА аргумента: папка отчётов и base URL.')
+}
+
+/** Не записываем в Sheets битые base URL вида hp.store/… без схемы (типичная опечатка --shees в PowerShell). */
+function assertValidPhotoBaseUrl(baseUrl: string): void {
+  const t = baseUrl.trim().replace(/^["']+|["']+$/g, '')
+  let parsed: URL
+  try {
+    parsed = new URL(t)
+  } catch {
+    console.error(`\n❌ Некорректный base URL (не удалось распарсить как URL): "${baseUrl}"`)
+    console.error('   Пример: https://bendershop.store/photos')
+    console.error('   PowerShell: два слова после --sheet: папка отчётов и полный URL; флаг именно --sheet\n')
+    process.exit(1)
+  }
+  const httpOkLocal =
+    parsed.protocol === 'http:' &&
+    (parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1')
+  if (parsed.protocol !== 'https:' && !httpOkLocal) {
+    console.error(`\n❌ base URL должен быть https:// (или http://localhost для локалки): "${baseUrl}"\n`)
+    process.exit(1)
+  }
 }
 
 function parseCommonFlags(argv: string[], start: number): Pick<CliArgs, 'minConfidence' | 'clearPhotos'> {
@@ -1263,6 +1287,8 @@ async function main() {
     console.error(`Photos dir not found: ${args.photosDir}`)
     process.exit(1)
   }
+
+  assertValidPhotoBaseUrl(args.baseUrl)
 
   // Initialize adapter
   let adapter: SheetAdapter
