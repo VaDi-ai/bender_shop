@@ -107,9 +107,13 @@ railway shell
 # Dry-run (только отчёт)
 npm run match-photos -- ./staging-all-brands --sheet ./reports https://bendershop.store/photos
 
-# Реальная запись в Sheets
-npm run match-photos -- ./staging-all-brands --sheet ./reports https://bendershop.store/photos --write
+# Полный переезд на новый сток: очистить «Фото» у всех строк + прописать новые URL
+npm run match-photos -- ./staging-all-brands --sheet ./reports https://bendershop.store/photos --write --clear-photos
+
+# Без --clear-photos — новые URL **дописываются через запятую** к уже существующим (точечные добавления)
 ```
+
+Порядок: **webp в zip → `upload-photos` → match с `--write --clear-photos`**, затем **`/sync`** в боте (или автосинк), чтобы Postgres/витрина подхватили ссылки.
 
 Использует тот же `GOOGLE_SERVICE_ACCOUNT_KEY` + `GOOGLE_SHEET_ID` что и `/sync`. Batch-update в один API-вызов (несколько диапазонов), retry на 429.
 

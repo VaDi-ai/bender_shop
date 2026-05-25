@@ -13,8 +13,10 @@
  *      `photos_dir` может содержать вложенные папки (Apple Stock/, Samsung Stock/ и т.д.):
  *      учитывается **basename** файла — в имени по-прежнему должен быть префикс `Apple Stock__` / `Samsung Stock__`.
  *      Дубликаты имён файла в разных подпапках → ошибка (логируется).
- *      Без --write: только отчёты (dry-run). С --write: реально дописывает колонку Q.
+ *      Без --write: только отчёты (dry-run). С --write: реально записывает колонку «Фото» (Q по layout).
  *      По умолчанию имя листа берётся из PRODUCT_SHEET_NAME env или 'Лист1'.
+ *      --clear-photos: перед матчингом очистить «Фото» у всех данных строк таблицы
+ *      (полный переезд на новый сток; иначе URL только дописываются через запятую к старым).
  *
  * Алгоритм:
  *   1. Парсим имя каждого файла в семантические поля (brand, family, size, color, etc.)
@@ -796,6 +798,8 @@ interface CliArgs {
   write?: boolean           // sheets mode: реально писать в Sheets
   /** Минимальный confidence для записи URL (по умолчанию 70; 50 = включая family-only). */
   minConfidence: number
+  /** Очистить колонку «Фото» у всех строк каталога перед записью совпадений. */
+  clearPhotos: boolean
 }
 
 function printUsage(): void {
@@ -804,11 +808,26 @@ function printUsage(): void {
   console.error('    ts-node scripts/match-photos-to-sheets.ts <photos_dir> <input_xlsx> <output_dir> <base_url>')
   console.error('')
   console.error('  Sheets-direct:')
-  console.error('    ts-node scripts/match-photos-to-sheets.ts <photos_dir> --sheet <output_dir> <base_url> [--write] [--sheet-name=Лист1]')
+  console.error('    ts-node scripts/match-photos-to-sheets.ts <photos_dir> --sheet <output_dir> <base_url> [--write] [--clear-photos] [--sheet-name=Лист1]')
   console.error('')
   console.error('  Без --write — dry-run (только отчёты, Sheets не трогаем).')
+  console.error('  --clear-photos — перед матчем обнулить «Фото» у всех строк (полное обновление; без флага — новые URL дописываются к старым).')
   console.error('  --min-confidence=70  порог записи (70=по умолчанию; 50=добавить family-only матчи, требует ревью).')
   console.error('  PRODUCT_SHEET_NAME env используется как default имя листа.')
+}
+
+function parseCommonFlags(argv: string[], start: number): Pick<CliArgs, 'minConfidence' | 'clearPhotos'> {
+  let minConfidence = 70
+  let clearPhotos = false
+  for (let i = start; i < argv.length; i++) {
+    const a = argv[i] ?? ''
+    if (a === '--clear-photos') clearPhotos = true
+    else if (a.startsWith('--min-confidence=')) {
+      const n = parseInt(a.split('=', 2)[1] ?? '70', 10)
+      if (!Number.isNaN(n) && n >= 0 && n <= 100) minConfidence = n
+    }
+  }
+  return { minConfidence, clearPhotos }
 }
 
 function parseArgs(argv: string[]): CliArgs | null {
@@ -822,20 +841,17 @@ function parseArgs(argv: string[]): CliArgs | null {
   if (second === '--sheet') {
     let sheetName = process.env.PRODUCT_SHEET_NAME || 'Лист1'
     let write = false
-    let minConfidence = 70
     for (let i = 6; i < argv.length; i++) {
       const a = argv[i] ?? ''
       if (a === '--write') write = true
       else if (a.startsWith('--sheet-name=')) sheetName = a.split('=', 2)[1] ?? sheetName
-      else if (a.startsWith('--min-confidence=')) {
-        const n = parseInt(a.split('=', 2)[1] ?? '70', 10)
-        if (!Number.isNaN(n) && n >= 0 && n <= 100) minConfidence = n
-      }
     }
-    return { photosDir, outputDir, baseUrl, mode: 'sheets', sheetName, write, minConfidence }
+    const { minConfidence, clearPhotos } = parseCommonFlags(argv, 6)
+    return { photosDir, outputDir, baseUrl, mode: 'sheets', sheetName, write, minConfidence, clearPhotos }
   }
 
-  return { photosDir, outputDir, baseUrl, mode: 'xlsx', xlsxPath: second, minConfidence: 70 }
+  const { minConfidence, clearPhotos } = parseCommonFlags(argv, 6)
+  return { photosDir, outputDir, baseUrl, mode: 'xlsx', xlsxPath: second, minConfidence, clearPhotos }
 }
 
 /** Рекурсивно собирает basenames изображений. Матчинг и URL — только по basename (как на CDN). */
@@ -904,6 +920,10 @@ async function main() {
   console.log(`Sheet rows: ${adapter.rows.length}`)
   if (args.mode === 'sheets') {
     console.log(`min-confidence: ${args.minConfidence} (--min-confidence= для изменения)`)
+  }
+  if (args.clearPhotos) {
+    for (const row of adapter.rows) adapter.setPhotoCell(row.rowIdx, '')
+    console.log(`[clear] Обнулена колонка «Фото» для ${adapter.rows.length} строк (--clear-photos)`)
   }
 
   // 1. Загрузить и распарсить фото (рекурсивно по подпапкам — стейдж Apple Stock / Samsung Stock / …)
