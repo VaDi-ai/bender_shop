@@ -24,8 +24,10 @@
  *   2. Для каждой строки берём готовые поля (Бренд / Категория / Цвет / Размер).
  *   3. Группируем строки в Map<key, row[]> где key = "brand|family|size|color".
  *   4. Для каждого фото:
- *        — точный match (все 4 поля) → confidence 100, URL в колонку Q.
- *        — partial match (3 из 4) → confidence 75, URL в колонку Q + помечаем для ревью.
+ *        — точный match (все 4 поля) → confidence 100, URL в колонку «Фото».
+ *        — частичный / префикс family / только family → ниже порог confidence.
+ *        — затем матч по **полному названию строки («Название модели»)** и тексту имени файла
+ *          (Dice токены + подстрока), когда имя файла следует имени товара в таблице.
  *        — иначе → нет матча, попадает в orphans.csv.
  *   5. Сохраняем результат через выбранный SheetAdapter + два отчёта (matched.csv, orphans.csv).
  *
@@ -456,6 +458,89 @@ function extractFamily(brand: string, category: string, fullName: string): strin
   return `${lowerBrand} ${words.join(' ')}`.trim()
 }
 
+// ── Сопоставление по тексту названия (fallback под «то же имя что в столбце») ─
+
+/** Сжимаем текст для Dice / подстрок: без акцентов, пунктуация → пробел. */
+function compactComparable(s: string): string {
+  const t = s
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/\p{M}+/gu, '')
+    .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+  return t
+}
+
+function tokenBag(s: string): Map<string, number> {
+  const m = new Map<string, number>()
+  for (const raw of compactComparable(s).split(/\s+/)) {
+    const tok = raw.trim()
+    if (tok.length < 2) continue
+    if (/^\d+$/.test(tok)) continue
+    m.set(tok, (m.get(tok) ?? 0) + 1)
+  }
+  return m
+}
+
+/** Sørensen–Dice между наборами токенов (0..1). */
+function diceComparable(a: string, b: string): number {
+  const A = tokenBag(a)
+  const B = tokenBag(b)
+  if (!A.size || !B.size) return 0
+  let inter = 0
+  for (const [t, na] of A) {
+    const nb = B.get(t)
+    if (nb !== undefined) inter += Math.min(na, nb)
+  }
+  const sumA = [...A.values()].reduce((s, x) => s + x, 0)
+  const sumB = [...B.values()].reduce((s, x) => s + x, 0)
+  return sumA && sumB ? (2 * inter) / (sumA + sumB) : 0
+}
+
+/**
+ * Из basename фото: «человеческие» сегменты после префикса стока,
+ * без длинных техно-хвостов.
+ */
+function photoTitleBlob(originalFilename: string): string {
+  const stem = originalFilename.replace(/\.(png|webp|jpg|jpeg)$/i, '')
+  const parts = normalizeFilename(stem).split('__').map(x => x.trim())
+  const rest = parts.slice(1).filter(seg => {
+    if (!seg) return false
+    if (/^[\s_a-z0-9+.-]{22,}$/i.test(seg) && /[+.]/.test(seg)) return false
+    if (/^[a-f0-9]{16,}$/i.test(seg)) return false
+    return true
+  })
+  return rest.join(' ')
+}
+
+function scoreSheetTitleAgainstPhotoBlob(row: SheetRow, blob: string, photo: PhotoMeta): number {
+  if (!blob || blob.length < 10) return 0
+  const sheetComparable = compactComparable(row.fullName)
+  if (!sheetComparable || sheetComparable.length < 6) return 0
+
+  let d = diceComparable(blob, sheetComparable)
+  const bCmp = compactComparable(blob)
+  const bNoSpace = bCmp.replace(/\s/g, '')
+  const sNoSpace = sheetComparable.replace(/\s/g, '')
+  if (
+    sheetComparable.length >= 12 &&
+    (bCmp.includes(sheetComparable) ||
+      sheetComparable.includes(bCmp.slice(0, Math.min(80, bCmp.length))) ||
+      (bNoSpace.length >= 12 && (bNoSpace.includes(sNoSpace) || sNoSpace.includes(bNoSpace))))
+  ) {
+    d = Math.max(d, 0.92)
+  }
+
+  const rCol = normColor(row.color)
+  const pCol = normColor(photo.color)
+  if (rCol && pCol && rCol !== pCol) {
+    const bc = blob.toLowerCase().replace(/\s/g, '')
+    if (!bc.includes(rCol.replace(/\s/g, ''))) d *= 0.62
+  }
+  return Math.min(d, 1)
+}
+
 // ── Matching engine ──────────────────────────────────────────────────────────
 
 /** Composite key для группировки: brand|family|size|color */
@@ -463,7 +548,7 @@ function makeKey(brand: string, family: string, size: string, color: string): st
   return `${brand.toLowerCase()}|${family.toLowerCase()}|${size.toLowerCase()}|${normColor(color)}`
 }
 
-function matchPhoto(photo: PhotoMeta, byKey: Map<string, SheetRow[]>): MatchResult {
+function matchPhoto(photo: PhotoMeta, byKey: Map<string, SheetRow[]>, sheetRows: SheetRow[]): MatchResult {
   // 1) Точный match (4 поля)
   const exactKey = makeKey(photo.brand, photo.family, photo.size, photo.color)
   const exact = byKey.get(exactKey)
@@ -565,6 +650,51 @@ function matchPhoto(photo: PhotoMeta, byKey: Map<string, SheetRow[]>): MatchResu
         rows: familyOnly.map(r => r.rowIdx),
         confidence: 50,
         reason: 'family only (color/size missed)',
+      }
+    }
+  }
+
+  // 5) По полному тексту «Название модели» × человекочитаемые сегменты имени файла
+  const blob = photoTitleBlob(photo.filename)
+  if (blob.length >= 10 && sheetRows.length > 0) {
+    const scored: { row: SheetRow; score: number }[] = []
+    for (const row of sheetRows) {
+      if (row.brand.toLowerCase() !== photo.brand.toLowerCase()) continue
+      const sc = scoreSheetTitleAgainstPhotoBlob(row, blob, photo)
+      if (sc >= 0.63) scored.push({ row, score: sc })
+    }
+    if (scored.length > 0) {
+      scored.sort((a, b) => b.score - a.score)
+      const best = scored[0]!.score
+      const close = scored.filter(x => x.score >= best - 0.04).slice(0, 20)
+      // Один префикс на много строк (например только «Galaxy S25») — не размазываем одну картинку
+      if (close.length > 6 && best < 0.88) {
+        // пропуск — пусть строка идёт в orphans / ручное сопоставление
+      } else if (close.length > 0 && close.length <= 20 && best >= 0.63) {
+        let conf: number
+        let reason: string
+        if (best >= 0.9) {
+          conf = 90
+          reason = 'sheet title — very high overlap (name-like file)'
+        } else if (best >= 0.82) {
+          conf = 78
+          reason = 'sheet title/token overlap (strong)'
+        } else if (best >= 0.72) {
+          conf = 73
+          reason = 'sheet title/token overlap'
+        } else if (best >= 0.66) {
+          conf = 68
+          reason = 'sheet title/token overlap (medium)'
+        } else {
+          conf = 64
+          reason = 'sheet title/token overlap (weak; use --min-confidence=64 or review)'
+        }
+        return {
+          photo: photo.filename,
+          rows: close.map(x => x.row.rowIdx),
+          confidence: conf,
+          reason,
+        }
       }
     }
   }
@@ -842,7 +972,7 @@ function printUsage(): void {
   console.error('')
   console.error('  Без --write — dry-run (только отчёты, Sheets не трогаем).')
   console.error('  --clear-photos — перед матчем обнулить «Фото» у всех строк (полное обновление; без флага — новые URL дописываются к старым).')
-  console.error('  --min-confidence=70  порог записи (70=по умолчанию; 50=добавить family-only матчи, требует ревью).')
+  console.error('  --min-confidence=70  порог записи (70=по умолчанию; 64 включает слабые title-матчи; 50=family-only).')
   console.error('  PRODUCT_SHEET_NAME env используется как default имя листа.')
 }
 
@@ -972,15 +1102,21 @@ async function main() {
   console.log(`Unique keys: ${byKey.size}`)
 
   // 3. Match каждое фото
-  const matches: MatchResult[] = photos.map(p => matchPhoto(p, byKey))
+  const matches: MatchResult[] = photos.map(p => matchPhoto(p, byKey, adapter.rows))
 
   // 4. Распределить по статусам и накопить изменения в адаптере
   const matchedRowIds = new Set<number>()
   let writtenCount = 0
-  let exactConf = 0, midConf = 0, prefixConf = 0, lowConf = 0, none = 0
+  let exactConf = 0
+  let midConf = 0
+  let prefixConf = 0
+  let lowConf = 0
+  let titleOverlap = 0
+  let none = 0
 
   for (const m of matches) {
     if (m.confidence === 0) { none++; continue }
+    if (/sheet title/i.test(m.reason)) titleOverlap++
     if (m.confidence >= 100) exactConf++
     else if (m.confidence >= 75) midConf++
     else if (m.confidence >= 70) prefixConf++
@@ -1033,11 +1169,12 @@ async function main() {
 
   // 7. Summary
   console.log('\n=== Match results ===')
-  console.log(`  exact (conf 100):           ${exactConf} photos`)
-  console.log(`  no-size / family+color (75-85): ${midConf} photos`)
-  console.log(`  prefix family + color (70): ${prefixConf} photos`)
-  console.log(`  family only (50):           ${lowConf} photos${args.minConfidence <= 50 ? ' (written)' : ' (not written — add --min-confidence=50 to include)'}`)
-  console.log(`  no match:                   ${none} photos`)
+  console.log(`  exact (100):                   ${exactConf} photos`)
+  console.log(`  strong (≥75 incl. часть title): ${midConf} photos`)
+  console.log(`  medium (70–74):               ${prefixConf} photos`)
+  console.log(`  weak / title-medium / etc.:   ${lowConf} photos (часть в orphans если < --min-confidence)`)
+  console.log(`  где сработало «название ↔ имя файла»: ${titleOverlap} photos (строк reason вроде sheet title)`)
+  console.log(`  no match (0):                 ${none} photos`)
   console.log(`\n  URLs written: ${writtenCount} (across ${matchedRowIds.size} of ${adapter.rows.length} rows)`)
   console.log(`  Coverage: ${(100 * matchedRowIds.size / Math.max(1, adapter.rows.length)).toFixed(1)}% of sheet rows`)
   console.log(`\n  Save: ${saveResult}`)
