@@ -10,6 +10,62 @@ import { google, sheets_v4 } from 'googleapis'
 const SHEET_ID = process.env.GOOGLE_SHEET_ID ?? ''
 const SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
 
+/**
+ * В `.env` внутри `private_key` часто оказываются настоящие переводы строк (U+000A)
+ * вместо JSON-escape `\n`, либо последовательность «\\» + реальный LF — JSON.parse падает.
+ */
+function fixPrivateKeyNewlinesInInlineJson(s: string): string {
+  const begin = '-----BEGIN PRIVATE KEY-----'
+  const end = '-----END PRIVATE KEY-----'
+  const i0 = s.indexOf(begin)
+  const i1 = s.indexOf(end)
+  if (i0 < 0 || i1 < 0 || i1 <= i0) return s
+  const head = s.slice(0, i0 + begin.length)
+  const mid = s.slice(i0 + begin.length, i1)
+  const tail = s.slice(i1)
+  let m = mid.replace(/\\\r?\n/g, '\\n')
+  m = m.replace(/\r\n/g, '\\n').replace(/\r/g, '\\n').replace(/\n/g, '\\n')
+  /** После конца PEM: «-----END … -----» затем необязательный «\», реальный LF и закрывающая кавычка строки JSON */
+  const tailFixed = tail.replace(/^(-----END PRIVATE KEY-----)(?:\\)?\r?\n"/, '$1\\n"')
+  return head + m + tailFixed
+}
+
+/** Нормализует сырую строку учётки из `.env`: типичный дребезг PEM и экранирования. */
+export function buildInlineGoogleServiceAccountJsonVariants(rawKeyJson: string): string[] {
+  const trim = rawKeyJson.replace(/^\uFEFF/, '').trim().replace(/\r/g, '')
+  /** Некоторые редакторы вставили в PEM вместо перевода строки литералы «\xa» (невалидный JSON escape). */
+  const fixPemNl = trim
+    .replace(/(-----BEGIN PRIVATE KEY-----)\\xa/gi, '$1\\n')
+    .replace(/(-----BEGIN PRIVATE KEY-----)\\\\xa/gi, '$1\\n')
+    .replace(/(-----BEGIN PRIVATE KEY-----)\\x(?=[A-Za-z0-9+/=])/gi, '$1\\n')
+  /** После `{` лишний обратный слэш: `{  \"type\":` → `{\"type\":` */
+  const fixLeadBrace = trim.replace(/^(\{\s+)\s*\\+"/, '$1"')
+  const fixLeadBracePem = fixPemNl.replace(/^(\{\s+)\s*\\+"/, '$1"')
+  /** В .env вложенность полей сохранена как `\"key\"` вместо `"key"`. */
+  const unescapeQuotes = (s: string) => s.replace(/\\"/g, '"')
+
+  const chain = (s: string) => fixPrivateKeyNewlinesInInlineJson(unescapeQuotes(s))
+
+  return [
+    ...new Set(
+      [
+        trim,
+        fixPemNl,
+        fixLeadBrace,
+        fixLeadBracePem,
+        unescapeQuotes(trim),
+        unescapeQuotes(fixPemNl),
+        unescapeQuotes(fixLeadBrace),
+        unescapeQuotes(fixLeadBracePem),
+        chain(trim),
+        chain(fixPemNl),
+        chain(fixLeadBrace),
+        chain(fixLeadBracePem),
+      ].filter(Boolean),
+    ),
+  ]
+}
+
 function getAuth() {
   // Приоритет — путь к JSON-файлу (надёжно работает локально, без проблем с
   // dotenv-экранированием private_key). На Railway переменная задана как
@@ -22,21 +78,35 @@ function getAuth() {
     return new google.auth.GoogleAuth({ keyFile, scopes: SCOPES })
   }
 
+  // Стандарт gcloud/ACTIONS: переменная на JSON-файл (без вставки ключа в .env).
+  const gac = process.env.GOOGLE_APPLICATION_CREDENTIALS
+  if (gac && fs.existsSync(gac)) {
+    return new google.auth.GoogleAuth({ keyFile: gac, scopes: SCOPES })
+  }
+
   const keyJson = process.env.GOOGLE_SERVICE_ACCOUNT_KEY
   if (!keyJson) throw new Error('GOOGLE_SERVICE_ACCOUNT_KEY (or _KEY_FILE) not set')
 
-  // Если значение лежит в .env с экранированием (`\"` остаётся как `\"` потому
-  // что dotenv не разэкранирует кавычки внутри двойных кавычек), первый
-  // JSON.parse падает. Пытаемся снять только экранирование кавычек.
-  let key: Record<string, unknown>
-  try {
-    key = JSON.parse(keyJson) as Record<string, unknown>
-  } catch {
+  // В .env JSON часто порчен: PEM с невалидным escape «\xa» вместо «\n»; кавычки как \".
+  // Пробуем цепочку вариантов до первого успешного JSON.parse.
+  let key: Record<string, unknown> | undefined
+  const variants = buildInlineGoogleServiceAccountJsonVariants(keyJson)
+  let lastErr: unknown
+  let parsedOk = false
+  for (const v of variants) {
     try {
-      key = JSON.parse(keyJson.replace(/\\"/g, '"')) as Record<string, unknown>
-    } catch (err) {
-      throw new Error(`GOOGLE_SERVICE_ACCOUNT_KEY is not valid JSON: ${err instanceof Error ? err.message : String(err)}. Используй GOOGLE_SERVICE_ACCOUNT_KEY_FILE с путём к JSON-файлу.`)
+      key = JSON.parse(v) as Record<string, unknown>
+      parsedOk = true
+      break
+    } catch (e) {
+      lastErr = e
     }
+  }
+  if (!parsedOk || key === undefined) {
+    throw new Error(
+      `GOOGLE_SERVICE_ACCOUNT_KEY is not valid JSON: ${lastErr instanceof Error ? lastErr.message : String(lastErr)}. ` +
+        'Положи ключ в JSON-файл и задай GOOGLE_SERVICE_ACCOUNT_KEY_FILE=./path/to/key.json — так не зависит от экранирования в .env.',
+    )
   }
   return new google.auth.GoogleAuth({ credentials: key, scopes: SCOPES })
 }

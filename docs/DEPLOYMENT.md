@@ -72,18 +72,18 @@ GET /health returns 200 if DB is connected, 503 otherwise.
 **Вариант 1: HTTP-загрузка (рекомендуется).** Локально готовишь WebP, пакуешь в zip, шлёшь POST `/admin/photos/upload`. Подпись HMAC-SHA256 от `BOT_TOKEN` (anti-replay через 5-минутный timestamp). Готовая обёртка:
 
 ```bash
-# Папку с готовыми webp паковать в zip
-# PowerShell:
-Compress-Archive -Path .\R-final\*.webp -DestinationPath .\photos.zip -Force
+# Zip с сохранением вложенных папок (пути внутри архива задают итоговое имя на сервере).
+# PowerShell — с папкой целиком:
+Compress-Archive -Path .\Samsung Stock\* -DestinationPath .\photos.zip -Force
 # bash:
-(cd R-final && zip -r ../photos.zip *.webp)
+(cd "Samsung Stock" && zip -r ../photos.zip .)
 
 # Заливаем (требует BOT_TOKEN в .env)
 npm run upload-photos -- ./photos.zip
 # или: npm run upload-photos -- ./photos.zip --url=https://staging.example.com
 ```
 
-Сервер распаковывает zip во временную папку, копирует image-файлы (`.webp .png .jpg .jpeg`) плоско в `PHOTOS_DIR`. Symlinks игнорируются, имена нормализуются через `path.basename` — path traversal невозможен. Лимит размера body — 250 MB.
+Сервер распаковывает zip во временную папку и копирует image-файлы (`.webp .png .jpg .jpeg`) в `PHOTOS_DIR`: **конечное имя файла = плоское имя относительного пути** в архиве (как у `npm run match-photos`, см. `lib/photo-flat-name.ts`: `Samsung Stock/foo/bar.webp` → `Samsung Stock__foo__bar.webp`). Так совпадают URL после заливки и ключи матчинга при обходе той же папки локально. Вне корня архива записи игнорируются; symlink'и не копируются. Лимит body — 250 MB.
 
 Проверить статус Volume:
 ```bash
@@ -101,7 +101,7 @@ railway shell
 
 ### Прямая запись URL в Google Sheets
 
-После заливки фото на Volume — нужно прописать их URL'ы в колонку «Фото» (Q) Google Sheets, чтобы `/sync` подтянул их в каталог. Путь может быть общей родительской папкой со вложениями **`Apple Stock (Обработка)`**, **`Samsung Stock`** и т.д.; скрипт обходит дерево рекурсивно (совпадает только **basename**, префикс в имени файла типа `Apple Stock__…` должен сохраниться).
+После заливки фото на Volume — нужно прописать их URL'ы в колонку «Фото» (Q) Google Sheets, чтобы `/sync` подтянул их в каталог. Путь может быть общей родительской папкой со вложениями (**`Apple Stock (Обработка)`**, **`Samsung Stock`** …); скрипт обходит дерево рекурсивно и матчится по тому же **плоскому имени**, что попадёт в URL после загрузки zip с тем же относительным путём.
 
 ```bash
 # Dry-run (только отчёт)

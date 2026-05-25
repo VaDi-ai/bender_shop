@@ -10,9 +10,12 @@
  *    пишет URL'ы прямо в колонку Q через batchUpdate API.
  *      ts-node scripts/match-photos-to-sheets.ts <photos_dir> --sheet <output_dir> <base_url> [--write] [--sheet-name=Лист1]
  *
- *      `photos_dir` может содержать вложенные папки (Apple Stock/, Samsung Stock/ и т.д.):
- *      учитывается **basename** файла — в имени по-прежнему должен быть префикс `Apple Stock__` / `Samsung Stock__`.
- *      Дубликаты имён файла в разных подпапках → ошибка (логируется).
+ *      `photos_dir` — это **распакованная папка** с картинками (архив .zip сюда не подставляют,
+ *      сначала распаковать, например Apple/Samsung в общий каталог `Фото/`).
+ *      Ключ для матчинга и URL: **относительный путь**, сведённый в одно имя:
+ *      `Samsung Stock/Galaxy Buds…/pic.png` → `Samsung Stock__Galaxy Buds…__pic.png`
+ *      (Samsung часто без `Samsung Stock__` в basename — папки дают бренд).
+ *      Дубликат одной и той же плоской строки после flatten → лог, второе пропускается.
  *      Без --write: только отчёты (dry-run). С --write: реально записывает колонку «Фото» (Q по layout).
  *      По умолчанию имя листа берётся из PRODUCT_SHEET_NAME env или 'Лист1'.
  *      --clear-photos: перед матчингом очистить «Фото» у всех данных строк таблицы
@@ -41,6 +44,8 @@ import 'dotenv/config'
 import ExcelJS from 'exceljs'
 import fs from 'fs'
 import path from 'path'
+
+import { flattenRelativePhotoPath } from '../lib/photo-flat-name'
 
 // ── Типы ─────────────────────────────────────────────────────────────────────
 interface PhotoMeta {
@@ -280,7 +285,150 @@ function parseSamsungGalaxyS(filename: string): PhotoMeta | null {
     }
   }
 
+  if (!color) {
+    const fromLabel = extractSamsungColorFromMarketingLabel(searchable)
+    color = normColor(fromLabel)
+  }
+
   return { filename, brand: 'Samsung', family, size: '', color: normColor(color), cellular: null }
+}
+
+/**
+ * Маркетинговые имена («Samsung Galaxy Z Fold 7 Jet Black 1.png» без __) и вложение
+ * в zip под Samsung Stock__/… Для серии Galaxy S с плоским именем цвет уже подтягивает
+ * parseSamsungGalaxyS; здесь главным образом Galaxy Z Fold/Flip.
+ */
+function parseSamsungGalaxyZFoldFlip(filename: string): PhotoMeta | null {
+  const stemRaw = filename.replace(/\.(png|webp|jpe?g)$/i, '')
+  const searchable = stemRaw.replace(/__/g, ' ').replace(/\s+/g, ' ').trim()
+  if (!/\bGalaxy\s+Z\s+(?:Fold|Flip)/i.test(searchable)) return null
+
+  const syntheticForFamily = searchable
+  let family = extractFamily('Samsung', '', syntheticForFamily)
+  family = splitGluedColor(family).replace(/\s+/g, ' ').trim()
+
+  const colorRaw = extractSamsungColorFromMarketingLabel(searchable)
+
+  return { filename, brand: 'Samsung', family, size: '', color: normColor(colorRaw), cellular: null }
+}
+
+/** HUD/ассеты листинга Samsung (не семейство товара) — игнорируим при выборе family в generic. */
+function isSamsungListingNoiseSegment(seg: string): boolean {
+  const low = seg.replace(/_/g, ' ').toLowerCase().trim()
+  if (!low) return true
+  if (/^color\s*selection\b/.test(low)) return true
+  if (/^\s*tab\s*$/.test(low)) return true
+  if (/\bgallery\s*thumb\b/.test(low)) return true
+  if (/^sku[_\s-]/i.test(low)) return true
+  if (/^360[_\s-]?view\b/.test(low)) return true
+  return false
+}
+
+/**
+ * Galaxy Buds из дерева вида Stock__Galaxy Buds Stock__Galaxy Buds 4 Pro__…__Color_Selection_….
+ * Generic раньше брал последний сегмент → «color selection…» как family → неверный ключ и матч на все цвета.
+ */
+function parseSamsungGalaxyBuds(filename: string): PhotoMeta | null {
+  const stem = filename.replace(/\.(png|webp|jpe?g)$/i, '')
+  const searchable = stem.replace(/__/g, ' ').replace(/\s+/g, ' ').trim()
+  if (!/\bgalaxy\s+buds\b/i.test(searchable)) return null
+
+  const familyCandidates: RegExp[] = [
+    /\bgalaxy\s+buds\s+\d+\s+(?:pro|fe)\b/i,
+    /\bgalaxy\s+buds\s+\d+\b/i,
+    /\bgalaxy\s+buds\s*\+\b/i,
+    /\bgalaxy\s+buds\s+(?:live|edge)\b/i,
+    /\bgalaxy\s+buds\s+(?:pro|fe)\b/i,
+    /\bgalaxy\s+buds\b/i,
+  ]
+  let familyRaw = ''
+  for (const re of familyCandidates) {
+    const m = searchable.match(re)
+    if (m?.[0]) {
+      familyRaw = m[0]
+      break
+    }
+  }
+  const family = familyRaw.toLowerCase().replace(/\s+/g, ' ').trim() || 'galaxy buds'
+
+  const parts = stem.split('__')
+  const SAMSUNG_COLOR_HINT =
+    /\b(jet\s*black|phantom\s*black|silver\s*blue|sky\s*blue|icy\s*blue|cream|mint|sand|purple|coffee|brown|bronze|coral|cobalt|graphite|ruby|\b(light|dark)\s+silver|ocean|snow|mist|pink|taupe|\b(red|orange|lime|yellow|green|grey|gray|silver|gold|natural|copper)\b|\b(red|pink|purple|lime|silver|gold|green|bronze|coral|graphite|white|black)\b\s*(?:titanium)?)\b/i
+
+  let color = ''
+  for (let i = parts.length - 1; i >= Math.max(parts.length - 8, 1); i--) {
+    let chunk = (parts[i] ?? '').replace(/_/g, ' ')
+    if (isSamsungListingNoiseSegment(chunk)) continue
+    if (/[-+]/.test(chunk) && /^[\s_a-z0-9+.-]*\d+[a-z0-9._+-]{8,}$/i.test(chunk.replace(/\s/g, '_'))) continue
+    let ch = chunk
+      .replace(/([a-z])([A-Z])/g, '$1 $2')
+      .toLowerCase()
+    ch = splitGluedColor(ch)
+    const wordsFam = family.split(/\s+/).filter(w => w.length > 1)
+    for (const tok of wordsFam) {
+      if (tok !== 'galaxy') {
+        ch = ch.replace(new RegExp(`\\b${tok}\\b`, 'gi'), '')
+      }
+    }
+    const mch = ch.match(SAMSUNG_COLOR_HINT)
+    if (mch) {
+      color = normColor(mch[0]!)
+      color = splitGluedColor(color).replace(/\s+/g, ' ').trim()
+      if (color) break
+    }
+  }
+  if (!color) {
+    color = normColor(extractSamsungColorFromMarketingLabel(searchable))
+  }
+
+  return { filename, brand: 'Samsung', family, size: '', color: normColor(color), cellular: null }
+}
+
+/** Последнее вхождение цветового маркера (длинную фразу предпочитаем короткой «black»). */
+function extractSamsungColorFromMarketingLabel(searchable: string): string {
+  const s = searchable.replace(/\s+/g, ' ')
+  /** Нестандартные и составные названия палитры Samsung (до одиночных black/gray). */
+  const phrasesDesc = [
+    'titanium silverblue',
+    'titanium whitesilver',
+    'titanium pinkgold',
+    'titanium black',
+    'titanium gray',
+    'silver shadow',
+    'blue shadow',
+    'cobalt violet',
+    'sky blue',
+    'phantom black',
+    'phantom violet',
+    'jet black',
+    'ice blue',
+    'icyblue',
+    'silver blue',
+    'light gold',
+    'rose gold',
+    'space gray',
+    'product red',
+    'midnight ink',
+    'deep purple',
+  ]
+  let best = ''
+  let bestLen = 0
+  const low = s.toLowerCase()
+  for (const ph of phrasesDesc) {
+    const idx = low.lastIndexOf(ph)
+    if (idx >= 0 && ph.length > bestLen) {
+      best = ph
+      bestLen = ph.length
+    }
+  }
+  if (!best.length) {
+    const mch = low.match(/\b(red|pink|purple|lime|silver|gold|green|bronze|coral|graphite|mint|cream|sand|lavender|navy|violet|white|grey|gray|orange|brown|yellow|natural|taupe|olive)\b(?![a-z])/i)
+    if (mch?.[1]) best = String(mch[1])
+    else if (/\bblue\b/i.test(low)) best = 'blue'
+    else if (/\bblack\b/i.test(low)) best = 'black'
+    else return ''
+  }
+  return splitGluedColor(best).replace(/\s+/g, ' ').trim()
 }
 
 /**
@@ -330,11 +478,12 @@ function parseGeneric(filename: string): PhotoMeta | null {
     BRAND_FROM_FOLDER[folderBrand] ??
     folderBrand
 
-  // Найти самый последний "человеческий" сегмент
+  // Найти самый последний "человеческий" сегмент (не шум вида Color_Selection / TAB из листингов Samsung)
   let family = ''
   let familyIdx = -1
   for (let i = parts.length - 1; i >= 1; i--) {
     const p = parts[i] ?? ''
+    if (isSamsungListingNoiseSegment(p)) continue
     if (/[-+]/.test(p)) continue                   // технический ID
     if (/^[a-f0-9]{16,}/i.test(p)) continue        // хеш
     if (p.length > 40 && /\d.*[a-z]|[a-z].*\d/i.test(p)) continue  // длинный machineID
@@ -378,6 +527,8 @@ const PARSERS: Array<(f: string) => PhotoMeta | null> = [
   parseAppleWatch,
   parseIphone,
   parseSamsungGalaxyS,
+  parseSamsungGalaxyZFoldFlip,
+  parseSamsungGalaxyBuds,
   parseDyson,
   parseGeneric,
 ]
@@ -441,6 +592,16 @@ function extractFamily(brand: string, category: string, fullName: string): strin
   if (brand === 'Samsung') {
     const m = name.match(/galaxy\s+(s\d+(?:\s+(?:edge|ultra|fe|plus))?)/i)
     if (m) return `galaxy ${m[1]!.toLowerCase().replace(/\s+/g, ' ').trim()}`
+    // Buds / Z / A — строки таблицы иначе схлопываются в samsung galaxy … и не попадают в ключ buds
+    if (/\bgalaxy\s+buds\b/i.test(name)) {
+      const b = name.match(/\bgalaxy\s+buds(?:\s+\d+(?:\s+(?:pro|fe))?|\s+(?:live|edge|\+)|\s+[a-z0-9]+\s+(?:pro|fe)?)?\b/i)
+      if (b) return b[0]!.toLowerCase().replace(/\s+/g, ' ').trim()
+      return 'galaxy buds'
+    }
+    const zm = name.match(/\bgalaxy\s+z\s+(?:fold|flip)(?:\s*\d+(?:\s+ultra)?)?/i)
+    if (zm) return zm[0]!.toLowerCase().replace(/\s+/g, ' ').trim()
+    const am = name.match(/\bgalaxy\s+a\s*\d+\b/i)
+    if (am) return am[0]!.toLowerCase().replace(/\s+/g, ' ').trim()
   }
 
   if (brand === 'Dyson') {
@@ -507,6 +668,7 @@ function photoTitleBlob(originalFilename: string): string {
   const parts = normalizeFilename(stem).split('__').map(x => x.trim())
   const rest = parts.slice(1).filter(seg => {
     if (!seg) return false
+    if (isSamsungListingNoiseSegment(seg)) return false
     if (/^[\s_a-z0-9+.-]{22,}$/i.test(seg) && /[+.]/.test(seg)) return false
     if (/^[a-f0-9]{16,}$/i.test(seg)) return false
     return true
@@ -1014,9 +1176,10 @@ function parseArgs(argv: string[]): CliArgs | null {
   return { photosDir, outputDir, baseUrl, mode: 'xlsx', xlsxPath: second, minConfidence, clearPhotos }
 }
 
-/** Рекурсивно собирает basenames изображений. Матчинг и URL — только по basename (как на CDN). */
-function collectPhotoBasenamesRecursive(root: string): string[] {
-  const byName = new Map<string, string>() // basename → first absolute path seen
+/** Рекурсивно собирает плоские ключи для матчинга/URL (= относительный путь через `__`, см. photo-flat-name). */
+function collectPhotoFlatKeysRecursive(root: string): string[] {
+  const rootAbs = path.resolve(root)
+  const byFlat = new Map<string, string>() // flatKey → absolute path (дубликат только логировать)
   const IMG = /\.(png|webp|jpg|jpeg)$/i
 
   function walk(dir: string): void {
@@ -1031,18 +1194,21 @@ function collectPhotoBasenamesRecursive(root: string): string[] {
       if (ent.isDirectory()) {
         walk(full)
       } else if (IMG.test(ent.name)) {
-        const prev = byName.get(ent.name)
+        const nativeRel = path.relative(rootAbs, full)
+        if (nativeRel.startsWith('..')) continue
+        const flat = flattenRelativePhotoPath(nativeRel)
+        const prev = byFlat.get(flat)
         if (prev && prev !== full) {
-          console.error(`[photos] Duplicate basename skipped: ${ent.name}\n    ${prev}\n    ${full}`)
+          console.error(`[photos] Duplicate flat key skipped:\n    ${flat}\n    ${prev}\n    ${full}`)
           continue
         }
-        byName.set(ent.name, full)
+        byFlat.set(flat, full)
       }
     }
   }
 
-  walk(root)
-  return Array.from(byName.keys()).sort((a, b) => a.localeCompare(b))
+  walk(rootAbs)
+  return Array.from(byFlat.keys()).sort((a, b) => a.localeCompare(b))
 }
 
 async function main() {
@@ -1074,6 +1240,13 @@ async function main() {
     fs.mkdirSync(args.outputDir, { recursive: true })
     const sheetsAdapter = new SheetsAdapter(args.sheetName!, !args.write)
     console.log(`Reading Google Sheets: '${args.sheetName}'${args.write ? '' : ' (dry-run)'}`)
+    if (!args.write) {
+      console.log(
+        '\n!!! Без --write Google Таблица НЕ обновляется (только CSV в папке отчётов). Колонка «Фото» не меняется до запуска с --write, затем нужен /sync в боте.\n',
+      )
+    } else {
+      console.log('\n>>> Режим записи: после завершения выполните /sync в Telegram-боте.\n')
+    }
     await sheetsAdapter.load()
     adapter = sheetsAdapter
   }
@@ -1087,7 +1260,7 @@ async function main() {
   }
 
   // 1. Загрузить и распарсить фото (рекурсивно по подпапкам — стейдж Apple Stock / Samsung Stock / …)
-  const photoFiles = collectPhotoBasenamesRecursive(args.photosDir)
+  const photoFiles = collectPhotoFlatKeysRecursive(args.photosDir)
   console.log(`Photos: ${photoFiles.length}`)
   const photos = photoFiles.map(f => parsePhoto(f))
 
@@ -1124,7 +1297,8 @@ async function main() {
 
     // Запись от min-confidence (по умолчанию 70; 50 = family-only — проверяйте orphans/reports)
     if (m.confidence >= args.minConfidence) {
-      const url = `${args.baseUrl.replace(/\/$/, '')}/${encodeURIComponent(m.photo).replace(/\.png$/i, '.webp')}`
+      const urlFilename = encodeURIComponent(m.photo)
+      const url = `${args.baseUrl.replace(/\/$/, '')}/${urlFilename}`
       for (const rIdx of m.rows) {
         const existing = adapter.getPhotoCell(rIdx)
         // если в ячейке уже что-то есть — добавляем через запятую (parsePhotoUrls в sheets-sync.ts это поддерживает)

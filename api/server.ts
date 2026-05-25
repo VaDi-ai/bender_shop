@@ -30,6 +30,7 @@ import { DeliveryType } from '../generated/prisma/client'
 import { Decimal } from '@prisma/client/runtime/client'
 import { fmtPrice, formatProductNameWithAttrs } from '../lib/format'
 import log from '../lib/logger'
+import { flattenRelativePhotoPath } from '../lib/photo-flat-name'
 import { trackEvent } from '../lib/events'
 
 // BigInt → JSON serialization (avitoItemId etc.)
@@ -430,7 +431,8 @@ export function startApiServer(bot?: Telegraf): Server {
   // Auth: requireAdminHmac (HMAC от BOT_TOKEN + 5-минутный timestamp).
   // Парсер: express.raw application/zip, лимит 250 MB.
   // Распаковка: adm-zip (чистый JS, не зависит от системного tar/unzip),
-  // copy в PHOTOS_DIR с защитой от path traversal (берём path.basename, кладём плоско).
+  // copy в PHOTOS_DIR с защитой от path traversal: относительный путь внутри zip →
+  // то же «плоское» имя, что и у `npm run match-photos` (`lib/photo-flat-name.ts`).
   //
   // Возвращает JSON { uploaded, skipped, errors, photosDir }.
   // skipped = файл с тем же mtime≥ что у нового => не перезаписываем.
@@ -489,8 +491,9 @@ export function startApiServer(bot?: Telegraf): Server {
           return
         }
 
-        // Рекурсивно собираем все image-файлы, плоско копируем в photosDir.
-        // Path traversal-защита: используем только basename, никаких ../ не возможно.
+        // Рекурсивно собираем все image-файлы, копируем в photosDir с именем =
+        // flatten(relative от корня распакованного архива).
+        const extractRoot = path.resolve(tmpExtract)
         const IMAGE_EXTS = new Set(['.webp', '.png', '.jpg', '.jpeg'])
         let uploaded = 0
         let skipped = 0
@@ -516,8 +519,23 @@ export function startApiServer(bot?: Telegraf): Server {
             const ext = path.extname(name).toLowerCase()
             if (!IMAGE_EXTS.has(ext)) continue
 
-            const destName = path.basename(name)
-            const destPath = path.join(photosDir, destName)
+            const fileResolved = path.resolve(full)
+            const relNative = path.relative(extractRoot, fileResolved)
+            if (relNative.startsWith('..') || path.isAbsolute(relNative)) {
+              errors.push(`${relNative}: skipped (outside extract root)`)
+              continue
+            }
+            const photosRootResolved = path.resolve(photosDir)
+            const destName = flattenRelativePhotoPath(relNative)
+            const destPath = path.resolve(path.join(photosRootResolved, destName))
+            const relIntoPhotos = path.relative(photosRootResolved, destPath)
+            if (
+              destPath !== photosRootResolved &&
+              (relIntoPhotos.startsWith('..') || path.isAbsolute(relIntoPhotos))
+            ) {
+              errors.push(`${destName}: skipped (refused path outside PHOTOS_DIR)`)
+              continue
+            }
 
             try {
               if (fs.existsSync(destPath)) {

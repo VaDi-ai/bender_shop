@@ -89,11 +89,13 @@ Auth: HMAC-SHA256 от `BOT_TOKEN` поверх `<timestamp>:<sha256(body)>`. З
 Локальная обёртка: `scripts/upload-photos.ts` (`npm run upload-photos -- <zip>`) — формирует подпись автоматически.
 
 ### POST /admin/photos/upload
-Заливка zip с готовыми WebP в `PHOTOS_DIR`. Лимит — 250 MB.
+Заливка zip с готовыми изображениями в `PHOTOS_DIR`. Лимит — 250 MB.
 
 **Headers:** `Content-Type: application/zip` + admin HMAC.
 
 **Body:** raw bytes zip-архива.
+
+**Файлы в архиве:** допускаются вложенные папки; на диск пишется **одно имя файла**, полученное из относительного пути тем же правилом, что и локальный матчинг фото (`lib/photo-flat-name.ts`, см. DEPLOYMENT → Product Photos). Symlink'и внутри zip не обрабатываются.
 
 **Response:** `{ uploaded, skipped, errors, photosDir }`. `skipped` — файлы у которых mtime в `PHOTOS_DIR` уже >= mtime в zip.
 
