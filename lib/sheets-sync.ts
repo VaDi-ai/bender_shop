@@ -53,12 +53,39 @@ export function parsePhotoUrls(cell: string): string[] {
   return out
 }
 
+/**
+ * `/no-photo.webp` и т.п. нельзя хранить в каталоге: при ошибке CDN фронт и так ставит заглушку,
+ * а в БД длинный список одинаковых битых URL раздувает карусель («много точек — везде Бендер»).
+ */
+export function filterPlaceholderPhotoUrls(urls: string[]): string[] {
+  const bad = (u: string): boolean => {
+    const t = String(u ?? '').trim()
+    if (!t) return true
+    if (/\/no-photo\.(webp|png)(\?|#|$)/i.test(t)) return true
+    try {
+      if (/^https?:\/\//i.test(t)) {
+        const pathname = new URL(t).pathname
+        if (/\/no-photo\.(webp|png)$/i.test(pathname)) return true
+      }
+    } catch {
+      /* невалидный URL всё же не считаем плейсхолдером — пусть parse отфильтрует или упадёт в sync */
+    }
+    return false
+  }
+  return urls.filter(u => !bad(u))
+}
+
+/** Парсинг ячейки «Фото» для записи в БД (без заглушек сайта). */
+export function sanitizeSyncedPhotoUrls(cell: string): string[] {
+  return filterPlaceholderPhotoUrls(parsePhotoUrls(cell))
+}
+
 /** Уникальные URL фото по всем вариантам (порядок: как в таблице, без дублей). */
 export function mergeVariantPhotoUrls(variants: { photoUrls: string[] }[]): string[] {
   const seen = new Set<string>()
   const out: string[] = []
   for (const v of variants) {
-    for (const raw of v.photoUrls) {
+    for (const raw of filterPlaceholderPhotoUrls(v.photoUrls)) {
       const u = String(raw ?? '').trim()
       if (!u || seen.has(u)) continue
       seen.add(u)
@@ -339,7 +366,7 @@ export async function syncProductsFromSheets(shouldAbort?: () => boolean): Promi
       attrs,
       rowIndex: row.rowIndex,
       sheetName: row.sheetName,
-      photoUrls: parsePhotoUrls(row.photo),
+      photoUrls: sanitizeSyncedPhotoUrls(row.photo),
     })
   }
 

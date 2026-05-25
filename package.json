@@ -19,6 +19,7 @@
     "restore-paths": "ts-node scripts/restore-paths.ts",
     "upload-photos": "ts-node scripts/upload-photos.ts",
     "match-photos": "ts-node scripts/match-photos-to-sheets.ts",
+    "clear-sheet-photos": "ts-node scripts/clear-sheet-photo-column.ts",
     "import:avito": "ts-node scripts/import-avito-stats.ts",
     "audit:attrs": "ts-node scripts/audit-attributes.ts",
     "test": "vitest run",

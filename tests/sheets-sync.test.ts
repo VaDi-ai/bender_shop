@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest'
-import { extractProductName, parsePhotoUrls, mergeVariantPhotoUrls } from '../lib/sheets-sync'
+import {
+  extractProductName,
+  parsePhotoUrls,
+  mergeVariantPhotoUrls,
+  filterPlaceholderPhotoUrls,
+  sanitizeSyncedPhotoUrls,
+} from '../lib/sheets-sync'
 
 describe('extractProductName', () => {
   it('iPhone: removes color, memory, country', () => {
@@ -79,6 +85,23 @@ describe('parsePhotoUrls', () => {
   })
 })
 
+describe('filterPlaceholderPhotoUrls / sanitizeSyncedPhotoUrls', () => {
+  it('убирает no-photo заглушки (относительные и абсолютные URL)', () => {
+    expect(
+      filterPlaceholderPhotoUrls([
+        '/photos/item.webp',
+        '/no-photo.webp',
+        'https://bendershop.store/no-photo.png',
+      ]),
+    ).toEqual(['/photos/item.webp'])
+  })
+
+  it('sanitizeSyncedPhotoUrls: парсинг + фильтрация через запятую', () => {
+    expect(sanitizeSyncedPhotoUrls('https://x/a.webp, /no-photo.webp, https://bendershop.store/no-photo.png'))
+      .toEqual(['https://x/a.webp'])
+  })
+})
+
 describe('mergeVariantPhotoUrls', () => {
   it('склеивает уникальные URL в порядке встречи', () => {
     expect(mergeVariantPhotoUrls([
@@ -89,5 +112,14 @@ describe('mergeVariantPhotoUrls', () => {
 
   it('пустые варианты не ломают', () => {
     expect(mergeVariantPhotoUrls([{ photoUrls: [] }, { photoUrls: ['https://x/y'] }])).toEqual(['https://x/y'])
+  })
+
+  it('не тащит no-photo в карусель', () => {
+    expect(
+      mergeVariantPhotoUrls([
+        { photoUrls: ['/no-photo.webp', 'https://a.com/ok.webp'] },
+        { photoUrls: ['https://bendershop.store/no-photo.png'] },
+      ]),
+    ).toEqual(['https://a.com/ok.webp'])
   })
 })
