@@ -24,17 +24,16 @@ Avito API ← avito-sync → PostgreSQL ← sheets-sync ← Google Sheets
 
 ## Подготовка фото товаров
 
-Фото товаров приходят с разными пропорциями (1024×1024, 1280×800, 1344×768, 1408×736 и др.), но карточка в каталоге использует `aspect-ratio: 1/1` — нужны квадраты, иначе видны пустые полосы.
+Каталог использует квадратные карточки (`aspect-ratio: 1/1`). Фото считаются **уже подготовленными** во внешнем стоковом пайплайне (Apple Stock, Samsung Stock, каталог «(Обработка)» и т.д.). Важно сохранить машинную схему имён вида `Apple Stock__…` или `Samsung Stock__…`.
 
-`scripts/pad-to-square.ts` приводит любое фото к квадрату 1024×1024 WebP без видимых стыков:
-1. Crop светлых полей по краям (стандартные апплевские paddings)
-2. Pad до квадрата через `extend({ extendWith: 'copy' })` — повторение крайней строки/столбца. NB: `resize` через Lanczos здесь даёт артефакт яркости (Sharp делает sRGB↔linear gamma transform на однородных полосах), поэтому используем именно extend.
-3. Bright-streak detection: если у края есть яркие пятна (логотип) при тёмном фоне — fallback на solid color заливку
-4. Resize 1024×1024, WebP quality 85
+В репозитории остаются только **matching** и **заливка** на CDN:
 
-Запуск: `npm run pad-images <input_dir> <output_dir>`. Идемпотентен (skip-up-to-date по mtime, как `optimize-images.ts`).
+- `scripts/match-photos-to-sheets.ts` → колонка **Фото (Q)** в Sheets. Путь к файлам может быть родительским каталогом: скрипт **рекурсивно** обходит подпапки (`Apple Stock (Обработка)/`, `Samsung Stock/` …), для матчинга и URL использует **basename** (как в `/photos/<file>.webp`). Дубликат basename в двух подпапках попадёт в лог и будет пропущен.
+- `scripts/upload-photos.ts` (+ `POST /admin/photos/upload`) — zip → Railway Volume (`PHOTOS_DIR`).
 
-Готовые файлы выкладываются на **Railway Volume** (mount `/data/photos`, env `PHOTOS_DIR`) и раздаются через `/photos/*` — отдельный static route в `api/server.ts`. Volume отделён от репо чтобы не раздувать git и не копировать MB изображений при каждом деплое. См. DEPLOYMENT.md → Product Photos.
+Устаревший локальный Sharp-пайплайн (`pad-to-square`, `flatten-on-bg`, `optimize-images`) **удалён**.
+
+Готовые файлы живут на **Railway Volume** (mount `/data/photos`) и отдаются через `/photos/*` в `api/server.ts`. Подробности — DEPLOYMENT.md → Product Photos.
 
 ### Matching фото к Sheets
 

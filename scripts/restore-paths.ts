@@ -22,15 +22,13 @@
  * Использование:
  *   ts-node scripts/restore-paths.ts <flat_input_dir> <reference_dir> <output_dir>
  *
- *   <flat_input_dir>  — папка с плоскими именами (например ./staging-flat
- *                       после flatten-on-bg)
+ *   <flat_input_dir>  — папка с плоскими именами (например выгрузка с прозрачным фоном)
  *   <reference_dir>   — папка-шаблон с иерархическими именами (./R, ./Фото_ready)
  *   <output_dir>      — куда складывать переименованные файлы
  *
  * Пример:
- *   ts-node scripts/flatten-on-bg.ts "./Photoroom Apple.zip" ./staging-flat
  *   ts-node scripts/restore-paths.ts ./staging-flat ./R ./R-final
- *   ts-node scripts/match-photos-to-sheets.ts ./R-final ./prices.xlsx ./out https://bendershop.store/photos
+ *   ts-node scripts/match-photos-to-sheets.ts ./R-final --sheet ./reports https://example.com/photos --write
  *
  * Выход:
  *   - Файлы скопированы в <output_dir> с полным иерархическим именем

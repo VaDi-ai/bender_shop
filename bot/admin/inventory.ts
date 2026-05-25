@@ -55,6 +55,55 @@ function shortVariantLabel(
   return label.slice(0, 40)
 }
 
+/** Макс. снимков в медиагруппе Telegram (carousel превью) */
+const INVENTORY_PREVIEW_ALBUM_MAX = 10
+
+/**
+ * Карусель превью для чата поддержки / товароучёта: публичные URL или Telegram file_id.
+ */
+async function sendInventoryPhotoCarousel(ctx: Context, photoRefs: unknown): Promise<boolean> {
+  const list = Array.isArray(photoRefs) ? photoRefs : []
+  const clean = [
+    ...new Set(
+      list
+        .filter((x): x is string => typeof x === 'string')
+        .map((x) => x.trim())
+        .filter(Boolean),
+    ),
+  ]
+  const chatId = ctx.chat?.id
+  if (!chatId || clean.length === 0) return false
+
+  try {
+    if (clean.length === 1) {
+      await ctx.replyWithPhoto(clean[0]!)
+      return true
+    }
+
+    const batch = clean.slice(0, INVENTORY_PREVIEW_ALBUM_MAX)
+    const overflow = clean.length - batch.length
+    const caption =
+      overflow > 0
+        ? `Превью ${batch.length} из ${clean.length} (+${overflow} — смотри на сайте / в колонке Q).`
+        : undefined
+
+    const media = batch.map((m, i) => ({
+      type: 'photo' as const,
+      media: m,
+      ...(i === 0 && caption ? { caption } : {}),
+    }))
+    await ctx.telegram.sendMediaGroup(chatId, media)
+    return true
+  } catch (err) {
+    log.warn('Inventory photo carousel failed', {
+      chatId,
+      count: clean.length,
+      error: err instanceof Error ? err.message : String(err),
+    })
+    return false
+  }
+}
+
 // ─── SKU автогенерация ─────────────────────────────────────────────────────────
 
 async function generateProductSku(categoryId: number | null): Promise<string> {
@@ -699,6 +748,13 @@ async function showProductPhotos(ctx: Context, productId: number): Promise<void>
     return
   }
   const count = product.photos.length
+  let okCarousel = false
+  if (count > 0) okCarousel = await sendInventoryPhotoCarousel(ctx, product.photos)
+  if (count > 0 && !okCarousel) {
+    await ctx.reply(
+      '⚠️ Не удалось отправить альбом превью (ссылки недоступны для Telegram или слишком тяжёлые файлы). Проверь URL или открой витрину.',
+    )
+  }
   await ctx.reply(
     `🖼️ Фото товара — ${product.name}\n\nТекущих фото: ${count}`,
     Markup.inlineKeyboard([
@@ -721,6 +777,14 @@ async function showVariantPhotos(ctx: Context, variantId: number): Promise<void>
     return
   }
   const attrs = formatVariantAttrs(variant.attributes)
+  const nVar = variant.photos.length
+  let okCarousel = false
+  if (nVar > 0) okCarousel = await sendInventoryPhotoCarousel(ctx, variant.photos)
+  if (nVar > 0 && !okCarousel) {
+    await ctx.reply(
+      '⚠️ Не удалось отправить альбом превью варианта. Проверь URL или Telegram file_id.',
+    )
+  }
   await ctx.reply(
     `🖼️ Фото — ${variant.product.name}\n${attrs || 'Базовый вариант'}\n📸 Фото: ${variant.photos.length} шт. | 📦 Остаток: ${variant.quantity} шт.`,
     Markup.inlineKeyboard([

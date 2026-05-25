@@ -10,6 +10,9 @@
  *    пишет URL'ы прямо в колонку Q через batchUpdate API.
  *      ts-node scripts/match-photos-to-sheets.ts <photos_dir> --sheet <output_dir> <base_url> [--write] [--sheet-name=Лист1]
  *
+ *      `photos_dir` может содержать вложенные папки (Apple Stock/, Samsung Stock/ и т.д.):
+ *      учитывается **basename** файла — в имени по-прежнему должен быть префикс `Apple Stock__` / `Samsung Stock__`.
+ *      Дубликаты имён файла в разных подпапках → ошибка (логируется).
  *      Без --write: только отчёты (dry-run). С --write: реально дописывает колонку Q.
  *      По умолчанию имя листа берётся из PRODUCT_SHEET_NAME env или 'Лист1'.
  *
@@ -66,6 +69,8 @@ interface MatchResult {
 
 const BRAND_FROM_FOLDER: Record<string, string> = {
   'Apple Stock': 'Apple',
+  /** Экспорт обработанного стока (подпапка в стейдже) — тот же префикс в имени файла */
+  'Apple Stock (Обработка)': 'Apple',
   'Samsung Stock': 'Samsung',
   'Sony Stock': 'Sony',
   'Oculus Stock': 'Meta',
@@ -137,7 +142,7 @@ function normalizeFilename(filename: string): string {
  */
 function parseAppleWatch(filename: string): PhotoMeta | null {
   if (!/Apple Watch/i.test(filename)) return null
-  const stem = filename.replace(/\.png$/i, '')
+  const stem = filename.replace(/\.(png|webp|jpe?g)$/i, '')
   const parts = stem.split('__')
   // parts[2] = серия (S11, SE3, Ultra 3, ...)
   const seriesRaw = parts[2] ?? ''
@@ -181,7 +186,7 @@ function parseAppleWatch(filename: string): PhotoMeta | null {
  */
 function parseIphone(filename: string): PhotoMeta | null {
   if (!/iPhone/i.test(filename) || /Чехол|Case|TechWoven/i.test(filename)) return null
-  const stem = filename.replace(/\.png$/i, '')
+  const stem = filename.replace(/\.(png|webp|jpe?g)$/i, '')
   const parts = stem.split('__')
   if (parts.length < 4) return null
 
@@ -223,7 +228,7 @@ function parseIphone(filename: string): PhotoMeta | null {
  */
 function parseSamsungGalaxyS(filename: string): PhotoMeta | null {
   if (!/Galaxy S Stock/i.test(filename)) return null
-  const stem = filename.replace(/\.png$/i, '')
+  const stem = filename.replace(/\.(png|webp|jpe?g)$/i, '')
   const parts = stem.split('__')
   if (parts.length < 4) return null
 
@@ -252,7 +257,7 @@ function parseSamsungGalaxyS(filename: string): PhotoMeta | null {
  */
 function parseDyson(filename: string): PhotoMeta | null {
   if (!/^dyson Stock/i.test(filename)) return null
-  const stem = filename.replace(/\.png$/i, '')
+  const stem = filename.replace(/\.(png|webp|jpe?g)$/i, '')
   const parts = stem.split('__')
   const modelCode = (parts[1] ?? '').toUpperCase()
   const colorRaw = parts[2] ?? ''
@@ -274,12 +279,22 @@ function parseDyson(filename: string): PhotoMeta | null {
  * Цвет пытаемся извлечь по common-pattern из последних сегментов и из tech-detail
  * (типа "...starlight.png" или "...silver-256gb.png"). Если не находим — пусто,
  * матчинг будет идти через prefix без цвета.
+ *
+ * Если первый сегмент — «Apple Stock (Обработка)» и т.п., суффикс убирается для маппинга BRAND_FROM_FOLDER.
  */
+function normalizeStockFolderSegment(segment: string): string {
+  return segment.replace(/\s*\((Обработка|обработка|processed)\)\s*$/iu, '').trim()
+}
+
 function parseGeneric(filename: string): PhotoMeta | null {
-  const stem = filename.replace(/\.png$/i, '')
+  const stem = filename.replace(/\.(png|webp|jpe?g)$/i, '')
   const parts = stem.split('__')
-  const folderBrand = parts[0] ?? ''
-  const brand = BRAND_FROM_FOLDER[folderBrand] ?? folderBrand
+  const folderBrandRaw = parts[0] ?? ''
+  const folderBrand = normalizeStockFolderSegment(folderBrandRaw)
+  const brand =
+    BRAND_FROM_FOLDER[folderBrandRaw] ??
+    BRAND_FROM_FOLDER[folderBrand] ??
+    folderBrand
 
   // Найти самый последний "человеческий" сегмент
   let family = ''
@@ -823,6 +838,37 @@ function parseArgs(argv: string[]): CliArgs | null {
   return { photosDir, outputDir, baseUrl, mode: 'xlsx', xlsxPath: second, minConfidence: 70 }
 }
 
+/** Рекурсивно собирает basenames изображений. Матчинг и URL — только по basename (как на CDN). */
+function collectPhotoBasenamesRecursive(root: string): string[] {
+  const byName = new Map<string, string>() // basename → first absolute path seen
+  const IMG = /\.(png|webp|jpg|jpeg)$/i
+
+  function walk(dir: string): void {
+    let entries
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true })
+    } catch {
+      return
+    }
+    for (const ent of entries) {
+      const full = path.join(dir, ent.name)
+      if (ent.isDirectory()) {
+        walk(full)
+      } else if (IMG.test(ent.name)) {
+        const prev = byName.get(ent.name)
+        if (prev && prev !== full) {
+          console.error(`[photos] Duplicate basename skipped: ${ent.name}\n    ${prev}\n    ${full}`)
+          continue
+        }
+        byName.set(ent.name, full)
+      }
+    }
+  }
+
+  walk(root)
+  return Array.from(byName.keys()).sort((a, b) => a.localeCompare(b))
+}
+
 async function main() {
   const args = parseArgs(process.argv)
   if (!args) {
@@ -860,8 +906,8 @@ async function main() {
     console.log(`min-confidence: ${args.minConfidence} (--min-confidence= для изменения)`)
   }
 
-  // 1. Загрузить и распарсить фото
-  const photoFiles = fs.readdirSync(args.photosDir).filter(f => /\.(png|webp|jpg|jpeg)$/i.test(f))
+  // 1. Загрузить и распарсить фото (рекурсивно по подпапкам — стейдж Apple Stock / Samsung Stock / …)
+  const photoFiles = collectPhotoBasenamesRecursive(args.photosDir)
   console.log(`Photos: ${photoFiles.length}`)
   const photos = photoFiles.map(f => parsePhoto(f))
 

@@ -363,9 +363,8 @@ export function startApiServer(bot?: Telegraf): Server {
 
   // Static: product photos.
   //
-  // PHOTOS_DIR указывает на директорию с фото товаров (квадратные WebP, подготовленные
-  // через scripts/pad-to-square.ts). На Railway это mount path для Volume
-  // (например /data/photos) — фото живут отдельно от репо и не раздувают git.
+  // PHOTOS_DIR указывает на директорию с фото товаров (обычно квадратные WebP из стокового пайплайна).
+  // На Railway это mount path для Volume (например /data/photos) — фото живут отдельно от репозитория.
   // Локально без переменной — отдаётся из public/uploads/products (для разработки).
   //
   // Cache: 1 день в браузере + ETag для revalidation (default Express). Не immutable,

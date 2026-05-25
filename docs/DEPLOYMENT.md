@@ -101,14 +101,14 @@ railway shell
 
 ### Прямая запись URL в Google Sheets
 
-После заливки фото на Volume — нужно прописать их URL'ы в колонку «Фото» (Q) Google Sheets, чтобы `/sync` подтянул их в каталог:
+После заливки фото на Volume — нужно прописать их URL'ы в колонку «Фото» (Q) Google Sheets, чтобы `/sync` подтянул их в каталог. Путь может быть общей родительской папкой со вложениями **`Apple Stock (Обработка)`**, **`Samsung Stock`** и т.д.; скрипт обходит дерево рекурсивно (совпадает только **basename**, префикс в имени файла типа `Apple Stock__…` должен сохраниться).
 
 ```bash
 # Dry-run (только отчёт)
-npm run match-photos -- ./R-final --sheet ./reports https://bendershop.store/photos
+npm run match-photos -- ./staging-all-brands --sheet ./reports https://bendershop.store/photos
 
 # Реальная запись в Sheets
-npm run match-photos -- ./R-final --sheet ./reports https://bendershop.store/photos --write
+npm run match-photos -- ./staging-all-brands --sheet ./reports https://bendershop.store/photos --write
 ```
 
 Использует тот же `GOOGLE_SERVICE_ACCOUNT_KEY` + `GOOGLE_SHEET_ID` что и `/sync`. Batch-update в один API-вызов (несколько диапазонов), retry на 429.
