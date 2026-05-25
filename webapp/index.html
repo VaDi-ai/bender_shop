@@ -1134,7 +1134,7 @@
       <div class="modal-carousel" id="modalCarousel">
         <div class="modal-badge" id="modalBadge" style="display:none"></div>
         <div class="modal-carousel-ph" id="modalCarouselPh"><img src="/no-photo.webp" alt="" style="width:100%;height:100%;object-fit:cover;opacity:0.6;" onerror="this.onerror=null;this.src='/no-photo.png'"></div>
-        <img class="modal-carousel-img" id="modalCarouselImg" src="" alt="" style="display:none" loading="lazy">
+        <img class="modal-carousel-img" id="modalCarouselImg" src="" alt="" style="display:none" loading="lazy" decoding="async" onerror="handleProductPhotoError(this)">
         <button class="modal-carousel-arrow modal-carousel-prev hidden" id="modalCarouselPrev">‹</button>
         <button class="modal-carousel-arrow modal-carousel-next hidden" id="modalCarouselNext">›</button>
         <div class="modal-carousel-dots" id="modalCarouselDots"></div>
@@ -1386,6 +1386,39 @@
       if (raw.startsWith('//')) return 'https:' + raw
       if (raw.startsWith('/') && /\.(webp|png|jpg|jpeg)(\?[^\s]*)?$/i.test(raw)) return raw
       return photoUrl(raw)
+    }
+
+    /** Сброс ошибки перед сменой src (hover-карусель, смена ТП). */
+    function resetProductImgFallback(el) {
+      if (!el || el.tagName !== 'IMG') return
+      try {
+        delete el.dataset.fallbackStep
+        delete el.dataset.broken
+        el.style.opacity = ''
+      } catch (_) {}
+    }
+
+    /** 404 CDN / битая ссылка → плейсхолдер, не чёрный квадрат. */
+    function handleProductPhotoError(el) {
+      if (!el || el.tagName !== 'IMG') return
+      try {
+        var step = +(el.dataset.fallbackStep || 0)
+        el.dataset.fallbackStep = String(step + 1)
+        if (step === 0) {
+          try { el.removeAttribute('srcset') } catch (_) {}
+          el.src = '/no-photo.webp'
+          return
+        }
+        if (step === 1) {
+          el.src = '/no-photo.png'
+          return
+        }
+        el.dataset.broken = '1'
+        el.style.opacity = '0'
+        try { el.removeAttribute('src') } catch (_) {}
+      } catch (_) {
+        try { el.style.opacity = '0' } catch (__) {}
+      }
     }
 
     // ── Variant helpers ───────────────────────────────────────────────────────
@@ -1874,9 +1907,10 @@
 
       section.style.display = 'block'
       scroll.innerHTML = hits.map(p => {
-        const photo = p.photos && p.photos[0] ? resolvePhoto(p.photos[0]) : null
+        const photoList = getProductPhotos(p, null)
+        const photo = photoList.length ? photoList[0] : null
         const imgHtml = photo
-          ? `<img src="${photo}" alt="" loading="lazy">`
+          ? `<img src="${esc(photo)}" alt="" loading="lazy" decoding="async" onerror="handleProductPhotoError(this)">`
           : `<img src="/no-photo.webp" alt="" onerror="this.onerror=null;this.src='/no-photo.png'">`
 
         const minPrice = p.variants && p.variants.length ? minVariantPrice(p) : Number(p.price)
@@ -2071,7 +2105,7 @@
         const photoAreaHtml = `<div class="product-photo-wrap" data-photos="${photosData}">
   ${badgeHtml}
   ${mainPhoto
-    ? `<img class="product-photo" src="${esc(mainPhoto)}" alt=""${i >= 6 ? ' loading="lazy"' : ''}>`
+    ? `<img class="product-photo" src="${esc(mainPhoto)}" alt=""${i >= 6 ? ' loading="lazy"' : ''} decoding="async" onerror="handleProductPhotoError(this)">`
     : '<div class="product-photo-ph"><img src="/no-photo.webp" alt="" style="width:100%;height:100%;object-fit:cover;opacity:0.6;" onerror="this.onerror=null;this.src=\'/no-photo.png\'"></div>'}
   ${photos.length > 1
     ? `<div class="product-hover-dots">${photos.slice(0, Math.min(photos.length, 8)).map((_, j) => `<span class="${j === 0 ? 'active' : ''}"></span>`).join('')}</div>`
@@ -2232,6 +2266,8 @@
             photoWrap.insertBefore(cardImg, dotsEl || null)
           }
           cardImg.style.display = 'block'
+          resetProductImgFallback(cardImg)
+          cardImg.onerror = function () { handleProductPhotoError(cardImg) }
           cardImg.src = newPhotos[0]
           if (dotsEl) {
             if (newPhotos.length > 1) {
@@ -2274,8 +2310,12 @@
           const n = photos.length
           const dlen = dots.length || 1
           idx = 0
+          resetProductImgFallback(img)
+          img.onerror = function () { handleProductPhotoError(img) }
           timer = setInterval(() => {
             idx = (idx + 1) % n
+            resetProductImgFallback(img)
+            img.onerror = function () { handleProductPhotoError(img) }
             img.src = photos[idx]
             dots.forEach((d, i) => d.classList.toggle('active', i === (idx % dlen)))
           }, 800)
@@ -2286,7 +2326,11 @@
           try { photos = JSON.parse(wrap.dataset.photos.replace(/&quot;/g, '"')) } catch { return }
           const img = wrap.querySelector('.product-photo')
           const dots = wrap.querySelectorAll('.product-hover-dots span')
-          if (img && photos[0] && img.style.display !== 'none') img.src = photos[0]
+          if (img && photos[0] && img.style.display !== 'none') {
+            resetProductImgFallback(img)
+            img.onerror = function () { handleProductPhotoError(img) }
+            img.src = photos[0]
+          }
           dots.forEach((d, i) => d.classList.toggle('active', i === 0))
         })
       })
@@ -2403,6 +2447,8 @@
 
       if (photos.length > 0) {
         if (modalPhotoIdx >= photos.length) modalPhotoIdx = 0
+        resetProductImgFallback(imgEl)
+        imgEl.onerror = function () { handleProductPhotoError(imgEl) }
         imgEl.src = photos[modalPhotoIdx]
         imgEl.style.display = 'block'
         phEl.style.display  = 'none'

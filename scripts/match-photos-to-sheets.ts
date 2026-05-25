@@ -223,32 +223,62 @@ function parseIphone(filename: string): PhotoMeta | null {
 }
 
 /**
- * Samsung Galaxy S parser. Имя:
- *   "Samsung Stock__Galaxy S Stock__Galaxy S25__S25 Edge__S25 Edge Titanium icyBlue__noise..."
+ * Samsung Galaxy S / S+. Имя часто содержит:
+ *   "...__Galaxy S Stock__Galaxy S25__S25 Edge__..."
+ * или без «Galaxy S Stock»: "...__Samsung Galaxy S25 Ultra__Phantom Black__...".
  *
- * parts[2]=Galaxy S25, parts[3]=Variant (S25 Edge / S25 Ultra), parts[4]=Variant + Color
+ * Если требовать только `Galaxy S Stock`, экспорт без этого сегмента уходит в generic
+ * с неверным family → в таблице нет строк Q и на витрине пустые/битые фото.
  */
 function parseSamsungGalaxyS(filename: string): PhotoMeta | null {
-  if (!/Galaxy S Stock/i.test(filename)) return null
   const stem = filename.replace(/\.(png|webp|jpe?g)$/i, '')
-  const parts = stem.split('__')
-  if (parts.length < 4) return null
+  const searchable = stem.replace(/_/g, ' ')
+  // Только линейка Galaxy S (Fold/A/Buds — другие парсеры / generic)
+  if (!/\bGalaxy\s+S\s*\d+/i.test(searchable)) return null
 
-  const variantRaw = parts[3] ?? ''   // 'S25 Edge', 'S25 Ultra'
-  const colorRaw = parts[4] ?? ''     // 'S25 Edge Titanium icyBlue'
+  const fullModel =
+    searchable.match(/\bGalaxy\s+S\s*\d+(?:\s+(?:Ultra|Edge|FE|Plus))?\b/i)
+  let family =
+    fullModel?.[0]!.toLowerCase().replace(/\s+/g, ' ').trim() ?? ''
 
-  // family
-  const family = `galaxy ${variantRaw.toLowerCase().replace(/\s+/g, ' ').trim()}`
-
-  // color: убираем variantRaw из colorRaw, нормализуем
-  let color = colorRaw.toLowerCase()
-  for (const tok of variantRaw.toLowerCase().split(/\s+/)) {
-    color = color.replace(new RegExp(`\\b${tok}\\b`, 'g'), '')
+  // Запасной вариант, если паттерн с модификатором не сработал (редкое имя)
+  if (!family) {
+    const base = searchable.match(/\bGalaxy\s+S\s*\d+/i)
+    if (base) family = `${base[0]!.replace(/\s+/g, ' ').trim()}`.toLowerCase()
   }
-  color = splitGluedColor(color).replace(/titanium/gi, '').replace(/\s+/g, ' ').trim()
-  color = normColor(color)
+  if (!family) return null
 
-  return { filename, brand: 'Samsung', family, size: '', color, cellular: null }
+  const parts = stem.split('__')
+
+  /** Цвет последних «человеческих» сегментов (CamelCase типа icyBlue режем пробелами) */
+  const SAMSUNG_COLOR_HINT =
+    /\b(jet\s*black|space\s*gray|space\s*black|rose\s*gold|silver\s*blue|icy\s*blue|phantom\s*black|cream|mint|sand|purple|coffee|brown|bronze|coral|cobalt|\b(light|dark)\s+silver|titanium|graphite|ruby|steel|ocean|snow|mist|pink|taupe|\b(red|orange|lime|yellow|green|grey|gray|silver|gold|natural|copper)\b|\b(red|pink|purple|lime|silver|gold|green|bronze|coral|graphite|white|black)\b\s*(?:titanium)?)\b/i
+
+  let color = ''
+  for (let i = parts.length - 1; i >= Math.max(parts.length - 6, 1); i--) {
+    let chunk = (parts[i] ?? '').replace(/_/g, ' ')
+    if (/^[\s_a-z0-9+.-]*\d+[a-z0-9._+-]{12,}$/i.test(chunk) && /[+.]/.test(chunk)) continue // tech tail
+    let ch = chunk
+      .replace(/([a-z])([A-Z])/g, '$1 $2')
+      .toLowerCase()
+    ch = splitGluedColor(ch)
+
+    const modelPieces = family.split(/\s+/)
+    for (const tok of modelPieces) {
+      if (tok !== 'galaxy' && tok.length > 1) {
+        ch = ch.replace(new RegExp(`\\b${tok}\\b`, 'gi'), '')
+      }
+    }
+
+    const mch = ch.match(SAMSUNG_COLOR_HINT)
+    if (mch) {
+      color = normColor(mch[0]!.replace(/titanium/gi, ' '))
+      color = splitGluedColor(color).replace(/\s+/g, ' ').trim()
+      if (color) break
+    }
+  }
+
+  return { filename, brand: 'Samsung', family, size: '', color: normColor(color), cellular: null }
 }
 
 /**
