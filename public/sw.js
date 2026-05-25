@@ -1,26 +1,20 @@
-const CACHE_NAME = 'bender-v2'
-const OFFLINE_URL = '/offline.html'
+/**
+ * Раньше перехват navigation + fetch().catch(...) отдавал /offline.html при ЛЮБОЙ ошибке сети
+ * (502, TLS, перезапуск Railway, короткий таймаут) — в Telegram это выглядело как «нет интернета».
+ *
+ * Политика сейчас: не подменять HTML; реальную ошибку загрузки API показывает витрина
+ * («Не удалось загрузить товары» + кнопка). Старый кэш безопасно сносим после обновления.
+ */
+const LEGACY_CACHE = 'bender-v2'
 
-self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then(cache => cache.addAll([OFFLINE_URL]))
-  )
+self.addEventListener('install', () => {
   self.skipWaiting()
 })
 
-self.addEventListener('activate', (event) => {
-  // Clean up old caches
+self.addEventListener('activate', event => {
   event.waitUntil(
     caches.keys().then(keys =>
-      Promise.all(keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k)))
-    ).then(() => self.clients.claim())
+      Promise.all(keys.filter(k => k === LEGACY_CACHE).map(k => caches.delete(k))),
+    ).then(() => self.clients.claim()),
   )
-})
-
-self.addEventListener('fetch', (event) => {
-  if (event.request.mode === 'navigate') {
-    event.respondWith(
-      fetch(event.request).catch(() => caches.match(OFFLINE_URL))
-    )
-  }
 })
