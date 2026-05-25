@@ -69,6 +69,10 @@ describe('parsePhotoUrls', () => {
     expect(parsePhotoUrls('/photos/a.webp, /photos/b.webp')).toEqual(['/photos/a.webp', '/photos/b.webp'])
   })
 
+  it('снимает обрамляющие кавычки (вставка из таблиц)', () => {
+    expect(parsePhotoUrls('"https://a.com/a.webp"')).toEqual(['https://a.com/a.webp'])
+  })
+
   it('поддерживает http (без s)', () => {
     expect(parsePhotoUrls('http://insecure.com/photo.jpg'))
       .toEqual(['http://insecure.com/photo.jpg'])

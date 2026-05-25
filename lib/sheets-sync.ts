@@ -33,13 +33,14 @@ export function capitalizeAttr(val: string): string {
  * Запятая внутри query одного URL (напр. `?size=100,200`) сохраняется.
  */
 export function parsePhotoUrls(cell: string): string[] {
-  if (!cell?.trim()) return []
-  const segments = cell.trim().split(
+  const trimmed = (cell ?? '').replace(/^\uFEFF/, '').trim()
+  if (!trimmed) return []
+  const segments = trimmed.split(
     /,\s*(?=https?:\/\/|\/[^\s,]+\.(?:webp|png|jpg|jpeg))/i,
   )
   const out: string[] = []
   for (const seg of segments) {
-    const p = seg.trim()
+    let p = seg.trim().replace(/^\uFEFF/, '').replace(/^["']+|["']+$/g, '')
     if (!p) continue
     if (/^https?:\/\//i.test(p)) {
       out.push(p)

@@ -1379,7 +1379,14 @@
     function totalWithFee() { const s = subtotal(); return payMethod === 'card' ? s * 1.14 : s }
     function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;') }
     function photoUrl(fid) { return '/api/banner/' + encodeURIComponent(fid) }
-    function resolvePhoto(f) { return (typeof f === 'string' && f.startsWith('http')) ? f : photoUrl(f) }
+    /** Абсолютный URL (/https), путь CDN (/photos/*.webp), иначе file_id Telegram → /api/banner */
+    function resolvePhoto(f) {
+      const raw = typeof f === 'string' ? f.replace(/\uFEFF/g, '').trim() : String(f ?? '').trim()
+      if (/^https?:\/\//i.test(raw)) return raw
+      if (raw.startsWith('//')) return 'https:' + raw
+      if (raw.startsWith('/') && /\.(webp|png|jpg|jpeg)(\?[^\s]*)?$/i.test(raw)) return raw
+      return photoUrl(raw)
+    }
 
     // ── Variant helpers ───────────────────────────────────────────────────────
     function findVariant(product, selectedAttrs) {
@@ -1398,6 +1405,8 @@
         if (Array.isArray(variant.photos) && variant.photos.length) {
           return variant.photos.map(resolvePhoto)
         }
+        if (Array.isArray(p.photos) && p.photos.length) return p.photos.map(resolvePhoto)
+        if (p.photoUrl) return [resolvePhoto(p.photoUrl)]
         return []
       }
       // Превью товара без выбранного ТП
@@ -1951,7 +1960,7 @@
       grid.innerHTML = '<div class="state-msg">Загрузка…</div>'
       activeBrand = ''
       try {
-        const res  = await fetch('/api/products')
+        const res  = await fetch('/api/products', { cache: 'no-store' })
         if (!res.ok) throw new Error('HTTP ' + res.status)
         allProducts = await res.json()
         computeBrands()

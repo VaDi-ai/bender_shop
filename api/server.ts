@@ -590,6 +590,21 @@ export function startApiServer(bot?: Telegraf): Server {
     })
   })
 
+  /** Витрина раньше смотрела только на variant.photos; в БД иногда есть только photoUrls — склеиваем уникально. */
+  function variantPhotosPublic(v: { photos?: string[] | null; photoUrls?: string[] | null }): string[] {
+    const out: string[] = []
+    const seen = new Set<string>()
+    const pushRaw = (x: unknown) => {
+      const s = typeof x === 'string' ? x.replace(/\uFEFF/g, '').trim() : ''
+      if (!s || seen.has(s)) return
+      seen.add(s)
+      out.push(s)
+    }
+    for (const s of v.photos ?? []) pushRaw(s)
+    for (const s of v.photoUrls ?? []) pushRaw(s)
+    return out
+  }
+
   // ── GET /api/products ──────────────────────────────────────────────────────
   app.get('/api/products', async (req, res, next) => {
     try {
@@ -635,6 +650,7 @@ export function startApiServer(bot?: Telegraf): Server {
               quantity: true,
               attributes: true,
               photos: true,
+              photoUrls: true,
               inStock: true,
             },
           },
@@ -667,10 +683,11 @@ export function startApiServer(bot?: Telegraf): Server {
           quantity: v.quantity,
           inStock: v.inStock,
           attributes: v.attributes,
-          photos: v.photos,
+          photos: variantPhotosPublic(v),
         })),
       }))
 
+      res.set('Cache-Control', 'private, no-store, must-revalidate')
       res.json(payload)
     } catch (err) {
       if (!res.headersSent) next(err)
