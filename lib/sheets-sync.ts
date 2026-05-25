@@ -29,13 +29,27 @@ export function capitalizeAttr(val: string): string {
 
 /**
  * Парсит строку фото из ячейки Google Sheets.
- * Несколько URL разделяются запятой (перед http).
- * Фильтруются только валидные https:// URL.
+ * Несколько URL через запятую (перед `https://`, `http://` или вторым `/...webp`).
+ * Запятая внутри query одного URL (напр. `?size=100,200`) сохраняется.
  */
 export function parsePhotoUrls(cell: string): string[] {
   if (!cell?.trim()) return []
-  const parts = cell.split(/,\s*(?=https?:\/\/)/)
-  return parts.map(u => u.trim()).filter(u => /^https?:\/\//.test(u))
+  const segments = cell.trim().split(
+    /,\s*(?=https?:\/\/|\/[^\s,]+\.(?:webp|png|jpg|jpeg))/i,
+  )
+  const out: string[] = []
+  for (const seg of segments) {
+    const p = seg.trim()
+    if (!p) continue
+    if (/^https?:\/\//i.test(p)) {
+      out.push(p)
+      continue
+    }
+    if (p.startsWith('/') && /\.(webp|png|jpg|jpeg)(\?[^\s]*)?$/i.test(p)) {
+      out.push(p)
+    }
+  }
+  return out
 }
 
 /** Уникальные URL фото по всем вариантам (порядок: как в таблице, без дублей). */
@@ -512,11 +526,9 @@ export async function syncProductsFromSheets(shouldAbort?: () => boolean): Promi
             attributes: { ...v.attrs, fullName: v.fullName },
           }
 
-          // Если есть фото из таблицы — перезаписать photos
-          if (v.photoUrls.length > 0) {
-            updateData.photos = v.photoUrls
-            updateData.photoUrls = v.photoUrls
-          }
+          // Фото всегда зеркало таблицы: пустая ячейка / нераспознанный URL → сбросить в каталоге
+          updateData.photos = v.photoUrls.length > 0 ? v.photoUrls : []
+          updateData.photoUrls = v.photoUrls.length > 0 ? v.photoUrls : []
 
           if (MARKUP_RULES_ENABLED) {
             const sheetCost = v.costPrice
@@ -599,11 +611,19 @@ export async function syncProductsFromSheets(shouldAbort?: () => boolean): Promi
       // Карусель в магазине: на уровне Product храним объединение URL со всех вариантов
       // (в таблице фото часто только у строк вариантов; раньше в Product попадало одно preview).
       const mergedPhotos = mergeVariantPhotoUrls(group.variants)
-      if (mergedPhotos.length > 0) {
+      try {
         await prisma.product.update({
           where: { id: product.id },
-          data: { photos: mergedPhotos, photoUrl: mergedPhotos[0]! },
-        }).catch(() => {})
+          data:
+            mergedPhotos.length > 0
+              ? { photos: mergedPhotos, photoUrl: mergedPhotos[0]! }
+              : { photos: [], photoUrl: null },
+        })
+      } catch (carouselErr) {
+        log.warn('Sheets sync product carousel update failed', {
+          productId: product.id,
+          error: String(carouselErr),
+        })
       }
     } catch (err) {
       const msg = `Product "${group.productName}" (${group.category}): ${err}`

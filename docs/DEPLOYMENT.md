@@ -115,6 +115,8 @@ npm run match-photos -- ./staging-all-brands --sheet ./reports https://bendersho
 
 Порядок: **webp в zip → `upload-photos` → match с `--write --clear-photos`**, затем **`/sync`** в боте (или автосинк), чтобы Postgres/витрина подхватили ссылки.
 
+В колонке **«Фото»** должны быть **обычный текст или отображаемые URL**, а не ячейка `=HYPERLINK(..., "Подпись")` с текстом-подписью — иначе API Sheets отдаёт подпись без `https://`, и синк игнорирует такие значения.
+
 Использует тот же `GOOGLE_SERVICE_ACCOUNT_KEY` + `GOOGLE_SHEET_ID` что и `/sync`. Batch-update в один API-вызов (несколько диапазонов), retry на 429.
 
 ## Database Migrations

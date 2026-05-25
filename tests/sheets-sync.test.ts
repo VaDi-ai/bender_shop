@@ -64,6 +64,11 @@ describe('parsePhotoUrls', () => {
       .toEqual(['https://a.com/1.jpg', 'https://b.com/2.jpg'])
   })
 
+  it('принимает относительные пути CDN', () => {
+    expect(parsePhotoUrls('/photos/item.webp')).toEqual(['/photos/item.webp'])
+    expect(parsePhotoUrls('/photos/a.webp, /photos/b.webp')).toEqual(['/photos/a.webp', '/photos/b.webp'])
+  })
+
   it('поддерживает http (без s)', () => {
     expect(parsePhotoUrls('http://insecure.com/photo.jpg'))
       .toEqual(['http://insecure.com/photo.jpg'])

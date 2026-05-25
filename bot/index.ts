@@ -757,9 +757,26 @@ bot.command('sync', async (ctx) => {
     const { syncProductsFromSheets, checkStalePrices, formatStaleSupplierMessage } = await import('../lib/sheets-sync')
     const result = await syncProductsFromSheets()
 
-    await ctx.reply(
-      `✅ Синхронизация завершена:\n➕ ${result.created} создано\n🔄 ${result.updated} обновлено\n🔴 ${result.disabled} снято\n❌ ${result.errors.length} ошибок`
-    )
+    const lines = [
+      '✅ Синхронизация завершена:',
+      `📦 Строк из таблицы: ${result.total}`,
+      `➕ ${result.created} создано`,
+      `🔄 ${result.updated} обновлено`,
+      `🔴 ${result.disabled} снято`,
+      `❌ ${result.errors.length} ошибок`,
+    ]
+    if (result.errors.length > 0) {
+      lines.push('', 'Подробности:')
+      const maxChars = 600
+      for (let i = 0; i < Math.min(5, result.errors.length); i++) {
+        const e = result.errors[i] ?? ''
+        lines.push(`• ${e.length > maxChars ? `${e.slice(0, maxChars)}…` : e}`)
+      }
+      if (result.errors.length > 5) {
+        lines.push(`…ещё ошибок: ${result.errors.length - 5}`)
+      }
+    }
+    await ctx.reply(lines.join('\n'))
 
     // Проверить stale prices
     const staleItems = await checkStalePrices()
