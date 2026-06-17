@@ -5,7 +5,6 @@ import {
   colorsCompatible,
   parseSamsungGalaxySFamilyFromText,
 } from '../lib/photo-match-normalize'
-import { normalizeCdnPhotoUrl } from '../lib/photo-flat-name'
 
 describe('photo-match-normalize', () => {
   it('canonicalFamily maps iphone air to iphone 17 air', () => {
@@ -28,12 +27,5 @@ describe('photo-match-normalize', () => {
 
   it('colorsCompatible pink gold', () => {
     expect(colorsCompatible('pink', 'pink gold', 'galaxy buds 4 pro')).toBe(true)
-  })
-
-  it('normalizeCdnPhotoUrl fixes Apple Watch S11 double-space color filenames', () => {
-    expect(normalizeCdnPhotoUrl('https://bendershop.store/photos/Apple%20Watch%20S11%20Silver.png'))
-      .toBe('https://bendershop.store/photos/Apple%20Watch%20S11%20%20Silver.png')
-    expect(normalizeCdnPhotoUrl('/photos/Apple Watch S11 Space Gray.png'))
-      .toBe('/photos/Apple Watch S11  Space Gray.png')
   })
 })

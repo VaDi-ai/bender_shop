@@ -100,6 +100,11 @@ describe('filterPlaceholderPhotoUrls / sanitizeSyncedPhotoUrls', () => {
     expect(sanitizeSyncedPhotoUrls('https://x/a.webp, /no-photo.webp, https://bendershop.store/no-photo.png'))
       .toEqual(['https://x/a.webp'])
   })
+
+  it('parsePhotoUrls: убирает хвост « ,» после расширения', () => {
+    expect(parsePhotoUrls('https://bendershop.store/photos/foo.png ,'))
+      .toEqual(['https://bendershop.store/photos/foo.png'])
+  })
 })
 
 describe('mergeVariantPhotoUrls', () => {

@@ -28,6 +28,12 @@ import { getApiKeyValue } from '../lib/api-key-store'
 import { handleInstagramVerification } from '../webhooks/instagram'
 import { DeliveryType } from '../generated/prisma/client'
 import { Decimal } from '@prisma/client/runtime/client'
+import {
+  buildCdnPhotoIndex,
+  cleanPhotoUrl,
+  readPhotoFilenamesFromDir,
+  resolveCdnPhotoUrl,
+} from '../lib/cdn-photo-resolve'
 import { fmtPrice, formatProductNameWithAttrs } from '../lib/format'
 import log from '../lib/logger'
 import { flattenRelativePhotoPath } from '../lib/photo-flat-name'
@@ -377,6 +383,16 @@ export function startApiServer(bot?: Telegraf): Server {
   if (!fs.existsSync(photosDir)) {
     log.warn('PHOTOS_DIR does not exist, /photos route will return 404', { photosDir })
   }
+  const cdnPhotoIndex = buildCdnPhotoIndex(readPhotoFilenamesFromDir(photosDir))
+  if (cdnPhotoIndex.exact.size > 0) {
+    log.info('CDN photo index built', { files: cdnPhotoIndex.exact.size })
+  }
+
+  function normalizePublicPhotoUrl(url: string): string {
+    const s = cleanPhotoUrl(url)
+    if (!s) return s
+    return resolveCdnPhotoUrl(s, cdnPhotoIndex.exact.size > 0 ? cdnPhotoIndex : null)
+  }
   app.use('/photos', express.static(photosDir, {
     maxAge: '1d',
     fallthrough: true,
@@ -613,7 +629,7 @@ export function startApiServer(bot?: Telegraf): Server {
     const out: string[] = []
     const seen = new Set<string>()
     const pushRaw = (x: unknown) => {
-      const s = typeof x === 'string' ? x.replace(/\uFEFF/g, '').trim() : ''
+      const s = typeof x === 'string' ? normalizePublicPhotoUrl(x) : ''
       if (!s || seen.has(s)) return
       seen.add(s)
       out.push(s)
@@ -684,8 +700,8 @@ export function startApiServer(bot?: Telegraf): Server {
         price: p.price.toString(),
         category: p.category?.name ?? '',
         categoryId: p.categoryId ?? null,
-        photoUrl: p.photoUrl ?? '',
-        photos: p.photos,
+        photoUrl: normalizePublicPhotoUrl(p.photoUrl ?? ''),
+        photos: (p.photos ?? []).map(normalizePublicPhotoUrl).filter(Boolean),
         quantity: p.quantity,
         badge: p.badge ?? null,
         brand: p.brand ?? null,

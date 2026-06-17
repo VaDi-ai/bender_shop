@@ -1392,12 +1392,6 @@
       else if (raw.startsWith('//')) url = 'https:' + raw
       else if (raw.startsWith('/') && /\.(webp|png|jpg|jpeg)(\?[^\s]*)?$/i.test(raw)) url = raw
       else url = photoUrl(raw)
-      // CDN: Apple Watch S11 — двойной пробел перед Silver / Space Gray
-      if (/\/photos\/Apple%20Watch%20S11%20(Silver|Space%20Gray)\./i.test(url)) {
-        url = url.replace(/S11%20(Silver|Space%20Gray)\./i, 'S11%20%20$1.')
-      } else if (/\/photos\/Apple Watch S11 (Silver|Space Gray)\./i.test(url)) {
-        url = url.replace(/S11 (Silver|Space Gray)\./i, 'S11  $1.')
-      }
       return url
     }
 

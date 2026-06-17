@@ -25,20 +25,4 @@ export function flattenRelativePhotoPath(nativeRel: string): string {
   return sanitizeFlatPhotoName(posix.split('/').join('__'))
 }
 
-/**
- * Нормализует URL фото под фактические имена на CDN.
- * Пример: Apple Watch S11 Silver.png → Apple Watch S11␠␠Silver.png (двойной пробел в архиве).
- */
-export function normalizeCdnPhotoUrl(url: string): string {
-  const t = String(url ?? '').trim()
-  if (!t) return t
-  return t
-    .replace(
-      /(\/photos\/Apple%20Watch%20S11)%20(Silver|Space%20Gray)(\.(?:png|webp|jpe?g))/i,
-      '$1%20%20$2$3',
-    )
-    .replace(
-      /(\/photos\/Apple Watch S11) (Silver|Space Gray)(\.(?:png|webp|jpe?g))/i,
-      '$1  $2$3',
-    )
-}
+export { normalizeCdnPhotoUrl } from './cdn-photo-resolve'

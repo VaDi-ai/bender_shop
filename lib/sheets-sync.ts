@@ -11,7 +11,7 @@ import { Sentry } from './sentry'
 import log from './logger'
 import { prisma } from './prisma'
 import { readSheet, getProductSheetNames } from './google-sheets'
-import { normalizeCdnPhotoUrl } from './photo-flat-name'
+import { normalizeCdnPhotoUrl, cleanPhotoUrl } from './cdn-photo-resolve'
 import {
   applyMarkupRules as _applyMarkupRules,
   loadRules as _loadRules,
@@ -41,7 +41,7 @@ export function parsePhotoUrls(cell: string): string[] {
   )
   const out: string[] = []
   for (const seg of segments) {
-    let p = seg.trim().replace(/^\uFEFF/, '').replace(/^["']+|["']+$/g, '')
+    let p = cleanPhotoUrl(seg.replace(/^["']+|["']+$/g, ''))
     if (!p) continue
     if (/^https?:\/\//i.test(p)) {
       out.push(p)
