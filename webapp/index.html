@@ -492,7 +492,7 @@
 
     /* Photo wrap: лёгкий «studio» градиент + разделитель */
     .product-photo-wrap {
-      position: relative; width: 100%; aspect-ratio: 1 / 1;
+      position: relative; width: 100%; aspect-ratio: 4 / 5;
       background:
         radial-gradient(ellipse 88% 72% at 50% 38%, rgba(38, 38, 42, 0.35) 0%, transparent 58%),
         radial-gradient(ellipse 100% 90% at 50% 100%, rgba(0,0,0,0.45) 0%, transparent 55%),
@@ -505,6 +505,7 @@
     }
     .product-photo { width: 100%; height: 100%; object-fit: contain; display: block; pointer-events: none; transition: opacity 0.15s; background: transparent; }
     .product-photo-ph { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 40px; pointer-events: none; background: var(--photo-matte); }
+    .product-photo-ph img, .modal-carousel-ph img { width: 72%; height: 72%; max-width: 100%; max-height: 100%; object-fit: contain; opacity: 0.6; }
     .product-badge {
       position: absolute; top: 8px; left: 8px; z-index: 2;
       background: #0a0a0a; color: var(--accent);
@@ -594,7 +595,7 @@
 
     /* Карусель: та же «сцена», спокойнее отделена от панели */
     .modal-carousel {
-      position: relative; width: 100%; max-height: 55vh;
+      position: relative; width: 100%; aspect-ratio: 4 / 5; max-height: min(55vh, 520px); min-height: 240px;
       background:
         radial-gradient(ellipse 88% 72% at 50% 38%, rgba(38, 38, 42, 0.35) 0%, transparent 58%),
         radial-gradient(ellipse 100% 90% at 50% 100%, rgba(0,0,0,0.45) 0%, transparent 55%),
@@ -606,7 +607,11 @@
         0 12px 40px rgba(0, 0, 0, 0.4);
     }
     .modal-carousel-img { width: 100%; height: 100%; object-fit: contain; display: block; background: transparent; }
-    .modal-carousel-ph { width: 100%; height: 280px; display: flex; align-items: center; justify-content: center; font-size: 72px; background: var(--photo-matte); }
+    .modal-carousel-ph {
+      position: absolute; inset: 0; width: 100%; height: 100%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 72px; background: var(--photo-matte);
+    }
     .product-photo-wrap, .modal-carousel { background-color: var(--photo-matte) !important; }
     .product-photo, .modal-carousel-img { background-color: transparent !important; }
     .cart-item-thumb, img[src*="/api/"] { background-color: var(--surface) !important; }
@@ -1133,7 +1138,7 @@
       <button class="modal-close-btn" id="modalCloseBtn" aria-label="Закрыть">✕</button>
       <div class="modal-carousel" id="modalCarousel">
         <div class="modal-badge" id="modalBadge" style="display:none"></div>
-        <div class="modal-carousel-ph" id="modalCarouselPh"><img src="/no-photo.webp" alt="" style="width:100%;height:100%;object-fit:cover;opacity:0.6;" onerror="this.onerror=null;this.src='/no-photo.png'"></div>
+        <div class="modal-carousel-ph" id="modalCarouselPh"><img src="/no-photo.webp" alt=""></div>
         <img class="modal-carousel-img" id="modalCarouselImg" src="" alt="" style="display:none" loading="lazy" decoding="async" onerror="handleProductPhotoError(this)">
         <button class="modal-carousel-arrow modal-carousel-prev hidden" id="modalCarouselPrev">‹</button>
         <button class="modal-carousel-arrow modal-carousel-next hidden" id="modalCarouselNext">›</button>
@@ -1382,10 +1387,18 @@
     /** Абсолютный URL (/https), путь CDN (/photos/*.webp), иначе file_id Telegram → /api/banner */
     function resolvePhoto(f) {
       const raw = typeof f === 'string' ? f.replace(/\uFEFF/g, '').trim() : String(f ?? '').trim()
-      if (/^https?:\/\//i.test(raw)) return raw
-      if (raw.startsWith('//')) return 'https:' + raw
-      if (raw.startsWith('/') && /\.(webp|png|jpg|jpeg)(\?[^\s]*)?$/i.test(raw)) return raw
-      return photoUrl(raw)
+      let url
+      if (/^https?:\/\//i.test(raw)) url = raw
+      else if (raw.startsWith('//')) url = 'https:' + raw
+      else if (raw.startsWith('/') && /\.(webp|png|jpg|jpeg)(\?[^\s]*)?$/i.test(raw)) url = raw
+      else url = photoUrl(raw)
+      // CDN: Apple Watch S11 — двойной пробел перед Silver / Space Gray
+      if (/\/photos\/Apple%20Watch%20S11%20(Silver|Space%20Gray)\./i.test(url)) {
+        url = url.replace(/S11%20(Silver|Space%20Gray)\./i, 'S11%20%20$1.')
+      } else if (/\/photos\/Apple Watch S11 (Silver|Space Gray)\./i.test(url)) {
+        url = url.replace(/S11 (Silver|Space Gray)\./i, 'S11  $1.')
+      }
+      return url
     }
 
     /** Убирает дубли URL и ограничивает карусель (много битых ссылок = «кипа» одинаковых плейсхолдеров). */
@@ -1416,20 +1429,63 @@
       } catch (_) {}
     }
 
+    /** HTML заглушки для ячеек без фото (Q пустая) или при 404 CDN. */
+    function placeholderImgHtml() {
+      return '<img src="/no-photo.webp" alt="" onerror="this.onerror=null;this.src=\'/no-photo.png\'">'
+    }
+
+    function showCardPhotoPlaceholder(photoWrap) {
+      if (!photoWrap) return
+      const dotsEl = photoWrap.querySelector('.product-hover-dots')
+      let cardImg = photoWrap.querySelector('.product-photo')
+      let phEl = photoWrap.querySelector('.product-photo-ph')
+      if (cardImg) cardImg.style.display = 'none'
+      if (!phEl) {
+        phEl = document.createElement('div')
+        phEl.className = 'product-photo-ph'
+        phEl.innerHTML = placeholderImgHtml()
+        photoWrap.insertBefore(phEl, dotsEl || null)
+      } else {
+        phEl.style.display = 'flex'
+      }
+      if (dotsEl) {
+        dotsEl.innerHTML = ''
+        dotsEl.style.display = 'none'
+      }
+      photoWrap.dataset.photos = '[]'
+    }
+
+    function showModalPhotoPlaceholder() {
+      const imgEl = document.getElementById('modalCarouselImg')
+      const phEl = document.getElementById('modalCarouselPh')
+      const prevEl = document.getElementById('modalCarouselPrev')
+      const nextEl = document.getElementById('modalCarouselNext')
+      const dotsEl = document.getElementById('modalCarouselDots')
+      if (imgEl) {
+        imgEl.style.display = 'none'
+        try { imgEl.removeAttribute('src') } catch (_) {}
+      }
+      if (phEl) phEl.style.display = 'flex'
+      prevEl?.classList.add('hidden')
+      nextEl?.classList.add('hidden')
+      if (dotsEl) dotsEl.innerHTML = ''
+    }
+
     /**
-     * Битый URL фото — скрываем картинку. Заглушка Бендера только когда getProductPhotos()
-     * вернул [] (пустая колонка Q), а не при 404 CDN.
+     * Битый URL → заглушка в той же ячейке (высота сохраняется).
+     * Пустая Q уже приходит как photos=[] и renderModalCarousel/showCard и так ставят ph.
      */
     function handleProductPhotoError(el) {
       if (!el || el.tagName !== 'IMG') return
       try {
         el.dataset.broken = '1'
-        el.style.display = 'none'
-        el.style.opacity = '0'
         if (el.id === 'modalCarouselImg') {
-          const phEl = document.getElementById('modalCarouselPh')
-          if (phEl && (!modalPhotos || modalPhotos.length === 0)) phEl.style.display = 'flex'
+          showModalPhotoPlaceholder()
+          return
         }
+        const wrap = el.closest('.product-photo-wrap')
+        if (wrap) showCardPhotoPlaceholder(wrap)
+        else el.style.display = 'none'
       } catch (_) {}
     }
     window.handleProductPhotoError = handleProductPhotoError
@@ -2124,7 +2180,7 @@
   ${badgeHtml}
   ${mainPhoto
     ? `<img class="product-photo" src="${esc(mainPhoto)}" alt=""${i >= 6 ? ' loading="lazy"' : ''} decoding="async" onerror="handleProductPhotoError(this)">`
-    : '<div class="product-photo-ph"><img src="/no-photo.webp" alt="" style="width:100%;height:100%;object-fit:cover;opacity:0.6;" onerror="this.onerror=null;this.src=\'/no-photo.png\'"></div>'}
+    : '<div class="product-photo-ph">' + placeholderImgHtml() + '</div>'}
   ${photos.length > 1
     ? `<div class="product-hover-dots">${photos.slice(0, Math.min(photos.length, 8)).map((_, j) => `<span class="${j === 0 ? 'active' : ''}"></span>`).join('')}</div>`
     : ''}
@@ -2273,7 +2329,7 @@
         let cardImg = photoWrap.querySelector('.product-photo')
         let phEl = photoWrap.querySelector('.product-photo-ph')
         const dotsEl = photoWrap.querySelector('.product-hover-dots')
-        const phInner = '<img src="/no-photo.webp" alt="" style="width:100%;height:100%;object-fit:cover;opacity:0.6;" onerror="this.onerror=null;this.src=\'/no-photo.png\'">'
+        const phInner = placeholderImgHtml()
 
         if (newPhotos.length > 0) {
           if (phEl) phEl.style.display = 'none'
@@ -2285,7 +2341,7 @@
           }
           cardImg.style.display = 'block'
           resetProductImgFallback(cardImg)
-          cardImg.onerror = function () { handleProductPhotoError(cardImg) }
+          cardImg.onerror = function () { showCardPhotoPlaceholder(photoWrap) }
           cardImg.src = newPhotos[0]
           if (dotsEl) {
             if (newPhotos.length > 1) {
@@ -2324,7 +2380,10 @@
           resetProductImgFallback(img)
           img.onerror = function () {
             broken.add(photoIdx)
-            if (broken.size >= photos.length) return
+            if (broken.size >= photos.length) {
+              showCardPhotoPlaceholder(wrap)
+              return
+            }
             let next = photoIdx
             for (let step = 0; step < photos.length; step++) {
               next = (next + 1) % photos.length
@@ -2492,31 +2551,12 @@
       if (photos.length > 0) {
         if (modalPhotoIdx >= photos.length) modalPhotoIdx = 0
         resetProductImgFallback(imgEl)
-        imgEl.style.display = 'block'
-        imgEl.onerror = function () {
-          if (photos.length <= 1) {
-            handleProductPhotoError(imgEl)
-            return
-          }
-          const start = modalPhotoIdx
-          let attempts = 0
-          while (attempts < photos.length) {
-            modalPhotoIdx = (modalPhotoIdx + 1) % photos.length
-            attempts++
-            if (modalPhotoIdx === start) break
-            resetProductImgFallback(imgEl)
-            imgEl.style.display = 'block'
-            imgEl.src = photos[modalPhotoIdx]
-            return
-          }
-          handleProductPhotoError(imgEl)
-        }
+        phEl.style.display = 'none'
+        imgEl.onerror = function () { showModalPhotoPlaceholder() }
         imgEl.src = photos[modalPhotoIdx]
         imgEl.style.display = 'block'
-        phEl.style.display  = 'none'
       } else {
-        imgEl.style.display = 'none'
-        phEl.style.display  = 'flex'
+        showModalPhotoPlaceholder()
       }
 
       const multi = photos.length > 1

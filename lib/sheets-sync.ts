@@ -11,6 +11,7 @@ import { Sentry } from './sentry'
 import log from './logger'
 import { prisma } from './prisma'
 import { readSheet, getProductSheetNames } from './google-sheets'
+import { normalizeCdnPhotoUrl } from './photo-flat-name'
 import {
   applyMarkupRules as _applyMarkupRules,
   loadRules as _loadRules,
@@ -77,7 +78,7 @@ export function filterPlaceholderPhotoUrls(urls: string[]): string[] {
 
 /** Парсинг ячейки «Фото» для записи в БД (без заглушек сайта). */
 export function sanitizeSyncedPhotoUrls(cell: string): string[] {
-  return filterPlaceholderPhotoUrls(parsePhotoUrls(cell))
+  return filterPlaceholderPhotoUrls(parsePhotoUrls(cell).map(normalizeCdnPhotoUrl))
 }
 
 /** Уникальные URL фото по всем вариантам (порядок: как в таблице, без дублей). */
