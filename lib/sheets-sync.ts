@@ -10,7 +10,7 @@ import { Decimal } from '@prisma/client/runtime/client'
 import { Sentry } from './sentry'
 import log from './logger'
 import { prisma } from './prisma'
-import { readSheet, getSheetNames } from './google-sheets'
+import { readSheet, getProductSheetNames } from './google-sheets'
 import {
   applyMarkupRules as _applyMarkupRules,
   loadRules as _loadRules,
@@ -81,6 +81,8 @@ export function sanitizeSyncedPhotoUrls(cell: string): string[] {
 }
 
 /** Уникальные URL фото по всем вариантам (порядок: как в таблице, без дублей). */
+const MAX_MERGED_PRODUCT_PHOTOS = 12
+
 export function mergeVariantPhotoUrls(variants: { photoUrls: string[] }[]): string[] {
   const seen = new Set<string>()
   const out: string[] = []
@@ -90,14 +92,13 @@ export function mergeVariantPhotoUrls(variants: { photoUrls: string[] }[]): stri
       if (!u || seen.has(u)) continue
       seen.add(u)
       out.push(u)
+      if (out.length >= MAX_MERGED_PRODUCT_PHOTOS) return out
     }
   }
   return out
 }
 
 const DEFAULT_QTY = parseInt(process.env.DEFAULT_STOCK_QTY || '3', 10) // если «В наличие» пусто
-
-const PRODUCT_SHEET_NAME = process.env.PRODUCT_SHEET_NAME || 'Лист1'
 
 const MARKUP_RULES_ENABLED = process.env.MARKUP_RULES_ENABLED === 'true'
 
@@ -190,21 +191,15 @@ export interface SheetRow {
 }
 
 /**
- * Читает первый лист таблицы и возвращает массив строк.
+ * Парсит один лист таблицы (с собственной строкой заголовков) в массив строк.
+ * Структура листов одинаковая, но маппинг колонок вычисляется для каждого листа
+ * отдельно — это устойчиво к мелким перестановкам колонок между листами.
  */
-export async function readAllProducts(): Promise<SheetRow[]> {
-  const allSheets = await getSheetNames()
-  const sheetName = allSheets.includes(PRODUCT_SHEET_NAME)
-    ? PRODUCT_SHEET_NAME
-    : allSheets[0]  // Fallback на первый лист если PRODUCT_SHEET_NAME не найден
-
-  if (!sheetName) return []
-
-  const data = await readSheet(sheetName)
-  if (data.length === 0) return []
+export function parseSheetRows(sheetName: string, data: string[][]): SheetRow[] {
+  const rows: SheetRow[] = []
+  if (data.length === 0) return rows
 
   const COL = mapHeaders(data[0]!)
-  const rows: SheetRow[] = []
 
   for (let i = 1; i < data.length; i++) {
     const row = data[i]!
@@ -253,6 +248,37 @@ export async function readAllProducts(): Promise<SheetRow[]> {
   }
 
   return rows
+}
+
+/**
+ * Читает все листы таблицы (кроме служебных, напр. «не использовать») и
+ * возвращает объединённый массив строк. Полистовой парсинг: каждый лист
+ * читается отдельно со своими заголовками; ошибка одного листа не роняет sync.
+ */
+export async function readAllProducts(): Promise<SheetRow[]> {
+  const sheetNames = await getProductSheetNames()
+  if (sheetNames.length === 0) return []
+
+  const allRows: SheetRow[] = []
+
+  for (const sheetName of sheetNames) {
+    try {
+      const data = await readSheet(sheetName)
+      if (data.length === 0) continue
+      const rows = parseSheetRows(sheetName, data)
+      log.debug('Sheets sync sheet parsed', { sheetName, rows: rows.length })
+      allRows.push(...rows)
+    } catch (err) {
+      // Один проблемный лист не должен ломать весь товарный учёт
+      Sentry.captureException(err, { tags: { operation: 'sheets-sync-read', sheetName } })
+      log.error('Sheets sync failed to read sheet', {
+        sheetName,
+        error: err instanceof Error ? err.message : String(err),
+      })
+    }
+  }
+
+  return allRows
 }
 
 /**
@@ -410,8 +436,9 @@ export async function syncProductsFromSheets(shouldAbort?: () => boolean): Promi
   }
   const cachedApplyRules = (cost: number): number => _applyMarkupRules(cost, cachedRules ?? [])
 
-  // Очередь обратной записи пересчитанных рекомендованных цен в Google Sheets
-  const sheetWritebacks: Array<{ rowIndex: number; price: number }> = []
+  // Очередь обратной записи пересчитанных рекомендованных цен в Google Sheets.
+  // sheetName обязателен: строки приходят с разных листов (полистовой учёт).
+  const sheetWritebacks: Array<{ sheetName: string; rowIndex: number; price: number }> = []
 
   for (const [key, group] of groups) {
     if (shouldAbort?.()) {
@@ -572,7 +599,7 @@ export async function syncProductsFromSheets(shouldAbort?: () => boolean): Promi
               updateData.costPrice = new Decimal(sheetCost)
               updateData.lastSyncedCostPrice = new Decimal(sheetCost)
               updateData.price = new Decimal(newPrice)
-              sheetWritebacks.push({ rowIndex: v.rowIndex, price: newPrice })
+              sheetWritebacks.push({ sheetName: v.sheetName, rowIndex: v.rowIndex, price: newPrice })
             } else if (sheetPrice !== dbPrice && sheetPrice > 0) {
               // Рекомендованная изменилась вручную → уважать
               updateData.price = new Decimal(sheetPrice)
@@ -665,7 +692,7 @@ export async function syncProductsFromSheets(shouldAbort?: () => boolean): Promi
     try {
       const { batchUpdate: batchUpdateSheets } = await import('./google-sheets')
       const updates = sheetWritebacks.map(wb => ({
-        range: "'" + PRODUCT_SHEET_NAME + "'!" + WRITEBACK_COLS.price + wb.rowIndex,
+        range: "'" + wb.sheetName + "'!" + WRITEBACK_COLS.price + wb.rowIndex,
         values: [[wb.price]],
       }))
       await batchUpdateSheets(updates)
@@ -1556,20 +1583,20 @@ export async function checkStalePrices(): Promise<StaleItem[]> {
   const now = Date.now()
   const staleItems: StaleItem[] = []
 
-  const allSheets = await getSheetNames()
-  const sheetName = allSheets.includes(PRODUCT_SHEET_NAME) ? PRODUCT_SHEET_NAME : allSheets[0]
-  if (!sheetName) return staleItems
+  const sheetNames = await getProductSheetNames()
+  if (sheetNames.length === 0) return staleItems
 
-  try {
-    const data = await readSheet(sheetName)
-    if (data.length === 0) return staleItems
+  for (const sheetName of sheetNames) {
+    try {
+      const data = await readSheet(sheetName)
+      if (data.length === 0) continue
 
-    const COL = mapHeaders(data[0]!)
-    for (let i = 1; i < data.length; i++) {
-      const row = data[i]!
-      const name = col(row, COL.fullName)
-      const price = col(row, COL.price)
-      const dateStr = col(row, COL.updateDate)
+      const COL = mapHeaders(data[0]!)
+      for (let i = 1; i < data.length; i++) {
+        const row = data[i]!
+        const name = col(row, COL.fullName)
+        const price = col(row, COL.price)
+        const dateStr = col(row, COL.updateDate)
 
         if (!name || !price) continue
         // Пропускаем категории не зависящие от курса
@@ -1602,8 +1629,9 @@ export async function checkStalePrices(): Promise<StaleItem[]> {
           staleItems.push({ name, sheetName, lastUpdate: dateStr || 'никогда' })
         }
       }
-  } catch (err) {
-    log.error('Stale prices check failed', { sheetName, error: String(err) })
+    } catch (err) {
+      log.error('Stale prices check failed', { sheetName, error: String(err) })
+    }
   }
 
   return staleItems

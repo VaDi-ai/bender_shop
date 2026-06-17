@@ -245,12 +245,10 @@ async function writeEnrichToSheets(
   if (!description && !specs) return 0
 
   try {
-    const { readSheet, getSheetNames, batchUpdate } = await import('./google-sheets')
+    const { readSheet, getProductSheetNames, batchUpdate } = await import('./google-sheets')
 
-    const PRODUCT_SHEET_NAME = process.env.PRODUCT_SHEET_NAME || 'Лист1'
-    const allSheets = await getSheetNames()
-    const sheetName = allSheets.includes(PRODUCT_SHEET_NAME) ? PRODUCT_SHEET_NAME : allSheets[0]
-    if (!sheetName) return 0
+    const sheetNames = await getProductSheetNames()
+    if (sheetNames.length === 0) return 0
 
     // Collect all fullNames from product variants
     const variants = await prisma.productVariant.findMany({
@@ -264,29 +262,38 @@ async function writeEnrichToSheets(
     }
     if (fullNames.size === 0) return 0
 
-    // Read sheet and find matching rows (skip already-filled cells)
-    const data = await readSheet(sheetName)
     const specsText = specs
       ? Object.entries(specs).map(([k, v]) => `${k}: ${v}`).join('\n')
       : ''
 
+    // Полистовой поиск совпадающих строк по всем листам товарного учёта
     const batchData: { range: string; values: (string | number)[][] }[] = []
     let matchCount = 0
 
-    for (let i = 1; i < data.length; i++) {
-      const sheetFullName = (data[i]?.[4] ?? '').toString().trim()  // Column E (index 4)
-      if (!fullNames.has(sheetFullName)) continue
-
-      matchCount++
-      const row = i + 1  // 1-indexed for Sheets API
-      const existingDesc = (data[i]?.[9] ?? '').toString().trim()   // Column J (index 9)
-      const existingSpecs = (data[i]?.[10] ?? '').toString().trim() // Column K (index 10)
-
-      if (description && !existingDesc) {
-        batchData.push({ range: `'${sheetName}'!J${row}`, values: [[description]] })
+    for (const sheetName of sheetNames) {
+      let data: string[][]
+      try {
+        data = await readSheet(sheetName)
+      } catch (err) {
+        log.warn('Enrich failed to read sheet', { sheetName, error: err instanceof Error ? err.message : String(err) })
+        continue
       }
-      if (specsText && !existingSpecs) {
-        batchData.push({ range: `'${sheetName}'!K${row}`, values: [[specsText]] })
+
+      for (let i = 1; i < data.length; i++) {
+        const sheetFullName = (data[i]?.[4] ?? '').toString().trim()  // Column E (index 4)
+        if (!fullNames.has(sheetFullName)) continue
+
+        matchCount++
+        const row = i + 1  // 1-indexed for Sheets API
+        const existingDesc = (data[i]?.[9] ?? '').toString().trim()   // Column J (index 9)
+        const existingSpecs = (data[i]?.[10] ?? '').toString().trim() // Column K (index 10)
+
+        if (description && !existingDesc) {
+          batchData.push({ range: `'${sheetName}'!J${row}`, values: [[description]] })
+        }
+        if (specsText && !existingSpecs) {
+          batchData.push({ range: `'${sheetName}'!K${row}`, values: [[specsText]] })
+        }
       }
     }
     if (matchCount === 0) return 0

@@ -4,7 +4,7 @@
 import log from './logger'
 import { prisma } from './prisma'
 import { getAvitoItems, updateAvitoPrice, isAvitoConfigured } from './avito'
-import { readSheet, getSheetNames } from './google-sheets'
+import { readSheet, getProductSheetNames } from './google-sheets'
 import { mapHeaders } from './sheets-sync'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -190,33 +190,40 @@ function matchScoreWeighted(avitoTitle: string, sheetName: string): number {
 // ─── Load sheet data ──────────────────────────────────────────────────────────
 
 async function loadSheetProducts(): Promise<SheetProduct[]> {
-  const PRODUCT_SHEET_NAME = process.env.PRODUCT_SHEET_NAME || 'Лист1'
-  const allSheets = await getSheetNames()
-  const sheetName = allSheets.includes(PRODUCT_SHEET_NAME) ? PRODUCT_SHEET_NAME : allSheets[0]
-  if (!sheetName) return []
+  const sheetNames = await getProductSheetNames()
+  if (sheetNames.length === 0) return []
 
-  const data = await readSheet(sheetName)
-  if (data.length === 0) return []
-
-  const COL = mapHeaders(data[0]!)
   const items: SheetProduct[] = []
 
-  for (let i = 1; i < data.length; i++) {
-    const row = data[i]!
-    const fullName = (row[COL.fullName!] ?? '').toString().trim()
-    const priceRaw = (row[COL.price!] ?? '').toString().replace(/\s/g, '')
-    const price = parseFloat(priceRaw)
-    if (!fullName || isNaN(price) || price <= 0) continue
+  for (const sheetName of sheetNames) {
+    let data: string[][]
+    try {
+      data = await readSheet(sheetName)
+    } catch (err) {
+      log.error('Avito sync failed to read sheet', { sheetName, error: err instanceof Error ? err.message : String(err) })
+      continue
+    }
+    if (data.length === 0) continue
 
-    items.push({
-      rowIndex: i + 1,
-      sheetName,
-      fullName,
-      color: COL.color !== undefined ? (row[COL.color!] ?? '').toString().trim() : '',
-      memory: COL.memory !== undefined ? (row[COL.memory!] ?? '').toString().trim() : '',
-      size: COL.size !== undefined ? (row[COL.size!] ?? '').toString().trim() : '',
-      price,
-    })
+    const COL = mapHeaders(data[0]!)
+
+    for (let i = 1; i < data.length; i++) {
+      const row = data[i]!
+      const fullName = (row[COL.fullName!] ?? '').toString().trim()
+      const priceRaw = (row[COL.price!] ?? '').toString().replace(/\s/g, '')
+      const price = parseFloat(priceRaw)
+      if (!fullName || isNaN(price) || price <= 0) continue
+
+      items.push({
+        rowIndex: i + 1,
+        sheetName,
+        fullName,
+        color: COL.color !== undefined ? (row[COL.color!] ?? '').toString().trim() : '',
+        memory: COL.memory !== undefined ? (row[COL.memory!] ?? '').toString().trim() : '',
+        size: COL.size !== undefined ? (row[COL.size!] ?? '').toString().trim() : '',
+        price,
+      })
+    }
   }
   return items
 }

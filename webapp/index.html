@@ -1389,13 +1389,16 @@
     }
 
     /** Убирает дубли URL и ограничивает карусель (много битых ссылок = «кипа» одинаковых плейсхолдеров). */
-    const MAX_PRODUCT_PHOTOS_IN_UI = 24
+    const MAX_PRODUCT_PHOTOS_IN_UI = 12
+    function isPlaceholderPhotoUrl(u) {
+      return /\/no-photo\.(webp|png)(\?|#|$)/i.test(String(u || ''))
+    }
     function dedupeResolvedPhotos(urls) {
       const seen = new Set()
       const out = []
       for (const u of urls) {
         const s = typeof u === 'string' ? u.trim() : ''
-        if (!s || seen.has(s)) continue
+        if (!s || isPlaceholderPhotoUrl(s) || seen.has(s)) continue
         seen.add(s)
         out.push(s)
         if (out.length >= MAX_PRODUCT_PHOTOS_IN_UI) break
@@ -1413,28 +1416,23 @@
       } catch (_) {}
     }
 
-    /** 404 CDN / битая ссылка → плейсхолдер, не чёрный квадрат. */
+    /**
+     * Битый URL фото — скрываем картинку. Заглушка Бендера только когда getProductPhotos()
+     * вернул [] (пустая колонка Q), а не при 404 CDN.
+     */
     function handleProductPhotoError(el) {
       if (!el || el.tagName !== 'IMG') return
       try {
-        var step = +(el.dataset.fallbackStep || 0)
-        el.dataset.fallbackStep = String(step + 1)
-        if (step === 0) {
-          try { el.removeAttribute('srcset') } catch (_) {}
-          el.src = '/no-photo.webp'
-          return
-        }
-        if (step === 1) {
-          el.src = '/no-photo.png'
-          return
-        }
         el.dataset.broken = '1'
+        el.style.display = 'none'
         el.style.opacity = '0'
-        try { el.removeAttribute('src') } catch (_) {}
-      } catch (_) {
-        try { el.style.opacity = '0' } catch (__) {}
-      }
+        if (el.id === 'modalCarouselImg') {
+          const phEl = document.getElementById('modalCarouselPh')
+          if (phEl && (!modalPhotos || modalPhotos.length === 0)) phEl.style.display = 'flex'
+        }
+      } catch (_) {}
     }
+    window.handleProductPhotoError = handleProductPhotoError
 
     // ── Variant helpers ───────────────────────────────────────────────────────
     function findVariant(product, selectedAttrs) {
@@ -1448,20 +1446,25 @@
     }
 
     function getProductPhotos(p, variant) {
-      // Конкретное ТП: только его фото; пусто → [] (плейсхолдер), без подмеса других вариантов/товара.
+      // Конкретное ТП: только фото из его ячейки Q; пусто → [] (заглушка), без подмеса других вариантов.
       if (variant) {
         if (Array.isArray(variant.photos) && variant.photos.length) {
           return dedupeResolvedPhotos(variant.photos.map(resolvePhoto))
         }
-        if (Array.isArray(p.photos) && p.photos.length) return dedupeResolvedPhotos(p.photos.map(resolvePhoto))
-        if (p.photoUrl) return dedupeResolvedPhotos([resolvePhoto(p.photoUrl)])
         return []
       }
-      // Превью товара без выбранного ТП
-      if (Array.isArray(p.photos) && p.photos.length) {
-        return dedupeResolvedPhotos(p.photos.map(resolvePhoto))
-      }
+      // Превью в ленте / модал без выбранного ТП: одно фото, даже если вариантов много.
       if (p.photoUrl) return dedupeResolvedPhotos([resolvePhoto(p.photoUrl)])
+      if (Array.isArray(p.photos) && p.photos.length) {
+        return dedupeResolvedPhotos([resolvePhoto(p.photos[0])])
+      }
+      if (p.variants?.length) {
+        for (const v of p.variants) {
+          if (Array.isArray(v.photos) && v.photos.length) {
+            return dedupeResolvedPhotos(v.photos.map(resolvePhoto))
+          }
+        }
+      }
       return []
     }
 
@@ -2314,7 +2317,28 @@
     function setupCardHoverCycling() {
       document.querySelectorAll('.product-photo-wrap[data-photos]').forEach(wrap => {
         let timer = null
-        let idx   = 0
+        let idx = 0
+        const broken = new Set()
+
+        function showCarouselPhoto(img, photos, photoIdx, dots, dlen) {
+          resetProductImgFallback(img)
+          img.onerror = function () {
+            broken.add(photoIdx)
+            if (broken.size >= photos.length) return
+            let next = photoIdx
+            for (let step = 0; step < photos.length; step++) {
+              next = (next + 1) % photos.length
+              if (!broken.has(next)) break
+            }
+            if (!broken.has(next)) {
+              idx = next
+              showCarouselPhoto(img, photos, next, dots, dlen)
+            }
+          }
+          img.src = photos[photoIdx]
+          dots.forEach((d, i) => d.classList.toggle('active', i === (photoIdx % dlen)))
+        }
+
         wrap.addEventListener('mouseenter', () => {
           let photos = []
           try { photos = JSON.parse(wrap.dataset.photos.replace(/&quot;/g, '"')) } catch { return }
@@ -2325,18 +2349,23 @@
           const n = photos.length
           const dlen = dots.length || 1
           idx = 0
-          resetProductImgFallback(img)
-          img.onerror = function () { handleProductPhotoError(img) }
+          broken.clear()
+          showCarouselPhoto(img, photos, 0, dots, dlen)
           timer = setInterval(() => {
-            idx = (idx + 1) % n
-            resetProductImgFallback(img)
-            img.onerror = function () { handleProductPhotoError(img) }
-            img.src = photos[idx]
-            dots.forEach((d, i) => d.classList.toggle('active', i === (idx % dlen)))
+            if (broken.size >= n) return
+            let next = idx
+            for (let step = 0; step < n; step++) {
+              next = (next + 1) % n
+              if (!broken.has(next)) break
+            }
+            if (broken.has(next)) return
+            idx = next
+            showCarouselPhoto(img, photos, idx, dots, dlen)
           }, 800)
         })
         wrap.addEventListener('mouseleave', () => {
           clearInterval(timer); timer = null
+          broken.clear()
           let photos = []
           try { photos = JSON.parse(wrap.dataset.photos.replace(/&quot;/g, '"')) } catch { return }
           const img = wrap.querySelector('.product-photo')
@@ -2463,7 +2492,25 @@
       if (photos.length > 0) {
         if (modalPhotoIdx >= photos.length) modalPhotoIdx = 0
         resetProductImgFallback(imgEl)
-        imgEl.onerror = function () { handleProductPhotoError(imgEl) }
+        imgEl.style.display = 'block'
+        imgEl.onerror = function () {
+          if (photos.length <= 1) {
+            handleProductPhotoError(imgEl)
+            return
+          }
+          const start = modalPhotoIdx
+          let attempts = 0
+          while (attempts < photos.length) {
+            modalPhotoIdx = (modalPhotoIdx + 1) % photos.length
+            attempts++
+            if (modalPhotoIdx === start) break
+            resetProductImgFallback(imgEl)
+            imgEl.style.display = 'block'
+            imgEl.src = photos[modalPhotoIdx]!
+            return
+          }
+          handleProductPhotoError(imgEl)
+        }
         imgEl.src = photos[modalPhotoIdx]
         imgEl.style.display = 'block'
         phEl.style.display  = 'none'

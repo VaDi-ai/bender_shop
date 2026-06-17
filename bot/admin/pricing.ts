@@ -409,10 +409,20 @@ async function applyChanges(ctx: Context, userId: number): Promise<void> {
   // ── Записать обновлённые цены в Google Sheets (только для flow от поставщика) ──
   if (state.source === 'message') {
     try {
-      const { readSheet, batchUpdate: batchUpdateSheets } = await import('../../lib/google-sheets')
-      const PRODUCT_SHEET_NAME = process.env.PRODUCT_SHEET_NAME || 'Лист1'
-      const data = await readSheet(PRODUCT_SHEET_NAME)
+      const { readSheet, getProductSheetNames, batchUpdate: batchUpdateSheets } = await import('../../lib/google-sheets')
       const now = new Date().toLocaleDateString('ru-RU', { timeZone: 'Europe/Moscow' })
+
+      // Полистовой учёт: строка товара может быть на любом листе (кроме служебных).
+      // Читаем все листы один раз и ищем совпадение по «Название модели» (колонка E).
+      const sheetNames = await getProductSheetNames()
+      const sheetsData: { sheetName: string; data: string[][] }[] = []
+      for (const sheetName of sheetNames) {
+        try {
+          sheetsData.push({ sheetName, data: await readSheet(sheetName) })
+        } catch (err) {
+          log.warn('Pricing failed to read sheet', { sheetName, error: err instanceof Error ? err.message : String(err) })
+        }
+      }
 
       const sheetUpdates: { range: string; values: (string | number)[][] }[] = []
 
@@ -436,20 +446,25 @@ async function applyChanges(ctx: Context, userId: number): Promise<void> {
 
         // Fallback на имя продукта если fullName не найден
         const searchName = targetFullName || v.productName
+        const supplierLabel = state.label || ''
 
-        // Колонка E (index 4) = «Название модели»
-        for (let i = 1; i < data.length; i++) {
-          const cellName = (data[i]?.[4] ?? '').toString().trim()
-          if (!cellName) continue
+        // Колонка E (index 4) = «Название модели». Ищем первое совпадение по листам.
+        let found = false
+        for (const { sheetName, data } of sheetsData) {
+          for (let i = 1; i < data.length; i++) {
+            const cellName = (data[i]?.[4] ?? '').toString().trim()
+            if (!cellName) continue
 
-          if (cellName === searchName || cellName.toLowerCase() === searchName.toLowerCase()) {
-            const rowNum = i + 1
-            const supplierLabel = state.label || ''
-            sheetUpdates.push({ range: "'" + PRODUCT_SHEET_NAME + "'!" + WRITEBACK_COLS.costPrice + rowNum, values: [[costRaw]] })
-            sheetUpdates.push({ range: "'" + PRODUCT_SHEET_NAME + "'!" + WRITEBACK_COLS.price + rowNum, values: [[v.newPrice]] })
-            sheetUpdates.push({ range: "'" + PRODUCT_SHEET_NAME + "'!" + WRITEBACK_COLS.supplier + rowNum + ':' + WRITEBACK_COLS.date + rowNum, values: [[supplierLabel, now]] })
-            break
+            if (cellName === searchName || cellName.toLowerCase() === searchName.toLowerCase()) {
+              const rowNum = i + 1
+              sheetUpdates.push({ range: "'" + sheetName + "'!" + WRITEBACK_COLS.costPrice + rowNum, values: [[costRaw]] })
+              sheetUpdates.push({ range: "'" + sheetName + "'!" + WRITEBACK_COLS.price + rowNum, values: [[v.newPrice]] })
+              sheetUpdates.push({ range: "'" + sheetName + "'!" + WRITEBACK_COLS.supplier + rowNum + ':' + WRITEBACK_COLS.date + rowNum, values: [[supplierLabel, now]] })
+              found = true
+              break
+            }
           }
+          if (found) break
         }
       }
 

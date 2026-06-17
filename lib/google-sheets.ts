@@ -224,6 +224,41 @@ export async function getSheetNames(): Promise<string[]> {
 }
 
 /**
+ * Служебные листы, которые товарный учёт игнорирует при полистовом парсинге.
+ * По умолчанию исключаются все листы, чьё имя начинается с «не использовать»
+ * (в т.ч. «не использовать 2»). Дополнительные имена — через EXCLUDED_SHEET_NAMES
+ * (список через запятую). Сравнение регистронезависимое.
+ */
+function getExcludedSheetPrefix(): string {
+  return (process.env.EXCLUDED_SHEET_PREFIX ?? 'не использовать').trim().toLowerCase()
+}
+
+function getExcludedSheetNames(): string[] {
+  return (process.env.EXCLUDED_SHEET_NAMES ?? '')
+    .split(',')
+    .map(s => s.trim().toLowerCase())
+    .filter(Boolean)
+}
+
+/** true, если лист служебный и его нужно пропустить при синхронизации товаров. */
+export function isExcludedSheet(name: string): boolean {
+  const n = (name ?? '').trim().toLowerCase()
+  if (!n) return true
+  const prefix = getExcludedSheetPrefix()
+  if (prefix && n.startsWith(prefix)) return true
+  return getExcludedSheetNames().includes(n)
+}
+
+/**
+ * Листы с товарами для полистового товарного учёта: все листы таблицы,
+ * кроме служебных (см. {@link isExcludedSheet}).
+ */
+export async function getProductSheetNames(): Promise<string[]> {
+  const all = await getSheetNames()
+  return all.filter(name => name && !isExcludedSheet(name))
+}
+
+/**
  * Создать новый лист если не существует.
  */
 export async function createSheetIfNotExists(sheetName: string): Promise<void> {

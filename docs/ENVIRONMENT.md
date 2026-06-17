@@ -26,6 +26,8 @@
 |----------|-------------|---------|
 | GOOGLE_SERVICE_ACCOUNT_KEY | JSON string of service account key | {"type":"service_account",...} |
 | GOOGLE_SHEET_ID | Google Sheets document ID | 1ABC...xyz |
+| EXCLUDED_SHEET_PREFIX | Префикс имён служебных листов (регистронезависимо). По умолчанию «не использовать» — исключает и «не использовать 2». | не использовать |
+| EXCLUDED_SHEET_NAMES | Дополнительные служебные листы (через запятую), помимо префикса | архив |
 
 ### Encryption
 | Variable | Description | Example |
