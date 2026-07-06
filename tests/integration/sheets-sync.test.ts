@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { mapHeaders } from '../../lib/sheets-sync'
+import { mapHeaders, parseSheetRows } from '../../lib/sheets-sync'
 
 describe('Sheets sync logic', () => {
   it('maps column headers correctly', () => {
@@ -47,5 +47,66 @@ describe('Sheets sync logic', () => {
     const COL = mapHeaders(headers)
     expect(COL.price).toBe(12)
     expect(COL.costPrice).toBe(11)
+  })
+
+  // ── Phase 1: quantity header stems (fix «нули не гасятся») ─────────────────
+  it("maps quantity from «В наличии» by name, not positional fallback", () => {
+    // 'В наличии' sits at idx 2, quantity fallback is 13 — a return of 2 proves name-match
+    const COL = mapHeaders(['Название модели', 'Рекомендованная стоимость', 'В наличии'])
+    expect(COL.quantity).toBe(2)
+  })
+
+  it("maps quantity from «Наличие»", () => {
+    const COL = mapHeaders(['Название модели', 'Рекомендованная стоимость', 'Наличие'])
+    expect(COL.quantity).toBe(2)
+  })
+
+  it("maps quantity from «Остаток»", () => {
+    const COL = mapHeaders(['Название модели', 'Рекомендованная стоимость', 'Остаток'])
+    expect(COL.quantity).toBe(2)
+  })
+
+  it("still maps quantity in the full sheet layout with «В наличии»", () => {
+    const headers = ['', 'Бренд', 'Категория', 'Общая категория', 'Название модели',
+      'Цвет', 'Память', 'Размер', 'Страна', 'Описание', 'Характеристики',
+      'Закупочная цена', 'Рекомендованная стоимость', 'В наличии',
+      'Лучший поставщик', 'Дата обновления', 'Фото']
+    const COL = mapHeaders(headers)
+    expect(COL.quantity).toBe(13)
+    expect(COL.category).toBe(3) // «Общая категория» regression stays intact
+  })
+})
+
+describe('parseSheetRows — quantity parsing (Phase 1)', () => {
+  const HEADERS = ['', 'Бренд', 'Категория', 'Общая категория', 'Название модели',
+    'Цвет', 'Память', 'Размер', 'Страна', 'Описание', 'Характеристики',
+    'Закупочная цена', 'Рекомендованная стоимость', 'В наличии',
+    'Лучший поставщик', 'Дата обновления', 'Фото']
+
+  function qtyFor(qtyCell: string): number {
+    const row = ['', 'Apple', 'iPhone', 'Телефоны', 'iPhone 16 Pro 256GB Black',
+      'Black', '256GB', '', '', '', '', '', '100000', qtyCell, '', '', '']
+    const rows = parseSheetRows('Тест', [HEADERS, row])
+    return rows[0]!.quantity
+  }
+
+  it('empty cell → 0 (not the seed default)', () => {
+    expect(qtyFor('')).toBe(0)
+  })
+
+  it("'0' → 0", () => {
+    expect(qtyFor('0')).toBe(0)
+  })
+
+  it("'нет' → 0 (non-numeric)", () => {
+    expect(qtyFor('нет')).toBe(0)
+  })
+
+  it("'-' → 0 (non-numeric)", () => {
+    expect(qtyFor('-')).toBe(0)
+  })
+
+  it("'5' → 5", () => {
+    expect(qtyFor('5')).toBe(5)
   })
 })
