@@ -20,6 +20,12 @@ jobs:
 
       - run: npm ci
 
+      # Prisma client is gitignored (generated/prisma) and imported across the
+      # codebase; without this, tsc can't resolve its types and fails.
+      # Mirrors `prebuild: prisma generate` that the Railway build already runs.
+      - name: Generate Prisma client
+        run: npx prisma generate
+
       - name: Type check
         run: npx tsc --noEmit
 
@@ -27,3 +33,6 @@ jobs:
         run: npm test
         env:
           ENCRYPTION_KEY_V1: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+          # Unit tests never connect; lib/prisma.ts only requires the var to be
+          # present at import (it throws otherwise). Non-connecting dummy.
+          DATABASE_URL: postgresql://test:test@localhost:5432/test
