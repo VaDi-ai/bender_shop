@@ -99,7 +99,12 @@ export function mergeVariantPhotoUrls(variants: { photoUrls: string[] }[]): stri
   return out
 }
 
-const DEFAULT_QTY = parseInt(process.env.DEFAULT_STOCK_QTY || '3', 10) // если «В наличие» пусто
+// Пустая/нечисловая ячейка наличия = 0 (нет в наличии). Значение DEFAULT_STOCK_QTY
+// применяется к пустой ячейке ТОЛЬКО как явный опт-ин для сидинга пустого каталога
+// (SHEETS_SEED_EMPTY_STOCK=true). В обычном синке пустая ячейка всегда = 0, даже если
+// DEFAULT_STOCK_QTY задан в окружении.
+const DEFAULT_QTY = parseInt(process.env.DEFAULT_STOCK_QTY || '3', 10)
+const SEED_EMPTY_STOCK = process.env.SHEETS_SEED_EMPTY_STOCK === 'true'
 
 const MARKUP_RULES_ENABLED = process.env.MARKUP_RULES_ENABLED === 'true'
 
@@ -129,7 +134,9 @@ const EXPECTED_HEADERS: Record<string, string[]> = {
   specs:       ['Характеристики', 'Specs'],
   costPrice:   ['Закупочная цена', 'Закупка', 'Cost Price'],
   price:       ['Рекомендованная стоимость', 'Рекомендованная', 'Price', 'Retail'],
-  quantity:    ['В наличие', 'Количество', 'Qty', 'Stock'],
+  // Стемы (матчинг по нормализованному вхождению): 'налич' ловит «В наличии»/«Наличие»,
+  // 'остаток' — «Остаток». Без стемов includes('В наличие') промахивался мимо «В наличии».
+  quantity:    ['налич', 'остаток', 'кол-во', 'количество', 'qty', 'stock'],
   supplier:    ['Лучший поставщик', 'Supplier'],
   updateDate:  ['Дата обновления', 'Updated'],
   photo:       ['Фото', 'Photo', 'Image'],
@@ -147,12 +154,24 @@ export type ColumnMap = Record<string, number>
 export function mapHeaders(headerRow: any[]): ColumnMap {
   const headers: ColumnMap = {}
   const headerStrings = headerRow.map(h => (h ?? '').toString().trim())
+  const usedFallback: string[] = []
 
   for (const [key, variants] of Object.entries(EXPECTED_HEADERS)) {
     const idx = headerStrings.findIndex(h =>
       variants.some(v => h.toLowerCase().includes(v.toLowerCase()))
     )
-    headers[key] = idx >= 0 ? idx : FALLBACK_INDICES[key]!
+    if (idx >= 0) {
+      headers[key] = idx
+    } else {
+      headers[key] = FALLBACK_INDICES[key]!
+      usedFallback.push(key)
+    }
+  }
+
+  // Само-диагностика: наличие по позиционному fallback — частый источник «нули не гасятся»
+  // (лишняя колонка сдвигает idx 13). Явно шумим в логи, чтобы это было видно.
+  if (usedFallback.includes('quantity')) {
+    log.warn('[sync] quantity column resolved via positional fallback', { headers: headerStrings })
   }
 
   // Validate required columns
@@ -201,6 +220,7 @@ export function parseSheetRows(sheetName: string, data: string[][]): SheetRow[] 
   if (data.length === 0) return rows
 
   const COL = mapHeaders(data[0]!)
+  let emptyQtyCount = 0
 
   for (let i = 1; i < data.length; i++) {
     const row = data[i]!
@@ -213,11 +233,17 @@ export function parseSheetRows(sheetName: string, data: string[][]): SheetRow[] 
     const price = parseFloat(priceRaw)
     if (isNaN(price) || price <= 0) continue
 
+    // Пустая/нечисловая ячейка наличия = 0 (нет в наличии). '0'→0, '5'→5, 'нет'/'-'→0.
+    // Опт-ин сидинга (SHEETS_SEED_EMPTY_STOCK) применяет DEFAULT_QTY только к пустой ячейке.
     const qtyRaw = col(row, COL.quantity)
-    let quantity = DEFAULT_QTY
+    let quantity = 0
     if (qtyRaw !== '') {
       const q = parseInt(qtyRaw, 10)
       if (!isNaN(q)) quantity = q
+      else emptyQtyCount++
+    } else {
+      if (SEED_EMPTY_STOCK) quantity = DEFAULT_QTY
+      emptyQtyCount++
     }
 
     // Закупочная цена (может быть пустой)
@@ -245,6 +271,14 @@ export function parseSheetRows(sheetName: string, data: string[][]): SheetRow[] 
       photo:       col(row, COL.photo),
       sheetName,
       rowIndex: i + 1,
+    })
+  }
+
+  if (emptyQtyCount > 0) {
+    log.info('[sync] rows with empty/non-numeric quantity treated as 0', {
+      sheetName,
+      count: emptyQtyCount,
+      seeding: SEED_EMPTY_STOCK,
     })
   }
 
