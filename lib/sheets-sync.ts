@@ -122,8 +122,18 @@ export const WRITEBACK_COLS = {
 
 // ─── Dynamic column mapping from header row ──────────────────────────────────
 
+// Заголовки, которые матчатся ТОЛЬКО точным совпадением. Подстрочный матчинг здесь
+// неприменим: «Модель» ⊂ «Название модели», «Категория» ⊂ «Общая категория», —
+// includes() выбрал бы соседнюю колонку в зависимости от порядка шапки.
+const EXACT_HEADERS: Record<string, string[]> = {
+  line:  ['Категория'],   // C — линейка: iPhone / MacBook / Фитнес-часы
+  model: ['Модель'],      // D — модель: iPhone 17 Pro Max / Watch SE
+}
+
 const EXPECTED_HEADERS: Record<string, string[]> = {
   brand:       ['Бренд', 'Brand'],
+  // «Общая категория» из живой таблицы удалена; колонка остаётся в списке ради
+  // старых листов. Если её нет — category берётся из line (см. mapHeaders).
   category:    ['Общая категория', 'Category'],
   fullName:    ['Название модели', 'Название', 'Model'],
   color:       ['Цвет', 'Color'],
@@ -144,7 +154,7 @@ const EXPECTED_HEADERS: Record<string, string[]> = {
 
 // Fallback indices matching the new sheet layout
 const FALLBACK_INDICES: Record<string, number> = {
-  brand: 1, category: 3, fullName: 4, color: 5, memory: 6, size: 7,
+  brand: 1, line: 2, model: 3, category: 2, fullName: 4, color: 5, memory: 6, size: 7,
   country: 8, description: 9, specs: 10, costPrice: 11, price: 12,
   quantity: 13, supplier: 14, updateDate: 15, photo: 16,
 }
@@ -166,6 +176,30 @@ export function mapHeaders(headerRow: any[]): ColumnMap {
       headers[key] = FALLBACK_INDICES[key]!
       usedFallback.push(key)
     }
+  }
+
+  // Точный матчинг для line/model — includes() их не различает (см. EXACT_HEADERS).
+  for (const [key, variants] of Object.entries(EXACT_HEADERS)) {
+    const idx = headerStrings.findIndex(h =>
+      variants.some(v => h.toLowerCase() === v.toLowerCase())
+    )
+    if (idx >= 0) {
+      headers[key] = idx
+    } else {
+      headers[key] = FALLBACK_INDICES[key]!
+      usedFallback.push(key)
+    }
+  }
+
+  // «Общая категория» в живой таблице отсутствует, а её includes-матчинг молча
+  // проваливался в позиционный fallback (idx 3 = «Модель»), из-за чего site-category
+  // становилась моделью. Нет отдельной общей категории → категория сайта = линейка.
+  if (usedFallback.includes('category')) {
+    headers.category = headers.line!
+  }
+
+  if (usedFallback.includes('line') || usedFallback.includes('model')) {
+    log.warn('[sync] line/model column resolved via positional fallback', { headers: headerStrings })
   }
 
   // Само-диагностика: наличие по позиционному fallback — частый источник «нули не гасятся»
