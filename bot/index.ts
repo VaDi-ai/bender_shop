@@ -2423,8 +2423,15 @@ bot.action('price_request:cancel', async (ctx) => {
 
 // ─── Google Sheets синхронизация (каждый час в рабочее время) ─────────────────
 
+// Аварийный тормоз для выкатов, где визуал и пересборку данных нужно развести:
+// деплой сам по себе запускает синк (стартовый + ежечасный), а синк переписывает
+// товары. SHEETS_SKIP_AUTO_SYNC=true глушит оба автозапуска; ручной синк из
+// админки продолжает работать.
+const SKIP_AUTO_SYNC = process.env.SHEETS_SKIP_AUTO_SYNC === 'true'
+
 setInterval(async () => {
   try {
+    if (SKIP_AUTO_SYNC) return
     const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Europe/Moscow' }))
     const hour = now.getHours()
     if (hour < 11 || hour >= 20) return // только рабочее время
@@ -2498,6 +2505,10 @@ setInterval(async () => {
 // Первая синхронизация через 30 сек после старта
 setTimeout(async () => {
   try {
+    if (SKIP_AUTO_SYNC) {
+      log.warn('Sheets initial sync skipped (SHEETS_SKIP_AUTO_SYNC=true)')
+      return
+    }
     const { syncProductsFromSheets } = await import('../lib/sheets-sync')
     await syncProductsFromSheets()
     log.info('Sheets initial sync done')
