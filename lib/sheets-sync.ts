@@ -150,6 +150,7 @@ const EXPECTED_HEADERS: Record<string, string[]> = {
   supplier:    ['Лучший поставщик', 'Supplier'],
   updateDate:  ['Дата обновления', 'Updated'],
   photo:       ['Фото', 'Photo', 'Image'],
+  sortOrder:   ['Порядок', 'Order', 'Sort'],
 }
 
 // Fallback indices matching the new sheet layout
@@ -157,11 +158,29 @@ const FALLBACK_INDICES: Record<string, number> = {
   brand: 1, line: 2, model: 3, category: 2, fullName: 4, color: 5, memory: 6, size: 7,
   country: 8, description: 9, specs: 10, costPrice: 11, price: 12,
   quantity: 13, supplier: 14, updateDate: 15, photo: 16,
+  // -1 = колонки нет. Порядок тогда деградирует в порядок строк листа (см. parseSheetRows),
+  // а не притворяется, что нашёл её на позиции 0.
+  sortOrder: -1,
 }
 
 export type ColumnMap = Record<string, number>
 
-export function mapHeaders(headerRow: any[]): ColumnMap {
+/**
+ * Колонка «выглядит порядковой»: есть значения и все непустые — целые числа.
+ * Нужна только для подстраховки, когда «Порядок» записан, а заголовок не проставлен.
+ */
+function looksNumericColumn(dataRows: any[][], idx: number): boolean {
+  let seen = 0
+  for (const row of dataRows) {
+    const v = (row?.[idx] ?? '').toString().trim()
+    if (v === '') continue
+    if (!/^\d+$/.test(v)) return false
+    seen++
+  }
+  return seen > 0
+}
+
+export function mapHeaders(headerRow: any[], dataRows: any[][] = []): ColumnMap {
   const headers: ColumnMap = {}
   const headerStrings = headerRow.map(h => (h ?? '').toString().trim())
   const usedFallback: string[] = []
@@ -202,6 +221,17 @@ export function mapHeaders(headerRow: any[]): ColumnMap {
     log.warn('[sync] line/model column resolved via positional fallback', { headers: headerStrings })
   }
 
+  // «Порядок» — новая колонка. Если владелец её ещё не завёл, страхуемся: колонка idx 0
+  // считается порядком, только когда она сплошь числовая (значения записаны, заголовок нет).
+  if (usedFallback.includes('sortOrder')) {
+    if (looksNumericColumn(dataRows, 0)) {
+      headers.sortOrder = 0
+      log.warn('[sync] «Порядок» header missing, using numeric column A by position', { headers: headerStrings })
+    } else {
+      log.warn('[sync] «Порядок» column not found — model order degrades to sheet row order', { headers: headerStrings })
+    }
+  }
+
   // Само-диагностика: наличие по позиционному fallback — частый источник «нули не гасятся»
   // (лишняя колонка сдвигает idx 13). Явно шумим в логи, чтобы это было видно.
   if (usedFallback.includes('quantity')) {
@@ -227,7 +257,10 @@ function col(row: any[], idx: number | undefined): string {
 
 export interface SheetRow {
   brand: string
-  category: string           // «Общая категория» (для сайта)
+  category: string           // категория сайта (= линейка, пока нет «Общей категории»)
+  line: string               // «Категория» (C) — линейка: iPhone / MacBook / Galaxy S
+  model: string              // «Модель» (D) — модель: iPhone 17 Pro Max / Watch SE
+  sortOrder: number          // «Порядок» (A), 1 = верх/новее; 0 = не задан → в конец
   fullName: string           // «Название модели»
   color: string              // из колонки F
   memory: string             // из колонки G
@@ -253,8 +286,9 @@ export function parseSheetRows(sheetName: string, data: string[][]): SheetRow[] 
   const rows: SheetRow[] = []
   if (data.length === 0) return rows
 
-  const COL = mapHeaders(data[0]!)
+  const COL = mapHeaders(data[0]!, data.slice(1))
   let emptyQtyCount = 0
+  let missingOrderCount = 0
 
   for (let i = 1; i < data.length; i++) {
     const row = data[i]!
@@ -288,9 +322,26 @@ export function parseSheetRows(sheetName: string, data: string[][]): SheetRow[] 
       if (!isNaN(c) && c > 0) costPrice = c
     }
 
+    // «Порядок»: 1 = верх/новее. Пусто или колонки нет → 0, что означает «в конец»
+    // (сортировка ставит нули последними, сохраняя порядок строк листа).
+    const orderRaw = col(row, COL.sortOrder)
+    let sortOrder = 0
+    if (orderRaw !== '') {
+      const o = parseInt(orderRaw, 10)
+      if (!isNaN(o) && o > 0) sortOrder = o
+      else missingOrderCount++
+    } else {
+      missingOrderCount++
+    }
+
+    const line = col(row, COL.line)
+
     rows.push({
       brand:       col(row, COL.brand),
       category:    col(row, COL.category) || 'Другое',
+      line:        line || 'Другое',
+      model:       col(row, COL.model),
+      sortOrder,
       fullName,
       color:       col(row, COL.color),
       memory:      col(row, COL.memory),
@@ -305,6 +356,13 @@ export function parseSheetRows(sheetName: string, data: string[][]): SheetRow[] 
       photo:       col(row, COL.photo),
       sheetName,
       rowIndex: i + 1,
+    })
+  }
+
+  if (missingOrderCount > 0) {
+    log.info('[sync] rows with empty/non-numeric «Порядок» sorted last', {
+      sheetName,
+      count: missingOrderCount,
     })
   }
 
@@ -423,6 +481,8 @@ export async function syncProductsFromSheets(shouldAbort?: () => boolean): Promi
     productName: string
     brand: string
     category: string
+    line: string
+    sortOrder: number
     sheetDescription: string
     sheetSpecs: Record<string, string>
     variants: VariantData[]
@@ -434,7 +494,12 @@ export async function syncProductsFromSheets(shouldAbort?: () => boolean): Promi
     const productName = extractProductName(row.fullName, row.brand)
     const attrs = getAttributes(row)
 
-    const key = `${productName}|${row.category}`
+    // Ключ группировки (Phase 2): бренд + линейка + модель + имя товара.
+    // Раньше было productName|category — категория тогда была общей («Телефоны»),
+    // и один товар, заведённый и под категорией, и под общей категорией, давал два
+    // Product'а. Явная колонка «Модель» схлопывает это структурно; когда она пуста,
+    // ключом остаётся productName, то есть поведение прежнее.
+    const key = `${row.brand}|${row.line}|${row.model}|${productName}`
 
     if (!groups.has(key)) {
       // Parse specs string "key: val\nkey2: val2" → object
@@ -447,10 +512,17 @@ export async function syncProductsFromSheets(shouldAbort?: () => boolean): Promi
       }
       groups.set(key, {
         productName, brand: row.brand, category: row.category,
+        line: row.line, sortOrder: row.sortOrder,
         sheetDescription: row.description,
         sheetSpecs: Object.keys(sheetSpecs).length > 0 ? sheetSpecs : {},
         variants: [],
       })
+    }
+
+    // Порядок группы = минимальный ненулевой среди её строк (0 = не задан → в конец).
+    const g = groups.get(key)!
+    if (row.sortOrder > 0 && (g.sortOrder === 0 || row.sortOrder < g.sortOrder)) {
+      g.sortOrder = row.sortOrder
     }
 
     groups.get(key)!.variants.push({
@@ -577,6 +649,8 @@ export async function syncProductsFromSheets(shouldAbort?: () => boolean): Promi
             name: group.productName,
             brand: group.brand || null,
             categoryId: category.id,
+            line: group.line || null,
+            sortOrder: group.sortOrder,
             price: new Decimal(minPrice),
             stock: totalQty,
             quantity: totalQty,
@@ -598,6 +672,8 @@ export async function syncProductsFromSheets(shouldAbort?: () => boolean): Promi
           isAvailable: totalQty > 0,
           attributes: productAttributes,
           brand: group.brand || undefined,
+          line: group.line || null,
+          sortOrder: group.sortOrder,
         }
         // Apply sheet description/specs only if product doesn't have them yet
         if (group.sheetDescription && !product.description) {

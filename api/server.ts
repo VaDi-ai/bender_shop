@@ -670,6 +670,8 @@ export function startApiServer(bot?: Telegraf): Server {
           photos: true,
           badge: true,
           brand: true,
+          line: true,
+          sortOrder: true,
           attributes: true,
           specs: true,
           isFeatured: true,
@@ -700,6 +702,9 @@ export function startApiServer(bot?: Telegraf): Server {
         price: p.price.toString(),
         category: p.category?.name ?? '',
         categoryId: p.categoryId ?? null,
+        // Phase 2: дрилл-даун бренд → линейка → модель считается на клиенте
+        line: p.line ?? null,
+        sortOrder: p.sortOrder,
         photoUrl: normalizePublicPhotoUrl(p.photoUrl ?? ''),
         photos: (p.photos ?? []).map(normalizePublicPhotoUrl).filter(Boolean),
         quantity: p.quantity,
@@ -1008,10 +1013,41 @@ export function startApiServer(bot?: Telegraf): Server {
         'Гаджеты': { category: 'Бытовая электроника' },
         'Аксессуары': { category: 'Аксессуары' },
         'Дисплеи': { category: 'Мониторы' },
+
+        // Линейки из колонки «Категория». После удаления «Общей категории» из таблицы
+        // Product.category хранит именно линейку, поэтому без этих ключей фид молча
+        // отбрасывал бы все объявления (маппинг не найден → continue).
+        'iPhone': { category: 'Телефоны', goodsType: 'Смартфоны' },
+        'Galaxy S': { category: 'Телефоны', goodsType: 'Смартфоны' },
+        'Galaxy Z': { category: 'Телефоны', goodsType: 'Смартфоны' },
+        'iPad': { category: 'Планшеты и электронные книги', goodsType: 'Планшеты' },
+        'MacBook': { category: 'Ноутбуки' },
+        'iMac': { category: 'Настольные компьютеры' },
+        'Mac Mini': { category: 'Настольные компьютеры' },
+        'Mac Studio': { category: 'Настольные компьютеры' },
+        'Apple Watch': { category: 'Часы и украшения', goodsType: 'Наручные часы' },
+        'Фитнес-часы': { category: 'Часы и украшения', goodsType: 'Наручные часы' },
+        'Фитнес-браслеты': { category: 'Часы и украшения', goodsType: 'Наручные часы' },
+        'AirPods': { category: 'Аудио и видео', goodsType: 'Наушники' },
+        'Пылесосы': { category: 'Бытовая техника', goodsType: 'Пылесосы' },
+        'Фены': { category: 'Бытовая техника', goodsType: 'Красота и здоровье' },
+        'Стайлеры': { category: 'Бытовая техника', goodsType: 'Красота и здоровье' },
+        'Выпрямители': { category: 'Бытовая техника', goodsType: 'Красота и здоровье' },
+        'Уход за кожей': { category: 'Бытовая техника', goodsType: 'Красота и здоровье' },
+        'Климатическая техника': { category: 'Бытовая техника' },
+        'Фотоаппараты': { category: 'Фототехника' },
+        'Мгновенная фотография': { category: 'Фототехника' },
+        'Стабилизаторы': { category: 'Фототехника' },
+        'Панорамные камеры': { category: 'Фототехника', goodsType: 'Экшн-камеры' },
+        'Веб-камеры': { category: 'Бытовая электроника' },
+        'Микрофоны': { category: 'Аудио и видео' },
+        'VR-гарнитуры': { category: 'Игры, приставки и программы', goodsType: 'Игровые приставки' },
+        'Расходные материалы': { category: 'Аксессуары' },
+        'Защитные стекла': { category: 'Аксессуары' },
       }
 
       const escXml = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;')
-      const address = process.env.AVITO_ADDRESS || 'Москва, ул. Барклая, д. 8, ТЦ Горбушка, Павильон 211/1'
+      const address = process.env.AVITO_ADDRESS || 'Москва, ул. Барклая, д. 8, ТЦ Горбушка, Павильон 202'
       const phone = process.env.AVITO_PHONE || ''
       const manager = process.env.AVITO_MANAGER || 'Bender Shop'
       const baseUrl = process.env.WEBAPP_URL || 'https://bendershop.store'
