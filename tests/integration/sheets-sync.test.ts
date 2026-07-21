@@ -2,24 +2,53 @@ import { describe, it, expect } from 'vitest'
 import { mapHeaders, parseSheetRows } from '../../lib/sheets-sync'
 
 describe('Sheets sync logic', () => {
-  it('maps column headers correctly', () => {
-    const headers = ['', 'Бренд', 'Категория', 'Общая категория', 'Название модели', 'Цвет', 'Память', 'Размер']
-    const COL = mapHeaders(headers)
+  // Живая шапка «общего листа» A..Q (после удаления «Общей категории»)
+  const LIVE_HEADERS = ['', 'Бренд', 'Категория', 'Модель', 'Название модели',
+    'Цвет', 'Память', 'Размер', 'Страна', 'Описание', 'Характеристики',
+    'Закупочная цена', 'Рекомендованная стоимость', 'В наличие',
+    'Лучший поставщик', 'Дата обновления', 'Фото']
+
+  it('maps the live A..Q sheet layout', () => {
+    const COL = mapHeaders(LIVE_HEADERS)
 
     expect(COL.brand).toBe(1)
-    expect(COL.category).toBe(3) // "Общая категория", not "Категория"
+    expect(COL.line).toBe(2)      // «Категория» = линейка
+    expect(COL.model).toBe(3)     // «Модель»
+    expect(COL.category).toBe(2)  // нет «Общей категории» → site-category = линейка
     expect(COL.fullName).toBe(4)
     expect(COL.color).toBe(5)
     expect(COL.memory).toBe(6)
     expect(COL.size).toBe(7)
+    expect(COL.country).toBe(8)
+    expect(COL.description).toBe(9)
+    expect(COL.specs).toBe(10)
+    expect(COL.costPrice).toBe(11)
+    expect(COL.price).toBe(12)
+    expect(COL.quantity).toBe(13)
+    expect(COL.supplier).toBe(14)
+    expect(COL.updateDate).toBe(15)
+    expect(COL.photo).toBe(16)
   })
 
-  it('general category preferred over subcategory', () => {
-    const headers = ['', 'Бренд', 'Категория', 'Общая категория', 'Название модели']
-    const COL = mapHeaders(headers)
-    // "Общая категория" at idx 3, "Категория" at idx 2
-    // mapHeaders should pick 3 (Общая категория)
-    expect(COL.category).toBe(3)
+  it('matches «Модель» exactly, not as a substring of «Название модели»', () => {
+    // «Название модели» стоит раньше «Модели» — includes() выбрал бы idx 1
+    const COL = mapHeaders(['Бренд', 'Название модели', 'Модель', 'Рекомендованная стоимость'])
+    expect(COL.model).toBe(2)
+    expect(COL.fullName).toBe(1)
+  })
+
+  it('matches «Категория» exactly, not as a substring of «Общая категория»', () => {
+    const COL = mapHeaders(['Бренд', 'Общая категория', 'Категория', 'Название модели', 'Рекомендованная стоимость'])
+    expect(COL.line).toBe(2)
+    expect(COL.category).toBe(1) // отдельная «Общая категория» есть → она и остаётся site-category
+  })
+
+  it('falls back to positional line/model when both headers are missing', () => {
+    const COL = mapHeaders(['', 'Бренд', 'X', 'Y', 'Название модели', '', '', '', '', '', '',
+      '', 'Рекомендованная стоимость'])
+    expect(COL.line).toBe(2)
+    expect(COL.model).toBe(3)
+    expect(COL.category).toBe(2) // fallback category тоже уходит в линейку, не в модель
   })
 
   it('memory split handles 16GB/1TB format', () => {
