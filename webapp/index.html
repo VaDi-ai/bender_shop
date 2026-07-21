@@ -3171,7 +3171,7 @@
       const itemLines = items.map(i => esc(i.name) + ' × ' + i.qty).join('<br>')
       const payText = payment === 'cash' ? '💵 Наличные' : '💳 Карта'
       const deliveryText = delivery === 'pickup'
-        ? '📍 Самовывоз — ТЦ Горбушка, 211/1'
+        ? '📍 Самовывоз — ТЦ Горбушка, 202'
         : '🚚 Доставка: ' + esc(address || '')
 
       document.getElementById('successDetails').innerHTML = [
