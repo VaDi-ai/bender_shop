@@ -24,8 +24,8 @@
       --surface:   #1c1c1e;
       /* Подложка модалки — темнее витрины, чтобы «лист» товара читался отдельно */
       --modal-canvas: #050508;
-      /* «Сцена» под фото (letterbox) — заметно темнее панели карточки */
-      --photo-matte: #040404;
+      /* «Сцена» под фото (letterbox) — светлый бежевый, как у Яндекс.Маркета */
+      --photo-matte: #f7f2f0;
       /* Панель с текстом в модалке — чуть светлее холста, отрезана от фото */
       --modal-panel:  #1c1c1e;
       --border:    #333333;
@@ -490,22 +490,16 @@
       transition-duration: 0.12s;
     }
 
-    /* Photo wrap: лёгкий «studio» градиент + разделитель */
+    /* Photo wrap: плоский бежевый фон-«сцена» + разделитель */
     .product-photo-wrap {
       position: relative; width: 100%; aspect-ratio: 4 / 5;
-      background:
-        radial-gradient(ellipse 88% 72% at 50% 38%, rgba(38, 38, 42, 0.35) 0%, transparent 58%),
-        radial-gradient(ellipse 100% 90% at 50% 100%, rgba(0,0,0,0.45) 0%, transparent 55%),
-        var(--photo-matte);
+      background: var(--photo-matte);
       overflow: hidden; border-radius: var(--radius-card) var(--radius-card) 0 0;
-      border-bottom: 0.5px solid rgba(255,255,255,0.09);
-      box-shadow:
-        inset 0 1px 0 rgba(255,255,255,0.06),
-        inset 0 -24px 32px -20px rgba(0,0,0,0.55);
+      border-bottom: 0.5px solid rgba(0,0,0,0.10);
     }
     .product-photo { width: 100%; height: 100%; object-fit: contain; display: block; pointer-events: none; transition: opacity 0.15s; background: transparent; }
     .product-photo-ph { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 40px; pointer-events: none; background: var(--photo-matte); }
-    .product-photo-ph img, .modal-carousel-ph img { width: 100%; height: 100%; object-fit: cover; display: block; opacity: 0.6; }
+    .product-photo-ph img, .modal-carousel-ph img { width: 72%; height: 72%; max-width: 100%; max-height: 100%; object-fit: contain; opacity: 0.4; filter: grayscale(1); }
     .product-badge {
       position: absolute; top: 8px; left: 8px; z-index: 2;
       background: #0a0a0a; color: var(--accent);
@@ -593,18 +587,13 @@
     }
     .modal-close-btn:hover { border-color: rgba(255,255,255,0.28); color: #fff; background: rgba(44, 44, 48, 0.72); }
 
-    /* Карусель: та же «сцена», спокойнее отделена от панели */
+    /* Карусель: та же бежевая «сцена», спокойнее отделена от панели */
     .modal-carousel {
       position: relative; width: 100%; aspect-ratio: 4 / 5; max-height: min(55vh, 520px); min-height: 240px;
-      background:
-        radial-gradient(ellipse 88% 72% at 50% 38%, rgba(38, 38, 42, 0.35) 0%, transparent 58%),
-        radial-gradient(ellipse 100% 90% at 50% 100%, rgba(0,0,0,0.45) 0%, transparent 55%),
-        var(--photo-matte);
+      background: var(--photo-matte);
       flex-shrink: 0; overflow: hidden;
-      border-bottom: 0.5px solid rgba(255,255,255,0.1);
-      box-shadow:
-        inset 0 1px 0 rgba(255,255,255,0.05),
-        0 12px 40px rgba(0, 0, 0, 0.4);
+      border-bottom: 0.5px solid rgba(0,0,0,0.10);
+      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
     }
     .modal-carousel-img { width: 100%; height: 100%; object-fit: contain; display: block; background: transparent; }
     .modal-carousel-ph {
