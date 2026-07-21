@@ -52,3 +52,6 @@ _smoketest_*/
 
 # Source archives (not part of repo)
 /*.zip
+
+# Дампы прод-БД (персональные данные клиентов) — никогда не коммитить
+backups/

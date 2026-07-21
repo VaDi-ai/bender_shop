@@ -459,6 +459,31 @@
     .brand-filter-tab:hover { border-color: rgba(168,255,62,0.5); color: var(--accent); }
     .brand-filter-tab.active { border-color: #a8ff3e; color: #a8ff3e; background: rgba(168,255,62,0.05); }
 
+    /* ── Phase 2: дрилл-даун бренд → линейка → модель (скин из мокапа) ────── */
+    .dd-rowlabel { font-size: 9.5px; letter-spacing: 2.5px; color: #5a5a5a; padding: 12px 16px 6px 0; }
+    .dd-chips { display: flex; gap: 9px; overflow-x: auto; scroll-behavior: smooth; padding: 0 16px 10px 0; cursor: grab; scrollbar-width: none; -ms-overflow-style: none; }
+    .dd-chips::-webkit-scrollbar { display: none; }
+    .dd-chip { flex: 0 0 auto; font-size: 11.5px; letter-spacing: 1.2px; padding: 9px 16px; border: 1px solid #333; border-radius: 9px; color: #888; cursor: pointer; white-space: nowrap; transition: 0.18s; user-select: none; font-family: 'JetBrains Mono', monospace; text-transform: uppercase; }
+    .dd-chip:hover { color: #ccc; border-color: #555; }
+    .dd-chip.on { color: var(--accent); border-color: var(--accent); box-shadow: 0 0 10px rgba(168,255,62,0.14); }
+
+    .dd-crumb { font-size: 11px; letter-spacing: 1.5px; color: #888; padding: 14px 16px 0; }
+    .dd-crumb span { cursor: pointer; }
+    .dd-crumb span:hover { color: #bbb; }
+    .dd-crumb b { color: var(--accent); font-weight: 500; }
+    .dd-crumb .sep { color: #444; margin: 0 8px; }
+
+    .dd-card { background: #1c1c1e; border: 1px solid #333; border-radius: 16px; overflow: hidden; display: flex; flex-direction: column; cursor: pointer; transition: 0.18s; position: relative; }
+    .dd-card:hover { border-color: var(--accent); box-shadow: 0 0 0 1px rgba(168,255,62,0.22); }
+    /* Слот фото: беж под реальные фото; плейсхолдер кладётся поверх на всю ячейку. */
+    .dd-photo { aspect-ratio: 1/1; background: var(--photo-matte); margin: 10px 10px 0; border-radius: 12px; overflow: hidden; position: relative; }
+    .dd-photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .dd-photo.is-placeholder { background: #040404; }
+    .dd-meta { padding: 13px; display: flex; flex-direction: column; gap: 6px; flex: 1; }
+    .dd-nm { font-size: 12.5px; line-height: 1.35; letter-spacing: 0.3px; color: #fff; }
+    .dd-sub { font-size: 9.5px; letter-spacing: 1px; color: #888; margin-top: auto; }
+    .dd-price { font-size: 13px; color: #fff; letter-spacing: 0.5px; margin-top: auto; }
+
     .cat-filter-wrap { border-bottom: 1px solid #1a1a1a; padding: 0 0 0 16px; }
     .cat-filter-bar { display: flex; gap: 6px; overflow-x: auto; padding: 10px 16px 10px 0; -ms-overflow-style: none; scrollbar-width: none; }
     .cat-filter-bar::-webkit-scrollbar { display: none; }
@@ -468,6 +493,7 @@
 
     /* ── Product grid ─────────────────────────────────────────────────────── */
     .products { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; padding: 18px 16px 0; }
+    .products.dd-grid { grid-template-columns: repeat(auto-fill, minmax(168px, 1fr)); gap: 16px; }
     .state-msg { grid-column: 1 / -1; text-align: center; padding: 48px 0; color: var(--hint); font-size: 14px; letter-spacing: 2px; }
     @keyframes cardIn { from { transform: translateY(12px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
 
@@ -1232,14 +1258,6 @@
       </div>
     </div>
 
-    <div class="cat-grid-section" id="catGridSection">
-      <div class="section-label" style="padding: 0 16px;">БРЕНДЫ</div>
-      <div class="cat-grid" id="catGrid"></div>
-      <button class="cat-more-btn" id="catMoreBtn" onclick="toggleMoreCats()">
-        <span id="catMoreText">Ещё бренды</span>
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
-      </button>
-    </div>
 
     <div class="hits-section" id="hitsSection" style="display:none">
       <div style="display: flex; align-items: center; justify-content: space-between; padding: 0 16px; margin-bottom: 10px;">
@@ -1279,8 +1297,10 @@
         </div>
       </div>
       <div class="cat-filter-wrap" id="catFilterWrap">
-        <div class="cat-filter-bar" id="catFilterBar"></div>
+        <div class="dd-rowlabel">БРЕНД</div>
+        <div class="dd-chips" id="catFilterBar"></div>
       </div>
+      <div class="dd-crumb" id="ddCrumb"></div>
       <div class="products" id="grid">
         <div class="state-msg">Загрузка…</div>
       </div>
@@ -1687,8 +1707,8 @@
         renderNavList()
       } catch (err) {
         console.error('[Categories] Load failed:', err)
-        const catGrid = document.getElementById('catGrid')
-        if (catGrid) catGrid.innerHTML = '<div class="state-msg">Не удалось загрузить категории</div>'
+        const bar = document.getElementById('catFilterBar')
+        if (bar) bar.innerHTML = ''
       }
     }
 
@@ -1741,29 +1761,156 @@
         })
     }
 
+    // Верхний фильтр — чипы БРЕНДОВ (Phase 2). Порядок из BRAND_POPULARITY,
+    // незнакомые бренды — следом, «Прочее» последним. Ничего не хардкодим:
+    // список брендов приходит из allProducts.
     function renderCatFilterBar() {
       const bar = document.getElementById('catFilterBar')
       if (!bar) return
-      const CATEGORY_POPULARITY = [
-        'Телефоны', 'Планшеты', 'Ноутбуки', 'Аудио', 'Часы',
-        'Телевизоры', 'Desktop', 'Игровые консоли', 'Умный дом',
-        'Гаджеты', 'Аксессуары', 'Красота и уход', 'Фототехника',
-        'Экшн-камеры', 'Дисплеи', 'Дроны'
-      ]
-      const sorted = [...categories].sort((a, b) => {
-        const ai = CATEGORY_POPULARITY.indexOf(a.name)
-        const bi = CATEGORY_POPULARITY.indexOf(b.name)
-        return (ai !== -1 ? ai : 999) - (bi !== -1 ? bi : 999)
-      })
-      let html = `<div class="cat-filter-tab${activeCat === '' ? ' active' : ''}" data-cat="">ВСЕ</div>`
-      html += sorted.map(c =>
-        `<div class="cat-filter-tab${activeCat === c.name ? ' active' : ''}" data-cat="${esc(c.name)}">${esc(c.name).toUpperCase()}</div>`
+      const rank = b => {
+        if (b === 'Прочее') return 9999
+        const i = BRAND_POPULARITY.indexOf(b)
+        return i !== -1 ? i : 998
+      }
+      const sorted = [...brands].sort((a, b) => rank(a.name) - rank(b.name) || a.name.localeCompare(b.name, 'ru'))
+      let html = `<div class="dd-chip${activeBrand === '' ? ' on' : ''}" data-brand="">ВСЕ</div>`
+      html += sorted.map(b =>
+        `<div class="dd-chip${activeBrand === b.name ? ' on' : ''}" data-brand="${esc(b.name)}">${esc(b.name)}</div>`
       ).join('')
       bar.innerHTML = html
-      bar.querySelectorAll('.cat-filter-tab').forEach(el => {
-        el.addEventListener('click', () => selectCategory(el.dataset.cat))
+      bar.querySelectorAll('.dd-chip').forEach(el => {
+        el.addEventListener('click', () => selectBrand(el.dataset.brand))
       })
       setupBrandDrag(bar)
+    }
+
+    // ── Дрилл-даун: группировка и обложки ─────────────────────────────────────
+
+    // Товары текущего уровня: поиск не участвует, бренд — если выбран.
+    function drillProducts() {
+      let list = allProducts
+      if (activeBrand) list = list.filter(p => productBrand(p) === activeBrand)
+      return list
+    }
+
+    function productBrand(p) {
+      return (p.brand && p.brand.trim()) ? p.brand.trim() : (p.name || '').split(' ')[0]
+    }
+
+    function productLine(p) {
+      return (p.line && String(p.line).trim()) || p.category || 'Другое'
+    }
+
+    // sortOrder: 1 = новее/выше. 0 («Порядок» не задан) уходит в конец.
+    function orderOf(p) {
+      const n = Number(p.sortOrder || 0)
+      return n > 0 ? n : Number.MAX_SAFE_INTEGER
+    }
+
+    // Первое реальное фото товара (не плейсхолдер), иначе ''.
+    function realPhotoOf(p) {
+      const photos = getProductPhotos(p, null) || []
+      for (const url of photos) {
+        if (url && !isPlaceholderPhotoUrl(url)) return url
+      }
+      return ''
+    }
+
+    // Обложка линейки = фото самой новой модели в наличии (min sortOrder) с реальным
+    // фото → любой товар линейки с реальным фото → плейсхолдер. allProducts уже
+    // in-stock-only, поэтому обложка всегда «живая».
+    function lineCover(items) {
+      const byOrder = [...items].sort((a, b) => orderOf(a) - orderOf(b))
+      for (const p of byOrder) {
+        const url = realPhotoOf(p)
+        if (url) return url
+      }
+      return ''
+    }
+
+    function groupByLine(list) {
+      const map = new Map()
+      for (const p of list) {
+        const line = productLine(p)
+        if (!map.has(line)) map.set(line, [])
+        map.get(line).push(p)
+      }
+      // Линейки по минимальному sortOrder своих моделей: линейка с моделью №1 первая.
+      return [...map.entries()]
+        .map(([line, items]) => ({ line, items, order: Math.min(...items.map(orderOf)) }))
+        .sort((a, b) => a.order - b.order || a.line.localeCompare(b.line, 'ru'))
+    }
+
+    function ddPhotoHtml(url) {
+      if (!url) {
+        return `<div class="dd-photo is-placeholder"><img src="/no-photo.webp" alt="" loading="lazy"></div>`
+      }
+      return `<div class="dd-photo"><img src="${esc(url)}" alt="" loading="lazy" onerror="this.parentElement.classList.add('is-placeholder');this.src='/no-photo.webp'"></div>`
+    }
+
+    function renderCrumb() {
+      const el = document.getElementById('ddCrumb')
+      if (!el) return
+      if (searchQuery) { el.innerHTML = ''; return }
+      let html = `<span onclick="scrollToTop()">Главная</span><span class="sep">—</span>`
+      if (!activeBrand && !activeCat) {
+        html += `<b>Каталог</b>`
+      } else {
+        html += `<span onclick="selectBrand('')">Каталог</span>`
+        if (activeBrand) {
+          html += `<span class="sep">—</span>`
+          html += activeCat
+            ? `<span onclick="selectLine('')">${esc(activeBrand)}</span>`
+            : `<b>${esc(activeBrand)}</b>`
+        }
+        if (activeCat) html += `<span class="sep">—</span><b>${esc(activeCat)}</b>`
+      }
+      el.innerHTML = html
+    }
+
+    // Уровень линеек: фото-карточки, обложка = фото новейшей модели в наличии.
+    function renderLineCards(grid) {
+      const groups = groupByLine(drillProducts())
+      if (!groups.length) {
+        grid.innerHTML = '<div class="state-msg">Ничего не найдено</div>'
+        return
+      }
+      grid.innerHTML = groups.map(g => `
+        <div class="dd-card" onclick="selectLine('${esc(g.line).replace(/'/g, "\\'")}')">
+          ${ddPhotoHtml(lineCover(g.items))}
+          <div class="dd-meta">
+            <div class="dd-nm">${esc(g.line)}</div>
+            <div class="dd-sub">${g.items.length} ${pluralize(g.items.length, 'модель', 'модели', 'моделей')}</div>
+          </div>
+        </div>
+      `).join('')
+    }
+
+    // Уровень моделей: sortOrder ASC (новые сверху), клик → модалка товара.
+    function renderModelCards(grid) {
+      const items = drillProducts()
+        .filter(p => productLine(p) === activeCat)
+        .sort((a, b) => orderOf(a) - orderOf(b) || a.name.localeCompare(b.name, 'ru'))
+      if (!items.length) {
+        grid.innerHTML = '<div class="state-msg">Ничего не найдено</div>'
+        return
+      }
+      grid.innerHTML = items.map(p => `
+        <div class="dd-card" onclick="openProductModal(${p.id})">
+          ${ddPhotoHtml(realPhotoOf(p))}
+          <div class="dd-meta">
+            <div class="dd-nm">${esc(p.name)}</div>
+            <div class="dd-price">${priceDisplay(minVariantPrice(p), 'от ')}</div>
+          </div>
+        </div>
+      `).join('')
+    }
+
+    function selectLine(line) {
+      track('filter_line', { line })
+      activeCat = line
+      renderGrid()
+      document.getElementById('catalog')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
     }
 
     function setupBrandDrag(bar) {
@@ -1786,12 +1933,11 @@
     function selectBrand(brand) {
       track('filter_brand', { brand })
       activeBrand = brand
-      // Update brand grid tiles
-      document.querySelectorAll('.cat-btn[data-brand]').forEach(el => {
-        el.classList.toggle('active', el.dataset.brand === brand)
+      // Смена бренда возвращает на уровень линеек — линейка прошлого бренда тут не к месту.
+      activeCat = ''
+      document.querySelectorAll('.dd-chip[data-brand]').forEach(el => {
+        el.classList.toggle('on', el.dataset.brand === brand)
       })
-      // Update category filter for this brand
-      updateCatFilterForBrand(brand)
       renderGrid()
       const catalog = document.getElementById('catalog')
       if (catalog) {
@@ -1799,77 +1945,9 @@
       }
     }
 
-    function updateCatFilterForBrand(brand) {
-      const bar = document.getElementById('catFilterBar')
-      if (!bar) return
-      if (!brand) {
-        bar.querySelectorAll('.cat-filter-tab').forEach(el => { el.style.display = '' })
-        return
-      }
-      const brandCats = new Set()
-      allProducts.forEach(p => {
-        const b = (p.brand && p.brand.trim()) ? p.brand.trim() : (p.name || '').split(' ')[0]
-        if (b === brand) brandCats.add(p.category || '')
-      })
-      bar.querySelectorAll('.cat-filter-tab').forEach(el => {
-        const cat = el.dataset.cat
-        el.style.display = (cat === '' || brandCats.has(cat)) ? '' : 'none'
-      })
-      if (activeCat && !brandCats.has(activeCat)) {
-        activeCat = ''
-        bar.querySelectorAll('.cat-filter-tab').forEach(el => {
-          el.classList.toggle('active', el.dataset.cat === '')
-        })
-      }
-    }
 
-    function updateBrandGridForCategory(cat) {
-      const tiles = document.querySelectorAll('.cat-btn[data-brand]')
-      if (!tiles.length) return
-      if (!cat) {
-        tiles.forEach(el => { el.style.display = '' })
-        return
-      }
-      const catBrands = new Set()
-      allProducts.forEach(p => {
-        if ((p.category || '') === cat) {
-          const b = (p.brand && p.brand.trim()) ? p.brand.trim() : (p.name || '').split(' ')[0]
-          catBrands.add(b)
-        }
-      })
-      tiles.forEach(el => {
-        const brand = el.dataset.brand
-        el.style.display = (brand === '' || catBrands.has(brand)) ? '' : 'none'
-      })
-      if (activeBrand && !catBrands.has(activeBrand)) {
-        activeBrand = ''
-        tiles.forEach(el => { el.classList.toggle('active', el.dataset.brand === '') })
-      }
-    }
 
     // ── Category images ──────────────────────────────────────────────────────
-    const CATEGORY_IMAGES = {
-      'Телефоны':        '/categories/phones.webp',
-      'Планшеты':        '/categories/tablets.webp',
-      'Ноутбуки':        '/categories/laptops.webp',
-      'Часы':            '/categories/watches.webp',
-      'Аудио':           '/categories/audio.webp',
-      'Консоли':         '/categories/consoles.webp',
-      'Игровые консоли': '/categories/consoles.webp',
-      'Умный дом':       '/categories/smarthome.webp',
-      'Фототехника':     '/categories/photo.webp',
-      'Desktop':         '/categories/desktop.webp',
-      'Компьютеры':      '/categories/desktop.webp',
-      'Аксессуары':      '/categories/accessories.webp',
-      'Услуги':          '/categories/services.webp',
-      'Акции':           '/categories/sales.webp',
-      'Красота и уход':  '/categories/beauty.webp',
-      'Телевизоры':      '/categories/tv.webp',
-      'Гаджеты':         '/categories/gadgets.webp',
-      'Дисплеи':         '/categories/display.webp',
-      'Дроны':           '/categories/dron.webp',
-      'Экшн-камеры':     '/categories/action_camera.webp',
-    }
 
     let TOP_CATEGORIES = ['Телефоны', 'Ноутбуки', 'Планшеты', 'Аудио', 'Часы', 'Телевизоры']
     const MAX_VISIBLE = 6
@@ -1882,80 +1960,8 @@
       return many
     }
 
-    const BRAND_IMAGES = {
-      'Apple':            '/categories/phones.webp',
-      'Samsung':          '/categories/tablets.webp',
-      'Xiaomi':           '/categories/smarthome.webp',
-      'Sony':             '/categories/consoles.webp',
-      'JBL':              '/categories/audio.webp',
-      'Dyson':            '/categories/beauty.webp',
-      'LG':               '/categories/tv.webp',
-      'Garmin':           '/categories/watches.webp',
-      'DJI':              '/categories/dron.webp',
-      'Google':           '/categories/gadgets.webp',
-      'Huawei':           '/categories/laptops.webp',
-      'Beats':            '/categories/audio.webp',
-      'Marshall':         '/categories/desktop.webp',
-      'Honor':            '/categories/display.webp',
-      'Poco':             '/categories/action_camera.webp',
-      'OnePlus':          '/categories/accessories.webp',
-      'Yandex':           '/categories/smarthome.webp',
-      'Ray-Ban':          '/categories/gadgets.webp',
-      'Nintendo':         '/categories/consoles.webp',
-      'Fujifilm':         '/categories/photo.webp',
-      'Hisense':          '/categories/tv.webp',
-      'Insta360':         '/categories/action_camera.webp',
-      'Oakley':           '/categories/gadgets.webp',
-      'Canon':            '/categories/photo.webp',
-      'GoPro':            '/categories/action_camera.webp',
-      'Meta':             '/categories/consoles.webp',
-      'Bowers & Wilkins': '/categories/audio.webp',
-      'Medicube':         '/categories/beauty.webp',
-      'Plaud':            '/categories/gadgets.webp',
-      'Whoop':            '/categories/watches.webp',
-      'Microsoft':        '/categories/consoles.webp',
-      'Valve':            '/categories/consoles.webp',
-      'Asus':             '/categories/laptops.webp',
-    }
 
-    function renderBrandGrid() {
-      const grid = document.getElementById('catGrid')
-      if (!grid) return
 
-      const sorted = [...brands].slice(0, 20)
-
-      grid.innerHTML = sorted.map((b, i) => {
-        const img = BRAND_IMAGES[b.name] || ''
-        const hiddenClass = i >= MAX_VISIBLE && !catsExpanded ? ' hidden' : ''
-        return `
-      <div class="cat-btn${hiddenClass}${activeBrand === b.name ? ' active' : ''}" data-brand="${esc(b.name)}" onclick="selectBrand('${esc(b.name)}')">
-        <div class="cat-btn-text">
-          <div class="cat-btn-name">${esc(b.name).toUpperCase()}</div>
-          <div class="cat-btn-count">${b.count} ${pluralize(b.count, 'товар', 'товара', 'товаров')}</div>
-        </div>
-        ${img ? `<img class="cat-btn-img" src="${img}" alt="" loading="lazy" onerror="if(this.src.includes('.webp')){this.src=this.src.replace('.webp','.png')}else{this.style.display='none'}">` : ''}
-      </div>
-    `
-      }).join('')
-
-      const moreBtn = document.getElementById('catMoreBtn')
-      if (moreBtn) {
-        moreBtn.style.display = sorted.length > MAX_VISIBLE ? 'flex' : 'none'
-      }
-    }
-
-    function toggleMoreCats() {
-      catsExpanded = !catsExpanded
-      const btn = document.getElementById('catMoreBtn')
-      btn.classList.toggle('expanded', catsExpanded)
-      document.getElementById('catMoreText').textContent = catsExpanded ? 'Свернуть' : 'Ещё бренды'
-
-      document.querySelectorAll('.cat-btn').forEach((el, i) => {
-        if (i >= MAX_VISIBLE) {
-          el.classList.toggle('hidden', !catsExpanded)
-        }
-      })
-    }
 
     // ── Hits ──────────────────────────────────────────────────────────────────
     function renderHits(products) {
@@ -2028,11 +2034,10 @@
     // ── Select category ───────────────────────────────────────────────────────
     function selectCategory(cat) {
       track('filter_category', { category: cat })
+      // Категория сайта = линейка (Phase 2). Выбор из меню сбрасывает бренд,
+      // иначе линейка чужого бренда дала бы пустую выдачу.
       activeCat = cat
-      // Update category filter bar
-      document.querySelectorAll('.cat-filter-tab[data-cat]').forEach(el => {
-        el.classList.toggle('active', el.dataset.cat === cat)
-      })
+      activeBrand = ''
       document.querySelectorAll('.nav-item').forEach(el => {
         el.classList.toggle('active', el.dataset.cat === cat)
       })
@@ -2044,8 +2049,6 @@
         document.getElementById('catalogTitle').textContent = 'КАТАЛОГ'
         document.getElementById('catalogSub').textContent   = 'Все товары'
       }
-      // Update brand grid for this category
-      updateBrandGridForCategory(cat)
       document.getElementById('catalog').scrollIntoView({ behavior: 'smooth', block: 'start' })
       renderGrid()
     }
@@ -2060,7 +2063,6 @@
         if (!res.ok) throw new Error('HTTP ' + res.status)
         allProducts = await res.json()
         computeBrands()
-        renderBrandGrid()
         renderCatFilterBar()
         renderHits(allProducts)
         renderGrid()
@@ -2073,6 +2075,27 @@
     function renderGrid() {
       const grid = document.getElementById('grid')
       document.getElementById('searchResultsHeader')?.remove()
+      renderCrumb()
+
+      // Дрилл-даун (Phase 2): без поиска каталог — это уровни линеек и моделей.
+      // Поиск идёт мимо уровней и показывает обычные карточки товаров.
+      if (!searchQuery) {
+        grid.classList.add('dd-grid')
+        const title = document.getElementById('catalogTitle')
+        const sub = document.getElementById('catalogSub')
+        if (activeCat) {
+          if (title) title.textContent = String(activeCat).toUpperCase()
+          if (sub) sub.textContent = 'Модели'
+          renderModelCards(grid)
+        } else {
+          if (title) title.textContent = activeBrand ? String(activeBrand).toUpperCase() : 'КАТАЛОГ'
+          if (sub) sub.textContent = 'Линейки'
+          renderLineCards(grid)
+        }
+        return
+      }
+      grid.classList.remove('dd-grid')
+
       let products = allProducts
 
       // Фильтр по поиску

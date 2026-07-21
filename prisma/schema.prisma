@@ -253,6 +253,10 @@ model Product {
   avitoItemId  BigInt? // ID объявления на Avito (заполняется при маппинге)
   avitoEnabled Boolean @default(false) // Включён ли товар для Avito
 
+  // Phase 2 — таксономия бренд → линейка → модель
+  line      String? // линейка бренда из колонки «Категория»: iPhone, MacBook, Galaxy S
+  sortOrder Int     @default(0) // из колонки «Порядок», 1 = верх/новее; 0 = не задан → в конец
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -267,6 +271,7 @@ model Product {
   @@index([name])
   @@index([avitoItemId])
   @@index([avitoEnabled])
+  @@index([brand, line])
 }
 
 model ProductVariant {
