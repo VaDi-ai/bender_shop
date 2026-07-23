@@ -408,7 +408,7 @@
     .dd-meta { padding: 13px; display: flex; flex-direction: column; gap: 6px; flex: 1; }
     .dd-nm { font-size: 12.5px; line-height: 1.35; letter-spacing: 0.3px; color: #fff; }
     .dd-sub { font-size: 9.5px; letter-spacing: 1px; color: #888; margin-top: auto; }
-    .dd-price { font-size: 13px; color: #fff; letter-spacing: 0.5px; margin-top: auto; }
+    .dd-price { font-family: 'Onest', sans-serif; font-weight: 600; font-size: 13px; color: #fff; letter-spacing: 0.2px; margin-top: auto; }
 
     .cat-filter-wrap { border-bottom: 1px solid #1a1a1a; padding: 0 0 0 16px; }
     .cat-filter-bar { display: flex; gap: 6px; overflow-x: auto; padding: 10px 16px 10px 0; -ms-overflow-style: none; scrollbar-width: none; }
@@ -444,7 +444,7 @@
 
     /* Photo wrap: плоский бежевый фон-«сцена» + разделитель */
     .product-photo-wrap {
-      position: relative; width: 100%; aspect-ratio: 4 / 5;
+      position: relative; width: 100%; aspect-ratio: 1 / 1;
       background: var(--photo-matte);
       overflow: hidden; border-radius: var(--radius-card) var(--radius-card) 0 0;
       border-bottom: 0.5px solid rgba(0,0,0,0.10);
@@ -483,9 +483,9 @@
       color: rgba(255,255,255,0.94);
     }
     .product-price {
-      font-family: 'JetBrains Mono', monospace; font-size: 15px; font-weight: 600;
+      font-family: 'Onest', sans-serif; font-size: 15px; font-weight: 600;
       font-variant-numeric: tabular-nums;
-      color: var(--accent); margin-top: auto;
+      color: #fff; margin-top: auto;
       letter-spacing: -0.02em;
     }
     .product-price.ask-manager { font-family: inherit; font-size: 12px; color: #ff9500; }
@@ -556,9 +556,19 @@
       display: flex; align-items: center; justify-content: center;
       font-size: 72px; background: #040404;
     }
-    .product-photo-wrap, .modal-carousel { background-color: var(--photo-matte) !important; }
-    .product-photo, .modal-carousel-img { background-color: transparent !important; }
-    .cart-item-thumb, img[src*="/api/"] { background-color: var(--surface) !important; }
+    /* ═══ ЕДИНЫЙ БЕЖ-СЛОТ для ВСЕХ карточек товара (главная/каталог/дрилл-даун/модалка/корзина) ═══
+       Беж #f7f2f0 заливает весь слот; фото товара лежит на беже БЕЗ собственной тёмной подложки.
+       Плейсхолдеры (нет фото) сюда НЕ попадают (:not) — остаются full-bleed тёмными, как в проде. */
+    .product-photo-wrap, .modal-carousel, .dd-photo:not(.is-placeholder), .hc-slot:not(.is-ph),
+    .modal-rec-img, .cart-item-thumb { background-color: var(--photo-matte) !important; }
+    /* фото карточки: прозрачный фон (беж слота виден как фон, а не каймой) + contain. Перебивает
+       глобальный img{background:--surface} и img[src*="/api/"] за счёт !important и специфичности. */
+    .hc-slot img.hc-img, .product-photo, .dd-photo:not(.is-placeholder) img,
+    .modal-carousel-img, .modal-rec-img img {
+      background-color: transparent !important; object-fit: contain !important;
+    }
+    /* корзина: миниатюра — тоже беж-слот с товаром (contain), консистентно с карточками */
+    .cart-item-thumb { object-fit: contain !important; }
     .modal-carousel-arrow {
       position: absolute; top: 50%; transform: translateY(-50%);
       z-index: 5; width: 40px; height: 40px;
