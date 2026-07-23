@@ -4,6 +4,7 @@ import log from './logger'
 
 export type SecurityEvent =
   | 'invalid_telegram_signature'
+  | 'pdn_consent'
   | 'price_manipulation_attempt'
   | 'rate_limit_exceeded'
   | 'invalid_order_data'

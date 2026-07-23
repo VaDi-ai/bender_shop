@@ -1054,6 +1054,42 @@
     #tabbar .tb svg { width: 22px; height: 22px; display: block; }
     #tabbar .tb .tb-badge { position: absolute; }
     @media (min-width: 481px) { #tabbar { max-width: 480px; } }
+
+    /* ════════ Кабинет ════════ */
+    .acc { padding: 16px 16px 8px; font-family: 'Onest', sans-serif; }
+    .acc-head { display: flex; align-items: center; gap: 14px; margin-bottom: 18px; }
+    .acc-avatar { width: 54px; height: 54px; border-radius: 50%; background: var(--surface); border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; font-size: 26px; flex: 0 0 auto; }
+    .acc-name { font-weight: 600; font-size: 18px; letter-spacing: -0.2px; }
+    .acc-sub { font-size: 12px; color: var(--hint); margin-top: 2px; }
+    .acc-card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 14px 14px 16px; margin-bottom: 14px; }
+    .acc-card-h { font-weight: 600; font-size: 15px; margin-bottom: 12px; }
+    .acc-field { display: flex; flex-direction: column; gap: 5px; margin-bottom: 11px; }
+    .acc-field > span { font-size: 12px; color: var(--hint); font-weight: 400; }
+    .acc-field input { width: 100%; background: #141416; border: 1px solid var(--border); border-radius: 10px; padding: 11px 12px; color: var(--text); font-family: 'Onest', sans-serif; font-size: 14px; outline: none; transition: border-color .15s; }
+    .acc-field input:focus { border-color: var(--accent); }
+    .acc-consent { display: flex; align-items: flex-start; gap: 9px; margin: 4px 0 12px; font-size: 12px; color: var(--hint); line-height: 1.4; cursor: pointer; }
+    .acc-consent input { margin-top: 1px; width: 16px; height: 16px; accent-color: var(--accent); flex: 0 0 auto; }
+    .acc-consent a { color: var(--accent); }
+    .acc-err { color: #ff6b6b; font-size: 12px; min-height: 15px; margin-bottom: 6px; }
+    .acc-save { width: 100%; background: var(--accent); color: var(--accent-fg); border: none; border-radius: 11px; padding: 13px; font-family: 'Onest', sans-serif; font-weight: 600; font-size: 14px; cursor: pointer; }
+    .acc-save:disabled { opacity: .55; }
+    .acc-empty { color: var(--hint); font-size: 13px; padding: 6px 2px; }
+    .acc-order { border: 1px solid var(--border); border-radius: 12px; padding: 11px 12px; margin-bottom: 10px; }
+    .acc-order:last-child { margin-bottom: 0; }
+    .acc-order-top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+    .acc-order-top > span:first-child { font-size: 12px; color: var(--hint); }
+    .acc-order-sum { font-weight: 600; font-size: 14px; }
+    .acc-order-status { display: inline-block; font-size: 10.5px; font-weight: 600; padding: 2px 8px; border-radius: 6px; background: rgba(168,255,62,.14); color: var(--accent); margin: 6px 0 5px; }
+    .acc-order-status.st-cancelled { background: rgba(255,107,107,.14); color: #ff6b6b; }
+    .acc-order-status.st-new, .acc-order-status.st-processing { background: rgba(255,226,122,.16); color: #ffe27a; }
+    .acc-order-items { font-size: 12.5px; color: #cfcfcf; line-height: 1.4; }
+
+    /* ════════ Акции (заглушка) ════════ */
+    .promos-soon { min-height: 52vh; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 40px 24px; font-family: 'Onest', sans-serif; }
+    .promos-emoji { font-size: 46px; margin-bottom: 14px; }
+    .promos-title { font-weight: 600; font-size: 21px; margin-bottom: 8px; }
+    .promos-sub { font-size: 13px; color: var(--hint); max-width: 28ch; line-height: 1.5; margin-bottom: 22px; }
+    .promos-btn { background: transparent; color: var(--accent); border: 1px solid var(--accent); border-radius: 11px; padding: 11px 22px; font-family: 'Onest', sans-serif; font-weight: 600; font-size: 13px; cursor: pointer; }
   </style>
 </head>
 <body>
@@ -1338,6 +1374,52 @@
       </div>
     </section>
     </div><!-- #catalogView -->
+
+    <!-- ═══ КАБИНЕТ (профиль + история заказов) ═══ -->
+    <div id="accountView" class="view-off">
+      <section class="acc">
+        <div class="acc-head">
+          <div class="acc-avatar">👤</div>
+          <div class="acc-id">
+            <div class="acc-name" id="accName">Гость</div>
+            <div class="acc-sub" id="accSub"></div>
+          </div>
+        </div>
+
+        <div class="acc-card">
+          <div class="acc-card-h">Профиль</div>
+          <label class="acc-field"><span>ФИО</span>
+            <input id="pfFullName" type="text" placeholder="Иванов Иван Иванович" maxlength="120" autocomplete="name"></label>
+          <label class="acc-field"><span>Дата рождения</span>
+            <input id="pfBirth" type="text" inputmode="numeric" placeholder="дд.мм.гггг" maxlength="10" oninput="maskBirth(this)"></label>
+          <label class="acc-field"><span>Телефон</span>
+            <input id="pfPhone" type="tel" inputmode="tel" placeholder="+7 900 000-00-00" maxlength="32" autocomplete="tel"></label>
+          <label class="acc-field"><span>Email</span>
+            <input id="pfEmail" type="email" inputmode="email" placeholder="you@example.com" maxlength="120" autocomplete="email"></label>
+          <label class="acc-consent" id="pfConsentWrap">
+            <input type="checkbox" id="pfConsent">
+            <span>Согласен на обработку персональных данных согласно <a href="/legal/privacy" target="_blank" rel="noopener">политике конфиденциальности</a></span>
+          </label>
+          <div class="acc-err" id="pfErr"></div>
+          <button class="acc-save" id="pfSave" onclick="saveProfile()">Сохранить</button>
+        </div>
+
+        <div class="acc-card">
+          <div class="acc-card-h">Мои заказы</div>
+          <div id="accOrders"><div class="acc-empty">Загрузка…</div></div>
+        </div>
+      </section>
+    </div>
+
+    <!-- ═══ АКЦИИ (заглушка «скоро») ═══ -->
+    <div id="promosView" class="view-off">
+      <section class="promos-soon">
+        <div class="promos-emoji">⚡</div>
+        <div class="promos-title">Акции скоро</div>
+        <div class="promos-sub">Здесь появятся спецпредложения и скидки Bender Shop.</div>
+        <button class="promos-btn" onclick="switchTab('home')">На главную</button>
+      </section>
+    </div>
   </main>
 
   <footer class="site-footer">
@@ -1394,7 +1476,11 @@
 
   <script>
     const tg = window.Telegram && window.Telegram.WebApp
-    if (tg) { tg.ready(); tg.expand() }
+    if (tg) {
+      tg.ready(); tg.expand()
+      // нижняя кромка Mini App — зона свайпа-закрытия; иначе она перехватывает тапы по таббару
+      try { tg.disableVerticalSwipes && tg.disableVerticalSwipes() } catch {}
+    }
 
     // ── Analytics ──────────────────────────────────────────────────────────────
     const SESSION_ID = Math.random().toString(36).slice(2) + Date.now().toString(36)
@@ -3507,20 +3593,112 @@
     }
 
     // ── Таббар / переключение Главная ↔ Каталог ──
+    const TAB_VIEWS = { home: 'homeView', catalog: 'catalogView', account: 'accountView', promos: 'promosView' }
     function switchTab(tab) {
-      if (tab === 'cart') { openCart(); return }
-      if (tab === 'account') { openMenu(); return }
-      if (tab === 'promos') { showToast('Раздел «Акции» — скоро'); return }
-      const home = document.getElementById('homeView')
-      const cat = document.getElementById('catalogView')
-      if (tab === 'catalog') { home.classList.add('view-off'); cat.classList.remove('view-off') }
-      else { cat.classList.add('view-off'); home.classList.remove('view-off') }
+      if (tab === 'cart') { openCart(); return } // корзина — существующая панель, поверх текущего экрана
+      const targetId = TAB_VIEWS[tab] || 'homeView'
+      Object.values(TAB_VIEWS).forEach(id => {
+        const el = document.getElementById(id)
+        if (el) el.classList.toggle('view-off', id !== targetId)
+      })
       document.querySelectorAll('#tabbar .tb').forEach(b => b.classList.toggle('active', b.dataset.tab === tab))
+      if (tab === 'account') renderAccount()
       scrollToTop()
     }
     function goCatalog() { switchTab('catalog') }
     function goCatalogBrand() { switchTab('catalog'); if (brandBlockBrand) selectBrand(brandBlockBrand) }
     function homeSelectBrand(brand) { switchTab('catalog'); selectBrand(brand) }
+
+    // ══════════════════ Кабинет (профиль + история заказов) ══════════════════
+    function tgAuthHeaders() { return { 'x-telegram-init-data': (tg && tg.initData) || '' } }
+    function fmtDate(iso) {
+      const d = new Date(iso); if (isNaN(d)) return ''
+      const p = n => String(n).padStart(2, '0')
+      return `${p(d.getDate())}.${p(d.getMonth() + 1)}.${d.getFullYear()}`
+    }
+    function _v(id) { const el = document.getElementById(id); return el ? el.value.trim() : '' }
+    function _sv(id, val) { const el = document.getElementById(id); if (el) el.value = val || '' }
+
+    // Маска даты рождения → дд.мм.гггг
+    function maskBirth(el) {
+      const d = el.value.replace(/\D/g, '').slice(0, 8)
+      let out = d.slice(0, 2)
+      if (d.length > 2) out += '.' + d.slice(2, 4)
+      if (d.length > 4) out += '.' + d.slice(4, 8)
+      el.value = out
+    }
+
+    let _accountLoading = false
+    async function renderAccount() {
+      const u = (tg && tg.initDataUnsafe && tg.initDataUnsafe.user) || {}
+      if (_accountLoading) return
+      _accountLoading = true
+      try {
+        const headers = tgAuthHeaders()
+        const [pRes, oRes] = await Promise.all([
+          fetch('/api/profile', { headers, cache: 'no-store' }),
+          fetch('/api/my-orders', { headers, cache: 'no-store' }),
+        ])
+        if (pRes.ok) {
+          const p = await pRes.json()
+          const uname = p.telegramUsername || u.username || ''
+          document.getElementById('accName').textContent = p.fullName || (uname ? '@' + uname : (u.first_name || 'Гость'))
+          document.getElementById('accSub').textContent = [uname ? '@' + uname : '', p.createdAt ? 'с ' + fmtDate(p.createdAt) : ''].filter(Boolean).join(' · ')
+          _sv('pfFullName', p.fullName); _sv('pfBirth', p.birthDate); _sv('pfPhone', p.phone); _sv('pfEmail', p.email)
+          // согласие уже собрано (профиль заполнялся ранее) → чекбокс не показываем
+          document.getElementById('pfConsentWrap').style.display = p.hasProfile ? 'none' : ''
+        } else if (pRes.status === 401) {
+          document.getElementById('accSub').textContent = 'Откройте магазин из Telegram, чтобы войти'
+        }
+        const ordersEl = document.getElementById('accOrders')
+        if (oRes.ok) renderOrders(await oRes.json())
+        else ordersEl.innerHTML = '<div class="acc-empty">' + (oRes.status === 401 ? 'Войдите через Telegram' : 'Не удалось загрузить заказы') + '</div>'
+      } catch {
+        document.getElementById('accOrders').innerHTML = '<div class="acc-empty">Нет связи с сервером</div>'
+      } finally { _accountLoading = false }
+    }
+
+    function renderOrders(list) {
+      const el = document.getElementById('accOrders')
+      if (!Array.isArray(list) || !list.length) { el.innerHTML = '<div class="acc-empty">Заказов пока нет</div>'; return }
+      const stLabel = { new: 'Новый', processing: 'В работе', completed: 'Выполнен', cancelled: 'Отменён' }
+      el.innerHTML = list.map(o => `
+        <div class="acc-order">
+          <div class="acc-order-top"><span>№${o.id} · ${fmtDate(o.createdAt)}</span><span class="acc-order-sum">${fmt(Number(o.totalAmount))} ₽</span></div>
+          <span class="acc-order-status st-${esc(o.status)}">${stLabel[o.status] || esc(o.status)}</span>
+          <div class="acc-order-items">${(o.items || []).map(i => `${esc(i.name)} ×${i.quantity}`).join(', ')}</div>
+        </div>`).join('')
+    }
+
+    async function saveProfile() {
+      const err = document.getElementById('pfErr'); err.textContent = ''
+      const birth = _v('pfBirth'), phone = _v('pfPhone'), email = _v('pfEmail')
+      // клиентская валидация формата
+      if (birth && !/^\d{2}\.\d{2}\.\d{4}$/.test(birth)) { err.textContent = 'Дата рождения — в формате дд.мм.гггг'; return }
+      if (phone && !/^\+?[0-9][0-9\s()\-]{6,19}$/.test(phone)) { err.textContent = 'Проверьте телефон'; return }
+      if (email && !/^[^@\s]+@[^@\s]+\.[^@\s]{2,}$/.test(email)) { err.textContent = 'Проверьте email'; return }
+      const needConsent = document.getElementById('pfConsentWrap').style.display !== 'none'
+      const consentChecked = document.getElementById('pfConsent').checked
+      if (needConsent && !consentChecked) { err.textContent = 'Нужно согласие на обработку персональных данных'; return }
+
+      const btn = document.getElementById('pfSave'); btn.disabled = true
+      try {
+        const res = await fetch('/api/profile', {
+          method: 'PUT',
+          headers: { ...tgAuthHeaders(), 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fullName: _v('pfFullName'), birthDate: birth, phone, email, consent: needConsent ? consentChecked : true }),
+        })
+        if (res.ok) { showToast('Профиль сохранён'); renderAccount() }
+        else {
+          const e = await res.json().catch(() => ({}))
+          if (e.error === 'consent_required') err.textContent = 'Нужно согласие на обработку персональных данных'
+          else if (e.error === 'validation') err.textContent = 'Проверьте поля: ' + (e.fields || []).map(f => ({ birthDate: 'дата рождения', phone: 'телефон', email: 'email' }[f] || f)).join(', ')
+          else if (res.status === 401) err.textContent = 'Войдите через Telegram'
+          else err.textContent = 'Не удалось сохранить'
+        }
+      } catch { err.textContent = 'Нет связи с сервером' }
+      finally { btn.disabled = false }
+    }
   </script>
 
   <!-- ── Order success screen ─────────────────────────────────────── -->
