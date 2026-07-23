@@ -400,9 +400,11 @@
     .dd-card { background: #1c1c1e; border: 1px solid #333; border-radius: 16px; overflow: hidden; display: flex; flex-direction: column; cursor: pointer; transition: 0.18s; position: relative; }
     .dd-card:hover { border-color: var(--accent); box-shadow: 0 0 0 1px rgba(168,255,62,0.22); }
     /* Слот фото: беж под реальные фото; плейсхолдер кладётся поверх на всю ячейку. */
-    .dd-photo { aspect-ratio: 1/1; background: var(--photo-matte); margin: 10px 10px 0; border-radius: 12px; overflow: hidden; position: relative; }
-    .dd-photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
-    .dd-photo.is-placeholder { background: #040404; }
+    .dd-photo { aspect-ratio: 1/1; background: var(--photo-matte); margin: 10px 10px 0; border-radius: 12px; overflow: hidden; position: relative; padding: 10px; }
+    .dd-photo img { width: 100%; height: 100%; object-fit: contain; display: block; border-radius: 8px; }
+    /* плейсхолдер — full-bleed без бежа и без рамки (как в проде) */
+    .dd-photo.is-placeholder { background: #040404; padding: 0; }
+    .dd-photo.is-placeholder img { object-fit: cover; border-radius: 0; }
     .dd-meta { padding: 13px; display: flex; flex-direction: column; gap: 6px; flex: 1; }
     .dd-nm { font-size: 12.5px; line-height: 1.35; letter-spacing: 0.3px; color: #fff; }
     .dd-sub { font-size: 9.5px; letter-spacing: 1px; color: #888; margin-top: auto; }
@@ -447,7 +449,8 @@
       overflow: hidden; border-radius: var(--radius-card) var(--radius-card) 0 0;
       border-bottom: 0.5px solid rgba(0,0,0,0.10);
     }
-    .product-photo { width: 100%; height: 100%; object-fit: contain; display: block; pointer-events: none; transition: opacity 0.15s; background: transparent; }
+    /* padding → беж-рамка вокруг фото (у товарных фото часто свой тёмный фон); bg прозрачный, поэтому в отступе виден беж слота */
+    .product-photo { width: 100%; height: 100%; object-fit: contain; display: block; pointer-events: none; transition: opacity 0.15s; background: transparent; padding: 12px; border-radius: 12px; }
     /* No-photo placeholder: own dark bg (NOT the beige --photo-matte) so the Bender
        image fills the slot edge-to-edge. Beige is only for real product photos. */
     .product-photo-ph { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 40px; pointer-events: none; background: #040404; }
@@ -979,6 +982,8 @@
 
     /* ── Баннер: пропорции ~½ экрана + аккуратные контролы (§1, механику не трогаем) ── */
     #homeView .hero-slider { height: 52vh; max-height: 460px; min-height: 320px; border-radius: 0 0 20px 20px; }
+    /* слайд заполняет блок целиком, фото по центру, тёмный фолбэк — без светлых просветов/полос */
+    #homeView .hero-slide { top: 0; left: 0; right: 0; bottom: 0; background-size: cover !important; background-position: center center !important; background-repeat: no-repeat; background-color: var(--bg); }
     #homeView .hero-slide-caption { padding: 18px 18px 26px; background: linear-gradient(to top, rgba(6,6,6,0.9) 0%, rgba(6,6,6,0.45) 55%, transparent 100%); }
     #homeView .hero-slide-title { font-family: 'Onest', sans-serif; font-weight: 600; font-size: clamp(19px, 5.2vw, 26px); line-height: 1.18; letter-spacing: -0.2px; max-width: 88%; }
     #homeView .hero-slide-subtitle { font-family: 'Onest', sans-serif; font-weight: 400; font-size: 12.5px; letter-spacing: 0.2px; color: rgba(255,255,255,0.82); }
@@ -1004,8 +1009,9 @@
     .hc { flex: 0 0 168px; scroll-snap-align: start; background: var(--surface); border: 1px solid var(--border); border-radius: 16px; overflow: hidden; display: flex; flex-direction: column; cursor: pointer; }
     /* беж-слот: на всю ширину верха карточки, крупный, скругление только верхних углов */
     .hc-slot { position: relative; width: 100%; aspect-ratio: 1/1; background: var(--photo-matte); border-radius: 16px 16px 0 0; border-bottom: 1px solid var(--slot-edge); display: flex; align-items: center; justify-content: center; overflow: hidden; }
-    /* реальное фото — contain (беж-слот виден по краям, как в проде); плейсхолдер ниже — cover */
-    .hc-slot img.hc-img { width: 100%; height: 100%; object-fit: contain; }
+    /* реальное фото — contain + внутренний padding: фото сидит в бежевой рамке, беж виден
+       по краям даже если у фото свой тёмный фон. Плейсхолдер (is-ph) ниже — full-bleed без бежа. */
+    .hc-slot img.hc-img { width: 100%; height: 100%; object-fit: contain; padding: 12px; background: transparent; border-radius: 10px; }
     /* плейсхолдер (нет фото): на всю ячейку, без бежа — как в проде */
     .hc-slot.is-ph { background: #040404; border-bottom-color: transparent; }
     .hc-slot.is-ph img { width: 100%; height: 100%; object-fit: cover; }
