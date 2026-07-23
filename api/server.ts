@@ -878,7 +878,8 @@ export function startApiServer(bot?: Telegraf): Server {
       if (birthDate) {
         if (!/^\d{2}\.\d{2}\.\d{4}$/.test(birthDate)) fields.push('birthDate')
         else {
-          const [d, m, y] = birthDate.split('.').map(Number)
+          const parts = birthDate.split('.')
+          const d = Number(parts[0]), m = Number(parts[1]), y = Number(parts[2])
           const dt = new Date(y, m - 1, d)
           if (dt.getFullYear() !== y || dt.getMonth() !== m - 1 || dt.getDate() !== d || y < 1900 || y > new Date().getFullYear()) fields.push('birthDate')
         }

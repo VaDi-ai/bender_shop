@@ -63,6 +63,7 @@ const CRITICAL_EVENTS: SecurityEvent[] = [
 ]
 
 const EVENT_DESCRIPTIONS: Record<SecurityEvent, string> = {
+  pdn_consent:                '✅ Согласие на обработку персональных данных (профиль)',
   price_manipulation_attempt: '💰 Попытка подмены цены в заказе',
   unauthorized_access:        '🚫 Попытка несанкционированного доступа к админке',
   invalid_telegram_signature: '🔑 Запрос с неверной подписью Telegram',
