@@ -849,7 +849,7 @@ export function startApiServer(bot?: Telegraf): Server {
       const client = await prisma.client.findUnique({
         where: { source_externalId: { source: 'telegram', externalId: telegramId } },
       })
-      const hasProfile = !!(client && (client.fullName || client.phone || client.email || client.birthDate))
+      const hasProfile = !!client?.pdnConsentAt   // согласие уже дано → чекбокс прячем
       res.setHeader('Cache-Control', 'private, no-store, must-revalidate')
       res.json({
         fullName: client?.fullName ?? '',
@@ -891,7 +891,7 @@ export function startApiServer(bot?: Telegraf): Server {
       const existing = await prisma.client.findUnique({
         where: { source_externalId: { source: 'telegram', externalId: telegramId } },
       })
-      const alreadyConsented = !!(existing && (existing.fullName || existing.phone || existing.email || existing.birthDate))
+      const alreadyConsented = !!existing?.pdnConsentAt
       const settingPII = !!(fullName || birthDate || phone || email)
       // Согласие на обработку ПДн обязательно при ПЕРВОМ сохранении перс. данных
       if (settingPII && !alreadyConsented && body.consent !== true) {
@@ -904,6 +904,8 @@ export function startApiServer(bot?: Telegraf): Server {
       if (birthDate) data.birthDate = encryptClientField(birthDate)
       if (phone) data.phone = encryptClientField(phone)
       if (email) data.email = encryptClientField(email)
+      // Юр. факт согласия: timestamp рядом с клиентом (первый раз), + запись в security-log ниже
+      if (settingPII && !alreadyConsented) data.pdnConsentAt = new Date()
 
       const tgUser = tgUserFromReq(req)
       const nameForRecord = fullName || existing?.name || tgUser.username || tgUser.first_name || ('tg_' + telegramId)
