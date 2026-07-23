@@ -291,85 +291,9 @@
     .cat-more-btn svg { transition: transform 0.3s; }
     .cat-more-btn.expanded svg { transform: rotate(180deg); }
 
-    /* ── Hits section ────────────────────────────────────────────────── */
-    .hits-section { padding: 12px 0; }
+    /* (старая .hits-section заменена лентой «Хиты» на мобильной главной — см. #secHits) */
 
-    .hits-arrow {
-      width: 24px; height: 24px;
-      border: 1px solid #333;
-      border-radius: 50%;
-      background: transparent;
-      color: #666;
-      display: flex; align-items: center; justify-content: center;
-      cursor: pointer;
-      transition: border-color 0.2s, color 0.2s;
-    }
-
-    .hits-arrow:hover, .hits-arrow-active {
-      border-color: var(--accent);
-      color: var(--accent);
-    }
-
-    .hits-scroll {
-      display: flex;
-      gap: 8px;
-      overflow-x: auto;
-      scroll-behavior: smooth;
-      padding: 0 12px;
-      -ms-overflow-style: none;
-      scrollbar-width: none;
-    }
-
-    .hits-scroll::-webkit-scrollbar { display: none; }
-
-    .hit-card {
-      min-width: 160px;
-      max-width: 160px;
-      background: #111;
-      border: 1px solid #1a1a1a;
-      border-radius: 12px;
-      padding: 10px;
-      flex-shrink: 0;
-      cursor: pointer;
-      transition: border-color 0.2s;
-    }
-
-    .hit-card:hover { border-color: var(--accent); }
-
-    .hit-card-img {
-      width: 100%;
-      aspect-ratio: 16 / 10;
-      background: transparent;
-      border-radius: 8px;
-      overflow: hidden;
-      margin-bottom: 8px;
-    }
-
-    .hit-card-img img {
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-      border-radius: 8px;
-    }
-
-    .hit-card-name {
-      font-size: 11px;
-      color: #e5e5e5;
-      line-height: 1.3;
-      display: -webkit-box;
-      -webkit-line-clamp: 2;
-      -webkit-box-orient: vertical;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      min-height: 28px;
-    }
-
-    .hit-card-price {
-      font-size: 12px;
-      color: var(--accent);
-      margin-top: 4px;
-      font-weight: 600;
-    }
+    /* (.hit-card* удалены вместе с renderHits — карточки хитов теперь единые .hc) */
 
     /* ── Sort dropdown ────────────────────────────────────────────────── */
     .sort-wrap { position: relative; flex-shrink: 0; }
@@ -2070,41 +1994,7 @@
 
 
 
-    // ── Hits ──────────────────────────────────────────────────────────────────
-    function renderHits(products) {
-      const hits = products.filter(p => p.isFeatured).slice(0, 10)
-      const section = document.getElementById('hitsSection')
-      const scroll = document.getElementById('hitsScroll')
-      if (!hits.length || !section || !scroll) {
-        if (section) section.style.display = 'none'
-        return
-      }
-
-      section.style.display = 'block'
-      scroll.innerHTML = hits.map(p => {
-        const photoList = getProductPhotos(p, null)
-        const photo = photoList.length ? photoList[0] : null
-        const imgHtml = photo
-          ? `<img src="${esc(photo)}" alt="" loading="lazy" decoding="async" onerror="handleProductPhotoError(this)">`
-          : `<img src="/no-photo.webp" alt="" onerror="this.onerror=null;this.src='/no-photo.png'">`
-
-        const minPrice = p.variants && p.variants.length ? minVariantPrice(p) : Number(p.price)
-        const priceText = minPrice === 0 ? 'Цена по запросу' : 'от ' + fmt(minPrice) + ' ₽'
-
-        return `
-      <div class="hit-card" onclick="openProductModal(${p.id})">
-        <div class="hit-card-img">${imgHtml}</div>
-        <div class="hit-card-name">${esc(p.name)}</div>
-        <div class="hit-card-price">${priceText}</div>
-      </div>
-    `
-      }).join('')
-    }
-
-    function scrollHits(dir) {
-      const el = document.getElementById('hitsScroll')
-      if (el) el.scrollBy({ left: dir * 240, behavior: 'smooth' })
-    }
+    // (renderHits/scrollHits удалены — «Хиты» теперь ленты главной: renderHitsRail/computeAutoHits)
 
     // ── Sort ──────────────────────────────────────────────────────────────────
     let sortMode = 'default'
