@@ -130,6 +130,18 @@ const EXACT_HEADERS: Record<string, string[]> = {
   model: ['Модель'],      // D — модель: iPhone 17 Pro Max / Watch SE
 }
 
+// Опциональные колонки-оверрайды (§10 «умный дефолт + ручной override»). Читаются ТОЛЬКО
+// по заголовку — БЕЗ позиционного fallback: сегодня их в листе нет, владелец заведёт их
+// справа (R+), чтобы не сдвинуть колонки цен/наличия и writeback рекомендованной цены.
+// Заголовок отсутствует → ключ не ставим, поле товара НЕ трогаем (работает авто-логика).
+//   • «Бейдж»  → Product.badge     (Хит / Советуем / Новинка; перебивает авто-бейдж)
+//   • «В хиты» → Product.isFeatured (да/1/✓ → принудительно в блок «Хиты»)
+// Бот позже пишет в те же поля БД — фронт/бэкенд не меняются.
+const OPTIONAL_HEADERS: Record<string, string[]> = {
+  badge: ['Бейдж', 'Badge'],
+  hit:   ['В хиты', 'Hit'],
+}
+
 const EXPECTED_HEADERS: Record<string, string[]> = {
   brand:       ['Бренд', 'Brand'],
   // «Общая категория» из живой таблицы удалена; колонка остаётся в списке ради
@@ -210,6 +222,15 @@ export function mapHeaders(headerRow: any[], dataRows: any[][] = []): ColumnMap 
     }
   }
 
+  // Опциональные оверрайд-колонки: ставим ключ ТОЛЬКО если заголовок реально есть.
+  // Нет заголовка → ключ отсутствует, col() вернёт '' и поле товара не переопределяется.
+  for (const [key, variants] of Object.entries(OPTIONAL_HEADERS)) {
+    const idx = headerStrings.findIndex(h =>
+      variants.some(v => h.toLowerCase().includes(v.toLowerCase()))
+    )
+    if (idx >= 0) headers[key] = idx
+  }
+
   // «Общая категория» в живой таблице отсутствует, а её includes-матчинг молча
   // проваливался в позиционный fallback (idx 3 = «Модель»), из-за чего site-category
   // становилась моделью. Нет отдельной общей категории → категория сайта = линейка.
@@ -273,6 +294,11 @@ export interface SheetRow {
   quantity: number
   supplier: string           // Лучший поставщик (O)
   photo: string              // URL фото (Q), пусто если нет
+  // §10 override (опц., R+). Пусто, если колонки/ячейки нет.
+  badge: string              // «Бейдж» → ручной бейдж (Хит/Советуем/Новинка)
+  hit: boolean               // «В хиты» → принудительно в блок «Хиты»
+  badgeColPresent: boolean   // был ли заголовок «Бейдж» в листе (иначе поле не трогаем)
+  hitColPresent: boolean     // был ли заголовок «В хиты» в листе
   sheetName: string
   rowIndex: number
 }
@@ -336,6 +362,11 @@ export function parseSheetRows(sheetName: string, data: string[][]): SheetRow[] 
 
     const line = col(row, COL.line)
 
+    // §10 override: читаем, только когда заголовок присутствует в этом листе.
+    const badge = col(row, COL.badge)
+    const hitRaw = col(row, COL.hit)
+    const hit = /^(да|yes|y|1|true|✓|\+|x|х)$/i.test(hitRaw)
+
     rows.push({
       brand:       col(row, COL.brand),
       category:    col(row, COL.category) || 'Другое',
@@ -354,6 +385,10 @@ export function parseSheetRows(sheetName: string, data: string[][]): SheetRow[] 
       quantity,
       supplier:    col(row, COL.supplier),
       photo:       col(row, COL.photo),
+      badge,
+      hit,
+      badgeColPresent: COL.badge !== undefined,
+      hitColPresent:   COL.hit !== undefined,
       sheetName,
       rowIndex: i + 1,
     })
@@ -485,6 +520,11 @@ export async function syncProductsFromSheets(shouldAbort?: () => boolean): Promi
     sortOrder: number
     sheetDescription: string
     sheetSpecs: Record<string, string>
+    // §10 override — агрегируется по строкам модели
+    badge: string            // первый непустой «Бейдж» среди строк
+    hit: boolean             // хоть одна строка помечена «В хиты»
+    badgeColPresent: boolean // колонка «Бейдж» есть в листе → badge применяется (в т.ч. очистка)
+    hitColPresent: boolean   // колонка «В хиты» есть в листе → isFeatured применяется
     variants: VariantData[]
   }
 
@@ -515,6 +555,8 @@ export async function syncProductsFromSheets(shouldAbort?: () => boolean): Promi
         line: row.line, sortOrder: row.sortOrder,
         sheetDescription: row.description,
         sheetSpecs: Object.keys(sheetSpecs).length > 0 ? sheetSpecs : {},
+        badge: row.badge, hit: row.hit,
+        badgeColPresent: row.badgeColPresent, hitColPresent: row.hitColPresent,
         variants: [],
       })
     }
@@ -524,6 +566,12 @@ export async function syncProductsFromSheets(shouldAbort?: () => boolean): Promi
     if (row.sortOrder > 0 && (g.sortOrder === 0 || row.sortOrder < g.sortOrder)) {
       g.sortOrder = row.sortOrder
     }
+
+    // §10 override по строкам модели: бейдж — первый непустой; хит — хоть одна строка.
+    if (!g.badge && row.badge) g.badge = row.badge
+    if (row.hit) g.hit = true
+    g.badgeColPresent = g.badgeColPresent || row.badgeColPresent
+    g.hitColPresent = g.hitColPresent || row.hitColPresent
 
     groups.get(key)!.variants.push({
       fullName: row.fullName,
@@ -659,6 +707,9 @@ export async function syncProductsFromSheets(shouldAbort?: () => boolean): Promi
             description: group.sheetDescription || null,
             specs: Object.keys(group.sheetSpecs).length > 0 ? group.sheetSpecs : {},
             photos: [],
+            // §10 override: применяем, только когда колонка есть в листе (иначе default)
+            ...(group.badgeColPresent ? { badge: group.badge || null } : {}),
+            ...(group.hitColPresent ? { isFeatured: group.hit } : {}),
           },
         })
         productsByKey.set(productKey, product)
@@ -683,6 +734,10 @@ export async function syncProductsFromSheets(shouldAbort?: () => boolean): Promi
         if (Object.keys(group.sheetSpecs).length > 0 && !hasSpecs) {
           updateData.specs = group.sheetSpecs
         }
+        // §10 override: колонка в листе есть → значение ячейки правит поле (пусто = авто/сброс);
+        // колонки нет → поле не трогаем (сохраняем то, что мог проставить бот/админка).
+        if (group.badgeColPresent) updateData.badge = group.badge || null
+        if (group.hitColPresent) updateData.isFeatured = group.hit
         await prisma.product.update({
           where: { id: product.id },
           data: updateData,

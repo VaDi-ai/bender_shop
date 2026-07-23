@@ -7,7 +7,7 @@
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Onest:wght@400;500;600;700&display=swap">
   <link rel="manifest" href="/manifest.json">
   <link rel="preload" href="/no-photo.webp" as="image">
   <link rel="dns-prefetch" href="https://api.telegram.org">
@@ -291,85 +291,9 @@
     .cat-more-btn svg { transition: transform 0.3s; }
     .cat-more-btn.expanded svg { transform: rotate(180deg); }
 
-    /* ── Hits section ────────────────────────────────────────────────── */
-    .hits-section { padding: 12px 0; }
+    /* (старая .hits-section заменена лентой «Хиты» на мобильной главной — см. #secHits) */
 
-    .hits-arrow {
-      width: 24px; height: 24px;
-      border: 1px solid #333;
-      border-radius: 50%;
-      background: transparent;
-      color: #666;
-      display: flex; align-items: center; justify-content: center;
-      cursor: pointer;
-      transition: border-color 0.2s, color 0.2s;
-    }
-
-    .hits-arrow:hover, .hits-arrow-active {
-      border-color: var(--accent);
-      color: var(--accent);
-    }
-
-    .hits-scroll {
-      display: flex;
-      gap: 8px;
-      overflow-x: auto;
-      scroll-behavior: smooth;
-      padding: 0 12px;
-      -ms-overflow-style: none;
-      scrollbar-width: none;
-    }
-
-    .hits-scroll::-webkit-scrollbar { display: none; }
-
-    .hit-card {
-      min-width: 160px;
-      max-width: 160px;
-      background: #111;
-      border: 1px solid #1a1a1a;
-      border-radius: 12px;
-      padding: 10px;
-      flex-shrink: 0;
-      cursor: pointer;
-      transition: border-color 0.2s;
-    }
-
-    .hit-card:hover { border-color: var(--accent); }
-
-    .hit-card-img {
-      width: 100%;
-      aspect-ratio: 16 / 10;
-      background: transparent;
-      border-radius: 8px;
-      overflow: hidden;
-      margin-bottom: 8px;
-    }
-
-    .hit-card-img img {
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-      border-radius: 8px;
-    }
-
-    .hit-card-name {
-      font-size: 11px;
-      color: #e5e5e5;
-      line-height: 1.3;
-      display: -webkit-box;
-      -webkit-line-clamp: 2;
-      -webkit-box-orient: vertical;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      min-height: 28px;
-    }
-
-    .hit-card-price {
-      font-size: 12px;
-      color: var(--accent);
-      margin-top: 4px;
-      font-weight: 600;
-    }
+    /* (.hit-card* удалены вместе с renderHits — карточки хитов теперь единые .hc) */
 
     /* ── Sort dropdown ────────────────────────────────────────────────── */
     .sort-wrap { position: relative; flex-shrink: 0; }
@@ -1042,6 +966,73 @@
       .toast { max-width: 520px; }
       .order-result-content { max-width: 520px; }
     }
+
+    /* ════════ Phase 2 — Мобильная главная (Onest, неон, беж-слот, таббар) ════════ */
+    :root { --tabbar-h: 62px; --slot-edge: #e6e0dd; }
+    /* Onest как основной шрифт витрины (§11); лого/моно остаются JetBrains Mono */
+    body { font-family: 'Onest', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+    /* место под фиксированный таббар (последний элемент — футер — не должен прятаться под ним) */
+    .app-container { padding-bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom) + 8px); }
+
+    /* view switching (Главная ↔ Каталог) */
+    #catalogView.view-off, #homeView.view-off { display: none; }
+
+    /* ── Баннер: пропорции ~½ экрана + аккуратные контролы (§1, механику не трогаем) ── */
+    #homeView .hero-slider { height: 52vh; max-height: 460px; min-height: 320px; border-radius: 0 0 20px 20px; }
+    #homeView .hero-slide-caption { padding: 18px 18px 26px; background: linear-gradient(to top, rgba(6,6,6,0.9) 0%, rgba(6,6,6,0.45) 55%, transparent 100%); }
+    #homeView .hero-slide-title { font-family: 'Onest', sans-serif; font-weight: 600; font-size: clamp(19px, 5.2vw, 26px); line-height: 1.18; letter-spacing: -0.2px; max-width: 88%; }
+    #homeView .hero-slide-subtitle { font-family: 'Onest', sans-serif; font-weight: 400; font-size: 12.5px; letter-spacing: 0.2px; color: rgba(255,255,255,0.82); }
+    /* точки: 7px, активная — пилюля 20px (неон-fill mechanic сохранён) */
+    #homeView .slider-dot { width: 7px; height: 7px; background: rgba(255,255,255,0.42); }
+    #homeView .slider-dot.active { width: 20px; border-radius: 4px; }
+    /* стрелки компактнее */
+    #homeView .slider-nav-btn { width: 30px; height: 30px; min-width: 30px; min-height: 30px; border-radius: 50%; }
+
+    /* ── Секции главной ── */
+    .home-sec { margin-top: 24px; }
+    .home-sec-h { display: flex; align-items: center; gap: 8px; padding: 0 16px; margin-bottom: 10px; }
+    .home-sec-h h3 { font-family: 'Onest', sans-serif; font-weight: 600; font-size: 19px; letter-spacing: -0.3px; }
+    .home-sec-h .arr { margin-left: auto; width: 26px; height: 26px; border-radius: 8px; background: var(--surface); display: flex; align-items: center; justify-content: center; color: var(--hint); font-size: 15px; border: none; }
+    .home-tabs { display: flex; gap: 8px; overflow-x: auto; padding: 0 16px 2px; scrollbar-width: none; }
+    .home-tabs::-webkit-scrollbar { display: none; }
+    .home-tab { flex: 0 0 auto; font-family: 'Onest', sans-serif; font-weight: 600; font-size: 12px; padding: 8px 15px; border-radius: 20px; background: var(--surface); color: var(--hint); white-space: nowrap; border: 1px solid transparent; cursor: pointer; }
+    .home-tab.active { background: var(--accent); color: var(--accent-fg); }
+    .home-rail { display: flex; gap: 12px; overflow-x: auto; padding: 12px 16px 4px; scrollbar-width: none; scroll-snap-type: x proximity; }
+    .home-rail::-webkit-scrollbar { display: none; }
+
+    /* ── Единая карточка ВЕЗДЕ (§9a): беж-слот вариант B ── */
+    .hc { flex: 0 0 168px; scroll-snap-align: start; background: var(--surface); border: 1px solid var(--border); border-radius: 16px; overflow: hidden; display: flex; flex-direction: column; cursor: pointer; }
+    /* беж-слот: на всю ширину верха карточки, крупный, скругление только верхних углов */
+    .hc-slot { position: relative; width: 100%; aspect-ratio: 1/1; background: var(--photo-matte); border-radius: 16px 16px 0 0; border-bottom: 1px solid var(--slot-edge); display: flex; align-items: center; justify-content: center; overflow: hidden; }
+    /* реальное фото — contain (беж-слот виден по краям, как в проде); плейсхолдер ниже — cover */
+    .hc-slot img.hc-img { width: 100%; height: 100%; object-fit: contain; }
+    /* плейсхолдер (нет фото): на всю ячейку, без бежа — как в проде */
+    .hc-slot.is-ph { background: #040404; border-bottom-color: transparent; }
+    .hc-slot.is-ph img { width: 100%; height: 100%; object-fit: cover; }
+    .hc-badge { position: absolute; top: 9px; left: 9px; font-family: 'Onest', sans-serif; font-size: 10px; font-weight: 700; padding: 3px 8px; border-radius: 6px; letter-spacing: .3px; }
+    .hc-badge.b-hit { background: var(--accent); color: var(--accent-fg); }
+    .hc-badge.b-new { background: #ffe27a; color: #3a2c00; }
+    .hc-badge.b-rec { background: #4aa3ff; color: #04121f; }
+    .hc-body { padding: 10px 11px 12px; display: flex; flex-direction: column; gap: 5px; }
+    .hc-price { display: flex; align-items: baseline; gap: 7px; }
+    .hc-price .now { font-family: 'Onest', sans-serif; font-weight: 600; font-size: 15px; }
+    .hc-price .old { font-size: 11.5px; color: var(--hint); text-decoration: line-through; }
+    .hc-name { font-family: 'Onest', sans-serif; font-weight: 400; font-size: 12.5px; line-height: 1.35; color: #e6e6e6; min-height: 34px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+    .hc-cart { margin-top: 3px; background: var(--accent); color: var(--accent-fg); font-family: 'Onest', sans-serif; font-weight: 600; font-size: 12.5px; padding: 9px; border-radius: 9px; border: none; text-align: center; cursor: pointer; }
+
+    /* ── Карточка бренда ── */
+    .brand-card { flex: 0 0 132px; scroll-snap-align: start; background: var(--surface); border: 1px solid var(--border); border-radius: 16px; overflow: hidden; display: flex; flex-direction: column; cursor: pointer; }
+    .brand-card .bc-lg { width: 100%; aspect-ratio: 1/1; background: var(--photo-matte); border-bottom: 1px solid var(--slot-edge); display: flex; align-items: center; justify-content: center; font-family: 'Onest', sans-serif; font-weight: 800; color: #111; font-size: 17px; letter-spacing: .3px; overflow: hidden; }
+    .brand-card .bc-lg img { width: 72%; height: 72%; object-fit: contain; }
+    .brand-card .bc-nm { padding: 11px 10px 13px; font-family: 'Onest', sans-serif; font-weight: 400; font-size: 13px; color: #e6e6e6; text-align: center; }
+
+    /* ── Нижний таббар ── */
+    #tabbar { position: fixed; left: 50%; transform: translateX(-50%); bottom: 0; width: 100%; max-width: 480px; z-index: 60; display: flex; justify-content: space-around; padding: 8px 4px calc(8px + env(safe-area-inset-bottom)); background: rgba(12,12,12,0.97); backdrop-filter: blur(10px); border-top: 1px solid #1c1c1c; }
+    #tabbar .tb { display: flex; flex-direction: column; align-items: center; gap: 3px; color: var(--hint); font-family: 'Onest', sans-serif; font-weight: 500; font-size: 10px; flex: 1; background: none; border: none; cursor: pointer; padding: 2px 0; }
+    #tabbar .tb.active { color: var(--accent); }
+    #tabbar .tb svg { width: 22px; height: 22px; display: block; }
+    #tabbar .tb .tb-badge { position: absolute; }
+    @media (min-width: 481px) { #tabbar { max-width: 480px; } }
   </style>
 </head>
 <body>
@@ -1246,6 +1237,8 @@
       </div>
     </div>
 
+    <!-- ═══ ГЛАВНАЯ (свёрнутый вид: баннер + новинки + бренды + хиты + блок бренда) ═══ -->
+    <div id="homeView">
     <div class="hero-slider" id="heroSlider">
       <div class="slider-bottom-fade">
         <div class="slider-controls">
@@ -1259,21 +1252,39 @@
     </div>
 
 
-    <div class="hits-section" id="hitsSection" style="display:none">
-      <div style="display: flex; align-items: center; justify-content: space-between; padding: 0 16px; margin-bottom: 10px;">
-        <div class="section-label" style="margin-bottom: 0;">HIT ПРОДАЖ</div>
-        <div style="display: flex; gap: 6px;">
-          <button class="hits-arrow" onclick="scrollHits(-1)" aria-label="Назад">
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
-          </button>
-          <button class="hits-arrow hits-arrow-active" onclick="scrollHits(1)" aria-label="Вперёд">
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
-          </button>
-        </div>
-      </div>
-      <div class="hits-scroll" id="hitsScroll"></div>
+    <!-- Новинки -->
+    <div class="home-sec" id="secNew">
+      <div class="home-sec-h"><h3>Новинки</h3><button class="arr" onclick="goCatalog()" aria-label="Все">›</button></div>
+      <div class="home-rail" id="railNew"></div>
     </div>
 
+    <!-- Бренды -->
+    <div class="home-sec" id="secBrands">
+      <div class="home-sec-h"><h3>Бренды</h3></div>
+      <div class="home-rail" id="railBrands"></div>
+    </div>
+
+    <!-- Хиты продаж (табы Хит / Советуем / Новинка) -->
+    <div class="home-sec" id="secHits">
+      <div class="home-sec-h"><h3>Хиты продаж</h3></div>
+      <div class="home-tabs" id="hitsTabs">
+        <button class="home-tab active" data-hit="hit" onclick="selectHitTab('hit')">Хит</button>
+        <button class="home-tab" data-hit="rec" onclick="selectHitTab('rec')">Советуем</button>
+        <button class="home-tab" data-hit="new" onclick="selectHitTab('new')">Новинка</button>
+      </div>
+      <div class="home-rail" id="railHits"></div>
+    </div>
+
+    <!-- Блок бренда с табами линеек -->
+    <div class="home-sec" id="secBrandBlock">
+      <div class="home-sec-h"><h3 id="brandBlockTitle">Apple</h3><button class="arr" onclick="goCatalogBrand()" aria-label="Все">›</button></div>
+      <div class="home-tabs" id="brandBlockTabs"></div>
+      <div class="home-rail" id="railBrandBlock"></div>
+    </div>
+    </div><!-- #homeView -->
+
+    <!-- ═══ КАТАЛОГ (полный дрилл-даун бренд → линейка → модель) ═══ -->
+    <div id="catalogView" class="view-off">
     <section id="catalog">
       <div class="catalog-header">
         <h2 class="catalog-title" id="catalogTitle">КАТАЛОГ</h2>
@@ -1305,6 +1316,7 @@
         <div class="state-msg">Загрузка…</div>
       </div>
     </section>
+    </div><!-- #catalogView -->
   </main>
 
   <footer class="site-footer">
@@ -1329,6 +1341,25 @@
     </div>
     <div class="footer-copy">© 2026 Bender Shop. Все права защищены.</div>
   </footer>
+
+  <!-- ═══ Нижний таббар ═══ -->
+  <nav id="tabbar">
+    <button class="tb active" data-tab="home" onclick="switchTab('home')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 10l9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z"/></svg>Главная
+    </button>
+    <button class="tb" data-tab="catalog" onclick="switchTab('catalog')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><circle cx="3.5" cy="6" r="1"/><circle cx="3.5" cy="12" r="1"/><circle cx="3.5" cy="18" r="1"/></svg>Каталог
+    </button>
+    <button class="tb" data-tab="cart" onclick="switchTab('cart')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.6 13a2 2 0 0 0 2 1.6h9.7a2 2 0 0 0 2-1.6L23 6H6"/></svg>Корзина
+    </button>
+    <button class="tb" data-tab="account" onclick="switchTab('account')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></svg>Кабинет
+    </button>
+    <button class="tb" data-tab="promos" onclick="switchTab('promos')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M13 2L4 14h7l-2 8 9-12h-7z"/></svg>Акции
+    </button>
+  </nav>
 
   </div><!-- .app-container -->
 
@@ -1963,41 +1994,7 @@
 
 
 
-    // ── Hits ──────────────────────────────────────────────────────────────────
-    function renderHits(products) {
-      const hits = products.filter(p => p.isFeatured).slice(0, 10)
-      const section = document.getElementById('hitsSection')
-      const scroll = document.getElementById('hitsScroll')
-      if (!hits.length || !section || !scroll) {
-        if (section) section.style.display = 'none'
-        return
-      }
-
-      section.style.display = 'block'
-      scroll.innerHTML = hits.map(p => {
-        const photoList = getProductPhotos(p, null)
-        const photo = photoList.length ? photoList[0] : null
-        const imgHtml = photo
-          ? `<img src="${esc(photo)}" alt="" loading="lazy" decoding="async" onerror="handleProductPhotoError(this)">`
-          : `<img src="/no-photo.webp" alt="" onerror="this.onerror=null;this.src='/no-photo.png'">`
-
-        const minPrice = p.variants && p.variants.length ? minVariantPrice(p) : Number(p.price)
-        const priceText = minPrice === 0 ? 'Цена по запросу' : 'от ' + fmt(minPrice) + ' ₽'
-
-        return `
-      <div class="hit-card" onclick="openProductModal(${p.id})">
-        <div class="hit-card-img">${imgHtml}</div>
-        <div class="hit-card-name">${esc(p.name)}</div>
-        <div class="hit-card-price">${priceText}</div>
-      </div>
-    `
-      }).join('')
-    }
-
-    function scrollHits(dir) {
-      const el = document.getElementById('hitsScroll')
-      if (el) el.scrollBy({ left: dir * 240, behavior: 'smooth' })
-    }
+    // (renderHits/scrollHits удалены — «Хиты» теперь ленты главной: renderHitsRail/computeAutoHits)
 
     // ── Sort ──────────────────────────────────────────────────────────────────
     let sortMode = 'default'
@@ -2064,7 +2061,7 @@
         allProducts = await res.json()
         computeBrands()
         renderCatFilterBar()
-        renderHits(allProducts)
+        renderHome()
         renderGrid()
       } catch {
         grid.innerHTML = '<div class="state-msg">Не удалось загрузить товары<br><button onclick="loadProducts()" style="margin-top:12px;padding:8px 24px;background:var(--accent);color:var(--accent-fg);border:none;border-radius:8px;font-weight:700;cursor:pointer">Попробовать снова</button></div>'
@@ -3355,6 +3352,154 @@
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('/sw.js').catch(() => {})
     }
+
+    // ══════════════════ Phase 2 — Мобильная главная (Home) ══════════════════
+    let hitTab = 'hit'
+    let brandBlockBrand = ''
+    let brandBlockLine = ''
+
+    function newestSorted(list) {
+      return [...list].sort((a, b) => orderOf(a) - orderOf(b) || a.name.localeCompare(b.name, 'ru'))
+    }
+
+    // Бейдж из override-поля (Product.badge, §10). Пусто → авто/нет.
+    function badgeFromField(p) {
+      const raw = (p.badge || '').trim().toLowerCase()
+      if (!raw) return null
+      if (raw.includes('хит')) return { t: 'ХИТ', c: 'b-hit' }
+      if (raw.includes('совет')) return { t: 'СОВЕТУЕМ', c: 'b-rec' }
+      if (raw.includes('нов')) return { t: 'NEW', c: 'b-new' }
+      return { t: p.badge.trim().toUpperCase().slice(0, 10), c: 'b-hit' }
+    }
+
+    // Единая карточка для ВСЕХ лент главной (§9a). opts.autoBadge — {t,c} если поля нет.
+    function homeCardHtml(p, opts = {}) {
+      const photos = getProductPhotos(p, null)
+      const url = photos.length ? photos[0] : null
+      const isPh = !url || isPlaceholderPhotoUrl(url)
+      const badge = badgeFromField(p) || opts.autoBadge || null
+      const hasVariants = p.variants && p.variants.length
+      const minPrice = hasVariants ? minVariantPrice(p) : Number(p.price)
+      const priceHtml = minPrice === 0
+        ? '<span class="now" style="color:#ff9500;font-size:12.5px">Цена по запросу</span>'
+        : `<span class="now">${(hasVariants ? 'от ' : '') + fmt(minPrice)} ₽</span>`
+      const slotInner = isPh
+        ? placeholderImgHtml()
+        : `<img class="hc-img" src="${esc(url)}" alt="" loading="lazy" onerror="handleProductPhotoError(this)">`
+      return `<div class="hc" onclick="openProductModal(${p.id})">
+        <div class="hc-slot${isPh ? ' is-ph' : ''}">${badge ? `<span class="hc-badge ${badge.c}">${esc(badge.t)}</span>` : ''}${slotInner}</div>
+        <div class="hc-body">
+          <div class="hc-price">${priceHtml}</div>
+          <div class="hc-name">${esc(p.name)}</div>
+          <button class="hc-cart" onclick="cardBtnClick(event,${p.id})">В корзину</button>
+        </div>
+      </div>`
+    }
+
+    function railInto(id, list, opts = {}) {
+      const el = document.getElementById(id)
+      if (!el) return
+      el.innerHTML = list.length
+        ? list.map(p => homeCardHtml(p, opts)).join('')
+        : '<div class="state-msg" style="padding:8px 4px;color:var(--hint);font-size:13px">Пока пусто</div>'
+    }
+
+    // Бренд-карточка (лого = картинка бренда, если есть, иначе текст-лого)
+    function brandCardHtml(b) {
+      const logo = b.imageUrl
+        ? `<img src="${esc(b.imageUrl)}" alt="${esc(b.name)}" loading="lazy" onerror="this.replaceWith(document.createTextNode('${esc(b.name)}'))">`
+        : esc(b.name)
+      return `<div class="brand-card" onclick="homeSelectBrand('${esc(b.name).replace(/'/g, "\\'")}')">
+        <div class="bc-lg">${logo}</div>
+        <div class="bc-nm">${esc(b.name)}</div>
+      </div>`
+    }
+
+    // §10: хиты = топ-новинка каждой линейки (min sortOrder, in-stock) + override (isFeatured поверх).
+    function computeAutoHits() {
+      const groups = groupByLine(allProducts)
+      const auto = groups.map(g => newestSorted(g.items)[0]).filter(Boolean)
+      const forced = allProducts.filter(p => p.isFeatured)
+      const seen = new Set(); const out = []
+      for (const p of [...forced, ...auto]) { if (!seen.has(p.id)) { seen.add(p.id); out.push(p) } }
+      return out.slice(0, 8)
+    }
+
+    function renderHitsRail(tab) {
+      hitTab = tab
+      let list, autoBadge
+      if (tab === 'rec') {
+        list = allProducts.filter(p => (p.badge || '').toLowerCase().includes('совет'))
+        if (!list.length) list = computeAutoHits()
+        autoBadge = { t: 'СОВЕТУЕМ', c: 'b-rec' }
+      } else if (tab === 'new') {
+        list = allProducts.filter(p => (p.badge || '').toLowerCase().includes('нов'))
+        if (!list.length) list = newestSorted(allProducts).slice(0, 8)
+        autoBadge = { t: 'NEW', c: 'b-new' }
+      } else {
+        list = computeAutoHits()
+        autoBadge = { t: 'ХИТ', c: 'b-hit' }
+      }
+      railInto('railHits', list, { autoBadge })
+    }
+
+    function selectHitTab(tab) {
+      document.querySelectorAll('#hitsTabs .home-tab').forEach(b => b.classList.toggle('active', b.dataset.hit === tab))
+      renderHitsRail(tab)
+    }
+
+    function renderBrandBlock(brand) {
+      brandBlockBrand = brand
+      const items = allProducts.filter(p => productBrand(p) === brand)
+      const title = document.getElementById('brandBlockTitle')
+      const tabsEl = document.getElementById('brandBlockTabs')
+      const sec = document.getElementById('secBrandBlock')
+      if (!items.length) { if (sec) sec.style.display = 'none'; return }
+      if (sec) sec.style.display = ''
+      if (title) title.textContent = brand
+      const groups = groupByLine(items)
+      if (!brandBlockLine || !groups.some(g => g.line === brandBlockLine)) brandBlockLine = groups[0]?.line || ''
+      if (tabsEl) {
+        tabsEl.innerHTML = groups.map(g =>
+          `<button class="home-tab${g.line === brandBlockLine ? ' active' : ''}" onclick="selectBrandBlockLine('${esc(g.line).replace(/'/g, "\\'")}')">${esc(g.line)}</button>`
+        ).join('')
+      }
+      const active = groups.find(g => g.line === brandBlockLine) || groups[0]
+      railInto('railBrandBlock', newestSorted(active ? active.items : []))
+    }
+
+    function selectBrandBlockLine(line) {
+      brandBlockLine = line
+      renderBrandBlock(brandBlockBrand)
+    }
+
+    function renderHome() {
+      // Новинки — самые новые модели (min sortOrder) по всему каталогу
+      railInto('railNew', newestSorted(allProducts).slice(0, 10), { autoBadge: { t: 'NEW', c: 'b-new' } })
+      // Бренды — из вычисленного массива популярности (те же данные, что чипы каталога)
+      const brandsEl = document.getElementById('railBrands')
+      if (brandsEl) brandsEl.innerHTML = brands.map(brandCardHtml).join('')
+      // Хиты (текущий таб)
+      renderHitsRail(hitTab)
+      // Блок топового бренда с табами линеек
+      renderBrandBlock((brands[0] && brands[0].name) || 'Apple')
+    }
+
+    // ── Таббар / переключение Главная ↔ Каталог ──
+    function switchTab(tab) {
+      if (tab === 'cart') { openCart(); return }
+      if (tab === 'account') { openMenu(); return }
+      if (tab === 'promos') { showToast('Раздел «Акции» — скоро'); return }
+      const home = document.getElementById('homeView')
+      const cat = document.getElementById('catalogView')
+      if (tab === 'catalog') { home.classList.add('view-off'); cat.classList.remove('view-off') }
+      else { cat.classList.add('view-off'); home.classList.remove('view-off') }
+      document.querySelectorAll('#tabbar .tb').forEach(b => b.classList.toggle('active', b.dataset.tab === tab))
+      scrollToTop()
+    }
+    function goCatalog() { switchTab('catalog') }
+    function goCatalogBrand() { switchTab('catalog'); if (brandBlockBrand) selectBrand(brandBlockBrand) }
+    function homeSelectBrand(brand) { switchTab('catalog'); selectBrand(brand) }
   </script>
 
   <!-- ── Order success screen ─────────────────────────────────────── -->
