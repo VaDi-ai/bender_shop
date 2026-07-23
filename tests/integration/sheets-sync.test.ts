@@ -193,3 +193,42 @@ describe('parseSheetRows — линейка/модель/порядок (Phase 2
     expect(rows[0]!.line).toBe('Другое')
   })
 })
+
+describe('§10 override — бейдж / «В хиты» (опц. колонки R+)', () => {
+  const BASE = ['Порядок', 'Бренд', 'Категория', 'Модель', 'Название модели',
+    'Цвет', 'Память', 'Размер', 'Страна', 'Описание', 'Характеристики',
+    'Закупочная цена', 'Рекомендованная стоимость', 'В наличие',
+    'Лучший поставщик', 'Дата обновления', 'Фото']
+
+  it('override-колонки не резолвятся, когда заголовков нет (нет позиционного fallback)', () => {
+    const COL = mapHeaders(BASE)
+    expect(COL.badge).toBeUndefined()
+    expect(COL.hit).toBeUndefined()
+  })
+
+  it('резолвит «Бейдж» и «В хиты», когда они добавлены справа (R+)', () => {
+    const COL = mapHeaders([...BASE, 'Бейдж', 'В хиты'])
+    expect(COL.badge).toBe(17)
+    expect(COL.hit).toBe(18)
+  })
+
+  it('колонки нет → badge=\'\', hit=false, *ColPresent=false (поле не трогаем)', () => {
+    const r = [...['1', 'Apple', 'iPhone', 'iPhone 17', 'iPhone 17 256GB Black',
+      'Black', '256GB', '', '', '', '', '', '100000', '3', '', '', '']]
+    const rows = parseSheetRows('Тест', [BASE, r])
+    expect(rows[0]!.badge).toBe('')
+    expect(rows[0]!.hit).toBe(false)
+    expect(rows[0]!.badgeColPresent).toBe(false)
+    expect(rows[0]!.hitColPresent).toBe(false)
+  })
+
+  it('колонки есть → читает бейдж и распознаёт «да/1/✓» как хит', () => {
+    const H = [...BASE, 'Бейдж', 'В хиты']
+    const mk = (badge: string, hit: string) => ['1', 'Apple', 'iPhone', 'iPhone 17', 'iPhone 17 256GB Black',
+      'Black', '256GB', '', '', '', '', '', '100000', '3', '', '', '', badge, hit]
+    const rows = parseSheetRows('Тест', [H, mk('Хит', 'да'), mk('Новинка', ''), mk('', '1'), mk('', '✓'), mk('', 'нет')])
+    expect(rows.map(r => r.badge)).toEqual(['Хит', 'Новинка', '', '', ''])
+    expect(rows.map(r => r.hit)).toEqual([true, false, true, true, false])
+    expect(rows.every(r => r.badgeColPresent && r.hitColPresent)).toBe(true)
+  })
+})
