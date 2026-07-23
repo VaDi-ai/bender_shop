@@ -24,6 +24,7 @@ import type { Telegraf } from 'telegraf'
 import { Telegram, Markup } from 'telegraf'
 import { prisma } from '../lib/prisma'
 import { logSecurityEvent } from '../lib/security-log'
+import { encryptClientField, decryptClientField } from '../lib/client-crypto'
 import { getApiKeyValue } from '../lib/api-key-store'
 import { handleInstagramVerification } from '../webhooks/instagram'
 import { DeliveryType } from '../generated/prisma/client'
@@ -828,6 +829,116 @@ export function startApiServer(bot?: Telegraf): Server {
     } catch (err) {
       if (!res.headersSent) next(err)
     }
+  })
+
+  // ── Кабинет: профиль пользователя (Telegram-auth) ──────────────────────────
+  // Профиль хранится на Client (source=telegram, externalId=telegramId). phone/email/
+  // birthDate шифруются (lib/client-crypto); fullName — открыто. Дата рождения — строка
+  // «дд.мм.гггг», хранится как есть (шифрованно). История заказов — по Order.telegramId.
+  function tgUserFromReq(req: Request): { id?: number; username?: string; first_name?: string; last_name?: string } {
+    try { return JSON.parse(new URLSearchParams(req.headers['x-telegram-init-data'] as string).get('user') || '{}') } catch { return {} }
+  }
+  const safeDecrypt = (v: string | null): string => {
+    try { return decryptClientField(v) ?? '' } catch { return '' }
+  }
+
+  app.get('/api/profile', requireTelegramAuth, async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const telegramId = String((req as unknown as { telegramId: number }).telegramId)
+      const tgUser = tgUserFromReq(req)
+      const client = await prisma.client.findUnique({
+        where: { source_externalId: { source: 'telegram', externalId: telegramId } },
+      })
+      const hasProfile = !!client?.pdnConsentAt   // согласие уже дано → чекбокс прячем
+      res.setHeader('Cache-Control', 'private, no-store, must-revalidate')
+      res.json({
+        fullName: client?.fullName ?? '',
+        birthDate: safeDecrypt(client?.birthDate ?? null),
+        phone: safeDecrypt(client?.phone ?? null),
+        email: safeDecrypt(client?.email ?? null),
+        telegramUsername: client?.telegramUsername ?? tgUser.username ?? '',
+        createdAt: client?.createdAt ? client.createdAt.toISOString() : null,
+        hasProfile,        // true → согласие на ПДн уже собрано, чекбокс можно скрыть
+      })
+    } catch (err) { if (!res.headersSent) next(err) }
+  })
+
+  app.put('/api/profile', requireTelegramAuth, express.json(), async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const telegramId = String((req as unknown as { telegramId: number }).telegramId)
+      const body = (req.body ?? {}) as Record<string, unknown>
+      const clean = (v: unknown) => (typeof v === 'string' ? v.trim() : '')
+      const fullName = clean(body.fullName).slice(0, 120)
+      const birthDate = clean(body.birthDate)
+      const phone = clean(body.phone).slice(0, 32)
+      const email = clean(body.email).slice(0, 120)
+
+      // Валидация формата (пустое поле допустимо — просто не сохраняем его)
+      const fields: string[] = []
+      if (birthDate) {
+        if (!/^\d{2}\.\d{2}\.\d{4}$/.test(birthDate)) fields.push('birthDate')
+        else {
+          const parts = birthDate.split('.')
+          const d = Number(parts[0]), m = Number(parts[1]), y = Number(parts[2])
+          const dt = new Date(y, m - 1, d)
+          if (dt.getFullYear() !== y || dt.getMonth() !== m - 1 || dt.getDate() !== d || y < 1900 || y > new Date().getFullYear()) fields.push('birthDate')
+        }
+      }
+      if (phone && !/^\+?[0-9][0-9\s()\-]{6,19}$/.test(phone)) fields.push('phone')
+      if (email && !/^[^@\s]+@[^@\s]+\.[^@\s]{2,}$/.test(email)) fields.push('email')
+      if (fields.length) { res.status(400).json({ error: 'validation', fields }); return }
+
+      const existing = await prisma.client.findUnique({
+        where: { source_externalId: { source: 'telegram', externalId: telegramId } },
+      })
+      const alreadyConsented = !!existing?.pdnConsentAt
+      const settingPII = !!(fullName || birthDate || phone || email)
+      // Согласие на обработку ПДн обязательно при ПЕРВОМ сохранении перс. данных
+      if (settingPII && !alreadyConsented && body.consent !== true) {
+        res.status(400).json({ error: 'consent_required' }); return
+      }
+
+      // НЕ затираем существующее значение пустым: пишем только непустые поля
+      const data: Record<string, any> = {}
+      if (fullName) data.fullName = fullName
+      if (birthDate) data.birthDate = encryptClientField(birthDate)
+      if (phone) data.phone = encryptClientField(phone)
+      if (email) data.email = encryptClientField(email)
+      // Юр. факт согласия: timestamp рядом с клиентом (первый раз), + запись в security-log ниже
+      if (settingPII && !alreadyConsented) data.pdnConsentAt = new Date()
+
+      const tgUser = tgUserFromReq(req)
+      const nameForRecord = fullName || existing?.name || tgUser.username || tgUser.first_name || ('tg_' + telegramId)
+      await prisma.client.upsert({
+        where: { source_externalId: { source: 'telegram', externalId: telegramId } },
+        update: data,
+        create: { name: nameForRecord, source: 'telegram', externalId: telegramId, telegramUsername: tgUser.username ?? null, ...data },
+      })
+      if (settingPII && !alreadyConsented) {
+        await logSecurityEvent('pdn_consent', { telegramId, at: new Date().toISOString() }, telegramId)
+      }
+      res.json({ ok: true })
+    } catch (err) { if (!res.headersSent) next(err) }
+  })
+
+  app.get('/api/my-orders', requireTelegramAuth, async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const telegramId = String((req as unknown as { telegramId: number }).telegramId)
+      const orders = await prisma.order.findMany({
+        where: { telegramId },
+        orderBy: { createdAt: 'desc' },
+        take: 50,
+        include: { items: { select: { productName: true, quantity: true, priceAtPurchase: true } } },
+      })
+      res.setHeader('Cache-Control', 'private, no-store, must-revalidate')
+      res.json(orders.map(o => ({
+        id: o.id,
+        createdAt: o.createdAt.toISOString(),
+        totalAmount: o.totalAmount.toString(),
+        status: o.status,
+        items: o.items.map(i => ({ name: i.productName, quantity: i.quantity, price: i.priceAtPurchase.toString() })),
+      })))
+    } catch (err) { if (!res.headersSent) next(err) }
   })
 
   // ── GET /api/cache-version ─────────────────────────────────────────────────

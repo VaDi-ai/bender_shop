@@ -124,6 +124,9 @@ model Client {
   fullName         String?
   email            String?
   birthDate        String?
+  // Согласие на обработку ПДн: юр. факт, живёт рядом с клиентом (дублируется в SecurityLog).
+  // Аддитивно, nullable — применяется на деплое через `prisma db push`.
+  pdnConsentAt     DateTime?
   lastPurchaseDate DateTime?
   totalPurchases   Int       @default(0)
   totalRevenue     Decimal   @default(0) @db.Decimal(14, 2)
