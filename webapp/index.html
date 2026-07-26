@@ -676,8 +676,11 @@
     @keyframes attrsShake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-5px); } 75% { transform: translateX(5px); } }
     .modal-attrs-section.highlight { animation: attrsShake 0.35s ease; }
 
-    /* Make modal add button always clickable to show hint */
-    #modalAddBtn { pointer-events: all; }
+    /* Только в открытой модалке: у закрытой .product-modal стоит pointer-events:none,
+       но #modalAddBtn перебивал его по специфичности — невидимый футер (z-index 8000)
+       перехватывал тапы по таббару и низу «Оформить». Клик по disabled-кнопке
+       (подсказка «Выберите вариант») работает — правило побеждает .box-button.disabled. */
+    .product-modal.open #modalAddBtn { pointer-events: all; }
     #modalAddBtn.disabled { cursor: default; }
 
     /* Accordions */
@@ -2138,6 +2141,7 @@
     // ── Select category ───────────────────────────────────────────────────────
     function selectCategory(cat) {
       track('filter_category', { category: cat })
+      ensureCatalogView()
       // Категория сайта = линейка (Phase 2). Выбор из меню сбрасывает бренд,
       // иначе линейка чужого бренда дала бы пустую выдачу.
       activeCat = cat
@@ -3405,6 +3409,7 @@
       input.addEventListener('input', function() {
         searchQuery = this.value.trim().toLowerCase()
         clearBtn.classList.toggle('visible', !!searchQuery)
+        if (searchQuery) ensureCatalogView()
         renderGrid()
         clearTimeout(_searchTrackTimer)
         if (searchQuery.length >= 3) {
@@ -3604,6 +3609,11 @@
       document.querySelectorAll('#tabbar .tb').forEach(b => b.classList.toggle('active', b.dataset.tab === tab))
       if (tab === 'account') renderAccount()
       scrollToTop()
+    }
+    // Поиск и категории бургер-меню рендерят в #grid внутри catalogView — с других
+    // табов результат уходил в скрытый экран и клик выглядел мёртвым.
+    function ensureCatalogView() {
+      if (document.getElementById('catalogView').classList.contains('view-off')) switchTab('catalog')
     }
     function goCatalog() { switchTab('catalog') }
     function goCatalogBrand() { switchTab('catalog'); if (brandBlockBrand) selectBrand(brandBlockBrand) }
