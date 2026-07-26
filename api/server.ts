@@ -341,7 +341,7 @@ export function startApiServer(bot?: Telegraf): Server {
   })
 
   // ── Event tracking endpoint ──────────────────────────────────────────────────
-  const ALLOWED_EVENT_TYPES = ['view_product', 'add_to_cart', 'remove_from_cart', 'search', 'filter_brand', 'filter_category', 'checkout_start']
+  const ALLOWED_EVENT_TYPES = ['view_product', 'add_to_cart', 'remove_from_cart', 'search', 'filter_brand', 'filter_category', 'filter_line', 'checkout_start']
   app.post('/api/track', express.json(), (req: Request, res: Response) => {
     const { type, productId, data, sessionId } = req.body
     if (!type || typeof type !== 'string') { res.status(400).json({ error: 'type required' }); return }
