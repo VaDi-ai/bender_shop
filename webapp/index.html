@@ -8,6 +8,7 @@
   <!-- Шрифты self-host (public/fonts): CSP style-src/font-src 'self' блокировал
        fonts.googleapis.com, и прод рендерился системным fallback-шрифтом. -->
   <link rel="stylesheet" href="/fonts/fonts.css">
+  <link rel="icon" href="/favicon.ico" sizes="32x32">
   <link rel="manifest" href="/manifest.json">
   <link rel="preload" href="/no-photo.webp" as="image">
   <link rel="dns-prefetch" href="https://api.telegram.org">
@@ -1210,7 +1211,8 @@
       <div class="modal-carousel" id="modalCarousel">
         <div class="modal-badge" id="modalBadge" style="display:none"></div>
         <div class="modal-carousel-ph" id="modalCarouselPh"><img src="/no-photo.webp" alt=""></div>
-        <img class="modal-carousel-img" id="modalCarouselImg" src="" alt="" style="display:none" loading="lazy" decoding="async" onerror="handleProductPhotoError(this)">
+        <!-- Без src: пустой src="" стрелял onerror при парсинге, до объявления handleProductPhotoError → ReferenceError на каждой загрузке -->
+        <img class="modal-carousel-img" id="modalCarouselImg" alt="" style="display:none" loading="lazy" decoding="async" onerror="handleProductPhotoError(this)">
         <button class="modal-carousel-arrow modal-carousel-prev hidden" id="modalCarouselPrev">‹</button>
         <button class="modal-carousel-arrow modal-carousel-next hidden" id="modalCarouselNext">›</button>
         <div class="modal-carousel-dots" id="modalCarouselDots"></div>
@@ -1536,7 +1538,9 @@
       return code ? (REGION_FLAGS[code] || '') : ''
     }
     function subtotal() { return cart.reduce((s, i) => s + Number(i.price) * i.qty, 0) }
-    function totalWithFee() { const s = subtotal(); return payMethod === 'card' ? s * 1.14 : s }
+    // Комиссия эквайринга округляется до рубля — иначе в чеке «+15 706,6 ₽» и дробное ИТОГО.
+    function acquiringFee(s) { return Math.round(s * 0.14) }
+    function totalWithFee() { const s = subtotal(); return payMethod === 'card' ? s + acquiringFee(s) : s }
     function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;') }
     function photoUrl(fid) { return '/api/banner/' + encodeURIComponent(fid) }
     /** Абсолютный URL (/https), путь CDN (/photos/*.webp), иначе file_id Telegram → /api/banner */
@@ -1740,12 +1744,16 @@
       renderCartBody()
       cartSidebar.classList.add('open')
       overlay.classList.add('show')
+      // Корзина — панель поверх экрана, switchTab до подсветки не доходит:
+      // активный таб ставим здесь, а при закрытии возвращаем таб текущего экрана.
+      setTabbarActive('cart')
     }
     function closeCart() {
       if (!cartOpen) return
       cartOpen = false
       cartSidebar.classList.remove('open')
       if (!menuOpen) overlay.classList.remove('show')
+      setTabbarActive(currentViewTab())
     }
 
     document.getElementById('menuBtn').addEventListener('click', () => { menuOpen ? closeMenu() : openMenu() })
@@ -3080,7 +3088,7 @@
 
     function updateTotals() {
       const sub  = subtotal()
-      const comm = payMethod === 'card' ? sub * 0.14 : 0
+      const comm = payMethod === 'card' ? acquiringFee(sub) : 0
       document.getElementById('subtotalVal').textContent = fmt(sub) + ' ₽'
       document.getElementById('totalVal').textContent    = fmt(sub + comm) + ' ₽'
       const bd = document.getElementById('commBreakdown')
@@ -3648,6 +3656,16 @@
 
     // ── Таббар / переключение Главная ↔ Каталог ──
     const TAB_VIEWS = { home: 'homeView', catalog: 'catalogView', account: 'accountView', promos: 'promosView' }
+    function setTabbarActive(tab) {
+      document.querySelectorAll('#tabbar .tb').forEach(b => b.classList.toggle('active', b.dataset.tab === tab))
+    }
+    function currentViewTab() {
+      for (const [tab, id] of Object.entries(TAB_VIEWS)) {
+        const el = document.getElementById(id)
+        if (el && !el.classList.contains('view-off')) return tab
+      }
+      return 'home'
+    }
     function switchTab(tab) {
       if (tab === 'cart') { openCart(); return } // корзина — существующая панель, поверх текущего экрана
       const targetId = TAB_VIEWS[tab] || 'homeView'
@@ -3655,7 +3673,7 @@
         const el = document.getElementById(id)
         if (el) el.classList.toggle('view-off', id !== targetId)
       })
-      document.querySelectorAll('#tabbar .tb').forEach(b => b.classList.toggle('active', b.dataset.tab === tab))
+      setTabbarActive(tab)
       if (tab === 'account') renderAccount()
       scrollToTop()
     }
