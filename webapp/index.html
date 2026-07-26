@@ -5,9 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>Bender Shop</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Onest:wght@400;500;600;700&display=swap">
+  <!-- Шрифты self-host (public/fonts): CSP style-src/font-src 'self' блокировал
+       fonts.googleapis.com, и прод рендерился системным fallback-шрифтом. -->
+  <link rel="stylesheet" href="/fonts/fonts.css">
   <link rel="manifest" href="/manifest.json">
   <link rel="preload" href="/no-photo.webp" as="image">
   <link rel="dns-prefetch" href="https://api.telegram.org">
@@ -2157,6 +2157,51 @@
       renderGrid()
     }
 
+    /**
+     * Значения атрибутов, различающиеся только регистром (в листе встречаются
+     * «eSIM» и «eSim»), схлопываются к самому частому написанию — иначе в модалке
+     * два «одинаковых» чипа, а findVariant сравнивает строки строго (===).
+     * Данные листа не трогаем — нормализация только клиентская, после fetch.
+     */
+    function normalizeAttrCase(products) {
+      for (const p of products) {
+        if (!Array.isArray(p.variants) || !p.variants.length) continue
+        // key → lower(value) → { написание → сколько раз встретилось у вариантов }
+        const counts = {}
+        for (const v of p.variants) {
+          for (const [k, val] of Object.entries(v.attributes || {})) {
+            if (k === 'fullName' || typeof val !== 'string') continue
+            const byCase = (counts[k] ||= {})[val.toLowerCase()] ||= {}
+            byCase[val] = (byCase[val] || 0) + 1
+          }
+        }
+        const canon = {}
+        for (const [k, byLow] of Object.entries(counts)) {
+          canon[k] = {}
+          for (const [low, byCase] of Object.entries(byLow)) {
+            canon[k][low] = Object.entries(byCase).sort((a, b) => b[1] - a[1])[0][0]
+          }
+        }
+        for (const v of p.variants) {
+          for (const k of Object.keys(v.attributes || {})) {
+            const c = canon[k] && canon[k][String(v.attributes[k]).toLowerCase()]
+            if (c) v.attributes[k] = c
+          }
+        }
+        if (p.attributes && typeof p.attributes === 'object') {
+          for (const [k, vals] of Object.entries(p.attributes)) {
+            if (!Array.isArray(vals)) continue
+            const seen = new Set(), out = []
+            for (const val of vals) {
+              const c = (canon[k] && canon[k][String(val).toLowerCase()]) || val
+              if (!seen.has(c)) { seen.add(c); out.push(c) }
+            }
+            p.attributes[k] = out
+          }
+        }
+      }
+    }
+
     // ── Load products ─────────────────────────────────────────────────────────
     async function loadProducts() {
       const grid = document.getElementById('grid')
@@ -2166,6 +2211,7 @@
         const res  = await fetch('/api/products', { cache: 'no-store' })
         if (!res.ok) throw new Error('HTTP ' + res.status)
         allProducts = await res.json()
+        normalizeAttrCase(allProducts)
         computeBrands()
         renderCatFilterBar()
         renderHome()
@@ -2955,9 +3001,12 @@
       const price    = variant ? variant.price : p.price
       if (Number(price) === 0) { showToast('Уточняйте цену у менеджера'); return }
       const quantity = variant ? variant.quantity : p.quantity
-      const name     = (variant && variant.attributes && Object.keys(variant.attributes).length)
-        ? p.name + ' (' + Object.values(variant.attributes).join(' / ') + ')'
-        : p.name
+      // fullName — сырое имя строки листа («iPhone 17 256GB Black (Индия)»), дублирует
+      // цвет/память/страну рядом стоящих атрибутов — в подписи позиции не показываем.
+      const attrVals = variant && variant.attributes
+        ? Object.entries(variant.attributes).filter(([k]) => k !== 'fullName').map(([, v]) => v)
+        : []
+      const name = attrVals.length ? p.name + ' (' + attrVals.join(' · ') + ')' : p.name
 
       let itemPhotoUrl = null
       if (variant && Array.isArray(variant.photos) && variant.photos.length) {
