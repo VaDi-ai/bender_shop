@@ -303,9 +303,48 @@ export function adminApiRouter(): Router {
     const id = parseInt(String(req.params.id), 10)
     if (!Number.isInteger(id)) { res.status(422).json({ error: 'validation', fields: [{ field: 'id', message: 'Неверный ID' }] }); return }
     const { getBatchPreview } = await import('../lib/price-batch')
+    const { resolveApplyMode } = await import('../lib/price-apply')
     const preview = await getBatchPreview(id)
     if (!preview) { res.status(404).json({ error: 'Батч не найден' }); return }
-    res.json(preview)
+    const mode = resolveApplyMode()
+    const qaId = parseInt(process.env.QA_SUPPLIER_ID ?? '', 10) || null
+    res.json({
+      ...preview,
+      applyMode: mode,
+      // dry-run доступен всегда; реальное применение — по режиму/поставщику
+      canApply: mode === 'on' || (mode === 'test' && qaId !== null && preview.batch.supplierId === qaId),
+    })
+  }))
+
+  // ── Применение / откат (PR-7) ─────────────────────────────────────────────
+  router.post('/price-batches/:id/apply', safe(async (req, res) => {
+    const id = parseInt(String(req.params.id), 10)
+    if (!Number.isInteger(id)) { res.status(422).json({ error: 'validation', fields: [{ field: 'id', message: 'Неверный ID' }] }); return }
+    const body = (req.body ?? {}) as Record<string, unknown>
+    const { applyPriceBatch } = await import('../lib/price-apply')
+    const result = await applyPriceBatch({
+      batchId: id,
+      actor: { telegramId: req.admin!.telegramId, role: req.admin!.role },
+      dryRun: body.dryRun === true,
+      includeOutOfCorridor: body.includeOutOfCorridor === true,
+    })
+    res.status(result.status).json(result)
+  }))
+
+  router.post('/price-batches/:id/rollback', ownerOnly, safe(async (req, res) => {
+    const id = parseInt(String(req.params.id), 10)
+    if (!Number.isInteger(id)) { res.status(422).json({ error: 'validation', fields: [{ field: 'id', message: 'Неверный ID' }] }); return }
+    const { rollbackPriceBatch } = await import('../lib/price-apply')
+    const result = await rollbackPriceBatch({ batchId: id, actor: { telegramId: req.admin!.telegramId, role: req.admin!.role } })
+    res.status(result.status).json(result)
+  }))
+
+  router.post('/price-batches/:id/retry-writeback', safe(async (req, res) => {
+    const id = parseInt(String(req.params.id), 10)
+    if (!Number.isInteger(id)) { res.status(422).json({ error: 'validation', fields: [{ field: 'id', message: 'Неверный ID' }] }); return }
+    const { retryWriteback } = await import('../lib/price-apply')
+    const result = await retryWriteback(id, { telegramId: req.admin!.telegramId, role: req.admin!.role })
+    res.status(result.status).json(result)
   }))
 
   // ── Синк (PR-4): журнал прогонов + ручной запуск ──────────────────────────
