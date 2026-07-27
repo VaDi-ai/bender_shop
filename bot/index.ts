@@ -106,6 +106,7 @@ import {
 import { handleSupplierMessage, requestPriceFromAllSuppliers } from '../webhooks/supplier'
 import { cancelPromotion } from '../lib/promotions'
 import { logSecurityEvent, initSecurityAlerts } from '../lib/security-log'
+import { seedAdminUsers } from '../lib/admin-users'
 import { createBackupBuffer } from '../lib/backup'
 import { aiSuggestions, storeSuggestion } from './ai/agent'
 
@@ -1810,6 +1811,16 @@ startScheduler(bot)
 const httpServer = startApiServer(process.env.NODE_ENV === 'production' ? bot : undefined)
 
 // ─── Загрузка OpenRouter ключа из БД ─────────────────────────────────────────
+
+// ─── Сид AdminUser из env ADMIN_IDS (ADMIN-DESIGN §2, идемпотентно) ──────────
+
+;(async () => {
+  try {
+    await seedAdminUsers()
+  } catch (e) {
+    log.error('AdminUser seed error', { error: e instanceof Error ? e.message : String(e) })
+  }
+})()
 
 ;(async () => {
   try {
