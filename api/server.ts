@@ -40,6 +40,7 @@ import log from '../lib/logger'
 import { flattenRelativePhotoPath } from '../lib/photo-flat-name'
 import { trackEvent } from '../lib/events'
 import { validateTelegramWebApp } from '../lib/telegram-webapp-auth'
+import { buildProfileWriteback } from '../lib/client-profile'
 import { adminApiRouter } from './admin'
 
 // BigInt → JSON serialization (avitoItemId etc.)
@@ -1474,6 +1475,7 @@ export function startApiServer(bot?: Telegraf): Server {
 
     // ── Весь заказ атомарно: проверка остатков, создание заказа, списание ──
     try {
+      let pdnConsentNew = false // A4: согласие впервые проставлено в этом заказе
       const order = await prisma.$transaction(async (tx) => {
         let totalDecimal = new Decimal(0)
         const enrichedItems: Array<{
@@ -1539,15 +1541,30 @@ export function startApiServer(bot?: Telegraf): Server {
         })
         if (!client) {
           const defaultSeg = await tx.segment.findFirst({ where: { isDefault: true } })
+          // A4: без ПДн-гейта в профиль ничего не пишем — раньше сюда уходил
+          // ТЕЛЕФОН ОТКРЫТЫМ ТЕКСТОМ без согласия. Теперь профиль наполняет
+          // только buildProfileWriteback ниже (шифрование + гейт согласия).
           client = await tx.client.create({
             data: {
               name: customerName.trim(),
               source: clientSource,
               externalId: telegramId,
               segmentId: defaultSeg?.id ?? null,
-              phone: customerPhone?.trim() || null,
             },
           })
+        }
+
+        // A4: обратная запись профиля из заказа — только при согласии
+        // (галочка чекаута pdnConsent или уже проставленный pdnConsentAt),
+        // только пустые поля, телефон шифруется.
+        const writeback = buildProfileWriteback(
+          { fullName: client.fullName, phone: client.phone, pdnConsentAt: client.pdnConsentAt },
+          { fullName: customerName, phone: customerPhone },
+          req.body.pdnConsent === true,
+        )
+        if (writeback.data) {
+          await tx.client.update({ where: { id: client.id }, data: writeback.data })
+          pdnConsentNew = writeback.consentIsNew
         }
 
         // Создать заказ
@@ -1642,6 +1659,13 @@ export function startApiServer(bot?: Telegraf): Server {
         },
         source: telegramId.startsWith('unverified_') || telegramId.startsWith('web_') ? 'web' : 'telegram',
       })
+
+      // A4: юр. факт первого согласия — в security-log (как в PUT /api/profile)
+      if (pdnConsentNew) {
+        try {
+          await logSecurityEvent('pdn_consent', { telegramId, at: new Date().toISOString(), source: 'checkout' }, telegramId)
+        } catch { /* лог не должен ломать заказ */ }
+      }
 
       // Ответ клиенту СРАЗУ — до уведомлений
       log.info('Order created', { orderId: order.id, telegramId, items: items.length, total: Number(order.totalAmount), paymentMethod })

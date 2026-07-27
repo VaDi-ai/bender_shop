@@ -1741,10 +1741,28 @@
       navSidebar.classList.remove('open')
       if (!cartOpen) overlay.classList.remove('show')
     }
+    // A4: префилл формы из профиля — только в ПУСТЫЕ поля; юзер может
+    // перебить значения для конкретного заказа, профиль это не меняет.
+    let _profilePrefetched = false
+    async function prefillCheckoutFromProfile() {
+      if (_profilePrefetched || !(tg && tg.initData)) return
+      _profilePrefetched = true
+      try {
+        const res = await fetch('/api/profile', { headers: { 'x-telegram-init-data': tg.initData }, cache: 'no-store' })
+        if (!res.ok) return
+        const p = await res.json()
+        const nameEl = document.getElementById('cfName')
+        const phoneEl = document.getElementById('cfPhone')
+        if (nameEl && !nameEl.value.trim() && p.fullName) nameEl.value = p.fullName
+        if (phoneEl && !phoneEl.value.trim() && p.phone) phoneEl.value = p.phone
+      } catch { /* префилл — удобство, не обязательство */ }
+    }
+
     function openCart() {
       if (cartOpen) return
       closeMenu()
       cartOpen = true
+      prefillCheckoutFromProfile()
       renderCartBody()
       cartSidebar.classList.add('open')
       overlay.classList.add('show')
@@ -3204,7 +3222,9 @@
       })
 
       try {
-        const body = { telegramId: tgUser ? String(tgUser.id) : '', items, totalAmount: totalAmt, payment: payMethod, customerName, customerPhone, deliveryType, customerComment }
+        // pdnConsent: галочка чекаута включает согласие на обработку ПДн —
+        // сервер по ней решает, можно ли сохранить имя/телефон в профиль (A4)
+        const body = { telegramId: tgUser ? String(tgUser.id) : '', items, totalAmount: totalAmt, payment: payMethod, customerName, customerPhone, deliveryType, customerComment, pdnConsent: !!document.getElementById('consentCheckbox')?.checked }
         if (deliveryAddress) body.deliveryAddress = deliveryAddress
         const headers = { 'Content-Type': 'application/json' }
         if (tg?.initData) headers['x-telegram-init-data'] = tg.initData
