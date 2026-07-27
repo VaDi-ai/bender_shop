@@ -46,8 +46,9 @@ jobs:
       - name: Type check
         run: npx tsc --noEmit
 
+      # Prisma 7: у db push нет --skip-generate (см. railway.toml) — generate выше уже отработал
       - name: Push schema to test DB
-        run: npx prisma db push --skip-generate
+        run: npx prisma db push
         env:
           DATABASE_URL: postgresql://test:test@localhost:5432/test
 
