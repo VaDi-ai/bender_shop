@@ -105,6 +105,8 @@ const EVENT_DESCRIPTIONS: Record<SecurityEvent, string> = {
   admin_hmac_stale:           '🕒 Просроченная подпись /admin (replay-защита)',
   invalid_admin_hmac:         '🔑 Неверная HMAC-подпись /admin',
   photos_uploaded:            '🖼️ Загружен пакет фото товаров',
+  admin_access_denied:        '🚫 Отказ в доступе к админ-API (нет в AdminUser / деактивирован)',
+  admin_role_denied:          '🚫 Отказ по роли в админ-API (нужен owner)',
 }
 
 const SENSITIVE_KEY_PATTERNS = ['token', 'key', 'hash', 'secret']
