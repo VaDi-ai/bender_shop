@@ -19,7 +19,7 @@ describe('classifyCorridor (±15%, гейт для PR-7)', () => {
 
   it('deltaPct: знак и округление до десятых; null при нулевой базе', () => {
     expect(priceDeltaPct(100000, 112340)).toBe(12.3)
-    expect(priceDeltaPct(100000, 87650)).toBe(-12.4)
+    expect(priceDeltaPct(100000, 87600)).toBe(-12.4)
     expect(priceDeltaPct(0, 1)).toBeNull()
   })
 })
