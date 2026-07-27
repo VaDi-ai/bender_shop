@@ -1298,7 +1298,7 @@ export function setupInventoryHandlers(bot: Telegraf): void {
     ;(async () => {
       try {
         const { syncProductsFromSheets } = await import('../../lib/sheets-sync')
-        const result = await syncProductsFromSheets(() => syncAbortFlag)
+        const result = await syncProductsFromSheets(() => syncAbortFlag, { trigger: 'manual', startedBy: userId ? String(userId) : undefined })
 
         if (syncAbortFlag) {
           if (userId) await bot.telegram.sendMessage(userId, '⏹️ Синхронизация остановлена.')
