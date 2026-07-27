@@ -268,6 +268,46 @@ export function adminApiRouter(): Router {
 
   router.get('/dashboard', safe(dashboard))
 
+  // ── Разбор прайсов (PR-6, СТРОГО READ-ONLY) ───────────────────────────────
+  // Создание/просмотр — owner+manager (это не применение). Применение с
+  // owner-гейтом вне коридора — PR-7. Цены вариантов и таблица не трогаются.
+  router.post('/price-batches', safe(async (req, res) => {
+    const body = (req.body ?? {}) as Record<string, unknown>
+    const source = body.source === 'file' ? 'file' as const : 'paste' as const
+    const text = typeof body.text === 'string' ? body.text.trim() : ''
+    if (text.length < 15) { res.status(422).json({ error: 'validation', fields: [{ field: 'text', message: 'Вставьте текст прайса (от 15 символов)' }] }); return }
+    if (text.length > 64_000) { res.status(422).json({ error: 'validation', fields: [{ field: 'text', message: 'Текст длиннее 64 КБ — разбейте на части' }] }); return }
+    let supplierId: number | null = null
+    if (body.supplierId !== undefined && body.supplierId !== null && body.supplierId !== '') {
+      supplierId = parseInt(String(body.supplierId), 10)
+      if (!Number.isInteger(supplierId)) { res.status(422).json({ error: 'validation', fields: [{ field: 'supplierId', message: 'Неверный поставщик' }] }); return }
+      const sup = await prisma.supplier.findUnique({ where: { id: supplierId }, select: { isActive: true } })
+      if (!sup) { res.status(404).json({ error: 'Поставщик не найден' }); return }
+    }
+    const { createPriceBatch } = await import('../lib/price-batch')
+    const result = await createPriceBatch({ source, text, supplierId, createdBy: req.admin!.telegramId })
+    res.status(result.reused ? 200 : 201).json(result)
+  }))
+
+  router.get('/price-batches', safe(async (req, res) => {
+    const limit = Math.min(Math.max(parseInt(String(req.query.limit ?? '20'), 10) || 20, 1), 100)
+    const batches = await prisma.priceApplyBatch.findMany({
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+      select: { id: true, source: true, status: true, supplierId: true, createdBy: true, createdAt: true, stats: true, supplier: { select: { name: true } } },
+    })
+    res.json(batches)
+  }))
+
+  router.get('/price-batches/:id', safe(async (req, res) => {
+    const id = parseInt(String(req.params.id), 10)
+    if (!Number.isInteger(id)) { res.status(422).json({ error: 'validation', fields: [{ field: 'id', message: 'Неверный ID' }] }); return }
+    const { getBatchPreview } = await import('../lib/price-batch')
+    const preview = await getBatchPreview(id)
+    if (!preview) { res.status(404).json({ error: 'Батч не найден' }); return }
+    res.json(preview)
+  }))
+
   // ── Синк (PR-4): журнал прогонов + ручной запуск ──────────────────────────
   router.get('/sync-runs', safe(async (req, res) => {
     const limit = Math.min(Math.max(parseInt(String(req.query.limit ?? '20'), 10) || 20, 1), 100)
