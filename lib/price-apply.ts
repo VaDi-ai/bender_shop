@@ -284,7 +284,7 @@ export async function applyPriceBatch(opts: {
   const appliedOutOfCorridor = applied.filter(r => r.corridor === 'out').length
   const writeback = opts.writebackFn ?? sheetPriceWriteback
   const wbRows: WritebackRow[] = applied
-    .map(r => {
+    .map((r): WritebackRow | null => {
       const fullName = computed.fullNameByVariant.get(r.variantId!) ?? ''
       return fullName ? { fullName, cost: r.newCost!, price: r.newPrice! } : null
     })
