@@ -49,6 +49,7 @@ if (!process.env.BOT_TOKEN) throw new Error('BOT_TOKEN is required')
 const BOT_TOKEN = process.env.BOT_TOKEN
 const PORT = Number(process.env.PORT || process.env.API_PORT || 3000)
 const WEBAPP_PATH = path.join(__dirname, '../../webapp/index.html')
+const ADMIN_HTML_PATH = path.join(__dirname, '../../webapp/admin.html')
 
 const telegram = new Telegram(BOT_TOKEN)
 const CRM_GROUP_ID = Number(process.env.CRM_GROUP_ID)
@@ -157,6 +158,12 @@ export function startApiServer(bot?: Telegraf): Server {
     indexHtml = fs.readFileSync(WEBAPP_PATH)
   } catch {
     log.warn('webapp/index.html not found at startup', { path: WEBAPP_PATH })
+  }
+  let adminHtml: Buffer | null = null
+  try {
+    adminHtml = fs.readFileSync(ADMIN_HTML_PATH)
+  } catch {
+    log.warn('webapp/admin.html not found at startup', { path: ADMIN_HTML_PATH })
   }
 
   // ── Telegram webhook (production, before body parsers) ─────────────────────
@@ -562,6 +569,17 @@ export function startApiServer(bot?: Telegraf): Server {
     }
     res.setHeader('Content-Type', 'text/html; charset=utf-8')
     res.send(indexHtml)
+  })
+
+  // ── GET /admin — админка (Mini App). HTML отдаётся всем, данные — за
+  // requireAdmin в /admin/api/* (тот же паттерн, что /shop + Кабинет).
+  app.get('/admin', (_req, res) => {
+    if (!adminHtml) {
+      res.status(503).send('admin webapp not available')
+      return
+    }
+    res.setHeader('Content-Type', 'text/html; charset=utf-8')
+    res.send(adminHtml)
   })
 
   // ── GET /health ────────────────────────────────────────────────────────────
