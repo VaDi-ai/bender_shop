@@ -34,6 +34,7 @@ import {
   incrementStat,
 } from '../bot/ai/agent'
 import { logSecurityEvent } from '../lib/security-log'
+import { getApiKeyValue } from '../lib/api-key-store'
 import { encryptClientField, decryptClientField, encryptDate, decryptDate } from '../lib/client-crypto'
 import log, { safeLog } from '../lib/logger'
 import { Sentry } from '../lib/sentry'
@@ -1212,7 +1213,7 @@ async function handleClientMessage(
           '🛍 У нас можно купить технику по лучшим ценам — iPhone, MacBook, PlayStation, Dyson и многое другое.',
           '',
           '📍 Мы работаем:',
-          '   Барклая 8, ТЦ Горбушка, Павильон 211/1',
+          '   Барклая 8, ТЦ Горбушка, Павильон 202',
           '   ⏰ Ежедневно с 11:00 до 20:00',
           '',
           '💬 Напишите что вас интересует — ответим быстро!',
@@ -1655,10 +1656,19 @@ async function handleWebAppOrder(
     `💳 Оплата: ${PAYMENT_LABEL[payment] ?? payment}`,
   ].join('\n')
 
-  if (client.telegramTopicId) {
-    await sendToTopic(telegram, CRM_GROUP_ID, client.telegramTopicId, notification)
-  } else {
-    await telegram.sendMessage(CRM_GROUP_ID, notification)
+  // Решение владельца (07.2026): заказ в персональный топик не дублируем —
+  // только топик «Продажи и резервы» (fallback — корень группы). Путь legacy
+  // (витрина шлёт заказы через POST /api/orders, sendData не используется),
+  // но поведение выравнено с веб-путём.
+  try {
+    const salesTopicId = await getApiKeyValue('sales_topic')
+    if (salesTopicId) {
+      await sendToTopic(telegram, CRM_GROUP_ID, Number(salesTopicId), notification)
+    } else {
+      await telegram.sendMessage(CRM_GROUP_ID, notification)
+    }
+  } catch (err) {
+    log.error('Sales topic notify error', { error: err instanceof Error ? err.message : String(err) })
   }
 
   await prisma.message.create({
