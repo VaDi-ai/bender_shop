@@ -9,7 +9,6 @@
 import { Telegraf } from 'telegraf'
 import type { Context } from 'telegraf'
 import { prisma } from '../lib/prisma'
-import { parseSupplierMessage } from '../lib/ai-parser'
 import { getApiKeyValue } from '../lib/api-key-store'
 import { roundPrice } from '../lib/currency'
 import log from '../lib/logger'
@@ -45,67 +44,37 @@ export async function handleSupplierMessage(
   log.info('Parsing supplier price', { supplier: supplier.name, chatId, textPreview: text.slice(0, 80) })
 
   try {
-    const parsed = await parseSupplierMessage(text)
-    if (parsed.length === 0) return false
+    // PR-8: входящий прайс → preview-БАТЧ (тот же контур, что вставка в вебе):
+    // строки isActive=false, цены НЕ трогаются до «Применить» в админке.
+    // Прямой записи активных SupplierPrice больше нет. Идемпотентность
+    // createPriceBatch гасит повторные форварды того же текста (<24ч).
+    const { createPriceBatch } = await import('../lib/price-batch')
+    const result = await createPriceBatch({
+      source: 'message',
+      text,
+      supplierId: supplier.id,
+      createdBy: 'supplier-webhook',
+    })
+    if (result.stats.rows === 0) return false
 
-    // Сохраняем спарсенные цены
-    const messageId = (ctx.message as { message_id?: number })?.message_id
-    let savedCount = 0
-
-    for (const item of parsed) {
-      // Проверяем алиас перед сохранением
-      const alias = await prisma.priceAlias.findUnique({
-        where: { alias: item.model.toLowerCase().trim() },
-      })
-
-      if (alias?.isIgnored) continue
-
-      // Если алиас привязан к товару — подставить название товара
-      let model = item.model
-      if (alias?.productId) {
-        const linkedProduct = await prisma.product.findUnique({
-          where: { id: alias.productId },
-          select: { name: true },
-        })
-        if (linkedProduct) model = linkedProduct.name
-      }
-
-      await prisma.supplierPrice.create({
-        data: {
-          supplierId: supplier.id,
-          model,
-          storage: item.storage ?? null,
-          ram: item.ram ?? null,
-          color: item.color ?? null,
-          simType: item.simType ?? null,
-          country: item.country ?? null,
-          price: item.price,
-          rawMessage: item.rawLine || text.slice(0, 500),
-          messageId: messageId ?? null,
-        },
-      })
-      savedCount++
-    }
-
-    // Обновить lastPriceAt
+    // lastPriceAt = «когда последний раз присылал прайс» (дерево §4.1)
     await prisma.supplier.update({
       where: { id: supplier.id },
       data: { lastPriceAt: new Date() },
     })
 
-    log.info('Saved supplier prices', { supplier: supplier.name, savedCount })
+    log.info('Supplier price batch created', { supplier: supplier.name, batchId: result.batchId, reused: result.reused, ...result.stats })
 
-    // Уведомить админов (если включено)
+    // Уведомить админов (если включено) — карточка «разберите в админке»
     const notifyEnabled = await getApiKeyValue('supplier_notify')
-    if (notifyEnabled !== 'false') {
-      const summary = parsed.map(p =>
-        `${p.model}${p.ram ? ' ' + p.ram : ''}${p.storage ? '/' + p.storage : ''}${p.color ? ' ' + p.color : ''} — ${p.price.toLocaleString('ru-RU')}₽`,
-      ).join('\n')
-
+    if (notifyEnabled !== 'false' && !result.reused) {
+      const s = result.stats
       const notification = [
-        `📦 Новые цены от ${supplier.name}:`,
+        `📦 Новый прайс от ${supplier.name} — разбор #${result.batchId}`,
         '',
-        summary,
+        `Строк: ${s.rows} · узнано: ${s.matchedRows} · не узнано: ${s.unmatchedRows}${s.outOfCorridor ? ` · вне коридора: ${s.outOfCorridor}` : ''}`,
+        'Проверьте и примените в админке: Цены → последние разборы.',
+        'Ничего не применится, пока вы не подтвердите.',
       ].join('\n')
 
       for (const adminId of ADMIN_IDS) {

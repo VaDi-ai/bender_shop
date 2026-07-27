@@ -233,6 +233,87 @@ export function setSupplierActive(active: boolean) {
   }
 }
 
+// ─── Правила наценки (Этап 1 / PR-9) ─────────────────────────────────────────
+//
+// create/update — owner+manager (операционка; AuditLog-дельта + SecurityLog
+// markup_rule_changed); enable/disable — owner-only (двигает ВСЕ цены канала
+// при пересчёте); жёсткого DELETE нет как класса (как у поставщиков).
+// Изменение правил НЕ пересчитывает существующие цены немедленно — влияет на
+// следующий синк (path 1) и применение батчей.
+
+const MARKUP_SELECT = { id: true, minCost: true, maxCost: true, mode: true, value: true, channel: true, enabled: true, updatedAt: true } as const
+
+function numRule(r: Record<string, unknown>): Record<string, unknown> {
+  return { ...r, minCost: Number(r.minCost), maxCost: r.maxCost === null ? null : Number(r.maxCost), value: Number(r.value) }
+}
+
+async function channelRules(channel: string) {
+  const rules = await prisma.markupRule.findMany({ where: { channel }, select: MARKUP_SELECT })
+  return rules.map(r => ({ id: r.id, minCost: Number(r.minCost), maxCost: r.maxCost === null ? null : Number(r.maxCost), mode: r.mode, value: Number(r.value), enabled: r.enabled }))
+}
+
+export async function listMarkupRules(_req: AdminRequest, res: Response): Promise<void> {
+  const rules = await prisma.markupRule.findMany({ orderBy: [{ channel: 'asc' }, { minCost: 'asc' }], select: MARKUP_SELECT })
+  res.json(rules.map(r => numRule(r as unknown as Record<string, unknown>)))
+}
+
+export async function createMarkupRule(req: AdminRequest, res: Response): Promise<void> {
+  const { validateMarkupRuleInput, evaluateIntegrityTransition } = await import('../lib/markup-rule-validation')
+  const { errors, data } = validateMarkupRuleInput(req.body ?? {}, { partial: false })
+  if (errors.length) { res.status(422).json({ error: 'validation', fields: errors }); return }
+  const channel = (data.channel as string) ?? 'site'
+  const integrity = evaluateIntegrityTransition(await channelRules(channel), { data: { ...data, enabled: data.enabled !== false } as never })
+  if (integrity.block) { res.status(422).json({ error: `Набор правил канала «${channel}» ломается: ${integrity.error}` }); return }
+  const rule = await prisma.markupRule.create({ data: data as never, select: MARKUP_SELECT })
+  const admin = req.admin!
+  void logAdminAction({ adminTelegramId: admin.telegramId, action: 'create', entity: 'MarkupRule', entityId: rule.id, after: data })
+  void logSecurityEvent('markup_rule_changed', { action: 'create', ruleId: rule.id, channel, via: 'web' }, admin.telegramId)
+  res.status(201).json({ ...numRule(rule as unknown as Record<string, unknown>), integrityWarning: integrity.warning ?? null })
+}
+
+export async function updateMarkupRule(req: AdminRequest, res: Response): Promise<void> {
+  const id = parseInt(String(req.params.id), 10)
+  if (!Number.isInteger(id)) { res.status(422).json({ error: 'validation', fields: [{ field: 'id', message: 'Неверный ID' }] }); return }
+  const { validateMarkupRuleInput, evaluateIntegrityTransition } = await import('../lib/markup-rule-validation')
+  const { errors, data } = validateMarkupRuleInput(req.body ?? {}, { partial: true })
+  if (errors.length) { res.status(422).json({ error: 'validation', fields: errors }); return }
+  if (!Object.keys(data).length) { res.status(422).json({ error: 'validation', fields: [{ field: 'body', message: 'Нет полей для изменения' }] }); return }
+  // enable/disable — только отдельными owner-роутами
+  if ('enabled' in data) { res.status(422).json({ error: 'validation', fields: [{ field: 'enabled', message: 'Включение/выключение — отдельной кнопкой (owner)' }] }); return }
+  const existing = await prisma.markupRule.findUnique({ where: { id }, select: MARKUP_SELECT })
+  if (!existing) { res.status(404).json({ error: 'Правило не найдено' }); return }
+  const channel = (data.channel as string) ?? existing.channel
+  const integrity = evaluateIntegrityTransition(await channelRules(channel), { id, data: data as never })
+  if (integrity.block) { res.status(422).json({ error: `Набор правил канала «${channel}» ломается: ${integrity.error}` }); return }
+  const updated = await prisma.markupRule.update({ where: { id }, data: data as never, select: MARKUP_SELECT })
+  const admin = req.admin!
+  const { supplierDelta } = await import('../lib/supplier-validation')
+  const { before, after } = supplierDelta(existing as unknown as Record<string, unknown>, data)
+  if (Object.keys(after).length) {
+    void logAdminAction({ adminTelegramId: admin.telegramId, action: 'update', entity: 'MarkupRule', entityId: id, before, after })
+    void logSecurityEvent('markup_rule_changed', { action: 'update', ruleId: id, fields: Object.keys(after), via: 'web' }, admin.telegramId)
+  }
+  res.json(numRule(updated as unknown as Record<string, unknown>))
+}
+
+export function setMarkupRuleEnabled(enabled: boolean) {
+  return async function (req: AdminRequest, res: Response): Promise<void> {
+    const id = parseInt(String(req.params.id), 10)
+    if (!Number.isInteger(id)) { res.status(422).json({ error: 'validation', fields: [{ field: 'id', message: 'Неверный ID' }] }); return }
+    const existing = await prisma.markupRule.findUnique({ where: { id }, select: MARKUP_SELECT })
+    if (!existing) { res.status(404).json({ error: 'Правило не найдено' }); return }
+    if (existing.enabled === enabled) { res.json({ ok: true, unchanged: true }); return }
+    const { evaluateIntegrityTransition } = await import('../lib/markup-rule-validation')
+    const integrity = evaluateIntegrityTransition(await channelRules(existing.channel), { id, data: { enabled } })
+    if (integrity.block) { res.status(422).json({ error: `Набор правил канала «${existing.channel}» ломается: ${integrity.error}` }); return }
+    await prisma.markupRule.update({ where: { id }, data: { enabled } })
+    const admin = req.admin!
+    void logAdminAction({ adminTelegramId: admin.telegramId, action: enabled ? 'enable' : 'disable', entity: 'MarkupRule', entityId: id, before: { enabled: existing.enabled }, after: { enabled } })
+    void logSecurityEvent('markup_rule_changed', { action: enabled ? 'enable' : 'disable', ruleId: id, via: 'web' }, admin.telegramId)
+    res.json({ ok: true })
+  }
+}
+
 /** owner-гейт для отдельных роутов (базовый requireAdmin уже отработал). */
 export function ownerOnly(req: AdminRequest, res: Response, next: NextFunction): void {
   if (req.admin?.role !== 'owner') {
@@ -346,6 +427,32 @@ export function adminApiRouter(): Router {
     const result = await retryWriteback(id, { telegramId: req.admin!.telegramId, role: req.admin!.role })
     res.status(result.status).json(result)
   }))
+
+  // ── Очередь «не узнал» + обучение алиасами (PR-8) ─────────────────────────
+  router.get('/unmatched', safe(async (req, res) => {
+    const limit = Math.min(Math.max(parseInt(String(req.query.limit ?? '100'), 10) || 100, 1), 300)
+    const { listUnmatched } = await import('../lib/price-alias')
+    res.json(await listUnmatched(limit))
+  }))
+
+  router.post('/aliases', safe(async (req, res) => {
+    const body = (req.body ?? {}) as Record<string, unknown>
+    const supplierPriceId = parseInt(String(body.supplierPriceId), 10)
+    if (!Number.isInteger(supplierPriceId)) { res.status(422).json({ error: 'validation', fields: [{ field: 'supplierPriceId', message: 'Укажите строку прайса' }] }); return }
+    const ignore = body.ignore === true
+    const variantId = body.variantId !== undefined ? parseInt(String(body.variantId), 10) : undefined
+    if (!ignore && !Number.isInteger(variantId)) { res.status(422).json({ error: 'validation', fields: [{ field: 'variantId', message: 'Укажите вариант или ignore' }] }); return }
+    const { linkSupplierPriceRow } = await import('../lib/price-alias')
+    const result = await linkSupplierPriceRow({ supplierPriceId, variantId: ignore ? undefined : variantId, ignore, actor: { telegramId: req.admin!.telegramId } })
+    res.status(result.status).json(result)
+  }))
+
+  // ── Правила наценки (PR-9) ────────────────────────────────────────────────
+  router.get('/markup-rules', safe(listMarkupRules))
+  router.post('/markup-rules', safe(createMarkupRule))
+  router.put('/markup-rules/:id', safe(updateMarkupRule))
+  router.post('/markup-rules/:id/enable', ownerOnly, safe(setMarkupRuleEnabled(true)))
+  router.post('/markup-rules/:id/disable', ownerOnly, safe(setMarkupRuleEnabled(false)))
 
   // ── Синк (PR-4): журнал прогонов + ручной запуск ──────────────────────────
   router.get('/sync-runs', safe(async (req, res) => {
