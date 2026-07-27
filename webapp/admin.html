@@ -45,6 +45,13 @@
     #tabbar .tb.on { color:var(--ac); }
     #tabbar .tb i { display:block; font-size:16px; font-style:normal; margin-bottom:3px; }
 
+    .inp { background:#0f0f10; border:1px solid var(--bd); border-radius:10px; padding:11px 12px; color:#fff; font-family:'Onest'; font-size:13px; width:100%; margin-top:8px; }
+    .btn-main { background:var(--ac); color:var(--acf); font-family:'Onest'; font-weight:600; font-size:13px; padding:12px 14px; border-radius:11px; border:none; width:100%; cursor:pointer; margin-top:10px; }
+    .btn-ghost { background:transparent; color:var(--dim); font-family:'Onest'; font-weight:600; font-size:13px; padding:10px 14px; border-radius:11px; border:1px solid var(--bd); width:100%; cursor:pointer; margin-top:8px; }
+    .sup-actions { display:flex; gap:8px; margin-top:10px; }
+    .sup-actions button { flex:1; margin-top:0; }
+    .sup-actions .danger { color:var(--bad); border-color:rgba(255,107,94,.5); background:transparent; }
+
     /* Гейт-экраны (загрузка / нет доступа / ошибка) */
     #gate { position:fixed; inset:0; background:var(--bg); z-index:50; display:flex; align-items:center; justify-content:center; text-align:center; padding:24px; }
     #gate .lg { font-family:'JetBrains Mono',monospace; color:var(--ac); font-weight:700; letter-spacing:2px; font-size:15px; margin-bottom:14px; }
@@ -87,8 +94,28 @@
     <!-- ЦЕНЫ И ПОСТАВЩИКИ -->
     <section class="screen" id="s-prices">
       <h2>Цены и поставщики</h2>
-      <div class="sub">Разбор прайсов, лучшая цена, наценка.</div>
-      <div class="empty">Флагман этапа. Дальше по плану:<br>поставщики (PR-5) → разбор и предпросмотр (PR-6) →<br>применение с коридором ±15% и откатом (PR-7) →<br>очередь «не узнал» и обучение (PR-8).</div>
+      <div class="sub">Карточки поставщиков. Разбор прайсов приедет следом (PR-6…8).</div>
+
+      <div class="card">
+        <h3 id="supFormTitle">Новый поставщик</h3>
+        <input class="inp" id="supName" placeholder="Название" maxlength="100">
+        <div style="display:flex;gap:8px">
+          <input class="inp" id="supMarkup" placeholder="Наценка, % (0–50)" inputmode="decimal">
+          <input class="inp" id="supTtl" placeholder="TTL, дней (1–30)" inputmode="numeric">
+        </div>
+        <input class="inp" id="supNotes" placeholder="Заметка" maxlength="1000">
+        <button class="btn-main" id="supSave">Добавить</button>
+        <button class="btn-ghost" id="supCancel" style="display:none">Отмена</button>
+        <div class="mt" id="supErr" style="color:var(--bad)"></div>
+        <div class="mt">Привязка к Telegram-чату (chatId) — только из бота; веб создаёт поставщика без чата, прайсы для него заводятся вставкой или файлом.</div>
+      </div>
+
+      <div class="cap" style="display:flex;align-items:center;gap:10px">ПОСТАВЩИКИ
+        <label style="margin-left:auto;font-family:'Onest';letter-spacing:0;color:var(--dim);font-size:11px;display:flex;align-items:center;gap:5px">
+          <input type="checkbox" id="supShowInactive"> неактивные
+        </label>
+      </div>
+      <div id="supList"><div class="empty">Загрузка…</div></div>
     </section>
 
     <!-- ВИТРИНА -->
@@ -157,9 +184,102 @@
       const nameEl = document.createElement('b')
       nameEl.textContent = me.name || me.telegramId
       who.append(nameEl, document.createElement('br'), document.createTextNode(ROLE_LABEL[me.role] || me.role))
+      window.adminMe = me
       gate.classList.add('hidden')
       loadDashboard()
       loadSyncRuns()
+      loadSuppliers()
+    }
+
+    // ── Поставщики (PR-5) ─────────────────────────────────────────────────────
+    let supEditId = null
+    const esc = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')
+
+    async function loadSuppliers() {
+      const box = document.getElementById('supList')
+      const inactive = document.getElementById('supShowInactive').checked
+      try {
+        const res = await fetch('/admin/api/suppliers' + (inactive ? '?includeInactive=1' : ''), { headers, cache: 'no-store' })
+        if (!res.ok) { box.innerHTML = '<div class="empty">Не удалось загрузить</div>'; return }
+        const list = await res.json()
+        if (!list.length) { box.innerHTML = '<div class="empty">Поставщиков пока нет —<br>добавьте первого формой выше.</div>'; return }
+        const isOwner = window.adminMe && window.adminMe.role === 'owner'
+        box.innerHTML = list.map(s => {
+          const days = s.lastPriceAt ? Math.floor((Date.now() - new Date(s.lastPriceAt)) / 86400000) : null
+          const last = days === null ? 'прайсов ещё не было' : (days === 0 ? 'прайс сегодня' : `последний прайс ${days} дн. назад`)
+          const chatBound = !String(s.chatId || '').startsWith('web:')
+          return `<div class="card" data-sid="${s.id}">
+            <h3>${esc(s.name)} <span class="chip ${s.isActive ? 'c-ok' : 'c-off'}">${s.isActive ? 'активен' : 'выключен'}</span></h3>
+            <div class="mt">Наценка ${s.markup}% · TTL ${s.priceTtlDays} дн. · ${last}</div>
+            <div class="mt">${chatBound ? 'Чат привязан' : 'Без чата'} · 📄 привязка к чату — из бота${s.notes ? ' · ' + esc(s.notes) : ''}</div>
+            <div class="sup-actions">
+              <button class="btn-ghost" data-edit="${s.id}">Изменить</button>
+              ${isOwner ? `<button class="btn-ghost${s.isActive ? ' danger' : ''}" data-toggle="${s.id}" data-active="${s.isActive ? '0' : '1'}">${s.isActive ? 'Деактивировать' : 'Включить'}</button>` : ''}
+            </div>
+          </div>`
+        }).join('')
+        window._suppliers = list
+        box.querySelectorAll('[data-edit]').forEach(b => b.addEventListener('click', () => editSupplier(Number(b.dataset.edit))))
+        box.querySelectorAll('[data-toggle]').forEach(b => b.addEventListener('click', () => toggleSupplier(Number(b.dataset.toggle), b.dataset.active === '1')))
+      } catch { box.innerHTML = '<div class="empty">Нет связи с сервером</div>' }
+    }
+    document.getElementById('supShowInactive').addEventListener('change', loadSuppliers)
+
+    function editSupplier(id) {
+      const s = (window._suppliers || []).find(x => x.id === id)
+      if (!s) return
+      supEditId = id
+      document.getElementById('supFormTitle').textContent = 'Изменить: ' + s.name
+      document.getElementById('supName').value = s.name
+      document.getElementById('supMarkup').value = s.markup
+      document.getElementById('supTtl').value = s.priceTtlDays
+      document.getElementById('supNotes').value = s.notes || ''
+      document.getElementById('supSave').textContent = 'Сохранить'
+      document.getElementById('supCancel').style.display = ''
+      document.querySelector('main').scrollTo({ top: 0, behavior: 'smooth' })
+    }
+
+    function resetSupForm() {
+      supEditId = null
+      document.getElementById('supFormTitle').textContent = 'Новый поставщик'
+      ;['supName', 'supMarkup', 'supTtl', 'supNotes'].forEach(id => { document.getElementById(id).value = '' })
+      document.getElementById('supSave').textContent = 'Добавить'
+      document.getElementById('supCancel').style.display = 'none'
+      document.getElementById('supErr').textContent = ''
+    }
+    document.getElementById('supCancel').addEventListener('click', resetSupForm)
+
+    document.getElementById('supSave').addEventListener('click', async () => {
+      const err = document.getElementById('supErr'); err.textContent = ''
+      const body = { name: document.getElementById('supName').value }
+      const markup = document.getElementById('supMarkup').value.trim()
+      const ttl = document.getElementById('supTtl').value.trim()
+      const notes = document.getElementById('supNotes').value.trim()
+      if (markup !== '') body.markup = Number(markup.replace(',', '.'))
+      if (ttl !== '') body.priceTtlDays = Number(ttl)
+      if (notes !== '' || supEditId) body.notes = notes
+      try {
+        const res = await fetch(supEditId ? '/admin/api/suppliers/' + supEditId : '/admin/api/suppliers', {
+          method: supEditId ? 'PUT' : 'POST',
+          headers: Object.assign({ 'Content-Type': 'application/json' }, headers),
+          body: JSON.stringify(body),
+        })
+        if (res.ok) { resetSupForm(); loadSuppliers(); return }
+        const e = await res.json().catch(() => ({}))
+        err.textContent = e.error === 'validation'
+          ? (e.fields || []).map(f => f.message).join(' · ')
+          : (e.error || 'Не удалось сохранить')
+      } catch { err.textContent = 'Нет связи с сервером' }
+    })
+
+    async function toggleSupplier(id, activate) {
+      const s = (window._suppliers || []).find(x => x.id === id)
+      if (!activate && !confirm(`Деактивировать поставщика «${s ? s.name : id}»? Он уйдёт из выбора цен, история сохранится.`)) return
+      try {
+        const res = await fetch(`/admin/api/suppliers/${id}/${activate ? 'activate' : 'deactivate'}`, { method: 'POST', headers })
+        if (!res.ok) { const e = await res.json().catch(() => ({})); alert(e.error || 'Не получилось'); return }
+        loadSuppliers()
+      } catch { alert('Нет связи с сервером') }
     }
 
     // Ручной запуск синка: 202 сразу, прогон идёт в фоне — обновляем карточку с задержкой
