@@ -97,6 +97,18 @@
       <div class="sub">Карточки поставщиков. Разбор прайсов приедет следом (PR-6…8).</div>
 
       <div class="card">
+        <h3>Разобрать прайс <span class="chip c-off">read-only</span></h3>
+        <select class="inp" id="pbSupplier"><option value="">Поставщик не указан (TTL 3 дня)</option></select>
+        <textarea class="inp" id="pbText" rows="5" placeholder="Вставьте текст прайса — как прислал поставщик"></textarea>
+        <button class="btn-main" id="pbParse">Разобрать</button>
+        <div class="mt" id="pbErr" style="color:var(--bad)"></div>
+        <div class="mt">Система прочитает текст и покажет, какие цены изменятся. Ничего не применится — кнопка «Применить» приедет в следующем обновлении (PR-7).</div>
+      </div>
+      <div id="pbPreview"></div>
+      <div class="cap">ПОСЛЕДНИЕ РАЗБОРЫ</div>
+      <div id="pbList" class="mt" style="margin-bottom:14px">—</div>
+
+      <div class="card">
         <h3 id="supFormTitle">Новый поставщик</h3>
         <input class="inp" id="supName" placeholder="Название" maxlength="100">
         <div style="display:flex;gap:8px">
@@ -189,6 +201,7 @@
       loadDashboard()
       loadSyncRuns()
       loadSuppliers()
+      loadBatches()
     }
 
     // ── Поставщики (PR-5) ─────────────────────────────────────────────────────
@@ -219,6 +232,7 @@
           </div>`
         }).join('')
         window._suppliers = list
+        fillSupplierSelect()
         box.querySelectorAll('[data-edit]').forEach(b => b.addEventListener('click', () => editSupplier(Number(b.dataset.edit))))
         box.querySelectorAll('[data-toggle]').forEach(b => b.addEventListener('click', () => toggleSupplier(Number(b.dataset.toggle), b.dataset.active === '1')))
       } catch { box.innerHTML = '<div class="empty">Нет связи с сервером</div>' }
@@ -271,6 +285,85 @@
           : (e.error || 'Не удалось сохранить')
       } catch { err.textContent = 'Нет связи с сервером' }
     })
+
+    // ── Разбор прайсов (PR-6, read-only) ─────────────────────────────────────
+    function fillSupplierSelect() {
+      const sel = document.getElementById('pbSupplier')
+      const cur = sel.value
+      sel.innerHTML = '<option value="">Поставщик не указан (TTL 3 дня)</option>' +
+        (window._suppliers || []).filter(s => s.isActive).map(s => `<option value="${s.id}">${esc(s.name)} (TTL ${s.priceTtlDays} дн.)</option>`).join('')
+      sel.value = cur
+    }
+
+    async function loadBatches() {
+      try {
+        const res = await fetch('/admin/api/price-batches?limit=8', { headers, cache: 'no-store' })
+        if (!res.ok) return
+        const list = await res.json()
+        document.getElementById('pbList').innerHTML = list.length ? list.map(b => {
+          const st = b.stats || {}
+          const dt = new Date(b.createdAt).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+          return `<div style="padding:7px 0;border-bottom:1px solid #232326;cursor:pointer" data-batch="${b.id}">
+            #${b.id} · ${dt} · ${esc(b.supplier ? b.supplier.name : 'без поставщика')} · ${b.status} ·
+            узнано ${st.matchedRows ?? '?'}/${st.rows ?? '?'}${st.outOfCorridor ? ` · ⚠️ вне коридора ${st.outOfCorridor}` : ''}</div>`
+        }).join('') : 'Разборов ещё не было.'
+        document.querySelectorAll('#pbList [data-batch]').forEach(el =>
+          el.addEventListener('click', () => showBatchPreview(Number(el.dataset.batch))))
+      } catch { /* список — не критично */ }
+    }
+
+    document.getElementById('pbParse').addEventListener('click', async function () {
+      const err = document.getElementById('pbErr'); err.textContent = ''
+      this.disabled = true; this.textContent = 'Разбираем… (10–30 сек)'
+      try {
+        const res = await fetch('/admin/api/price-batches', {
+          method: 'POST',
+          headers: Object.assign({ 'Content-Type': 'application/json' }, headers),
+          body: JSON.stringify({
+            source: 'paste',
+            text: document.getElementById('pbText').value,
+            supplierId: document.getElementById('pbSupplier').value || null,
+          }),
+        })
+        const data = await res.json().catch(() => ({}))
+        if (!res.ok) {
+          err.textContent = data.error === 'validation' ? (data.fields || []).map(f => f.message).join(' · ') : (data.error || 'Не удалось разобрать')
+          return
+        }
+        if (data.reused) err.textContent = 'Этот прайс уже разбирали — показываю существующий разбор.'
+        await showBatchPreview(data.batchId)
+        loadBatches()
+      } catch { err.textContent = 'Нет связи с сервером' }
+      finally { this.disabled = false; this.textContent = 'Разобрать' }
+    })
+
+    async function showBatchPreview(batchId) {
+      const box = document.getElementById('pbPreview')
+      box.innerHTML = '<div class="empty">Загрузка предпросмотра…</div>'
+      try {
+        const res = await fetch('/admin/api/price-batches/' + batchId, { headers, cache: 'no-store' })
+        if (!res.ok) { box.innerHTML = '<div class="empty">Не удалось загрузить</div>'; return }
+        const { batch, rows } = await res.json()
+        const st = batch.stats || {}
+        const rub = n => n == null ? '—' : Number(n).toLocaleString('ru-RU') + ' ₽'
+        box.innerHTML = `<div class="card">
+          <h3>Разбор #${batch.id} <span class="chip ${st.unmatchedRows ? 'c-warn' : 'c-ok'}">узнано ${st.matchedRows}/${st.rows}</span></h3>
+          <div class="mt">Пар цена×вариант: ${st.matchedVariants} · не узнано: ${st.unmatchedRows} · игнор: ${st.ignoredRows} · вне коридора ±15%: ${st.outOfCorridor} · TTL ${st.ttlDays} дн.</div>
+          ${rows.map(r => r.matched ? `
+            <div style="padding:8px 0;border-bottom:1px solid #232326">
+              <div style="font-size:13px">${esc(r.productName)} <span class="mt">${esc(Object.entries(r.variantAttrs || {}).filter(([k]) => k !== 'fullName').map(([, v]) => v).join(' · '))}</span></div>
+              <div class="mt">закупка → ${rub(r.supplierPrice)} · сайт ${rub(r.currentPrice)} → <b style="color:var(--ac)">${rub(r.proposedPrice)}</b>
+                ${r.deltaPct != null ? `(${r.deltaPct > 0 ? '+' : ''}${r.deltaPct}%)` : ''}
+                <span class="chip ${r.corridor === 'in' ? 'c-ok' : 'c-warn'}" style="margin-left:6px">${r.corridor === 'in' ? 'в коридоре' : 'вне ±15%'}</span></div>
+            </div>` : `
+            <div style="padding:8px 0;border-bottom:1px solid #232326">
+              <div class="mono" style="font-size:12px;color:var(--warn)">не узнал: ${esc(r.rawLine)}</div>
+              <div class="mt">связать с товаром можно будет в PR-8 (очередь «не узнал»)</div>
+            </div>`).join('')}
+          <button class="btn-main" disabled style="opacity:.35;cursor:default">Применить цены — придёт в PR-7</button>
+        </div>`
+      } catch { box.innerHTML = '<div class="empty">Нет связи с сервером</div>' }
+    }
 
     async function toggleSupplier(id, activate) {
       const s = (window._suppliers || []).find(x => x.id === id)
