@@ -1700,7 +1700,7 @@ export function startApiServer(bot?: Telegraf): Server {
 
           const cardSurcharge = paymentMethod === 'card' ? '\n💳 Эквайринг +14%' : ''
           const deliveryText = deliveryType === 'pickup'
-            ? '📍 Самовывоз (ТЦ Горбушка, 211/1)'
+            ? '📍 Самовывоз (ТЦ Горбушка, 202)'
             : `🚚 Доставка: ${deliveryAddress}`
           const commentLine = customerComment ? `\n💬 Комментарий: ${String(customerComment).slice(0, 200)}` : ''
 
@@ -1767,14 +1767,9 @@ export function startApiServer(bot?: Telegraf): Server {
             } catch { /* ignore */ }
           }
 
-          // 3. Если клиент уже в CRM — отправить в его топик тоже
-          if (client?.telegramTopicId && CRM_GROUP_ID) {
-            try {
-              await telegram.sendMessage(CRM_GROUP_ID, `🛒 Клиент оформил заказ #${order.id} через сайт\n\n${itemLines}\n\n💵 ${totalStr}₽`, {
-                message_thread_id: client.telegramTopicId,
-              })
-            } catch (err) { log.error('CRM topic notify error', { error: err instanceof Error ? err.message : String(err) }) }
-          }
+          // (Дубль заказа в персональный топик клиента убран — решение владельца:
+          // заказ = одно сообщение в «Продажи и резервы» + личка админам. Топик
+          // по-прежнему создаётся выше, кнопка «Перейти к клиенту» остаётся.)
 
           // 4. Подтверждение клиенту в личку
           try {
@@ -1785,7 +1780,7 @@ export function startApiServer(bot?: Telegraf): Server {
               `💵 Итого: ${totalStr}₽`,
               '',
               deliveryType === 'pickup'
-                ? '📍 Заберите заказ по адресу: Барклая 8, ТЦ Горбушка, Павильон 211/1\n⏰ Ежедневно с 11:00 до 20:00'
+                ? '📍 Заберите заказ по адресу: Барклая 8, ТЦ Горбушка, Павильон 202\n⏰ Ежедневно с 11:00 до 20:00'
                 : `🚚 Доставка по адресу: ${deliveryAddress}`,
               '',
               'Мы свяжемся с вами для подтверждения!',
