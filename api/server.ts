@@ -345,7 +345,11 @@ export function startApiServer(bot?: Telegraf): Server {
           productCount: productIds.length,
           productIds,
         }
-      }))
+      // Витрина не показывает акции без применённых товаров: isActive без
+      // PromotionPrice — валидный стейт «включил, но не применил», запись в БД
+      // не трогаем. TODO(админ-раздел акций, Этап 4): показывать такие акции
+      // владельцу как ворнинг «активна, но цены не применены».
+      }).filter(p => p.productCount > 0))
     } catch (err) { if (!res.headersSent) next(err) }
   })
 
