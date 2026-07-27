@@ -343,8 +343,20 @@
       try {
         const res = await fetch('/admin/api/price-batches/' + batchId, { headers, cache: 'no-store' })
         if (!res.ok) { box.innerHTML = '<div class="empty">Не удалось загрузить</div>'; return }
-        const { batch, rows } = await res.json()
+        const { batch, rows, applyMode, canApply } = await res.json()
         const st = batch.stats || {}
+        const isOwner = window.adminMe && window.adminMe.role === 'owner'
+        const applied = batch.status === 'applied'
+        const actions = applied
+          ? `${st.writebackFailed ? `<div class="mt" style="color:var(--bad)">⚠️ Запись в таблицу не проехала — цены заморожены от синка до повтора.</div>
+               <button class="btn-ghost" onclick="pbRetryWb(${batch.id})">Повторить запись в таблицу</button>` : ''}
+             ${isOwner ? `<button class="btn-ghost danger" onclick="pbRollback(${batch.id})">Откатить батч</button>` : ''}`
+          : batch.status === 'preview'
+          ? `<button class="btn-ghost" onclick="pbApply(${batch.id}, true)">Dry-run: показать, что применится</button>
+             ${canApply ? `${isOwner && st.outOfCorridor ? `<label class="mt" style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="pbIncludeOut"> применить и вне коридора ±15% (owner)</label>` : ''}
+               <button class="btn-main" onclick="pbApply(${batch.id}, false)">Применить цены</button>`
+             : `<div class="mt">Применение: режим «${applyMode}» — доступен только dry-run.</div>`}`
+          : `<div class="mt">Статус: ${esc(batch.status)}</div>`
         const rub = n => n == null ? '—' : Number(n).toLocaleString('ru-RU') + ' ₽'
         box.innerHTML = `<div class="card">
           <h3>Разбор #${batch.id} <span class="chip ${st.unmatchedRows ? 'c-warn' : 'c-ok'}">узнано ${st.matchedRows}/${st.rows}</span></h3>
@@ -360,9 +372,47 @@
               <div class="mono" style="font-size:12px;color:var(--warn)">не узнал: ${esc(r.rawLine)}</div>
               <div class="mt">связать с товаром можно будет в PR-8 (очередь «не узнал»)</div>
             </div>`).join('')}
-          <button class="btn-main" disabled style="opacity:.35;cursor:default">Применить цены — придёт в PR-7</button>
+          <div id="pbApplyResult"></div>
+          ${actions}
         </div>`
       } catch { box.innerHTML = '<div class="empty">Нет связи с сервером</div>' }
+    }
+
+    async function pbApply(batchId, dryRun) {
+      const out = document.getElementById('pbApplyResult')
+      out.innerHTML = '<div class="mt">' + (dryRun ? 'Считаем dry-run…' : 'Применяем…') + '</div>'
+      try {
+        const res = await fetch(`/admin/api/price-batches/${batchId}/apply`, {
+          method: 'POST',
+          headers: Object.assign({ 'Content-Type': 'application/json' }, headers),
+          body: JSON.stringify({ dryRun, includeOutOfCorridor: !!document.getElementById('pbIncludeOut')?.checked }),
+        })
+        const d = await res.json()
+        if (!res.ok) { out.innerHTML = `<div class="mt" style="color:var(--bad)">${esc(d.error || 'Не получилось')}</div>`; return }
+        if (d.alreadyApplied) { out.innerHTML = '<div class="mt">Батч уже применён.</div>'; return }
+        const head = dryRun ? 'DRY-RUN (ничего не записано)' : 'ПРИМЕНЕНО'
+        out.innerHTML = `<div class="mt"><b>${head}:</b> применяется ${d.applied} · вне коридора (skip) ${d.skippedOutOfCorridor} · исчезло ${d.skippedGone}${d.writebackFailed ? ' · <span style="color:var(--bad)">writeback НЕ проехал</span>' : ''}${d.writebackMissing && d.writebackMissing.length ? ' · нет в листе: ' + d.writebackMissing.length : ''}</div>`
+        if (!dryRun) { showBatchPreview(batchId); loadBatches() }
+      } catch { out.innerHTML = '<div class="mt" style="color:var(--bad)">Нет связи с сервером</div>' }
+    }
+
+    async function pbRollback(batchId) {
+      if (!confirm('Откатить батч? Цены и закупки вернутся к значениям до применения (конфликтные строки не трогаем).')) return
+      try {
+        const res = await fetch(`/admin/api/price-batches/${batchId}/rollback`, { method: 'POST', headers })
+        const d = await res.json()
+        alert(res.ok ? `Откачено строк: ${d.applied}${d.conflicts && d.conflicts.length ? `, конфликтов (пропущено): ${d.conflicts.length}` : ''}` : (d.error || 'Не получилось'))
+        showBatchPreview(batchId); loadBatches()
+      } catch { alert('Нет связи с сервером') }
+    }
+
+    async function pbRetryWb(batchId) {
+      try {
+        const res = await fetch(`/admin/api/price-batches/${batchId}/retry-writeback`, { method: 'POST', headers })
+        const d = await res.json()
+        alert(res.ok ? 'Запись в таблицу проехала' + (d.writebackMissing && d.writebackMissing.length ? `, не найдено строк: ${d.writebackMissing.length}` : '') : (d.error || 'Снова не удалось'))
+        showBatchPreview(batchId)
+      } catch { alert('Нет связи с сервером') }
     }
 
     async function toggleSupplier(id, activate) {

@@ -46,6 +46,8 @@ export type SecurityEvent =
   | 'admin_access_denied'
   | 'admin_role_denied'
   | 'admin_invalid_signature'
+  | 'price_batch_applied'
+  | 'price_out_of_corridor_applied'
 
 // ─── Ссылка на бот для реалтайм-алертов ──────────────────────────────────────
 
@@ -63,6 +65,9 @@ const CRITICAL_EVENTS: SecurityEvent[] = [
   'price_manipulation_attempt',
   'unauthorized_access',
   'invalid_telegram_signature',
+  // Решение владельца (PR-7 п.9): вне-коридорное применение цен будит админов;
+  // шторм невозможен — троттлинг отправки critical-алертов (hardening 1б)
+  'price_out_of_corridor_applied',
 ]
 
 const EVENT_DESCRIPTIONS: Record<SecurityEvent, string> = {
@@ -112,6 +117,8 @@ const EVENT_DESCRIPTIONS: Record<SecurityEvent, string> = {
   // будить всех админов (замечание владельца №1а к PR-2). Витринная подпись
   // остаётся critical как invalid_telegram_signature.
   admin_invalid_signature:    '🔑 Запрос к админ-API с неверной подписью Telegram',
+  price_batch_applied:        '💰 Применён батч цен из разбора прайса',
+  price_out_of_corridor_applied: '🚨 Применены цены ВНЕ коридора ±15% (owner-овеаррайд)',
 }
 
 const SENSITIVE_KEY_PATTERNS = ['token', 'key', 'hash', 'secret']

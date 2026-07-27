@@ -13,6 +13,7 @@ import { prisma } from './prisma'
 import { readSheet, getProductSheetNames } from './google-sheets'
 import { normalizeCdnPhotoUrl, cleanPhotoUrl } from './cdn-photo-resolve'
 import { syncRunStart, syncRunFinish, SyncRunMeta } from './sync-run'
+import { decidePriceSync, getFrozenVariantIds } from './price-sync-policy'
 import {
   applyMarkupRules as _applyMarkupRules,
   loadRules as _loadRules,
@@ -638,6 +639,13 @@ export async function syncProductsFromSheets(
   // sheetName обязателен: строки приходят с разных листов (полистовой учёт).
   const sheetWritebacks: Array<{ sheetName: string; rowIndex: number; price: number }> = []
 
+  // PR-7: варианты applied-батчей с непроехавшим writeback — цену не трогаем
+  const frozenVariantIds = await getFrozenVariantIds(prisma)
+  if (frozenVariantIds.size > 0) {
+    log.warn('Sheets sync: цены заморожены до повторного writeback батча', { variants: frozenVariantIds.size })
+    errors.push(`Заморожены цены ${frozenVariantIds.size} вариантов: у применённого батча не проехал writeback в лист — повторите запись из админки`)
+  }
+
   for (const [key, group] of groups) {
     if (shouldAbort?.()) {
       log.info('Sheets sync aborted by user')
@@ -802,14 +810,25 @@ export async function syncProductsFromSheets(
             const dbPrice = Number(entry.existing.price)
             const sheetPrice = v.price
 
-            if (sheetCost !== null && sheetCost > 0 && sheetCost !== lastKnown) {
+            // PR-7: выбор действия вынесен в чистую decidePriceSync (тестируется
+            // без Google API); frozen — applied-батч с непроехавшим writeback.
+            const action = decidePriceSync({
+              sheetCost, lastSyncedCost: lastKnown, dbPrice, sheetPrice,
+              frozen: frozenVariantIds.has(entry.existing.id),
+            })
+
+            if (action === 'freeze') {
+              // Цену/закупку не трогаем: часовой синк не должен откатывать
+              // применённый батч, пока запись в лист не проехала (усиление №2)
+              delete updateData.price
+            } else if (action === 'recalc_from_cost') {
               // Закупочная изменилась → пересчитать рекомендованную по правилам
-              const newPrice = cachedApplyRules(sheetCost)
-              updateData.costPrice = new Decimal(sheetCost)
-              updateData.lastSyncedCostPrice = new Decimal(sheetCost)
+              const newPrice = cachedApplyRules(sheetCost!)
+              updateData.costPrice = new Decimal(sheetCost!)
+              updateData.lastSyncedCostPrice = new Decimal(sheetCost!)
               updateData.price = new Decimal(newPrice)
               sheetWritebacks.push({ sheetName: v.sheetName, rowIndex: v.rowIndex, price: newPrice })
-            } else if (sheetPrice !== dbPrice && sheetPrice > 0) {
+            } else if (action === 'respect_sheet_price') {
               // Рекомендованная изменилась вручную → уважать
               updateData.price = new Decimal(sheetPrice)
             } else {
@@ -818,7 +837,7 @@ export async function syncProductsFromSheets(
             }
 
             // Первичная фиксация costPrice, если в БД ещё нет снимка
-            if (sheetCost !== null && sheetCost > 0 && lastKnown === null) {
+            if (action !== 'freeze' && sheetCost !== null && sheetCost > 0 && lastKnown === null) {
               updateData.costPrice = new Decimal(sheetCost)
               updateData.lastSyncedCostPrice = new Decimal(sheetCost)
             }
