@@ -756,7 +756,7 @@ bot.command('sync', async (ctx) => {
   await ctx.reply('⏳ Синхронизация Google Sheets...')
   try {
     const { syncProductsFromSheets, checkStalePrices, formatStaleSupplierMessage } = await import('../lib/sheets-sync')
-    const result = await syncProductsFromSheets()
+    const result = await syncProductsFromSheets(undefined, { trigger: 'manual', startedBy: String(userId) })
 
     const lines = [
       '✅ Синхронизация завершена:',
@@ -2449,7 +2449,7 @@ setInterval(async () => {
 
     log.info('Sheets auto-sync', { hour })
     const { syncProductsFromSheets, checkStalePrices, formatStaleSupplierMessage } = await import('../lib/sheets-sync')
-    const result = await syncProductsFromSheets()
+    const result = await syncProductsFromSheets(undefined, { trigger: 'cron' })
 
     if (result.created > 0 || result.updated > 0) {
       for (const adminId of ADMIN_IDS) {
@@ -2521,7 +2521,7 @@ setTimeout(async () => {
       return
     }
     const { syncProductsFromSheets } = await import('../lib/sheets-sync')
-    await syncProductsFromSheets()
+    await syncProductsFromSheets(undefined, { trigger: 'deploy' })
     log.info('Sheets initial sync done')
   } catch (err) {
     log.error('Sheets initial sync error', { error: err instanceof Error ? err.message : String(err) })

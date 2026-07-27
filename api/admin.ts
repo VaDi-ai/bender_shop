@@ -16,6 +16,7 @@ import { prisma } from '../lib/prisma'
 import { log } from '../lib/logger'
 import { logSecurityEvent } from '../lib/security-log'
 import { validateTelegramWebApp } from '../lib/telegram-webapp-auth'
+import { logAdminAction } from '../lib/audit'
 
 export type AdminRole = 'owner' | 'manager'
 
@@ -141,6 +142,24 @@ export function adminApiRouter(): Router {
   })
 
   router.get('/dashboard', safe(dashboard))
+
+  // ── Синк (PR-4): журнал прогонов + ручной запуск ──────────────────────────
+  router.get('/sync-runs', safe(async (req, res) => {
+    const limit = Math.min(Math.max(parseInt(String(req.query.limit ?? '20'), 10) || 20, 1), 100)
+    const runs = await prisma.syncRun.findMany({ orderBy: { startedAt: 'desc' }, take: limit })
+    res.json(runs)
+  }))
+
+  router.post('/sync', safe(async (req, res) => {
+    // Долгий прогон (десятки секунд) — не держим запрос: конкурентность закрыта
+    // advisory-lock'ом внутри syncProductsFromSheets, повторный тап просто скипнется.
+    const admin = req.admin!
+    const { syncProductsFromSheets } = await import('../lib/sheets-sync')
+    void syncProductsFromSheets(undefined, { trigger: 'manual', startedBy: admin.telegramId })
+      .catch(e => log.error('Manual sync from admin API failed', { error: e instanceof Error ? e.message : String(e) }))
+    void logAdminAction({ adminTelegramId: admin.telegramId, action: 'sync_trigger', entity: 'SyncRun' })
+    res.status(202).json({ started: true })
+  }))
 
   return router
 }
