@@ -179,7 +179,8 @@ describe.skipIf(!RUN)('applyPriceBatch / rollbackPriceBatch', () => {
   it('advisory-lock синка занят → 409, ничего не записано', async () => {
     const before = await snap()
     await prisma.$transaction(async (tx: any) => {
-      await tx.$queryRaw`SELECT pg_advisory_xact_lock(73001)` // держим лок до конца tx
+      const got = await tx.$queryRaw`SELECT pg_try_advisory_xact_lock(73001) as "l"` // лок до конца tx
+      expect(got[0].l).toBe(true)
       const r = await applyPriceBatch({ batchId, actor: OWNER, dryRun: false, mode: 'on', writebackFn: recordingWriteback().fn })
       expect(r.status).toBe(409)
       expect(r.error).toContain('синхронизация')
