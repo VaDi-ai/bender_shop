@@ -43,6 +43,8 @@ export type SecurityEvent =
   | 'admin_hmac_stale'
   | 'invalid_admin_hmac'
   | 'photos_uploaded'
+  | 'admin_access_denied'
+  | 'admin_role_denied'
 
 // ─── Ссылка на бот для реалтайм-алертов ──────────────────────────────────────
 

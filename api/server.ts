@@ -39,6 +39,8 @@ import { fmtPrice, formatProductNameWithAttrs } from '../lib/format'
 import log from '../lib/logger'
 import { flattenRelativePhotoPath } from '../lib/photo-flat-name'
 import { trackEvent } from '../lib/events'
+import { validateTelegramWebApp } from '../lib/telegram-webapp-auth'
+import { adminApiRouter } from './admin'
 
 // BigInt → JSON serialization (avitoItemId etc.)
 ;(BigInt.prototype as any).toJSON = function () { return this.toString() }
@@ -65,48 +67,7 @@ function getImageContentType(filename: string): string {
 }
 
 // ─── Валидация подписи Telegram WebApp ────────────────────────────────────────
-
-function validateTelegramWebApp(initData: string): { valid: boolean; userId?: number } {
-  try {
-    const params = new URLSearchParams(initData)
-    const hash = params.get('hash')
-    if (!hash) return { valid: false }
-    params.delete('hash')
-
-    const dataCheckString = Array.from(params.entries())
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([k, v]) => `${k}=${v}`)
-      .join('\n')
-
-    const secretKey = crypto
-      .createHmac('sha256', 'WebAppData')
-      .update(BOT_TOKEN)
-      .digest()
-
-    const expectedHash = crypto
-      .createHmac('sha256', secretKey)
-      .update(dataCheckString)
-      .digest('hex')
-
-    const expected = Buffer.from(expectedHash, 'hex')
-    const received = Buffer.from(hash, 'hex')
-    if (expected.length !== received.length || !crypto.timingSafeEqual(expected, received))
-      return { valid: false }
-
-    // Replay-attack prevention: reject tokens older than 5 minutes
-    const authDate = parseInt(params.get('auth_date') || '0', 10)
-    const now = Math.floor(Date.now() / 1000)
-    const MAX_AGE_SECONDS = 300
-    if (now - authDate > MAX_AGE_SECONDS) {
-      return { valid: false }
-    }
-
-    const user = JSON.parse(params.get('user') || '{}')
-    return { valid: true, userId: user.id }
-  } catch {
-    return { valid: false }
-  }
-}
+// Вынесена в lib/telegram-webapp-auth.ts (переиспользуется админ-API, PR-2).
 
 // ─── Middleware: Telegram Auth ─────────────────────────────────────────────────
 
@@ -287,6 +248,9 @@ export function startApiServer(bot?: Telegraf): Server {
 
   const trackLimiter = rateLimit({ windowMs: 60_000, max: 100 })
   app.use('/api/track', trackLimiter)
+
+  // ── Админ-API (ADMIN-DESIGN §2, PR-2): initData-auth + AdminUser, свой лимитер внутри ──
+  app.use('/admin/api', adminApiRouter())
 
   // /admin/photos/upload — заливка zip с фотками владельцем магазина.
   // HMAC-подпись от BOT_TOKEN (см. requireAdminHmac ниже) → ADMIN_IDS не

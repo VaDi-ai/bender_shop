@@ -10,6 +10,23 @@ jobs:
   test:
     runs-on: ubuntu-latest
 
+    # Тестовая БД для интеграционных тестов (ADMIN-DESIGN §10.6).
+    # URL совпадает с прежним «non-connecting dummy» — юнит-тесты как не
+    # коннектились, так и не коннектятся; интеграционные гейтятся INTEGRATION_DB.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
     steps:
       - uses: actions/checkout@v4
 
@@ -29,10 +46,14 @@ jobs:
       - name: Type check
         run: npx tsc --noEmit
 
+      - name: Push schema to test DB
+        run: npx prisma db push --skip-generate
+        env:
+          DATABASE_URL: postgresql://test:test@localhost:5432/test
+
       - name: Run tests
         run: npm test
         env:
           ENCRYPTION_KEY_V1: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-          # Unit tests never connect; lib/prisma.ts only requires the var to be
-          # present at import (it throws otherwise). Non-connecting dummy.
           DATABASE_URL: postgresql://test:test@localhost:5432/test
+          INTEGRATION_DB: '1'
