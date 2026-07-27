@@ -10,6 +10,7 @@
  * Роли: owner — всё; manager — без системного раздела и вне-коридорных
  * применений цен (гейт закладывается здесь, использоваться начнёт с PR-7).
  */
+import crypto from 'crypto'
 import express, { Router, Request, Response, NextFunction } from 'express'
 import rateLimit from 'express-rate-limit'
 import { prisma } from '../lib/prisma'
@@ -17,6 +18,7 @@ import { log } from '../lib/logger'
 import { logSecurityEvent } from '../lib/security-log'
 import { validateTelegramWebApp } from '../lib/telegram-webapp-auth'
 import { logAdminAction } from '../lib/audit'
+import { validateSupplierInput, supplierDelta } from '../lib/supplier-validation'
 
 export type AdminRole = 'owner' | 'manager'
 
@@ -124,6 +126,123 @@ export async function dashboard(req: AdminRequest, res: Response): Promise<void>
   })
 }
 
+// ─── Поставщики (Этап 1 / PR-5) ───────────────────────────────────────────────
+//
+// Утверждено владельцем: create/update — owner+manager; deactivate/activate —
+// owner-only; жёсткого DELETE нет как класса (Cascade снёс бы историю цен).
+// chatId сервер ВСЕГДА генерит сам (web:<uuid>) — привязка к реальному чату
+// делается из бота; матчер входящих прайсов сравнивает числовой Telegram
+// chat.id и на web:<uuid> не сматчится никогда.
+
+const SUPPLIER_SELECT = {
+  id: true, name: true, markup: true, priceTtlDays: true, notes: true,
+  isActive: true, chatId: true, chatType: true, lastPriceAt: true, createdAt: true,
+} as const
+
+function isUniqueConflict(e: unknown): string | null {
+  const err = e as { code?: string; meta?: { target?: string[] } }
+  if (err?.code !== 'P2002') return null
+  return err.meta?.target?.[0] ?? 'name'
+}
+
+export async function listSuppliers(req: AdminRequest, res: Response): Promise<void> {
+  const includeInactive = String(req.query.includeInactive ?? '') === '1'
+  const suppliers = await prisma.supplier.findMany({
+    where: includeInactive ? {} : { isActive: true },
+    orderBy: { name: 'asc' },
+    select: SUPPLIER_SELECT,
+  })
+  res.json(suppliers.map(s => ({ ...s, markup: Number(s.markup) })))
+}
+
+export async function createSupplier(req: AdminRequest, res: Response): Promise<void> {
+  const { errors, data } = validateSupplierInput(req.body ?? {}, { partial: false })
+  if (errors.length) { res.status(422).json({ error: 'validation', fields: errors }); return }
+  try {
+    const supplier = await prisma.supplier.create({
+      data: {
+        name: data.name as string,
+        markup: (data.markup as number) ?? 5,
+        priceTtlDays: (data.priceTtlDays as number) ?? 3,
+        notes: (data.notes as string | null) ?? null,
+        // Placeholder до привязки чата из бота; на Telegram chat.id не похож
+        chatId: 'web:' + crypto.randomUUID(),
+        chatType: 'private',
+      },
+      select: SUPPLIER_SELECT,
+    })
+    const admin = req.admin!
+    void logAdminAction({ adminTelegramId: admin.telegramId, action: 'create', entity: 'Supplier', entityId: supplier.id, after: data })
+    void logSecurityEvent('supplier_created', { name: supplier.name, via: 'web' }, admin.telegramId)
+    res.status(201).json({ ...supplier, markup: Number(supplier.markup) })
+  } catch (e) {
+    const field = isUniqueConflict(e)
+    if (field) { res.status(409).json({ error: `Поставщик с таким ${field === 'name' ? 'именем' : field} уже есть`, field }); return }
+    throw e
+  }
+}
+
+export async function updateSupplier(req: AdminRequest, res: Response): Promise<void> {
+  const id = parseInt(String(req.params.id), 10)
+  if (!Number.isInteger(id)) { res.status(422).json({ error: 'validation', fields: [{ field: 'id', message: 'Неверный ID' }] }); return }
+  const { errors, data } = validateSupplierInput(req.body ?? {}, { partial: true })
+  if (errors.length) { res.status(422).json({ error: 'validation', fields: errors }); return }
+  if (!Object.keys(data).length) { res.status(422).json({ error: 'validation', fields: [{ field: 'body', message: 'Нет полей для изменения' }] }); return }
+
+  const existing = await prisma.supplier.findUnique({ where: { id }, select: SUPPLIER_SELECT })
+  if (!existing) { res.status(404).json({ error: 'Поставщик не найден' }); return }
+
+  try {
+    const updated = await prisma.supplier.update({ where: { id }, data, select: SUPPLIER_SELECT })
+    const admin = req.admin!
+    const { before, after } = supplierDelta(existing as unknown as Record<string, unknown>, data)
+    if (Object.keys(after).length) {
+      void logAdminAction({ adminTelegramId: admin.telegramId, action: 'update', entity: 'Supplier', entityId: id, before, after })
+      void logSecurityEvent('supplier_updated', { name: updated.name, fields: Object.keys(after), via: 'web' }, admin.telegramId)
+      if ('markup' in after) {
+        void logSecurityEvent('supplier_markup_changed', { name: updated.name, from: before.markup, to: after.markup, via: 'web' }, admin.telegramId)
+      }
+    }
+    res.json({ ...updated, markup: Number(updated.markup) })
+  } catch (e) {
+    const field = isUniqueConflict(e)
+    if (field) { res.status(409).json({ error: `Поставщик с таким ${field === 'name' ? 'именем' : field} уже есть`, field }); return }
+    throw e
+  }
+}
+
+export function setSupplierActive(active: boolean) {
+  return async function (req: AdminRequest, res: Response): Promise<void> {
+    const id = parseInt(String(req.params.id), 10)
+    if (!Number.isInteger(id)) { res.status(422).json({ error: 'validation', fields: [{ field: 'id', message: 'Неверный ID' }] }); return }
+    const existing = await prisma.supplier.findUnique({ where: { id }, select: { id: true, name: true, isActive: true } })
+    if (!existing) { res.status(404).json({ error: 'Поставщик не найден' }); return }
+    if (existing.isActive === active) { res.json({ ok: true, unchanged: true }); return }
+    await prisma.supplier.update({ where: { id }, data: { isActive: active } })
+    const admin = req.admin!
+    void logAdminAction({
+      adminTelegramId: admin.telegramId,
+      action: active ? 'activate' : 'deactivate',
+      entity: 'Supplier',
+      entityId: id,
+      before: { isActive: existing.isActive },
+      after: { isActive: active },
+    })
+    void logSecurityEvent('supplier_updated', { name: existing.name, fields: ['isActive'], to: active, via: 'web' }, admin.telegramId)
+    res.json({ ok: true })
+  }
+}
+
+/** owner-гейт для отдельных роутов (базовый requireAdmin уже отработал). */
+export function ownerOnly(req: AdminRequest, res: Response, next: NextFunction): void {
+  if (req.admin?.role !== 'owner') {
+    logSecurityEvent('admin_role_denied', { ip: req.ip, telegramId: req.admin?.telegramId, role: req.admin?.role })
+    res.status(403).json({ error: 'Недостаточно прав (нужна роль owner)' })
+    return
+  }
+  next()
+}
+
 /** Обёртка: любой неожиданный reject роута → 503 без стектрейса наружу. */
 function safe(handler: (req: AdminRequest, res: Response) => Promise<void>) {
   return async (req: AdminRequest, res: Response): Promise<void> => {
@@ -155,6 +274,13 @@ export function adminApiRouter(): Router {
     const runs = await prisma.syncRun.findMany({ orderBy: { startedAt: 'desc' }, take: limit })
     res.json(runs)
   }))
+
+  // ── Поставщики (PR-5) ─────────────────────────────────────────────────────
+  router.get('/suppliers', safe(listSuppliers))
+  router.post('/suppliers', safe(createSupplier))
+  router.put('/suppliers/:id', safe(updateSupplier))
+  router.post('/suppliers/:id/deactivate', ownerOnly, safe(setSupplierActive(false)))
+  router.post('/suppliers/:id/activate', ownerOnly, safe(setSupplierActive(true)))
 
   router.post('/sync', safe(async (req, res) => {
     // Долгий прогон (десятки секунд) — не держим запрос: конкурентность закрыта

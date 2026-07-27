@@ -12,7 +12,7 @@ vi.mock('../lib/security-log', () => ({ logSecurityEvent: vi.fn() }))
 
 import { prisma } from '../lib/prisma'
 import { validateTelegramWebApp } from '../lib/telegram-webapp-auth'
-import { requireAdmin, mskDayStart, dashboard, AdminRequest } from '../api/admin'
+import { requireAdmin, mskDayStart, dashboard, ownerOnly, AdminRequest } from '../api/admin'
 import { buildInitData } from './helpers/init-data'
 
 const BOT_TOKEN = 'test-bot-token-123'
@@ -141,6 +141,19 @@ describe('dashboard: выручка только для owner (hardening №2)',
     expect(body.orders.today.count).toBe(3)
     expect(body.orders.today.revenue).toBeNull()
     expect(body.orders.yesterday.revenue).toBeNull()
+  })
+})
+
+describe('ownerOnly (гейт деактивации поставщиков и пр.)', () => {
+  it('manager → 403, owner → next', () => {
+    const res = mockRes(); const next = vi.fn() as NextFunction
+    ownerOnly({ admin: { telegramId: '1', name: null, role: 'manager' }, ip: 't' } as unknown as AdminRequest, res, next)
+    expect(res.statusCode).toBe(403)
+    expect(next).not.toHaveBeenCalled()
+
+    const res2 = mockRes(); const next2 = vi.fn() as NextFunction
+    ownerOnly({ admin: { telegramId: '1', name: null, role: 'owner' }, ip: 't' } as unknown as AdminRequest, res2, next2)
+    expect(next2).toHaveBeenCalledOnce()
   })
 })
 
