@@ -1089,11 +1089,17 @@
     .acc-order-items { font-size: 12.5px; color: #cfcfcf; line-height: 1.4; }
 
     /* ════════ Акции (заглушка) ════════ */
-    .promos-soon { min-height: 52vh; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 40px 24px; font-family: 'Onest', sans-serif; }
-    .promos-emoji { font-size: 46px; margin-bottom: 14px; }
-    .promos-title { font-weight: 600; font-size: 21px; margin-bottom: 8px; }
-    .promos-sub { font-size: 13px; color: var(--hint); max-width: 28ch; line-height: 1.5; margin-bottom: 22px; }
+    .promos-empty { min-height: 52vh; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 40px 24px; font-family: 'Onest', sans-serif; }
+    .promos-empty .em { font-size: 46px; margin-bottom: 14px; }
+    .promos-empty .tt { font-weight: 600; font-size: 21px; margin-bottom: 8px; }
+    .promos-empty .sb { font-size: 13px; color: var(--hint); max-width: 30ch; line-height: 1.5; margin-bottom: 22px; }
     .promos-btn { background: transparent; color: var(--accent); border: 1px solid var(--accent); border-radius: 11px; padding: 11px 22px; font-family: 'Onest', sans-serif; font-weight: 600; font-size: 13px; cursor: pointer; }
+    .promo-card { margin: 12px 16px; background: #141414; border: 1px solid #262626; border-radius: 14px; padding: 16px; font-family: 'Onest', sans-serif; }
+    .promo-card .pc-top { display: flex; align-items: center; gap: 10px; }
+    .promo-card .pc-name { font-weight: 600; font-size: 15px; flex: 1; }
+    .promo-card .pc-badge { background: var(--accent); color: var(--accent-fg); font-weight: 700; font-size: 13px; border-radius: 9px; padding: 5px 10px; white-space: nowrap; }
+    .promo-card .pc-meta { font-size: 12px; color: var(--hint); margin-top: 6px; line-height: 1.5; }
+    .promo-card .promos-btn { width: 100%; margin-top: 12px; }
   </style>
 </head>
 <body>
@@ -1418,11 +1424,9 @@
 
     <!-- ═══ АКЦИИ (заглушка «скоро») ═══ -->
     <div id="promosView" class="view-off">
-      <section class="promos-soon">
-        <div class="promos-emoji">⚡</div>
-        <div class="promos-title">Акции скоро</div>
-        <div class="promos-sub">Здесь появятся спецпредложения и скидки Bender Shop.</div>
-        <button class="promos-btn" onclick="switchTab('home')">На главную</button>
+      <section class="promos-page">
+        <h2 class="catalog-title" style="padding:18px 16px 4px">АКЦИИ</h2>
+        <div id="promosList"><div class="state-msg">Загрузка…</div></div>
       </section>
     </div>
   </main>
@@ -2000,7 +2004,7 @@
     function renderCrumb() {
       const el = document.getElementById('ddCrumb')
       if (!el) return
-      if (searchQuery) { el.innerHTML = ''; return }
+      if (searchQuery || promoFilter) { el.innerHTML = ''; return }
       let html = `<span onclick="scrollToTop()">Главная</span><span class="sep">—</span>`
       if (!activeBrand && !activeCat) {
         html += `<b>Каталог</b>`
@@ -2057,6 +2061,7 @@
 
     function selectLine(line) {
       track('filter_line', { line })
+      promoFilter = null
       activeCat = line
       renderGrid()
       document.getElementById('catalog')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
@@ -2081,6 +2086,7 @@
 
     function selectBrand(brand) {
       track('filter_brand', { brand })
+      promoFilter = null
       activeBrand = brand
       // Смена бренда возвращает на уровень линеек — линейка прошлого бренда тут не к месту.
       activeCat = ''
@@ -2149,6 +2155,7 @@
     // ── Select category ───────────────────────────────────────────────────────
     function selectCategory(cat) {
       track('filter_category', { category: cat })
+      promoFilter = null
       ensureCatalogView()
       // Категория сайта = линейка (Phase 2). Выбор из меню сбрасывает бренд,
       // иначе линейка чужого бренда дала бы пустую выдачу.
@@ -2240,8 +2247,8 @@
       renderCrumb()
 
       // Дрилл-даун (Phase 2): без поиска каталог — это уровни линеек и моделей.
-      // Поиск идёт мимо уровней и показывает обычные карточки товаров.
-      if (!searchQuery) {
+      // Поиск и фильтр по акции идут мимо уровней и показывают карточки товаров.
+      if (!searchQuery && !promoFilter) {
         grid.classList.add('dd-grid')
         const title = document.getElementById('catalogTitle')
         const sub = document.getElementById('catalogSub')
@@ -2269,6 +2276,11 @@
           ].filter(Boolean).join(' ').toLowerCase()
           return searchIn.includes(searchQuery)
         })
+      }
+
+      // Фильтр по акции (переход «Показать товары» из таба «Акции»)
+      if (promoFilter && !searchQuery) {
+        products = products.filter(p => promoFilter.ids.has(p.id))
       }
 
       // Фильтр по категории
@@ -2325,6 +2337,13 @@
             <span>Результаты: «${esc(searchQuery)}»</span>
             <span class="search-results-count">${countText}</span>
             <button class="search-results-clear" onclick="clearSearch()">✕ Сбросить</button>
+          </div>`)
+      } else if (promoFilter) {
+        grid.insertAdjacentHTML('beforebegin',
+          `<div class="search-results-header" id="searchResultsHeader">
+            <span>Акция: «${esc(promoFilter.name)}»</span>
+            <span class="search-results-count">${products.length} ${pluralize(products.length, 'товар', 'товара', 'товаров')}</span>
+            <button class="search-results-clear" onclick="clearPromoFilter()">✕ Сбросить</button>
           </div>`)
       }
 
@@ -3482,7 +3501,7 @@
       input.addEventListener('input', function() {
         searchQuery = this.value.trim().toLowerCase()
         clearBtn.classList.toggle('visible', !!searchQuery)
-        if (searchQuery) ensureCatalogView()
+        if (searchQuery) { promoFilter = null; ensureCatalogView() }
         renderGrid()
         clearTimeout(_searchTrackTimer)
         if (searchQuery.length >= 3) {
@@ -3670,6 +3689,61 @@
       renderBrandBlock((brands[0] && brands[0].name) || 'Apple')
     }
 
+    // ── Акции (таб promos) ────────────────────────────────────────────────────
+    let promosLoaded = null   // кэш ответа /api/promotions на сессию таба
+    let promoFilter  = null   // { name, ids:Set } — каталог показывает товары акции
+
+    async function loadPromos(force) {
+      const box = document.getElementById('promosList')
+      if (promosLoaded && !force) { renderPromos(); return }
+      try {
+        const res = await fetch('/api/promotions', { cache: 'no-store' })
+        if (!res.ok) throw new Error('HTTP ' + res.status)
+        promosLoaded = await res.json()
+      } catch {
+        box.innerHTML = '<div class="promos-empty"><div class="em">📡</div><div class="tt">Не удалось загрузить</div><button class="promos-btn" onclick="loadPromos(true)">Попробовать снова</button></div>'
+        return
+      }
+      renderPromos()
+    }
+
+    function promoDiscountLabel(p) {
+      return p.discountType === 'percent' ? '−' + fmt(p.discountValue) + '%' : '−' + fmt(p.discountValue) + ' ₽'
+    }
+
+    function renderPromos() {
+      const box = document.getElementById('promosList')
+      if (!promosLoaded || !promosLoaded.length) {
+        box.innerHTML = `<div class="promos-empty"><div class="em">🏷️</div><div class="tt">Активных акций нет</div>
+          <div class="sb">Как только появится скидка — она будет здесь.</div>
+          <button class="promos-btn" onclick="switchTab('catalog')">В каталог</button></div>`
+        return
+      }
+      box.innerHTML = promosLoaded.map(p => {
+        const until = p.endsAt ? 'до ' + new Date(p.endsAt).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' }) : 'бессрочно'
+        return `<div class="promo-card">
+          <div class="pc-top"><div class="pc-name">${esc(p.name)}</div><div class="pc-badge">${promoDiscountLabel(p)}</div></div>
+          <div class="pc-meta">${p.productCount} ${pluralize(p.productCount, 'товар', 'товара', 'товаров')} по акции · ${until}</div>
+          ${p.productCount ? `<button class="promos-btn" onclick="showPromoProducts(${p.id})">Показать товары</button>` : ''}
+        </div>`
+      }).join('')
+    }
+
+    function showPromoProducts(id) {
+      const p = (promosLoaded || []).find(x => x.id === id)
+      if (!p) return
+      promoFilter = { name: p.name, ids: new Set(p.productIds) }
+      activeCat = ''
+      activeBrand = ''
+      switchTab('catalog')
+      renderGrid()
+    }
+
+    function clearPromoFilter() {
+      promoFilter = null
+      renderGrid()
+    }
+
     // ── Таббар / переключение Главная ↔ Каталог ──
     const TAB_VIEWS = { home: 'homeView', catalog: 'catalogView', account: 'accountView', promos: 'promosView' }
     function setTabbarActive(tab) {
@@ -3691,6 +3765,7 @@
       })
       setTabbarActive(tab)
       if (tab === 'account') renderAccount()
+      if (tab === 'promos') loadPromos()
       scrollToTop()
     }
     // Поиск и категории бургер-меню рендерят в #grid внутри catalogView — с других

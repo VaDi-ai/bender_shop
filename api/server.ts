@@ -311,6 +311,43 @@ export function startApiServer(bot?: Telegraf): Server {
     res.redirect('/shop')
   })
 
+  // ── GET /api/promotions — активные акции для витрины (таб «Акции») ─────────
+  //
+  // Один запрос с include (без N+1): PromotionPrice → variant.productId.
+  // Скидки уже применены к ценам вариантов движком lib/promotions.ts —
+  // эндпоинт только описывает, ЧТО сейчас по акции.
+  app.get('/api/promotions', async (_req, res, next) => {
+    try {
+      const now = new Date()
+      const promos = await prisma.promotion.findMany({
+        where: {
+          isActive: true,
+          AND: [
+            { OR: [{ startsAt: null }, { startsAt: { lte: now } }] },
+            { OR: [{ endsAt: null }, { endsAt: { gte: now } }] },
+          ],
+        },
+        orderBy: { createdAt: 'desc' },
+        include: {
+          prices: { select: { variant: { select: { productId: true } } } },
+        },
+      })
+      res.setHeader('Cache-Control', 'public, max-age=60')
+      res.json(promos.map(p => {
+        const productIds = [...new Set(p.prices.map(pr => pr.variant.productId))]
+        return {
+          id: p.id,
+          name: p.name,
+          discountType: p.discountType,           // percent | fixed
+          discountValue: Number(p.discountValue),
+          endsAt: p.endsAt ? p.endsAt.toISOString() : null,
+          productCount: productIds.length,
+          productIds,
+        }
+      }))
+    } catch (err) { if (!res.headersSent) next(err) }
+  })
+
   // ── Event tracking endpoint ──────────────────────────────────────────────────
   const ALLOWED_EVENT_TYPES = ['view_product', 'add_to_cart', 'remove_from_cart', 'search', 'filter_brand', 'filter_category', 'filter_line', 'checkout_start']
   app.post('/api/track', express.json(), (req: Request, res: Response) => {
