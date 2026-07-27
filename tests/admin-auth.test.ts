@@ -2,13 +2,17 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import type { Response, NextFunction } from 'express'
 
 vi.mock('../lib/prisma', () => ({
-  prisma: { adminUser: { findUnique: vi.fn() } },
+  prisma: {
+    adminUser: { findUnique: vi.fn() },
+    order: { aggregate: vi.fn() },
+    syncRun: { findFirst: vi.fn() },
+  },
 }))
 vi.mock('../lib/security-log', () => ({ logSecurityEvent: vi.fn() }))
 
 import { prisma } from '../lib/prisma'
 import { validateTelegramWebApp } from '../lib/telegram-webapp-auth'
-import { requireAdmin, mskDayStart, AdminRequest } from '../api/admin'
+import { requireAdmin, mskDayStart, dashboard, AdminRequest } from '../api/admin'
 import { buildInitData } from './helpers/init-data'
 
 const BOT_TOKEN = 'test-bot-token-123'
@@ -108,6 +112,35 @@ describe('requireAdmin', () => {
     await requireAdmin()(req2, res2, next2)
     expect(next2).toHaveBeenCalledOnce()
     expect(req2.admin?.role).toBe('manager')
+  })
+})
+
+describe('dashboard: выручка только для owner (hardening №2)', () => {
+  const aggregate = prisma.order.aggregate as ReturnType<typeof vi.fn>
+  const findFirst = prisma.syncRun.findFirst as ReturnType<typeof vi.fn>
+
+  beforeEach(() => {
+    aggregate.mockResolvedValue({ _count: 3, _sum: { totalAmount: 245000 } })
+    findFirst.mockResolvedValue(null)
+  })
+
+  async function callDashboard(role: 'owner' | 'manager') {
+    const req = { admin: { telegramId: '1', name: null, role } } as unknown as AdminRequest
+    const res = mockRes()
+    await dashboard(req, res)
+    return res.body as { orders: { today: { count: number; revenue: number | null }; yesterday: { revenue: number | null } } }
+  }
+
+  it('owner видит выручку', async () => {
+    const body = await callDashboard('owner')
+    expect(body.orders.today).toEqual({ count: 3, revenue: 245000 })
+  })
+
+  it('manager получает revenue=null, счётчики — да', async () => {
+    const body = await callDashboard('manager')
+    expect(body.orders.today.count).toBe(3)
+    expect(body.orders.today.revenue).toBeNull()
+    expect(body.orders.yesterday.revenue).toBeNull()
   })
 })
 

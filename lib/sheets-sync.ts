@@ -987,14 +987,16 @@ export async function syncProductsFromSheets(
     }
   } catch { /* audit is non-critical */ }
 
+  // Прерванный прогон (кнопка «стоп» в боте) — не успех: счётчики частичные
+  const aborted = shouldAbort ? shouldAbort() : false
   await syncRunFinish(syncRunId, {
-    ok: errors.length === 0,
+    ok: !aborted && errors.length === 0,
     rowsRead: rows.length,
     created,
     updated,
     disabled,
     writebacks: sheetWritebacks.length,
-    errors,
+    errors: aborted ? [...errors, 'Прерван вручную — счётчики частичные'] : errors,
   })
 
   return { created, updated, disabled, total: rows.length, errors }

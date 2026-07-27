@@ -151,7 +151,12 @@
         me = await res.json()
       } catch { gateMsg.textContent = 'Нет связи с сервером.'; return }
 
-      document.getElementById('who').innerHTML = `<b>${me.name || me.telegramId}</b><br>${ROLE_LABEL[me.role] || me.role}`
+      // textContent, не innerHTML: me.name станет редактируемым — store-XSS не место
+      const who = document.getElementById('who')
+      who.textContent = ''
+      const nameEl = document.createElement('b')
+      nameEl.textContent = me.name || me.telegramId
+      who.append(nameEl, document.createElement('br'), document.createTextNode(ROLE_LABEL[me.role] || me.role))
       gate.classList.add('hidden')
       loadDashboard()
       loadSyncRuns()
@@ -187,10 +192,12 @@
         const res = await fetch('/admin/api/dashboard', { headers, cache: 'no-store' })
         if (!res.ok) return
         const d = await res.json()
+        // revenue = null для manager (видит только owner) → «—», не «NaN ₽»
+        const money = n => n == null ? '—' : fmt(n) + ' ₽'
         document.getElementById('kOrdersToday').textContent = d.orders.today.count
-        document.getElementById('kRevenueToday').textContent = fmt(d.orders.today.revenue) + ' ₽'
+        document.getElementById('kRevenueToday').textContent = money(d.orders.today.revenue)
         document.getElementById('kOrdersYesterday').textContent = d.orders.yesterday.count
-        document.getElementById('kRevenueYesterday').textContent = fmt(d.orders.yesterday.revenue) + ' ₽'
+        document.getElementById('kRevenueYesterday').textContent = money(d.orders.yesterday.revenue)
         const chip = document.getElementById('syncChip')
         const info = document.getElementById('syncInfo')
         if (d.lastSync) {
