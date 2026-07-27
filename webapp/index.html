@@ -2772,6 +2772,10 @@
         const selectedVal = modalSelectedAttrs[key]
         const label = selectedVal ? key + ' : ' + selectedVal : key
         const btns = vals.map(v => {
+          // Доступность значения считаем БЕЗ учёта текущего выбора ЭТОГО атрибута:
+          // {...selected, [key]: v} подменяет свой ключ, поэтому переключение внутри
+          // группы всегда возможно, «залипания» нет; unavailable остаётся только
+          // у реально несуществующих комбинаций с выбором ДРУГИХ атрибутов.
           const testAttrs = Object.assign({}, modalSelectedAttrs, { [key]: v })
           const available = (p.variants && p.variants.length)
             ? p.variants.some(variant => {
@@ -2792,13 +2796,25 @@
       section.querySelectorAll('.modal-attr-btn').forEach(btn => {
         btn.addEventListener('click', () => {
           if (btn.classList.contains('unavailable')) return
-          selectModalAttr(btn.dataset.key, btn.dataset.val)
+          // Повторный тап по активному значению — снять выбор (иначе из
+          // тупиковой комбинации не выбраться и заказ не оформить)
+          if (btn.classList.contains('active')) unselectModalAttr(btn.dataset.key)
+          else selectModalAttr(btn.dataset.key, btn.dataset.val)
         })
       })
     }
 
     function selectModalAttr(key, val) {
       modalSelectedAttrs[key] = val
+      refreshModalAfterAttrChange()
+    }
+
+    function unselectModalAttr(key) {
+      delete modalSelectedAttrs[key]
+      refreshModalAfterAttrChange()
+    }
+
+    function refreshModalAfterAttrChange() {
       modalActiveVariant = findVariant(modalProduct, modalSelectedAttrs)
 
       updateModalPhotos(modalActiveVariant, modalProduct)
