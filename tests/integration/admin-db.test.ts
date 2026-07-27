@@ -16,8 +16,24 @@ let requireAdmin: any
 let logAdminAction: any
 let buildInitData: (userId: number, botToken: string) => string
 
+/**
+ * Предохранитель (замечание владельца к PR-2): тесты делают deleteMany() —
+ * INTEGRATION_DB=1 никогда не должен добраться до реальной БД. Пускаем
+ * только явно локальные хосты; иначе — падение до первого хука.
+ */
+function assertDisposableDb(): void {
+  const url = process.env.DATABASE_URL ?? ''
+  let host = ''
+  try { host = new URL(url).hostname } catch { /* пустой url упадёт ниже */ }
+  const LOCAL = ['localhost', '127.0.0.1', '::1', 'postgres']
+  if (!LOCAL.includes(host)) {
+    throw new Error(`INTEGRATION_DB=1 с не-локальной БД (host="${host}") — отказ: тесты стирают AdminUser/AuditLog/SyncRun. Используйте одноразовую локальную БД.`)
+  }
+}
+
 describe.skipIf(!RUN)('seedAdminUsers + requireAdmin (реальная БД)', () => {
   beforeAll(async () => {
+    assertDisposableDb()
     process.env.BOT_TOKEN = BOT_TOKEN
     ;({ prisma } = await import('../../lib/prisma'))
     ;({ seedAdminUsers } = await import('../../lib/admin-users'))

@@ -12,6 +12,7 @@ import log from './logger'
 import { prisma } from './prisma'
 import { readSheet, getProductSheetNames } from './google-sheets'
 import { normalizeCdnPhotoUrl, cleanPhotoUrl } from './cdn-photo-resolve'
+import { syncRunStart, syncRunFinish, SyncRunMeta } from './sync-run'
 import {
   applyMarkupRules as _applyMarkupRules,
   loadRules as _loadRules,
@@ -452,7 +453,10 @@ export async function readAllProducts(): Promise<SheetRow[]> {
  * - Product.attributes = агрегированные уникальные значения из всех вариантов (для chips)
  * - Product.price = минимальная цена среди вариантов
  */
-export async function syncProductsFromSheets(shouldAbort?: () => boolean): Promise<{
+export async function syncProductsFromSheets(
+  shouldAbort?: () => boolean,
+  meta?: SyncRunMeta,
+): Promise<{
   created: number
   updated: number
   disabled: number
@@ -463,8 +467,12 @@ export async function syncProductsFromSheets(shouldAbort?: () => boolean): Promi
   const lockAcquired = await prisma.$queryRaw<[{pg_try_advisory_lock: boolean}]>`SELECT pg_try_advisory_lock(73001) as "pg_try_advisory_lock"`
   if (!lockAcquired[0]?.pg_try_advisory_lock) {
     log.warn('Sheets sync already running, skipping')
+    // Пропуск из-за конкурентного прогона — не прогон, в журнал не пишем
     return { created: 0, updated: 0, disabled: 0, total: 0, errors: ['Sync already in progress'] }
   }
+
+  // Журнал прогона (ADMIN-DESIGN §3.3). null при недоступной записи — синк идёт дальше.
+  const syncRunId = await syncRunStart(meta)
 
   try {
   // Full reset: clear all products if SHEETS_FULL_RESET=true and no real orders
@@ -496,6 +504,7 @@ export async function syncProductsFromSheets(shouldAbort?: () => boolean): Promi
   } catch (err) {
     Sentry.captureException(err, { tags: { operation: 'sheets-sync' } })
     log.error('Sheets sync read failed', { error: err instanceof Error ? err.message : String(err) })
+    await syncRunFinish(syncRunId, { ok: false, errors: [`Failed to read sheets: ${err}`] })
     return { created: 0, updated: 0, disabled: 0, total: 0, errors: [`Failed to read sheets: ${err}`] }
   }
   log.info('Sheets sync rows read', { count: rows.length })
@@ -977,6 +986,16 @@ export async function syncProductsFromSheets(shouldAbort?: () => boolean): Promi
       log.warn('Audit: products missing expected attributes', { count: issues.length, sample: issues.slice(0, 10) })
     }
   } catch { /* audit is non-critical */ }
+
+  await syncRunFinish(syncRunId, {
+    ok: errors.length === 0,
+    rowsRead: rows.length,
+    created,
+    updated,
+    disabled,
+    writebacks: sheetWritebacks.length,
+    errors,
+  })
 
   return { created, updated, disabled, total: rows.length, errors }
   } finally {

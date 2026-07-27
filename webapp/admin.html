@@ -79,7 +79,8 @@
       </div>
       <div class="card">
         <h3>Синк с таблицей <span class="chip c-off" id="syncChip">нет данных</span></h3>
-        <div class="mt" id="syncInfo">Журнал прогонов появится после следующего обновления (PR-4): здесь будет «когда, сколько строк, какие ошибки» и кнопка «Обновить из таблицы».</div>
+        <div class="mt" id="syncInfo">Прогонов ещё не было.</div>
+        <button class="btn" id="syncBtn" style="margin-top:10px;width:100%;padding:12px;border-radius:11px;border:1px solid var(--ac);background:transparent;color:var(--ac);font-family:'Onest';font-weight:600;font-size:13px;cursor:pointer">Обновить из таблицы</button>
       </div>
     </section>
 
@@ -109,7 +110,7 @@
       <h2>Ещё</h2>
       <div class="sub">Журналы, наценки, системное.</div>
       <div class="card"><h3>Правила наценки <span class="chip c-off">PR-9</span></h3><div class="mt">Просмотр и правка 12 правил с предпросмотром влияния на цены.</div></div>
-      <div class="card"><h3>Журнал синка <span class="chip c-off">PR-4</span></h3><div class="mt">Все прогоны: когда, что прочитал, что не смог.</div></div>
+      <div class="card"><h3>Журнал синка</h3><div class="mt" id="syncRuns">Загрузка…</div></div>
       <div class="card"><h3>Кто что менял <span class="chip c-off">этап 1</span></h3><div class="mt">AuditLog уже пишется на стороне сервера — вьюер подключим после первых мутаций.</div></div>
     </section>
   </main>
@@ -153,6 +154,32 @@
       document.getElementById('who').innerHTML = `<b>${me.name || me.telegramId}</b><br>${ROLE_LABEL[me.role] || me.role}`
       gate.classList.add('hidden')
       loadDashboard()
+      loadSyncRuns()
+    }
+
+    // Ручной запуск синка: 202 сразу, прогон идёт в фоне — обновляем карточку с задержкой
+    document.getElementById('syncBtn').addEventListener('click', async function () {
+      this.disabled = true; this.textContent = 'Запущено…'
+      try { await fetch('/admin/api/sync', { method: 'POST', headers }) } catch {}
+      setTimeout(() => { loadDashboard(); loadSyncRuns(); this.disabled = false; this.textContent = 'Обновить из таблицы' }, 15000)
+    })
+
+    const TRIGGER_LABEL = { cron: 'авто', manual: 'вручную', deploy: 'после деплоя' }
+    async function loadSyncRuns() {
+      try {
+        const res = await fetch('/admin/api/sync-runs?limit=10', { headers, cache: 'no-store' })
+        if (!res.ok) return
+        const runs = await res.json()
+        const el = document.getElementById('syncRuns')
+        if (!runs.length) { el.textContent = 'Прогонов ещё не было.'; return }
+        el.innerHTML = runs.map(r => {
+          const dt = new Date(r.startedAt).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+          const status = r.ok === null ? '⏳' : (r.ok ? '✅' : '⛔')
+          const errs = Array.isArray(r.errors) && r.errors.length ? ` · ⚠️ ${r.errors.length}` : ''
+          const stats = r.rowsRead != null ? ` · строк ${r.rowsRead}, обновлено ${r.updated ?? 0}` : ''
+          return `<div style="padding:7px 0;border-bottom:1px solid #232326">${status} ${dt} (${TRIGGER_LABEL[r.trigger] || r.trigger})${stats}${errs}</div>`
+        }).join('')
+      } catch { /* оставляем как есть */ }
     }
 
     async function loadDashboard() {
