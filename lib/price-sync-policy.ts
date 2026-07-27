@@ -48,8 +48,10 @@ export async function getFrozenVariantIds(prismaClient: any): Promise<Set<number
     select: { id: true },
   })
   if (!batches.length) return new Set()
+  // Только ПРИМЕНЁННЫЕ строки (isActive=true): skipped-строки батча цен не
+  // получали и морозить их листовые правки нельзя (не-блокер №1 ревью #31)
   const rows: Array<{ variantId: number | null }> = await prismaClient.supplierPrice.findMany({
-    where: { batchId: { in: batches.map(b => b.id) }, variantId: { not: null } },
+    where: { batchId: { in: batches.map(b => b.id) }, variantId: { not: null }, isActive: true },
     select: { variantId: true },
   })
   return new Set(rows.map(r => r.variantId!).filter(Boolean))

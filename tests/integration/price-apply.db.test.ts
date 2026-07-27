@@ -165,9 +165,11 @@ describe.skipIf(!RUN)('applyPriceBatch / rollbackPriceBatch', () => {
     expect(b.status).toBe('applied')
     expect(b.stats.writebackFailed).toBe(true)
 
-    // п.2: синк видит замороженные варианты
+    // п.2: синк видит замороженные варианты — но ТОЛЬКО применённые
+    // (White скипнут вне коридора — его листовые правки не подвешиваем)
     const frozen = await getFrozenVariantIds(prisma)
     expect(frozen.has(vBlackId)).toBe(true)
+    expect(frozen.has(vWhiteId)).toBe(false)
 
     // retry с рабочим листом снимает флаг → заморозка уходит
     const wb = recordingWriteback()
@@ -217,5 +219,42 @@ describe.skipIf(!RUN)('applyPriceBatch / rollbackPriceBatch', () => {
     // статус-гарды: повторный rollback → 409; apply rolled_back-батча → 409
     expect((await rollbackPriceBatch({ batchId, actor: OWNER, writebackFn: wb.fn })).status).toBe(409)
     expect((await applyPriceBatch({ batchId, actor: OWNER, dryRun: false, mode: 'on' })).status).toBe(409)
+  })
+
+  it('БЛОКЕР #31: oldCost=null — откат чистит закупку в листе и НЕ переприменяется синком', async () => {
+    // White до применения: costPrice = null (создан без закупки)
+    expect((await prisma.productVariant.findUnique({ where: { id: vWhiteId } })).costPrice).toBeNull()
+
+    const wb = recordingWriteback()
+    await applyPriceBatch({ batchId, actor: OWNER, dryRun: false, mode: 'on', includeOutOfCorridor: true, writebackFn: wb.fn })
+    // применён: price 103 990, costPrice 89 000
+    expect(Number((await prisma.productVariant.findUnique({ where: { id: vWhiteId } })).costPrice)).toBe(89000)
+
+    const r = await rollbackPriceBatch({ batchId, actor: OWNER, writebackFn: wb.fn })
+    expect(r.ok).toBe(true)
+    expect(r.applied).toBe(2) // обе строки восстановлены (конфликтов нет)
+
+    const white = await prisma.productVariant.findUnique({ where: { id: vWhiteId } })
+    expect(Number(white.price)).toBe(140000)
+    expect(white.costPrice).toBeNull()          // закупка вернулась к null
+    expect(white.lastSyncedCostPrice).toBeNull()
+
+    // Писбэк отката содержит null-cost строку → в листе колонка L очищается
+    const lastWb = wb.calls.at(-1)!
+    const whiteRow = lastWb.find((x: any) => x.fullName === 'PA7 iPhone 17 Pro 256 White')
+    expect(whiteRow).toEqual({ fullName: 'PA7 iPhone 17 Pro 256 White', cost: null, price: 140000 })
+
+    // Синк-путь после отката: лист = то, что записал писбэк (L пустая → null,
+    // M = 140 000). Пересчёт НЕ срабатывает, mirror — откат прилипает.
+    const { decidePriceSync } = await import('../../lib/price-sync-policy')
+    expect(decidePriceSync({
+      sheetCost: null, lastSyncedCost: null,
+      dbPrice: 140000, sheetPrice: 140000, frozen: false,
+    })).toBe('mirror_sheet_price')
+    // и для Black (oldCost=80000) симметрично:
+    expect(decidePriceSync({
+      sheetCost: 80000, lastSyncedCost: 80000,
+      dbPrice: 100000, sheetPrice: 100000, frozen: false,
+    })).toBe('mirror_sheet_price')
   })
 })
