@@ -47,8 +47,12 @@ export function buildProfileWriteback(
   if (fullName && !existing.fullName) data.fullName = fullName
   if (phone && !existing.phone) data.phone = encryptClientField(phone)
 
-  const consentIsNew = !existing.pdnConsentAt && Object.keys(data).length > 0
-  if (consentIsNew) data.pdnConsentAt = new Date()
+  // Согласие — самостоятельный юр-факт (ревью владельца к #26): фиксируется
+  // независимо от того, есть ли что писать в поля. Иначе клиент с уже
+  // заполненным профилем (в т.ч. популяция старого plaintext-бага),
+  // поставивший галочку, оставался бы с pdnConsentAt = null.
+  if (checkoutConsent && !existing.pdnConsentAt) data.pdnConsentAt = new Date()
+  const consentIsNew = 'pdnConsentAt' in data
 
   return { data: Object.keys(data).length ? data : null, consentIsNew }
 }

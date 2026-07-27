@@ -87,16 +87,38 @@ describe.skipIf(!RUN)('buildProfileWriteback + запись в Client (реал�
       { fullName: 'Новое Имя', phone: '+79991112233' },
       true,
     )
-    expect(wb.data).toBeNull() // оба поля заняты → писать нечего
+    expect(wb.data).toBeNull() // поля заняты, согласие уже есть → писать нечего
   })
 
-  it('пустой ввод не пишет ничего даже с согласием', async () => {
+  it('согласие — самостоятельный факт: профиль заполнен (популяция plaintext-бага), pdnConsentAt=null, галочка → фиксируется', async () => {
+    const wb = buildProfileWriteback(
+      { fullName: 'X', phone: 'enc:занят', pdnConsentAt: null },
+      { fullName: 'Другое Имя', phone: '+79991112233' },
+      true,
+    )
+    expect(wb.data).not.toBeNull()
+    expect(Object.keys(wb.data)).toEqual(['pdnConsentAt']) // поля НЕ переписаны
+    expect(wb.consentIsNew).toBe(true)
+  })
+
+  it('симметрично: pdnConsentAt уже стоит + галочка → не трогаем, consentIsNew=false', async () => {
+    const stamp = new Date('2026-01-01')
+    const wb = buildProfileWriteback(
+      { fullName: 'X', phone: 'enc:занят', pdnConsentAt: stamp },
+      { fullName: 'Имя', phone: '+79991112233' },
+      true,
+    )
+    expect(wb.data).toBeNull()
+    expect(wb.consentIsNew).toBe(false)
+  })
+
+  it('пустой ввод с галочкой: поля не пишутся, но согласие фиксируется', async () => {
     const wb = buildProfileWriteback(
       { fullName: null, phone: null, pdnConsentAt: null },
       { fullName: '  ', phone: '' },
       true,
     )
-    expect(wb.data).toBeNull()
-    expect(wb.consentIsNew).toBe(false)
+    expect(Object.keys(wb.data)).toEqual(['pdnConsentAt'])
+    expect(wb.consentIsNew).toBe(true)
   })
 })
