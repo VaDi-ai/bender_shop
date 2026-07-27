@@ -14,7 +14,10 @@
 import crypto from 'crypto'
 import { prisma } from './prisma'
 import { log } from './logger'
-import { parseSupplierMessage, AIParsedProduct } from './ai-parser'
+// type-only: ai-parser создаёт OpenAI-клиент при загрузке модуля (падает без
+// ключа) — рантайм-импорт ленивый, только когда parseFn не подменён (тесты/CI
+// живут без ключа и без сети)
+import type { AIParsedProduct } from './ai-parser'
 import { matchVariants, ParsedLine, MatchedVariant } from './price-matching'
 import { applyMarkupRules, loadRules, MarkupRuleData } from './markup-rules'
 import { logAdminAction } from './audit'
@@ -103,7 +106,7 @@ export async function createPriceBatch(opts: {
     return { batchId: existing.id, stats: existing.stats as unknown as BatchStats, reused: true }
   }
 
-  const parse = opts.parseFn ?? parseSupplierMessage
+  const parse = opts.parseFn ?? (await import('./ai-parser')).parseSupplierMessage
   const parsedRaw = await parse(opts.text)
   const parsed = parsedRaw.map(toParsedLine)
   const { matched, unmatched, ignored } = await matchVariants(parsed)
