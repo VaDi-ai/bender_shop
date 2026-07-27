@@ -45,6 +45,7 @@ export type SecurityEvent =
   | 'photos_uploaded'
   | 'admin_access_denied'
   | 'admin_role_denied'
+  | 'admin_invalid_signature'
 
 // ─── Ссылка на бот для реалтайм-алертов ──────────────────────────────────────
 
@@ -107,6 +108,10 @@ const EVENT_DESCRIPTIONS: Record<SecurityEvent, string> = {
   photos_uploaded:            '🖼️ Загружен пакет фото товаров',
   admin_access_denied:        '🚫 Отказ в доступе к админ-API (нет в AdminUser / деактивирован)',
   admin_role_denied:          '🚫 Отказ по роли в админ-API (нужен owner)',
+  // Намеренно ВНЕ CRITICAL_EVENTS: сканеры с мусорным заголовком не должны
+  // будить всех админов (замечание владельца №1а к PR-2). Витринная подпись
+  // остаётся critical как invalid_telegram_signature.
+  admin_invalid_signature:    '🔑 Запрос к админ-API с неверной подписью Telegram',
 }
 
 const SENSITIVE_KEY_PATTERNS = ['token', 'key', 'hash', 'secret']
@@ -144,6 +149,54 @@ function formatSecurityAlert(event: SecurityEvent, details: Record<string, any>)
   return `⚠️ СОБЫТИЕ БЕЗОПАСНОСТИ\n\n${desc}\nВремя: ${time}\n\n${detailsStr}`
 }
 
+// ─── Троттлинг critical-алертов (hardening 1б) ────────────────────────────────
+//
+// Троттлится ТОЛЬКО отправка в Telegram — в SecurityLog пишется каждое событие
+// (полный аудит не режем). Окно: 1 сообщение на (событие × IP) в 5 минут;
+// подавленные считаются и доклеиваются суффиксом к следующему отправленному.
+// Стор in-memory (сброс на рестарте — ок), с эвикцией, чтобы не тёк на
+// множестве IP: сначала истёкшие окна, затем самые старые.
+
+const ALERT_WINDOW_MS = 5 * 60 * 1000
+const ALERT_MAP_MAX = 500
+const _alertWindows = new Map<string, { start: number; suppressed: number }>()
+
+/** Решение «слать ли алерт сейчас» + сколько подавили за прошлое окно. */
+export function shouldSendCriticalAlert(
+  event: string,
+  ip: string | undefined,
+  now: number = Date.now(),
+): { send: boolean; suppressedBefore: number } {
+  const key = `${event}:${ip ?? '-'}`
+  const cur = _alertWindows.get(key)
+  if (cur && now - cur.start < ALERT_WINDOW_MS) {
+    cur.suppressed++
+    return { send: false, suppressedBefore: 0 }
+  }
+  const suppressedBefore = cur?.suppressed ?? 0
+  if (!cur && _alertWindows.size >= ALERT_MAP_MAX) {
+    for (const [k, v] of _alertWindows) {
+      if (now - v.start >= ALERT_WINDOW_MS) _alertWindows.delete(k)
+    }
+    while (_alertWindows.size >= ALERT_MAP_MAX) {
+      let oldestKey: string | null = null
+      let oldestStart = Infinity
+      for (const [k, v] of _alertWindows) {
+        if (v.start < oldestStart) { oldestStart = v.start; oldestKey = k }
+      }
+      if (!oldestKey) break
+      _alertWindows.delete(oldestKey)
+    }
+  }
+  _alertWindows.set(key, { start: now, suppressed: 0 })
+  return { send: true, suppressedBefore }
+}
+
+/** Только для тестов. */
+export function _resetAlertWindows(): void {
+  _alertWindows.clear()
+}
+
 // ─── Основная функция логирования ─────────────────────────────────────────────
 
 export async function logSecurityEvent(
@@ -172,11 +225,17 @@ export async function logSecurityEvent(
   const text = formatSecurityAlert(event, safe)
 
   if (CRITICAL_EVENTS.includes(event) && _bot && _adminIds.length > 0) {
-    for (const adminId of _adminIds) {
-      try {
-        await _bot.telegram.sendMessage(adminId, text)
-      } catch (err) {
-        log.error('[SECURITY] Failed to send alert to admin', { adminId, err: err instanceof Error ? err.message : String(err) })
+    const { send, suppressedBefore } = shouldSendCriticalAlert(event, details.ip)
+    if (send) {
+      const alertText = suppressedBefore > 0
+        ? `${text}\n\n…и ещё ${suppressedBefore} таких событий за прошлое окно (5 мин)`
+        : text
+      for (const adminId of _adminIds) {
+        try {
+          await _bot.telegram.sendMessage(adminId, alertText)
+        } catch (err) {
+          log.error('[SECURITY] Failed to send alert to admin', { adminId, err: err instanceof Error ? err.message : String(err) })
+        }
       }
     }
   }

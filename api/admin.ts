@@ -40,7 +40,9 @@ export function requireAdmin(minRole?: 'owner') {
     }
     const { valid, userId } = validateTelegramWebApp(initData)
     if (!valid || !userId) {
-      logSecurityEvent('invalid_telegram_signature', { ip: req.ip, scope: 'admin_api' })
+      // admin_invalid_signature — не-critical: сканер с мусорным заголовком
+      // не будит админов (§ hardening 1а); витринное событие осталось critical.
+      logSecurityEvent('admin_invalid_signature', { ip: req.ip, scope: 'admin_api' })
       res.status(401).json({ error: 'Неверная подпись Telegram' })
       return
     }
@@ -85,7 +87,7 @@ export function mskDayStart(now: Date, daysAgo = 0): Date {
   return new Date(dayStartMsk - MSK_OFFSET_MS)
 }
 
-async function dashboard(_req: AdminRequest, res: Response): Promise<void> {
+export async function dashboard(req: AdminRequest, res: Response): Promise<void> {
   const now = new Date()
   const today = mskDayStart(now)
   const yesterday = mskDayStart(now, 1)
@@ -102,10 +104,14 @@ async function dashboard(_req: AdminRequest, res: Response): Promise<void> {
     prisma.syncRun.findFirst({ orderBy: { startedAt: 'desc' } }),
   ])
 
+  // Решение владельца (hardening №2): выручка — только owner; счётчики
+  // заказов и статус синка — всем активным админам. Manager получает null.
+  const showRevenue = req.admin?.role === 'owner'
+
   res.json({
     orders: {
-      today: { count: ordersToday._count, revenue: Number(ordersToday._sum.totalAmount ?? 0) },
-      yesterday: { count: ordersYesterday._count, revenue: Number(ordersYesterday._sum.totalAmount ?? 0) },
+      today: { count: ordersToday._count, revenue: showRevenue ? Number(ordersToday._sum.totalAmount ?? 0) : null },
+      yesterday: { count: ordersYesterday._count, revenue: showRevenue ? Number(ordersYesterday._sum.totalAmount ?? 0) : null },
     },
     // null, пока PR-4 не начнёт заполнять SyncRun — UI показывает «нет данных»
     lastSync: lastSync && {
