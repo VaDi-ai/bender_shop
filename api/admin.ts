@@ -535,58 +535,17 @@ export function adminApiRouter(): Router {
     res.json({ ok: true })
   }))
 
-  // Очередь «SIM не определён»: страны каталога, для которых нет правила
+  // Очередь обучения словаря: «SIM не определён» + «SIM стоит без правила».
+  // Логика в lib/sim-recalc.ts — тот же признак «телефон», что у пересчёта.
   router.get('/sim-queue', safe(async (_req, res) => {
-    const { loadSimRules, loadAttrAliases, resolveSimType, detectGeneration } = await import('../lib/sim-rules')
-    const [rules, aliases, variants] = await Promise.all([
-      loadSimRules(), loadAttrAliases('SIM'),
-      prisma.productVariant.findMany({
-        select: { id: true, attributes: true, product: { select: { name: true, brand: true, category: { select: { name: true } } } } },
-      }),
-    ])
-    // Группировка по связке «бренд + страна»: страновые правила словаря
-    // принадлежат Apple, поэтому для андроида правило заводится под бренд —
-    // иначе оно накроет и Apple той же страны.
-    const missing = new Map<string, { country: string; brand: string | null; count: number; example: string; generations: number[] }>()
-    for (const v of variants) {
-      const a = (v.attributes ?? {}) as Record<string, string>
-      const isPhone = v.product.category?.name === 'Телефоны' || detectGeneration(a.fullName, v.product.name) !== null
-      if (!isPhone) continue
-      const r = resolveSimType({ explicit: a.SIM, country: a['Страна'], brand: v.product.brand, names: [a.fullName, v.product.name] }, rules, aliases)
-      if (r.reason !== 'unknown') continue
-      const brand = r.missingBrand ?? null
-      const key = `${brand ?? ''}|${r.missingKey!}`
-      const cur = missing.get(key) ?? { country: r.missingKey!, brand, count: 0, example: a.fullName ?? v.product.name, generations: [] }
-      cur.count++
-      const g = detectGeneration(a.fullName, v.product.name)
-      if (g && !cur.generations.includes(g)) cur.generations.push(g)
-      missing.set(key, cur)
-    }
-    // Второй раздел: SIM стоит, но правила нет (наследие старого хардкода —
-    // пересчёт их не трогает, владелец решает, заводить ли правило)
-    const inherited: Array<{ variantId: number; fullName: string; country: string | null; brand: string | null; current: string }> = []
-    for (const v of variants) {
-      const a = (v.attributes ?? {}) as Record<string, string>
-      if (!a.SIM) continue
-      const isPhone = /телефон|iphone|смартфон/i.test(v.product.category?.name ?? '') || detectGeneration(a.fullName, v.product.name) !== null
-      if (!isPhone) continue
-      const byDict = resolveSimType({ country: a['Страна'], brand: v.product.brand, names: [a.fullName, v.product.name] }, rules, aliases)
-      if (byDict.reason === 'unknown') {   // 'accessory' сюда не попадает — чехлы не наш домен
-        inherited.push({
-          variantId: v.id, fullName: a.fullName ?? v.product.name,
-          country: a['Страна'] ?? null, brand: byDict.missingBrand ?? v.product.brand ?? null, current: a.SIM,
-        })
-      }
-    }
-    res.json({
-      missing: [...missing.values()].sort((a, b) => b.count - a.count),
-      inherited,
-    })
+    const { loadSimQueue } = await import('../lib/sim-recalc')
+    res.json(await loadSimQueue())
   }))
 
   // ── Пересчёт SIM по каталогу (PR-B) ──────────────────────────────────────
-  // Предпросмотр read-only: три раздела, чтобы смысл был виден отдельно от
-  // косметики. Применение и откат — owner-only, транзакцией, с AuditLog.
+  // Предпросмотр read-only: четыре раздела, чтобы смысл был виден отдельно от
+  // первичного проставления и косметики. Применение и откат — owner-only,
+  // одной транзакцией под локом синка, с AuditLog как источником отката.
   router.get('/sim-recalc/preview', safe(async (_req, res) => {
     const { previewRecalc, lastRecalcState } = await import('../lib/sim-recalc')
     const [preview, last] = await Promise.all([previewRecalc(), lastRecalcState()])

@@ -213,10 +213,10 @@
       </div>
 
       <div class="card">
-        <h3>Пересчитать SIM по каталогу <span class="chip c-off right" id="simRecalcChip">предпросмотр</span></h3>
+        <h3>Пересчитать SIM по каталогу <span class="chip c-ok right" id="simRecalcChip">можно применять</span></h3>
         <div class="mt" id="simRecalc">Загрузка…</div>
         <div id="simRecalcActions"></div>
-        <div class="hint">Пересчёт применит словарь ко всем товарам сразу. Старые значения сохранятся — пересчёт можно откатить.</div>
+        <div class="hint">Словарь применяется ко всему каталогу разом. Строки «стоит без правила» не трогаем — сначала правило, потом пересчёт.</div>
       </div>
 
       <div class="card">
@@ -419,11 +419,38 @@
            <div class="list-i"><div style="flex:1"><div class="nm">Стоит без правила: <b>${c.inherited}</b></div>
              <div class="mt">пересчёт их не трогает — заведите правило выше</div></div><span class="chip c-off">не трогаем</span></div>`
 
-      // Кнопка «Пересчитать» намеренно НЕактивна до ревью и подтверждения владельцем
       const last = d.lastRecalc
+      const willChange = c.semantic + c.added + c.canonical
       act.innerHTML = `
-        <button class="btn b-main" disabled title="Активируем после ревью и вашего подтверждения">Пересчитать SIM (ждёт подтверждения)</button>
+        ${willChange === 0
+          ? ''
+          : isOwner
+            ? `<button class="btn b-main" id="simApplyBtn">Пересчитать SIM у ${willChange} ${plural(willChange, 'товара', 'товаров', 'товаров')}</button>
+               <div class="hint">Значения поменяются сразу и на витрине. Прежние сохраним — пересчёт можно откатить одной кнопкой.</div>`
+            : '<button class="btn b-main" disabled title="Пересчёт запускает только владелец">Пересчитать SIM (только владелец)</button>'}
         ${isOwner && last && !last.rolledBack ? `<button class="btn b-dg" id="simRollbackBtn">Откатить пересчёт #${last.recalcId}</button>` : ''}`
+
+      const ab = document.getElementById('simApplyBtn')
+      if (ab) ab.addEventListener('click', async () => {
+        const lines = [
+          `${c.semantic} ${plural(c.semantic, 'товар сменит', 'товара сменят', 'товаров сменят')} значение SIM`,
+          c.added ? `${c.added} получат SIM впервые` : null,
+          c.canonical ? `${c.canonical} — только метка («2Sim» → «2 SIM»)` : null,
+          c.inherited ? `${c.inherited} не тронем: SIM стоит, а правила нет` : null,
+        ].filter(Boolean).join('\n')
+        if (!confirm(`Пересчитать SIM по каталогу?\n\n${lines}\n\nПересчёт можно откатить.`)) return
+        ab.disabled = true; ab.textContent = 'Пересчитываем…'
+        const r2 = await api('/sim-recalc/apply', { method: 'POST', body: '{}' }).catch(() => null)
+        if (r2 && r2.ok) {
+          alert(r2.data.noop
+            ? 'Менять нечего — каталог уже соответствует словарю.'
+            : `Готово: пересчитано ${r2.data.changed} (значение ${r2.data.semantic}, впервые ${r2.data.added}, метка ${r2.data.canonical}). Откатить можно кнопкой ниже.`)
+        } else {
+          alert(r2 && r2.data && r2.data.error || 'Не получилось')
+        }
+        loadSimRecalc(); loadSimQueue()
+      })
+
       const rb = document.getElementById('simRollbackBtn')
       if (rb) rb.addEventListener('click', async () => {
         if (!confirm('Откатить последний пересчёт SIM? Значения вернутся к тем, что были до него.')) return

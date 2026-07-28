@@ -12,7 +12,7 @@ import { describe, it, expect, vi } from 'vitest'
 vi.mock('../lib/prisma', () => ({ prisma: {} }))
 vi.mock('../lib/security-log', () => ({ logSecurityEvent: vi.fn() }))
 
-import { buildPreview, VariantRow } from '../lib/sim-recalc'
+import { buildPreview, buildSimQueue, isPhone, VariantRow } from '../lib/sim-recalc'
 import { SIM_SEED, ALIAS_SEED, SimRuleData, AttrAliasData } from '../lib/sim-rules'
 import { ownerOnly, AdminRequest } from '../api/admin'
 import type { Response, NextFunction } from 'express'
@@ -134,6 +134,63 @@ describe('предпросмотр пересчёта SIM на снимке ка
     ], RULES, ALIASES)
     expect(p.semantic).toHaveLength(1)
     expect(p.semantic[0]).toMatchObject({ to: 'eSIM', by: 'model' })
+  })
+})
+
+describe('очередь обучения и пересчёт смотрят на каталог одинаково', () => {
+  // Категория пишется в таблице свободно: «Телефоны», «Смартфоны Xiaomi»…
+  const android = (id: number, cat: string, brand: string, country: string, name: string, sim?: string): VariantRow => ({
+    id,
+    attributes: { fullName: name, 'Страна': country, ...(sim ? { SIM: sim } : {}) },
+    product: { name, brand, category: { name: cat } },
+  })
+
+  const rows: VariantRow[] = [
+    android(1, 'Телефоны', 'Xiaomi', 'Казахстан', 'Redmi Note 14 Pro+ 5G 12/256 Black'),
+    android(2, 'Смартфоны Xiaomi', 'Poco', 'Европа', 'Poco F6 5G 12/512 Green'),
+    android(3, 'Мобильные телефоны', 'Honor', 'Россия', 'Honor X8d 8/128 Gray'),
+  ]
+
+  it('вариант, который пересчёт считает телефоном, виден и в очереди', () => {
+    for (const v of rows) expect(isPhone(v)).toBe(true)           // признак один и тот же
+    const q = buildSimQueue(rows, RULES, ALIASES)
+    const seen = q.missing.flatMap(m => Array(m.count).fill(`${m.brand}|${m.country}`))
+    expect(seen).toHaveLength(rows.length)                        // ни одна строка не потерялась
+    expect(q.missing.map(m => m.brand).sort()).toEqual(['Honor', 'Poco', 'Xiaomi'])
+  })
+
+  it('очередь группирует по связке «бренд + страна», а не по одной стране', () => {
+    const q = buildSimQueue([
+      ...rows,
+      android(4, 'Телефоны', 'Xiaomi', 'Казахстан', 'Redmi Note 14S 4G 8/256 Blue'),
+    ], RULES, ALIASES)
+    const xiaomi = q.missing.find(m => m.brand === 'Xiaomi')
+    expect(xiaomi).toMatchObject({ country: 'Казахстан', count: 2 })
+  })
+
+  it('строка с уже проставленным SIM идёт не в «не узнал», а в «стоит без правила»', () => {
+    const q = buildSimQueue([android(5, 'Смартфоны', 'Honor', 'Россия', 'Honor 400 Pro', 'eSIM')], RULES, ALIASES)
+    expect(q.missing).toHaveLength(0)
+    expect(q.inherited[0]).toMatchObject({ variantId: 5, current: 'eSIM', brand: 'Honor' })
+  })
+
+  it('Apple по-прежнему резолвится словарём и в очередь не попадает', () => {
+    const q = buildSimQueue([{
+      id: 6,
+      attributes: { fullName: 'iPhone 17 Pro 256 (Индия)', 'Страна': 'Индия', SIM: 'eSIM' },
+      product: { name: 'Iphone 17 Pro', brand: 'Apple', category: { name: 'Телефоны' } },
+    }], RULES, ALIASES)
+    expect(q.missing).toHaveLength(0)
+    expect(q.inherited).toHaveLength(0)
+  })
+
+  it('не-телефоны в очередь не попадают', () => {
+    const q = buildSimQueue([{
+      id: 7,
+      attributes: { fullName: 'Apple Mac Mini M4 (Индия)', 'Страна': 'Индия' },
+      product: { name: 'Apple Mac Mini M4', brand: 'Apple', category: { name: 'Mac' } },
+    }], RULES, ALIASES)
+    expect(q.missing).toHaveLength(0)
   })
 })
 
