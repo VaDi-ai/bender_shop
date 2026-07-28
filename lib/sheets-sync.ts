@@ -1016,7 +1016,7 @@ export async function syncProductsFromSheets(
 
   if (simCtx.unknown.size > 0) {
     const top = [...simCtx.unknown.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10)
-    errors.push(`SIM не определён для стран: ${top.map(([c, n]) => `${c} (${n})`).join(', ')} — задайте правило в админке (Товары → SIM по странам)`)
+    errors.push(`SIM не определён: ${top.map(([c, n]) => `${c} (${n})`).join(', ')} — задайте правило в админке (Товары → SIM по словарю)`)
   }
 
   // Прерванный прогон (кнопка «стоп» в боте) — не успех: счётчики частичные

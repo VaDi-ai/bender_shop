@@ -193,7 +193,7 @@
       <div class="cap">SIM НЕ ОПРЕДЕЛЁН — ПОДСКАЖИТЕ</div>
       <div id="simQueue"><div class="empty">Загрузка…</div></div>
 
-      <div class="cap">SIM ПО СТРАНАМ</div>
+      <div class="cap">SIM ПО СЛОВАРЮ</div>
       <div class="card">
         <h3>Словарь SIM</h3>
         <div id="simRules" class="mt">Загрузка…</div>
@@ -213,10 +213,10 @@
       </div>
 
       <div class="card">
-        <h3>Пересчитать SIM по каталогу <span class="chip c-ok right" id="simRecalcChip">можно применять</span></h3>
+        <h3>SIM по словарю <span class="chip c-ok right" id="simRecalcChip">можно применять</span></h3>
         <div class="mt" id="simRecalc">Загрузка…</div>
         <div id="simRecalcActions"></div>
-        <div class="hint">Словарь применяется ко всему каталогу разом. Строки «стоит без правила» не трогаем — сначала правило, потом пересчёт.</div>
+        <div class="hint">Значения берутся из справочника и переопределяют то, что стоит в карточке. Строки «стоит без правила» не трогаем — сначала правило, потом обновление.</div>
       </div>
 
       <div class="card">
@@ -310,11 +310,11 @@
           <div class="mt">${esc(x.country || 'страна не указана')} · сейчас «${esc(x.current)}»</div>
         </div>
         <button class="btn b-gh sm" data-sim-learn="${esc(x.country || '')}" data-sim-brand="${esc(x.brand || '')}">Задать правило</button></div>`).join('')}
-        <div class="hint">Пересчёт эти строки не трогает — значение оставили как есть. Заведите правило, и они попадут в обычный пересчёт.</div>
+        <div class="hint">Обновление по словарю эти строки не трогает — значение оставили как есть. Заведите правило, и они попадут в общий список.</div>
       </div>` : ''
 
       const missingHtml = missing.length ? `<div class="card">
-        <h3>${missing.length} ${plural(missing.length, 'страна без правила', 'страны без правила', 'стран без правила')} <span class="chip c-bad right">нужна помощь</span></h3>
+        <h3>${missing.length} ${plural(missing.length, 'связка без правила', 'связки без правила', 'связок без правила')} «бренд + страна» <span class="chip c-bad right">нужна помощь</span></h3>
         ${missing.map(x => `<div class="list-i"><div style="flex:1">
           <div class="nm">${esc(x.country)}</div>
           <div class="mt">${x.brand ? esc(x.brand) + ' · ' : ''}${x.count} ${plural(x.count, 'товар', 'товара', 'товаров')}${x.generations.length ? ' · поколения ' + x.generations.sort((a,b)=>a-b).join(', ') : ''} · напр. ${esc(String(x.example).slice(0, 40))}</div>
@@ -407,7 +407,7 @@
       const top = tops(d.byCountry), topAdded = tops(d.addedByCountry)
 
       el.innerHTML = (c.semantic + c.added + c.canonical) === 0
-        ? 'Каталог уже соответствует словарю — пересчитывать нечего.'
+        ? 'Каталог уже соответствует словарю — обновлять нечего.'
         : `<div class="list-i"><div style="flex:1"><div class="nm">Сменят значение SIM: <b>${c.semantic}</b></div>
              <div class="mt">это увидит покупатель${top ? ' · ' + top : ''}</div></div>
              <span class="chip ${c.semantic ? 'c-warn' : 'c-off'}">смысл</span></div>
@@ -417,7 +417,7 @@
            <div class="list-i"><div style="flex:1"><div class="nm">Только метка: <b>${c.canonical}</b></div>
              <div class="mt">«2Sim» → «2 SIM» — значение не меняется</div></div><span class="chip c-off">косметика</span></div>
            <div class="list-i"><div style="flex:1"><div class="nm">Стоит без правила: <b>${c.inherited}</b></div>
-             <div class="mt">пересчёт их не трогает — заведите правило выше</div></div><span class="chip c-off">не трогаем</span></div>`
+             <div class="mt">обновление их не трогает — заведите правило выше</div></div><span class="chip c-off">не трогаем</span></div>`
 
       const last = d.lastRecalc
       const willChange = c.semantic + c.added + c.canonical
@@ -425,26 +425,26 @@
         ${willChange === 0
           ? ''
           : isOwner
-            ? `<button class="btn b-main" id="simApplyBtn">Пересчитать SIM у ${willChange} ${plural(willChange, 'товара', 'товаров', 'товаров')}</button>
-               <div class="hint">Значения поменяются сразу и на витрине. Прежние сохраним — пересчёт можно откатить одной кнопкой.</div>`
-            : '<button class="btn b-main" disabled title="Пересчёт запускает только владелец">Пересчитать SIM (только владелец)</button>'}
-        ${isOwner && last && !last.rolledBack ? `<button class="btn b-dg" id="simRollbackBtn">Откатить пересчёт #${last.recalcId}</button>` : ''}`
+            ? `<button class="btn b-main" id="simApplyBtn">Обновить по словарю у ${willChange} ${plural(willChange, 'товара', 'товаров', 'товаров')}</button>
+               <div class="hint">Значения переопределятся сразу и на витрине. Прежние сохраним — обновление можно откатить одной кнопкой.</div>`
+            : '<button class="btn b-main" disabled title="Обновление по словарю запускает только владелец">Обновить по словарю (только владелец)</button>'}
+        ${isOwner && last && !last.rolledBack ? `<button class="btn b-dg" id="simRollbackBtn">Откатить обновление #${last.recalcId}</button>` : ''}`
 
       const ab = document.getElementById('simApplyBtn')
       if (ab) ab.addEventListener('click', async () => {
         const lines = [
-          `${c.semantic} ${plural(c.semantic, 'товар сменит', 'товара сменят', 'товаров сменят')} значение SIM`,
+          `${c.semantic} ${plural(c.semantic, 'товар получит', 'товара получат', 'товаров получат')} тип SIM по словарю (текущее значение переопределится)`,
           c.added ? `${c.added} получат SIM впервые` : null,
           c.canonical ? `${c.canonical} — только метка («2Sim» → «2 SIM»)` : null,
-          c.inherited ? `${c.inherited} не тронем: SIM стоит, а правила нет` : null,
+          c.inherited ? `${c.inherited} не тронем: SIM стоит, правила нет` : null,
         ].filter(Boolean).join('\n')
-        if (!confirm(`Пересчитать SIM по каталогу?\n\n${lines}\n\nПересчёт можно откатить.`)) return
-        ab.disabled = true; ab.textContent = 'Пересчитываем…'
+        if (!confirm(`Обновить SIM по словарю?\n\n${lines}\n\nСтарые значения сохранятся — можно откатить.`)) return
+        ab.disabled = true; ab.textContent = 'Обновляем…'
         const r2 = await api('/sim-recalc/apply', { method: 'POST', body: '{}' }).catch(() => null)
         if (r2 && r2.ok) {
           alert(r2.data.noop
             ? 'Менять нечего — каталог уже соответствует словарю.'
-            : `Готово: пересчитано ${r2.data.changed} (значение ${r2.data.semantic}, впервые ${r2.data.added}, метка ${r2.data.canonical}). Откатить можно кнопкой ниже.`)
+            : `Готово: обновлено по словарю ${r2.data.changed} (значение ${r2.data.semantic}, впервые ${r2.data.added}, метка ${r2.data.canonical}). Откатить можно кнопкой ниже.`)
         } else {
           alert(r2 && r2.data && r2.data.error || 'Не получилось')
         }
@@ -453,7 +453,7 @@
 
       const rb = document.getElementById('simRollbackBtn')
       if (rb) rb.addEventListener('click', async () => {
-        if (!confirm('Откатить последний пересчёт SIM? Значения вернутся к тем, что были до него.')) return
+        if (!confirm('Откатить последнее обновление SIM по словарю? Значения вернутся к тем, что были до него.')) return
         const r2 = await api('/sim-recalc/rollback', { method: 'POST', body: '{}' }).catch(() => null)
         alert(r2 && r2.ok ? `Откачено: ${r2.data.restored}${r2.data.conflicts && r2.data.conflicts.length ? `, пропущено изменённых: ${r2.data.conflicts.length}` : ''}` : (r2 && r2.data && r2.data.error || 'Не получилось'))
         loadSimRecalc(); loadSimQueue()
@@ -485,7 +485,7 @@
       const items = []
       if (attn.batches) items.push(`<div class="list-i"><div><div class="nm">${attn.batches} ${plural(attn.batches, 'новый прайс не применён', 'новых прайса не применены', 'новых прайсов не применены')}</div><div class="mt">${esc(attn.batchFrom)}</div></div></div>`)
       if (attn.unmatched) items.push(`<div class="list-i"><div><div class="nm">${attn.unmatched} ${plural(attn.unmatched, 'позицию система не узнала', 'позиции система не узнала', 'позиций система не узнала')}</div><div class="mt">нужно подсказать, что это за товар</div></div></div>`)
-      if (attn.simUnknown) items.push(`<div class="list-i" style="cursor:pointer" onclick="go('s-goods')"><div><div class="nm">SIM не определён у ${attn.simUnknown} ${plural(attn.simUnknown, 'товара', 'товаров', 'товаров')}</div><div class="mt">${attn.simCountries} ${plural(attn.simCountries, 'страна', 'страны', 'стран')} без правила — вкладка «Товары»</div></div></div>`)
+      if (attn.simUnknown) items.push(`<div class="list-i" style="cursor:pointer" onclick="go('s-goods')"><div><div class="nm">SIM не определён у ${attn.simUnknown} ${plural(attn.simUnknown, 'товара', 'товаров', 'товаров')}</div><div class="mt">${attn.simCountries} ${plural(attn.simCountries, 'связка', 'связки', 'связок')} «бренд + страна» без правила — вкладка «Товары»</div></div></div>`)
       if (attn.syncErrors) items.push(`<div class="list-i"><div><div class="nm">${attn.syncErrors} ${plural(attn.syncErrors, 'предупреждение синка', 'предупреждения синка', 'предупреждений синка')}</div><div class="mt">журнал — во вкладке «Ещё»</div></div></div>`)
       const card = document.getElementById('attentionCard')
       if (!items.length) { card.style.display = 'none'; return }
