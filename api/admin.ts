@@ -508,12 +508,13 @@ export function adminApiRouter(): Router {
     if (modelGenFrom !== null && (!Number.isInteger(modelGenFrom) || modelGenFrom < 5 || modelGenFrom > 30)) {
       res.status(422).json({ error: 'validation', fields: [{ field: 'modelGenFrom', message: 'Поколение — целое от 5 до 30 или пусто' }] }); return
     }
-    const where = { countryNorm_brand_modelMatch_modelGenFrom: { countryNorm: norm(country), brand, modelMatch, modelGenFrom } }
+    const key = { countryNorm: norm(country), brandNorm: norm(brand), modelMatch: modelMatch ?? '', modelGenFrom: modelGenFrom ?? 0 }
+    const where = { countryNorm_brandNorm_modelMatch_modelGenFrom: key }
     const before = await prisma.simRule.findUnique({ where })
     const rule = await prisma.simRule.upsert({
       where,
       update: { simType, source: 'learned', note: typeof b.note === 'string' ? b.note.slice(0, 300) : undefined },
-      create: { country, countryNorm: norm(country), brand, modelMatch, modelGenFrom, simType, source: 'learned', note: typeof b.note === 'string' ? b.note.slice(0, 300) : null },
+      create: { ...key, country, brand, simType, source: 'learned', note: typeof b.note === 'string' ? b.note.slice(0, 300) : null },
     })
     void logAdminAction({
       adminTelegramId: req.admin!.telegramId,

@@ -22,9 +22,12 @@ export interface SimRuleData {
   id: number
   country: string | null
   countryNorm: string
-  brand: string | null
-  modelMatch: string | null
-  modelGenFrom: number | null
+  /** '' = любой бренд */
+  brandNorm: string
+  /** '' = не модельное правило */
+  modelMatch: string
+  /** 0 = любое поколение */
+  modelGenFrom: number
   simType: string
   source: string
 }
@@ -97,14 +100,14 @@ export function resolveSimType(input: ResolveInput, rules: SimRuleData[], aliase
   const brandNorm = norm(input.brand)
   const haystack = input.names.map(n => norm(n)).join(' ')
 
-  const genOk = (r: SimRuleData) => r.modelGenFrom === null || (gen !== null && gen >= r.modelGenFrom)
-  const brandOk = (r: SimRuleData) => r.brand === null || norm(r.brand) === brandNorm
+  const genOk = (r: SimRuleData) => r.modelGenFrom === 0 || (gen !== null && gen >= r.modelGenFrom)
+  const brandOk = (r: SimRuleData) => r.brandNorm === '' || r.brandNorm === brandNorm
   // Максимальный подходящий modelGenFrom выигрывает (переезд рынка на eSIM-only)
-  const byGenDesc = (a: SimRuleData, b: SimRuleData) => (b.modelGenFrom ?? -1) - (a.modelGenFrom ?? -1)
+  const byGenDesc = (a: SimRuleData, b: SimRuleData) => b.modelGenFrom - a.modelGenFrom
 
   // 2. Модельный оверрайд (iPhone Air → eSIM во всём мире)
   const modelHit = rules
-    .filter(r => r.modelMatch && haystack.includes(norm(r.modelMatch)) && genOk(r) && brandOk(r))
+    .filter(r => r.modelMatch !== '' && haystack.includes(r.modelMatch) && genOk(r) && brandOk(r))
     .sort(byGenDesc)[0]
   if (modelHit) return { simType: modelHit.simType, reason: 'model' }
 
@@ -112,7 +115,7 @@ export function resolveSimType(input: ResolveInput, rules: SimRuleData[], aliase
   const cNorm = norm(input.country)
   if (cNorm) {
     const countryHit = rules
-      .filter(r => r.modelMatch === null && r.countryNorm === cNorm && genOk(r) && brandOk(r))
+      .filter(r => r.modelMatch === '' && r.countryNorm === cNorm && genOk(r) && brandOk(r))
       .sort(byGenDesc)[0]
     if (countryHit) return { simType: countryHit.simType, reason: 'country' }
   }
@@ -120,7 +123,7 @@ export function resolveSimType(input: ResolveInput, rules: SimRuleData[], aliase
   // 4. Брендовое правило без страны (Samsung Galaxy → SIM + eSIM)
   if (brandNorm) {
     const brandHit = rules
-      .filter(r => r.modelMatch === null && r.countryNorm === '' && r.brand !== null && norm(r.brand) === brandNorm && genOk(r))
+      .filter(r => r.modelMatch === '' && r.countryNorm === '' && r.brandNorm !== '' && r.brandNorm === brandNorm && genOk(r))
       .sort(byGenDesc)[0]
     if (brandHit) return { simType: brandHit.simType, reason: 'country' }
   }
@@ -133,7 +136,7 @@ export function resolveSimType(input: ResolveInput, rules: SimRuleData[], aliase
 
 export async function loadSimRules(): Promise<SimRuleData[]> {
   const rows = await prisma.simRule.findMany({
-    select: { id: true, country: true, countryNorm: true, brand: true, modelMatch: true, modelGenFrom: true, simType: true, source: true },
+    select: { id: true, country: true, countryNorm: true, brandNorm: true, modelMatch: true, modelGenFrom: true, simType: true, source: true },
   })
   return rows
 }
@@ -194,25 +197,20 @@ export async function seedSimDictionary(): Promise<{ rules: number; aliases: num
   let rules = 0
   for (const r of SIM_SEED) {
     const countryNorm = norm(r.country)
-    const where = {
-      countryNorm_brand_modelMatch_modelGenFrom: {
-        countryNorm,
-        brand: r.brand ?? null,
-        modelMatch: r.modelMatch ?? null,
-        modelGenFrom: r.modelGenFrom ?? null,
-      },
+    const key = {
+      countryNorm,
+      brandNorm: norm(r.brand),
+      modelMatch: norm(r.modelMatch),
+      modelGenFrom: r.modelGenFrom ?? 0,
     }
+    const where = { countryNorm_brandNorm_modelMatch_modelGenFrom: key }
     const existing = await prisma.simRule.findUnique({ where })
     // learned не перетираем — владелец мог поправить правило под себя
     if (existing && existing.source === 'learned') continue
     await prisma.simRule.upsert({
       where,
       update: { simType: r.simType, country: r.country ?? null, note: r.note ?? null },
-      create: {
-        country: r.country ?? null, countryNorm, brand: r.brand ?? null,
-        modelMatch: r.modelMatch ?? null, modelGenFrom: r.modelGenFrom ?? null,
-        simType: r.simType, source: 'seed', note: r.note ?? null,
-      },
+      create: { ...key, country: r.country ?? null, brand: r.brand ?? null, simType: r.simType, source: 'seed', note: r.note ?? null },
     })
     rules++
   }

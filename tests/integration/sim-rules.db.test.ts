@@ -59,7 +59,7 @@ describe.skipIf(!RUN)('SIM dictionary (реальная БД)', () => {
     expect(await prisma.simRule.count()).toBe(countAfterFirst)   // дублей нет
 
     // владелец поправил правило под себя → сид его не трогает
-    const india = await prisma.simRule.findFirst({ where: { countryNorm: 'индия', modelGenFrom: null } })
+    const india = await prisma.simRule.findFirst({ where: { countryNorm: 'индия', modelGenFrom: 0 } })
     await prisma.simRule.update({ where: { id: india.id }, data: { simType: 'eSIM', source: 'learned' } })
     await seedSimDictionary()
     expect((await prisma.simRule.findUnique({ where: { id: india.id } })).simType).toBe('eSIM')

@@ -6,9 +6,9 @@ const RULES: SimRuleData[] = SIM_SEED.map((r, i) => ({
   id: i + 1,
   country: r.country ?? null,
   countryNorm: norm(r.country),
-  brand: r.brand ?? null,
-  modelMatch: r.modelMatch ?? null,
-  modelGenFrom: r.modelGenFrom ?? null,
+  brandNorm: norm(r.brand),
+  modelMatch: norm(r.modelMatch),
+  modelGenFrom: r.modelGenFrom ?? 0,
   simType: r.simType,
   source: 'seed',
 }))
@@ -113,7 +113,7 @@ describe('целостность сида', () => {
     for (const r of SIM_SEED) expect(['2 SIM', 'eSIM', 'SIM + eSIM']).toContain(r.simType)
   })
   it('ключ (country, brand, modelMatch, gen) уникален — upsert не конфликтует', () => {
-    const keys = SIM_SEED.map(r => `${norm(r.country)}|${r.brand ?? ''}|${r.modelMatch ?? ''}|${r.modelGenFrom ?? ''}`)
+    const keys = SIM_SEED.map(r => `${norm(r.country)}|${norm(r.brand)}|${norm(r.modelMatch)}|${r.modelGenFrom ?? 0}`)
     expect(new Set(keys).size).toBe(keys.length)
   })
 })

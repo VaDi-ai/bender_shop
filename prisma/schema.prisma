@@ -734,14 +734,18 @@ model SimRule {
   id           Int      @id @default(autoincrement())
   /// Как в каталоге: «Индия», «Гонконг/США». null — правило не по стране (модельное/брендовое)
   country      String?
-  /// lower(trim(country)) для лукапа; '' если правило не по стране
+  // Части составного ключа — NOT NULL с sentinel-ами: в Postgres NULL != NULL,
+  // поэтому nullable-поля в @@unique не защитили бы от дублей и ломали upsert.
+  /// lower(trim(country)); '' = правило не по стране
   countryNorm  String   @default("")
-  /// Ограничение по бренду (null = любой)
+  /// lower(trim(brand)); '' = любой бренд
+  brandNorm    String   @default("")
+  /// Подстрока имени модели, lower («air») — модельный оверрайд, сильнее страны; '' = не модельное
+  modelMatch   String   @default("")
+  /// Правило действует с этого поколения; 0 = любое. Выигрывает максимальное подходящее
+  modelGenFrom Int      @default(0)
+  /// Отображаемое имя бренда (лукап идёт по brandNorm)
   brand        String?
-  /// Подстрока имени модели, lower — модельный оверрайд («air»); сильнее страны
-  modelMatch   String?
-  /// Правило действует с этого поколения (null = любое); выигрывает максимальное подходящее
-  modelGenFrom Int?
   /// Канон: "2 SIM" | "eSIM" | "SIM + eSIM"
   simType      String
   /// seed — из поставки; learned — выучено владельцем (сид не перетирает learned)
@@ -750,7 +754,7 @@ model SimRule {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  @@unique([countryNorm, brand, modelMatch, modelGenFrom])
+  @@unique([countryNorm, brandNorm, modelMatch, modelGenFrom])
   @@index([countryNorm])
   @@index([modelMatch])
 }
