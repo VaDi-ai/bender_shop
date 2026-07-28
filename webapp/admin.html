@@ -8,13 +8,14 @@
   <link rel="stylesheet" href="/fonts/fonts.css">
   <link rel="icon" href="/favicon.ico" sizes="32x32">
   <style>
-    :root { --bg:#0a0a0a; --card:#161618; --bd:#2c2c2e; --tx:#fff; --dim:#8a8a8a; --ac:#a8ff3e; --acf:#0a0a0a; --warn:#ffcc4d; --bad:#ff6b5e; --ok:#5ed17a; --tabbar-h:58px; }
+    /* Токены и компоненты — из docs/ADMIN-MOCKUP.html (эталон) */
+    :root { --bg:#0a0a0a; --card:#161618; --card2:#1c1c1e; --bd:#2c2c2e; --tx:#fff; --dim:#8a8a8a; --ac:#a8ff3e; --acf:#0a0a0a; --warn:#ffcc4d; --bad:#ff6b5e; --ok:#5ed17a; --tabbar-h:58px; }
     * { box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent; }
     html, body { height:100%; }
     body { background:var(--bg); color:var(--tx); font-family:'Onest',system-ui,sans-serif; display:flex; flex-direction:column; }
     .mono { font-family:'JetBrains Mono',monospace; }
 
-    .top { padding:14px 16px calc(14px); border-bottom:1px solid #1a1a1a; display:flex; align-items:center; gap:10px; background:rgba(10,10,10,.96); position:sticky; top:0; z-index:10; }
+    .top { padding:14px 16px; border-bottom:1px solid #1a1a1a; display:flex; align-items:center; gap:10px; background:rgba(10,10,10,.96); position:sticky; top:0; z-index:10; }
     .top .lg { font-family:'JetBrains Mono',monospace; color:var(--ac); font-weight:700; letter-spacing:1.5px; font-size:13px; }
     .top .who { margin-left:auto; font-size:11px; color:var(--dim); text-align:right; }
     .top .who b { color:#ccc; font-weight:500; }
@@ -24,35 +25,47 @@
     .sub { font-size:12px; color:var(--dim); margin-bottom:14px; line-height:1.5; }
     .card { background:var(--card); border:1px solid var(--bd); border-radius:14px; padding:14px; margin-bottom:12px; }
     .card h3 { font-size:14px; font-weight:600; margin-bottom:8px; display:flex; align-items:center; gap:8px; }
-    .chip { font-size:10px; padding:3px 8px; border-radius:20px; font-weight:500; margin-left:auto; }
+    .row { display:flex; align-items:center; gap:10px; }
+    .row + .row { margin-top:10px; }
+    .spacer { margin-left:auto; }
+    .lbl { font-size:12px; color:var(--dim); }
+    .chip { font-size:10px; padding:3px 8px; border-radius:20px; font-weight:500; white-space:nowrap; }
+    .chip.right { margin-left:auto; }
     .c-ok { background:rgba(94,209,122,.15); color:var(--ok); }
     .c-warn { background:rgba(255,204,77,.15); color:var(--warn); }
     .c-bad { background:rgba(255,107,94,.15); color:var(--bad); }
     .c-off { background:#232326; color:var(--dim); }
+    .btn { font-family:'Onest'; font-weight:600; font-size:13px; padding:12px 14px; border-radius:11px; border:none; width:100%; cursor:pointer; margin-top:10px; }
+    .b-main { background:var(--ac); color:var(--acf); }
+    .b-gh { background:transparent; color:var(--ac); border:1px solid var(--ac); }
+    .b-nt { background:#232326; color:#ddd; }
+    .b-dg { background:transparent; color:var(--bad); border:1px solid rgba(255,107,94,.5); }
+    .btn.sm { width:auto; padding:9px 14px; font-size:12px; margin-top:0; }
+    .btn:disabled { opacity:.4; cursor:default; }
+    .hint { font-size:11px; color:var(--dim); line-height:1.6; margin-top:9px; padding-left:20px; position:relative; }
+    .hint:before { content:"→"; position:absolute; left:4px; color:var(--ac); }
     .kpi { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:12px; }
     .kpi > div { background:var(--card); border:1px solid var(--bd); border-radius:12px; padding:12px; }
     .kpi .n { font-size:20px; font-weight:600; }
     .kpi .l { font-size:11px; color:var(--dim); margin-top:2px; }
+    .list-i { display:flex; align-items:center; gap:10px; padding:11px 0; border-bottom:1px solid #232326; font-size:13px; }
+    .list-i:last-of-type { border-bottom:none; }
+    .nm { font-size:13px; line-height:1.4; }
     .mt { font-size:11px; color:var(--dim); margin-top:2px; line-height:1.5; }
-    .empty { text-align:center; padding:26px 14px; border:1px dashed var(--bd); border-radius:14px; color:var(--dim); font-size:12.5px; line-height:1.7; }
+    .empty { text-align:center; padding:22px 14px; border:1px dashed var(--bd); border-radius:14px; color:var(--dim); font-size:12.5px; line-height:1.7; }
     .cap { font-family:'JetBrains Mono',monospace; font-size:9.5px; letter-spacing:1.5px; color:#5a5a5a; margin:16px 0 8px; }
-
+    .warnbox { background:rgba(255,204,77,.08); border:1px solid rgba(255,204,77,.3); border-radius:12px; padding:12px; font-size:12px; line-height:1.6; color:#f0dfa8; margin-top:10px; }
+    .okbox { background:rgba(168,255,62,.07); border:1px solid rgba(168,255,62,.3); border-radius:12px; padding:12px; font-size:12px; line-height:1.6; color:#d6f8a8; margin-top:10px; }
+    .diff { font-family:'JetBrains Mono',monospace; font-size:12px; }
+    .old { color:var(--dim); text-decoration:line-through; }
+    .new { color:var(--ac); }
+    .inp { background:#0f0f10; border:1px solid var(--bd); border-radius:10px; padding:11px 12px; color:#fff; font-family:'Onest'; font-size:13px; width:100%; margin-top:8px; }
     .screen { display:none; }
     .screen.on { display:block; }
-
     #tabbar { position:fixed; left:0; right:0; bottom:0; display:flex; border-top:1px solid #1c1c1c; background:rgba(12,12,12,.98); padding-bottom:env(safe-area-inset-bottom); z-index:20; }
     #tabbar .tb { flex:1; padding:9px 2px 11px; text-align:center; font-size:9.5px; color:var(--dim); cursor:pointer; background:none; border:none; font-family:'Onest',sans-serif; }
     #tabbar .tb.on { color:var(--ac); }
     #tabbar .tb i { display:block; font-size:16px; font-style:normal; margin-bottom:3px; }
-
-    .inp { background:#0f0f10; border:1px solid var(--bd); border-radius:10px; padding:11px 12px; color:#fff; font-family:'Onest'; font-size:13px; width:100%; margin-top:8px; }
-    .btn-main { background:var(--ac); color:var(--acf); font-family:'Onest'; font-weight:600; font-size:13px; padding:12px 14px; border-radius:11px; border:none; width:100%; cursor:pointer; margin-top:10px; }
-    .btn-ghost { background:transparent; color:var(--dim); font-family:'Onest'; font-weight:600; font-size:13px; padding:10px 14px; border-radius:11px; border:1px solid var(--bd); width:100%; cursor:pointer; margin-top:8px; }
-    .sup-actions { display:flex; gap:8px; margin-top:10px; }
-    .sup-actions button { flex:1; margin-top:0; }
-    .sup-actions .danger { color:var(--bad); border-color:rgba(255,107,94,.5); background:transparent; }
-
-    /* Гейт-экраны (загрузка / нет доступа / ошибка) */
     #gate { position:fixed; inset:0; background:var(--bg); z-index:50; display:flex; align-items:center; justify-content:center; text-align:center; padding:24px; }
     #gate .lg { font-family:'JetBrains Mono',monospace; color:var(--ac); font-weight:700; letter-spacing:2px; font-size:15px; margin-bottom:14px; }
     #gate p { color:var(--dim); font-size:13px; line-height:1.7; max-width:280px; margin:0 auto; }
@@ -73,92 +86,126 @@
     <span class="who" id="who"></span>
   </header>
 
-  <main>
-    <!-- ЧТО СЕГОДНЯ (живой с PR-2 API) -->
+  <main id="main">
+    <!-- ═══ СЕГОДНЯ ═══ -->
     <section class="screen on" id="s-home">
       <h2>Что сегодня</h2>
-      <div class="sub">Коротко: что происходит и что требует внимания.</div>
+      <div class="sub">Коротко: что происходит и что требует вашего внимания.</div>
+
       <div class="kpi">
         <div><div class="n" id="kOrdersToday">—</div><div class="l">заказов сегодня</div></div>
-        <div><div class="n" id="kRevenueToday">—</div><div class="l">выручка сегодня</div></div>
-        <div><div class="n" id="kOrdersYesterday">—</div><div class="l">заказов вчера</div></div>
-        <div><div class="n" id="kRevenueYesterday">—</div><div class="l">выручка вчера</div></div>
+        <div><div class="n" id="kRevenueToday">—</div><div class="l">выручка</div></div>
+        <div><div class="n">—</div><div class="l">прибыль · скоро</div></div>
+        <div><div class="n">—</div><div class="l">заходы · скоро</div></div>
       </div>
+
+      <div class="card" id="attentionCard" style="display:none">
+        <h3>⚠️ Требует внимания <span class="chip c-warn right" id="attnCount">0</span></h3>
+        <div id="attnList"></div>
+        <button class="btn b-main" onclick="go('s-prices')">Перейти к ценам</button>
+      </div>
+
       <div class="card">
-        <h3>Синк с таблицей <span class="chip c-off" id="syncChip">нет данных</span></h3>
+        <h3>Синк с таблицей <span class="chip c-off right" id="syncChip">нет данных</span></h3>
         <div class="mt" id="syncInfo">Прогонов ещё не было.</div>
-        <button class="btn" id="syncBtn" style="margin-top:10px;width:100%;padding:12px;border-radius:11px;border:1px solid var(--ac);background:transparent;color:var(--ac);font-family:'Onest';font-weight:600;font-size:13px;cursor:pointer">Обновить из таблицы</button>
+        <button class="btn b-gh" id="syncBtn">Обновить сайт из таблицы</button>
+        <div class="hint">Подтянет свежие цены, наличие и товары из Google-таблицы. Идёт до минуты.</div>
       </div>
     </section>
 
-    <!-- ЦЕНЫ И ПОСТАВЩИКИ -->
+    <!-- ═══ ЦЕНЫ ═══ -->
     <section class="screen" id="s-prices">
       <h2>Цены и поставщики</h2>
-      <div class="sub">Карточки поставщиков. Разбор прайсов приедет следом (PR-6…8).</div>
+      <div class="sub">Разбираем прайсы, берём лучшую цену, ставим наценку.</div>
+
+      <div class="cap">НОВЫЕ ПРАЙСЫ — ПРОВЕРЬТЕ И ПРИМЕНИТЕ</div>
+      <div id="pbList"><div class="empty">Загрузка…</div></div>
 
       <div class="card">
-        <h3>Разобрать прайс <span class="chip c-off">read-only</span></h3>
+        <h3>Разобрать прайс из текста</h3>
         <select class="inp" id="pbSupplier"><option value="">Поставщик не указан (TTL 3 дня)</option></select>
-        <textarea class="inp" id="pbText" rows="5" placeholder="Вставьте текст прайса — как прислал поставщик"></textarea>
-        <button class="btn-main" id="pbParse">Разобрать</button>
+        <textarea class="inp" id="pbText" rows="4" placeholder="Вставьте текст прайса — как прислал поставщик"></textarea>
+        <button class="btn b-main" id="pbParse">Разобрать прайс</button>
         <div class="mt" id="pbErr" style="color:var(--bad)"></div>
-        <div class="mt">Система прочитает текст и покажет, какие цены изменятся. Ничего не применится — кнопка «Применить» приедет в следующем обновлении (PR-7).</div>
+        <div class="hint">Система прочитает текст и покажет, какие цены изменятся. Ничего не применится, пока вы не подтвердите.</div>
       </div>
+
       <div id="pbPreview"></div>
-      <div class="cap">ПОСЛЕДНИЕ РАЗБОРЫ</div>
-      <div id="pbList" class="mt" style="margin-bottom:14px">—</div>
 
+      <div class="cap">СИСТЕМА НЕ УЗНАЛА — ПОДСКАЖИТЕ</div>
+      <div id="unmatchedBox"><div class="empty">Загрузка…</div></div>
+
+      <div class="cap">НАЦЕНКА</div>
       <div class="card">
-        <h3 id="supFormTitle">Новый поставщик</h3>
-        <input class="inp" id="supName" placeholder="Название" maxlength="100">
-        <div style="display:flex;gap:8px">
-          <input class="inp" id="supMarkup" placeholder="Наценка, % (0–50)" inputmode="decimal">
-          <input class="inp" id="supTtl" placeholder="TTL, дней (1–30)" inputmode="numeric">
+        <h3>Настройки наценки</h3>
+        <div id="mrList" class="mt">Загрузка…</div>
+        <div class="row" style="margin-top:10px"><span class="lbl">Применять автоматически</span><span class="spacer chip c-ok">если цена ±15%</span></div>
+        <button class="btn b-nt" id="mrAddBtn">Добавить правило наценки</button>
+        <div id="mrForm" style="display:none">
+          <div class="row" style="gap:8px"><input class="inp" id="mrMin" placeholder="От, ₽" inputmode="numeric"><input class="inp" id="mrMax" placeholder="До, ₽ (пусто = ∞)" inputmode="numeric"></div>
+          <div class="row" style="gap:8px">
+            <select class="inp" id="mrMode"><option value="fixed">+ рублей</option><option value="percent">+ процентов</option></select>
+            <input class="inp" id="mrValue" placeholder="Значение" inputmode="decimal">
+          </div>
+          <select class="inp" id="mrChannel"><option value="site">Сайт</option><option value="avito">Авито</option></select>
+          <button class="btn b-main" id="mrSave">Сохранить правило</button>
+          <button class="btn b-nt" id="mrCancel">Отмена</button>
+          <div class="mt" id="mrErr" style="color:var(--bad)"></div>
         </div>
-        <input class="inp" id="supNotes" placeholder="Заметка" maxlength="1000">
-        <button class="btn-main" id="supSave">Добавить</button>
-        <button class="btn-ghost" id="supCancel" style="display:none">Отмена</button>
-        <div class="mt" id="supErr" style="color:var(--bad)"></div>
-        <div class="mt">Привязка к Telegram-чату (chatId) — только из бота; веб создаёт поставщика без чата, прайсы для него заводятся вставкой или файлом.</div>
+        <div class="hint">Если цена из прайса меняет розницу сильнее коридора ±15% — система не применит её сама и спросит владельца.</div>
       </div>
 
-      <div class="cap" style="display:flex;align-items:center;gap:10px">ПОСТАВЩИКИ
-        <label style="margin-left:auto;font-family:'Onest';letter-spacing:0;color:var(--dim);font-size:11px;display:flex;align-items:center;gap:5px">
-          <input type="checkbox" id="supShowInactive"> неактивные
+      <div class="cap">ПОСТАВЩИКИ</div>
+      <div class="card">
+        <h3 id="supFormTitle">Поставщики</h3>
+        <div id="supList" class="mt">Загрузка…</div>
+        <label style="display:flex;align-items:center;gap:6px;margin-top:10px;font-size:11px;color:var(--dim)">
+          <input type="checkbox" id="supShowInactive"> показать выключенных
         </label>
+        <button class="btn b-gh" id="supAddBtn">Добавить поставщика</button>
+        <div id="supForm" style="display:none">
+          <input class="inp" id="supName" placeholder="Название" maxlength="100">
+          <div class="row" style="gap:8px">
+            <input class="inp" id="supMarkup" placeholder="Наценка, % (0–50)" inputmode="decimal">
+            <input class="inp" id="supTtl" placeholder="TTL, дней (1–30)" inputmode="numeric">
+          </div>
+          <input class="inp" id="supNotes" placeholder="Заметка" maxlength="1000">
+          <button class="btn b-main" id="supSave">Сохранить поставщика</button>
+          <button class="btn b-nt" id="supCancel">Отмена</button>
+          <div class="mt" id="supErr" style="color:var(--bad)"></div>
+        </div>
+        <div class="hint">Привязка к Telegram-чату — из бота: прайсы из чата попадают сюда сами. Поставщик без чата работает через вставку текста.</div>
       </div>
-      <div id="supList"><div class="empty">Загрузка…</div></div>
     </section>
 
-    <!-- ВИТРИНА -->
-    <section class="screen" id="s-storefront">
+    <!-- ═══ ВИТРИНА (следующий этап) ═══ -->
+    <section class="screen" id="s-shop">
       <h2>Витрина</h2>
-      <div class="sub">Баннеры, маркиза, хиты, категории.</div>
-      <div class="empty">Появится на Этапе 2 —<br>после проверки LWW-механики на живых данных.</div>
+      <div class="sub">Баннеры, категории, бегущая строка, хиты.</div>
+      <div class="empty">Раздел появится на следующем этапе.<br>Пока витрина управляется из бота — раздел «🖼️ Витрина».</div>
     </section>
 
-    <!-- ТОВАРЫ -->
-    <section class="screen" id="s-products">
+    <!-- ═══ ТОВАРЫ (следующий этап) ═══ -->
+    <section class="screen" id="s-goods">
       <h2>Товары</h2>
-      <div class="sub">Карточки, главное фото, скрытие с витрины.</div>
-      <div class="empty">Появится на Этапе 2.<br>Цены и наличие останутся в таблице — здесь они будут read-only.</div>
+      <div class="sub">Карточки, главное фото, предложения.</div>
+      <div class="empty">Раздел появится на следующем этапе.<br>Цены и наличие останутся в таблице — здесь они будут read-only.</div>
     </section>
 
-    <!-- ЕЩЁ -->
+    <!-- ═══ ЕЩЁ ═══ -->
     <section class="screen" id="s-more">
       <h2>Ещё</h2>
-      <div class="sub">Журналы, наценки, системное.</div>
-      <div class="card"><h3>Правила наценки <span class="chip c-off">PR-9</span></h3><div class="mt">Просмотр и правка 12 правил с предпросмотром влияния на цены.</div></div>
+      <div class="sub">Журналы и системное.</div>
       <div class="card"><h3>Журнал синка</h3><div class="mt" id="syncRuns">Загрузка…</div></div>
-      <div class="card"><h3>Кто что менял <span class="chip c-off">этап 1</span></h3><div class="mt">AuditLog уже пишется на стороне сервера — вьюер подключим после первых мутаций.</div></div>
+      <div class="card"><h3>Кто что менял <span class="chip c-off right">скоро</span></h3><div class="mt">Каждое действие в админке уже пишется в журнал на сервере — просмотр появится после первых разделов Этапа 2.</div></div>
     </section>
   </main>
 
   <nav id="tabbar">
-    <button class="tb on" data-s="s-home"><i>🏠</i>Сегодня</button>
-    <button class="tb" data-s="s-prices"><i>💰</i>Цены</button>
-    <button class="tb" data-s="s-storefront"><i>🖼</i>Витрина</button>
-    <button class="tb" data-s="s-products"><i>📦</i>Товары</button>
+    <button class="tb on" data-s="s-home"><i>▤</i>Сегодня</button>
+    <button class="tb" data-s="s-prices"><i>₽</i>Цены</button>
+    <button class="tb" data-s="s-shop"><i>◫</i>Витрина</button>
+    <button class="tb" data-s="s-goods"><i>▣</i>Товары</button>
     <button class="tb" data-s="s-more"><i>⋯</i>Ещё</button>
   </nav>
 
@@ -168,101 +215,400 @@
 
     const gate = document.getElementById('gate')
     const gateMsg = document.getElementById('gateMsg')
-    const fmt = n => Number(n).toLocaleString('ru-RU')
     const headers = { 'x-telegram-init-data': (tg && tg.initData) || '' }
-
-    // Табы
-    document.querySelectorAll('#tabbar .tb').forEach(b => b.addEventListener('click', () => {
-      document.querySelectorAll('#tabbar .tb').forEach(x => x.classList.toggle('on', x === b))
-      document.querySelectorAll('.screen').forEach(s => s.classList.toggle('on', s.id === b.dataset.s))
-      document.querySelector('main').scrollTo({ top: 0 })
-    }))
-
+    const fmt = n => Number(n).toLocaleString('ru-RU')
+    const rub = n => n == null ? '—' : fmt(n) + ' ₽'
+    const esc = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')
     const ROLE_LABEL = { owner: 'владелец', manager: 'менеджер' }
+
+    function go(id) {
+      document.querySelectorAll('#tabbar .tb').forEach(b => b.classList.toggle('on', b.dataset.s === id))
+      document.querySelectorAll('.screen').forEach(s => s.classList.toggle('on', s.id === id))
+      document.getElementById('main').scrollTo({ top: 0 })
+    }
+    document.querySelectorAll('#tabbar .tb').forEach(b => b.addEventListener('click', () => go(b.dataset.s)))
+
+    async function api(path, opts) {
+      const res = await fetch('/admin/api' + path, Object.assign({ cache: 'no-store' }, opts, {
+        headers: Object.assign({}, headers, opts && opts.body ? { 'Content-Type': 'application/json' } : {}, opts && opts.headers),
+      }))
+      let data = null
+      try { data = await res.json() } catch { /* пустой ответ */ }
+      return { ok: res.ok, status: res.status, data }
+    }
 
     async function boot() {
       let me
       try {
-        const res = await fetch('/admin/api/me', { headers, cache: 'no-store' })
-        if (res.status === 401) { gateMsg.textContent = 'Откройте админку из Telegram — доступ только по подписи Mini App.'; return }
-        if (res.status === 403) { gateMsg.textContent = 'У этого аккаунта нет доступа к админке.'; return }
-        if (!res.ok) { gateMsg.textContent = 'Сервис недоступен, попробуйте позже.'; return }
-        me = await res.json()
+        const r = await api('/me')
+        if (r.status === 401) { gateMsg.textContent = 'Откройте админку из Telegram — доступ только по подписи Mini App.'; return }
+        if (r.status === 403) { gateMsg.textContent = 'У этого аккаунта нет доступа к админке.'; return }
+        if (!r.ok) { gateMsg.textContent = 'Сервис недоступен, попробуйте позже.'; return }
+        me = r.data
       } catch { gateMsg.textContent = 'Нет связи с сервером.'; return }
 
-      // textContent, не innerHTML: me.name станет редактируемым — store-XSS не место
       const who = document.getElementById('who')
       who.textContent = ''
-      const nameEl = document.createElement('b')
-      nameEl.textContent = me.name || me.telegramId
-      who.append(nameEl, document.createElement('br'), document.createTextNode(ROLE_LABEL[me.role] || me.role))
+      const b = document.createElement('b')
+      b.textContent = me.name || me.telegramId
+      who.append(b, document.createElement('br'), document.createTextNode(ROLE_LABEL[me.role] || me.role))
       window.adminMe = me
       gate.classList.add('hidden')
-      loadDashboard()
-      loadSyncRuns()
-      loadSuppliers()
-      loadBatches()
+      loadDashboard(); loadSyncRuns(); loadSuppliers(); loadBatches(); loadUnmatched(); loadMarkupRules()
     }
 
-    // ── Поставщики (PR-5) ─────────────────────────────────────────────────────
-    let supEditId = null
-    const esc = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')
+    // ── Сегодня ───────────────────────────────────────────────────────────────
+    async function loadDashboard() {
+      const r = await api('/dashboard').catch(() => null)
+      if (!r || !r.ok) return
+      const d = r.data
+      document.getElementById('kOrdersToday').textContent = d.orders.today.count
+      document.getElementById('kRevenueToday').textContent = d.orders.today.revenue == null ? '—' : rub(d.orders.today.revenue)
+      const chip = document.getElementById('syncChip')
+      const info = document.getElementById('syncInfo')
+      if (d.lastSync) {
+        const errs = Array.isArray(d.lastSync.errors) ? d.lastSync.errors.length : 0
+        chip.textContent = d.lastSync.ok === false ? 'ошибка' : (errs ? errs + ' предупр.' : 'в порядке')
+        chip.className = 'chip right ' + (d.lastSync.ok === false ? 'c-bad' : (errs ? 'c-warn' : 'c-ok'))
+        info.textContent = 'Последний прогон: ' + new Date(d.lastSync.startedAt).toLocaleString('ru-RU') + (d.lastSync.trigger === 'cron' ? ' (авто)' : '')
+      }
+      renderAttention()
+    }
 
-    async function loadSuppliers() {
-      const box = document.getElementById('supList')
-      const inactive = document.getElementById('supShowInactive').checked
+    // Требует внимания: реальные счётчики (preview-батчи, «не узнал», ошибки синка)
+    const attn = { batches: 0, batchFrom: '', unmatched: 0, syncErrors: 0 }
+    function renderAttention() {
+      const items = []
+      if (attn.batches) items.push(`<div class="list-i"><div><div class="nm">${attn.batches} ${plural(attn.batches, 'новый прайс не применён', 'новых прайса не применены', 'новых прайсов не применены')}</div><div class="mt">${esc(attn.batchFrom)}</div></div></div>`)
+      if (attn.unmatched) items.push(`<div class="list-i"><div><div class="nm">${attn.unmatched} ${plural(attn.unmatched, 'позицию система не узнала', 'позиции система не узнала', 'позиций система не узнала')}</div><div class="mt">нужно подсказать, что это за товар</div></div></div>`)
+      if (attn.syncErrors) items.push(`<div class="list-i"><div><div class="nm">${attn.syncErrors} ${plural(attn.syncErrors, 'предупреждение синка', 'предупреждения синка', 'предупреждений синка')}</div><div class="mt">журнал — во вкладке «Ещё»</div></div></div>`)
+      const card = document.getElementById('attentionCard')
+      if (!items.length) { card.style.display = 'none'; return }
+      card.style.display = ''
+      document.getElementById('attnCount').textContent = items.length
+      document.getElementById('attnList').innerHTML = items.join('')
+    }
+    function plural(n, one, few, many) {
+      const m10 = n % 10, m100 = n % 100
+      if (m10 === 1 && m100 !== 11) return one
+      if (m10 >= 2 && m10 <= 4 && (m100 < 10 || m100 >= 20)) return few
+      return many
+    }
+
+    document.getElementById('syncBtn').addEventListener('click', async function () {
+      this.disabled = true; this.textContent = 'Обновляем… (до минуты)'
+      try { await api('/sync', { method: 'POST', body: '{}' }) } catch {}
+      setTimeout(() => { loadDashboard(); loadSyncRuns(); this.disabled = false; this.textContent = 'Обновить сайт из таблицы' }, 20000)
+    })
+
+    async function loadSyncRuns() {
+      const r = await api('/sync-runs?limit=10').catch(() => null)
+      if (!r || !r.ok) return
+      const el = document.getElementById('syncRuns')
+      if (!r.data.length) { el.textContent = 'Прогонов ещё не было.'; return }
+      attn.syncErrors = Array.isArray(r.data[0].errors) ? r.data[0].errors.length : 0
+      el.innerHTML = r.data.map(x => {
+        const dt = new Date(x.startedAt).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+        const st = x.ok === null ? '⏳' : (x.ok ? '✅' : '⛔')
+        const errs = Array.isArray(x.errors) && x.errors.length ? ` · ⚠️ ${x.errors.length}` : ''
+        return `<div style="padding:7px 0;border-bottom:1px solid #232326">${st} ${dt} (${x.trigger === 'cron' ? 'авто' : x.trigger === 'deploy' ? 'после деплоя' : 'вручную'})${x.rowsRead != null ? ` · строк ${x.rowsRead}, обновлено ${x.updated ?? 0}` : ''}${errs}</div>`
+      }).join('')
+      renderAttention()
+    }
+
+    // ── Цены: батчи ───────────────────────────────────────────────────────────
+    async function loadBatches() {
+      const r = await api('/price-batches?limit=10').catch(() => null)
+      const box = document.getElementById('pbList')
+      if (!r || !r.ok) { box.innerHTML = '<div class="empty">Не удалось загрузить</div>'; return }
+      const previews = r.data.filter(b => b.status === 'preview')
+      attn.batches = previews.length
+      attn.batchFrom = 'от ' + [...new Set(previews.map(b => b.supplier ? b.supplier.name : 'без поставщика'))].slice(0, 3).join(', ')
+      renderAttention()
+      if (!r.data.length) {
+        box.innerHTML = '<div class="empty">Новых прайсов нет.<br>Перешлите прайс боту из чата поставщика —<br>или вставьте текст в форму ниже.</div>'
+        return
+      }
+      box.innerHTML = r.data.map(bt => {
+        const st = bt.stats || {}
+        const when = new Date(bt.createdAt).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+        const chip = bt.status === 'preview'
+          ? (st.unmatchedRows ? `<span class="chip c-warn right">узнано ${st.matchedRows ?? 0} из ${st.rows ?? 0}</span>` : `<span class="chip c-ok right">узнано всё</span>`)
+          : bt.status === 'applied' ? '<span class="chip c-ok right">применён</span>'
+          : bt.status === 'rolled_back' ? '<span class="chip c-off right">откачен</span>'
+          : `<span class="chip c-off right">${esc(bt.status)}</span>`
+        return `<div class="card">
+          <h3>${esc(bt.supplier ? bt.supplier.name : 'Без поставщика')} ${chip}</h3>
+          <div class="mt">Разбор #${bt.id} · ${when} · ${st.rows ?? '?'} позиций${st.outOfCorridor ? ` · вне коридора: ${st.outOfCorridor}` : ''}</div>
+          <button class="btn ${bt.status === 'preview' ? 'b-main' : 'b-nt'}" data-open-batch="${bt.id}">${bt.status === 'preview' ? 'Проверить и применить' : 'Открыть разбор'}</button>
+          ${bt.status === 'preview' ? '<div class="hint">Ничего не применится, пока вы не подтвердите.</div>' : ''}
+        </div>`
+      }).join('')
+      box.querySelectorAll('[data-open-batch]').forEach(el => el.addEventListener('click', () => showBatchPreview(Number(el.dataset.openBatch))))
+    }
+
+    function fillSupplierSelect() {
+      const sel = document.getElementById('pbSupplier')
+      const cur = sel.value
+      sel.innerHTML = '<option value="">Поставщик не указан (TTL 3 дня)</option>' +
+        (window._suppliers || []).filter(s => s.isActive).map(s => `<option value="${s.id}">${esc(s.name)} (TTL ${s.priceTtlDays} дн.)</option>`).join('')
+      sel.value = cur
+    }
+
+    document.getElementById('pbParse').addEventListener('click', async function () {
+      const err = document.getElementById('pbErr'); err.textContent = ''
+      this.disabled = true; this.textContent = 'Разбираем… (10–30 сек)'
       try {
-        const res = await fetch('/admin/api/suppliers' + (inactive ? '?includeInactive=1' : ''), { headers, cache: 'no-store' })
-        if (!res.ok) { box.innerHTML = '<div class="empty">Не удалось загрузить</div>'; return }
-        const list = await res.json()
-        if (!list.length) { box.innerHTML = '<div class="empty">Поставщиков пока нет —<br>добавьте первого формой выше.</div>'; return }
-        const isOwner = window.adminMe && window.adminMe.role === 'owner'
-        box.innerHTML = list.map(s => {
-          const days = s.lastPriceAt ? Math.floor((Date.now() - new Date(s.lastPriceAt)) / 86400000) : null
-          const last = days === null ? 'прайсов ещё не было' : (days === 0 ? 'прайс сегодня' : `последний прайс ${days} дн. назад`)
-          const chatBound = !String(s.chatId || '').startsWith('web:')
-          return `<div class="card" data-sid="${s.id}">
-            <h3>${esc(s.name)} <span class="chip ${s.isActive ? 'c-ok' : 'c-off'}">${s.isActive ? 'активен' : 'выключен'}</span></h3>
-            <div class="mt">Наценка ${s.markup}% · TTL ${s.priceTtlDays} дн. · ${last}</div>
-            <div class="mt">${chatBound ? 'Чат привязан' : 'Без чата'} · 📄 привязка к чату — из бота${s.notes ? ' · ' + esc(s.notes) : ''}</div>
-            <div class="sup-actions">
-              <button class="btn-ghost" data-edit="${s.id}">Изменить</button>
-              ${isOwner ? `<button class="btn-ghost${s.isActive ? ' danger' : ''}" data-toggle="${s.id}" data-active="${s.isActive ? '0' : '1'}">${s.isActive ? 'Деактивировать' : 'Включить'}</button>` : ''}
+        const r = await api('/price-batches', { method: 'POST', body: JSON.stringify({
+          source: 'paste',
+          text: document.getElementById('pbText').value,
+          supplierId: document.getElementById('pbSupplier').value || null,
+        }) })
+        if (!r.ok) { err.textContent = r.data && r.data.error === 'validation' ? r.data.fields.map(f => f.message).join(' · ') : (r.data && r.data.error || 'Не удалось разобрать'); return }
+        if (r.data.reused) err.textContent = 'Этот прайс уже разбирали — открываю существующий разбор.'
+        document.getElementById('pbText').value = ''
+        await showBatchPreview(r.data.batchId)
+        loadBatches(); loadUnmatched()
+      } catch { err.textContent = 'Нет связи с сервером' }
+      finally { this.disabled = false; this.textContent = 'Разобрать прайс' }
+    })
+
+    async function showBatchPreview(batchId) {
+      const box = document.getElementById('pbPreview')
+      box.innerHTML = '<div class="empty">Загрузка разбора…</div>'
+      box.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      const r = await api('/price-batches/' + batchId).catch(() => null)
+      if (!r || !r.ok) { box.innerHTML = '<div class="empty">Не удалось загрузить</div>'; return }
+      const { batch, rows, applyMode, canApply } = r.data
+      const st = batch.stats || {}
+      const isOwner = window.adminMe && window.adminMe.role === 'owner'
+      const applied = batch.status === 'applied'
+
+      const rowsHtml = rows.map(x => x.matched ? `
+        <div class="list-i"><div style="flex:1">
+          <div class="nm">${esc(x.productName)} <span class="mt">${esc(Object.entries(x.variantAttrs || {}).filter(([k]) => k !== 'fullName').map(([, v]) => v).join(' · '))}</span></div>
+          <div class="mt diff">закупка ${x.currentCost != null ? `<span class="old">${fmt(x.currentCost)}</span> → ` : '→ '}<span class="new">${fmt(x.supplierPrice)}</span> · сайт <span class="old">${fmt(x.currentPrice)}</span> → <span class="new">${fmt(x.proposedPrice)}</span>${x.deltaPct != null ? ` (${x.deltaPct > 0 ? '+' : ''}${x.deltaPct}%)` : ''} · авито —</div>
+        </div>${x.corridor === 'in' ? '<span class="chip c-ok">в коридоре</span>' : '<span class="chip c-warn">вне ±15%</span>'}</div>` : `
+        <div class="list-i"><div style="flex:1">
+          <div class="nm mono" style="color:var(--warn)">«${esc(x.rawLine)}»</div>
+          <div class="mt">не узнал — подскажите в блоке ниже</div>
+        </div><span class="chip c-bad">нужна помощь</span></div>`).join('')
+
+      const actions = applied
+        ? `${st.writebackFailed ? `<div class="warnbox">Запись в таблицу не проехала — цены этих позиций заморожены от синка до повтора.</div>
+             <button class="btn b-gh" onclick="pbRetryWb(${batch.id})">Повторить запись в таблицу</button>` : ''}
+           ${isOwner ? `<button class="btn b-dg" onclick="pbRollback(${batch.id})">Откатить применение</button>
+           <div class="hint">Цены и закупки вернутся к значениям до применения. Строки, которые кто-то менял после, — не тронем.</div>` : ''}`
+        : batch.status === 'preview'
+        ? `<button class="btn b-nt" onclick="pbApply(${batch.id}, true)">Прогнать проверку без записи</button>
+           <div class="hint">Покажет, что именно изменится. В цены и таблицу не пишет.</div>
+           ${canApply ? `${isOwner && st.outOfCorridor ? `<label style="display:flex;gap:6px;align-items:center;margin-top:10px;font-size:12px"><input type="checkbox" id="pbIncludeOut"> применить и вне коридора ±15% (владелец)</label>` : ''}
+             <button class="btn b-main" onclick="pbApply(${batch.id}, false)">Применить цены</button>
+             <div class="hint">Обновятся цены и закупки, изменения уедут в таблицу. Старые цены сохранятся — можно откатить.</div>`
+           : `<div class="warnbox">Применение сейчас выключено (режим «${esc(applyMode)}») — доступна только проверка без записи.</div>`}`
+        : `<div class="mt">Статус: ${esc(batch.status)}</div>`
+
+      box.innerHTML = `<div class="card">
+        <h3>Разбор #${batch.id} <span class="chip ${st.unmatchedRows ? 'c-warn' : 'c-ok'} right">узнано ${st.matchedRows ?? 0} из ${st.rows ?? 0}</span></h3>
+        <div class="mt">Пар цена×вариант: ${st.matchedVariants ?? 0} · вне коридора: ${st.outOfCorridor ?? 0} · срок жизни цен: ${st.ttlDays ?? '?'} дн. · авито: правила канала не заведены</div>
+        ${rowsHtml}
+        <div id="pbApplyResult"></div>
+        ${actions}
+      </div>`
+    }
+
+    async function pbApply(batchId, dryRun) {
+      const out = document.getElementById('pbApplyResult')
+      out.innerHTML = '<div class="mt">' + (dryRun ? 'Считаем проверку…' : 'Применяем…') + '</div>'
+      try {
+        const r = await api(`/price-batches/${batchId}/apply`, { method: 'POST', body: JSON.stringify({ dryRun, includeOutOfCorridor: !!document.getElementById('pbIncludeOut')?.checked }) })
+        if (!r.ok) { out.innerHTML = `<div class="warnbox">${esc(r.data && r.data.error || 'Не получилось')}</div>`; return }
+        const d = r.data
+        if (d.alreadyApplied) { out.innerHTML = '<div class="okbox">Батч уже применён.</div>'; return }
+        out.innerHTML = `<div class="${dryRun ? 'okbox' : 'okbox'}"><b>${dryRun ? 'Проверка (ничего не записано)' : 'Применено'}:</b> применяется ${d.applied} · пропущено вне коридора ${d.skippedOutOfCorridor} · исчезло из каталога ${d.skippedGone}${d.writebackFailed ? ' · <span style="color:var(--bad)">запись в таблицу НЕ проехала</span>' : ''}${d.writebackMissing && d.writebackMissing.length ? ' · нет строк в листе: ' + d.writebackMissing.length : ''}</div>`
+        if (!dryRun) { showBatchPreview(batchId); loadBatches() }
+      } catch { out.innerHTML = '<div class="warnbox">Нет связи с сервером</div>' }
+    }
+
+    async function pbRollback(batchId) {
+      if (!confirm('Откатить применение? Цены и закупки вернутся к значениям до батча (конфликтные строки не трогаем).')) return
+      const r = await api(`/price-batches/${batchId}/rollback`, { method: 'POST', body: '{}' }).catch(() => null)
+      alert(r && r.ok ? `Откачено строк: ${r.data.applied}${r.data.conflicts && r.data.conflicts.length ? `, пропущено конфликтных: ${r.data.conflicts.length}` : ''}` : (r && r.data && r.data.error || 'Не получилось'))
+      showBatchPreview(batchId); loadBatches()
+    }
+
+    async function pbRetryWb(batchId) {
+      const r = await api(`/price-batches/${batchId}/retry-writeback`, { method: 'POST', body: '{}' }).catch(() => null)
+      alert(r && r.ok ? 'Запись в таблицу проехала' : (r && r.data && r.data.error || 'Снова не удалось'))
+      showBatchPreview(batchId)
+    }
+
+    // ── Цены: очередь «не узнал» + связывание ────────────────────────────────
+    let _productsCache = null
+    async function productsForSearch() {
+      if (_productsCache) return _productsCache
+      const res = await fetch('/api/products', { cache: 'no-store' })
+      const prods = await res.json()
+      _productsCache = prods.flatMap(p => (p.variants || []).map(v => ({
+        variantId: v.id,
+        label: p.name + ' · ' + Object.entries(v.attributes || {}).filter(([k]) => k !== 'fullName').map(([, x]) => x).join(' · '),
+        search: (p.name + ' ' + Object.values(v.attributes || {}).join(' ')).toLowerCase(),
+      })))
+      return _productsCache
+    }
+
+    async function loadUnmatched() {
+      const r = await api('/unmatched?limit=50').catch(() => null)
+      const box = document.getElementById('unmatchedBox')
+      if (!r || !r.ok) { box.innerHTML = '<div class="empty">Не удалось загрузить</div>'; return }
+      attn.unmatched = r.data.length
+      renderAttention()
+      if (!r.data.length) {
+        box.innerHTML = '<div class="empty">Все позиции из прайсов узнаны 🎉<br>Когда система встретит незнакомое название —<br>оно появится здесь.</div>'
+        return
+      }
+      box.innerHTML = `<div class="card">
+        <h3>${r.data.length} ${plural(r.data.length, 'позиция', 'позиции', 'позиций')} <span class="chip c-bad right">нужна помощь</span></h3>
+        ${r.data.map(u => `
+          <div class="list-i" data-um="${u.supplierPriceId}"><div style="flex:1">
+            <div class="nm mono">«${esc(u.rawLine)}»</div>
+            <div class="mt">${esc(u.supplierName || 'без поставщика')} · ${fmt(u.price)} ₽ · ${esc(u.model)}</div>
+            <div class="um-panel" style="display:none">
+              <input class="inp" placeholder="Начните вводить название товара…" data-um-search="${u.supplierPriceId}">
+              <div data-um-results="${u.supplierPriceId}"></div>
             </div>
-          </div>`
-        }).join('')
-        window._suppliers = list
-        fillSupplierSelect()
-        box.querySelectorAll('[data-edit]').forEach(b => b.addEventListener('click', () => editSupplier(Number(b.dataset.edit))))
-        box.querySelectorAll('[data-toggle]').forEach(b => b.addEventListener('click', () => toggleSupplier(Number(b.dataset.toggle), b.dataset.active === '1')))
-      } catch { box.innerHTML = '<div class="empty">Нет связи с сервером</div>' }
+          </div>
+          <div style="display:flex;flex-direction:column;gap:6px">
+            <button class="btn b-gh sm" data-um-link="${u.supplierPriceId}">Связать</button>
+            <button class="btn b-dg sm" data-um-ignore="${u.supplierPriceId}">Не наш</button>
+          </div></div>`).join('')}
+        <div class="hint">Свяжете один раз — дальше система узнает это название сама, подсказывать больше не придётся.</div>
+      </div>`
+      box.querySelectorAll('[data-um-link]').forEach(btn => btn.addEventListener('click', async () => {
+        const id = btn.dataset.umLink
+        const panel = box.querySelector(`[data-um="${id}"] .um-panel`)
+        panel.style.display = panel.style.display === 'none' ? '' : 'none'
+        const input = box.querySelector(`[data-um-search="${id}"]`)
+        const results = box.querySelector(`[data-um-results="${id}"]`)
+        const all = await productsForSearch()
+        input.addEventListener('input', () => {
+          const q = input.value.trim().toLowerCase()
+          if (q.length < 2) { results.innerHTML = ''; return }
+          const found = all.filter(x => x.search.includes(q)).slice(0, 6)
+          results.innerHTML = found.map(x => `<div class="list-i" style="cursor:pointer" data-pick="${x.variantId}"><div class="nm">${esc(x.label)}</div></div>`).join('') || '<div class="mt">Ничего не нашлось</div>'
+          results.querySelectorAll('[data-pick]').forEach(el => el.addEventListener('click', async () => {
+            const r2 = await api('/aliases', { method: 'POST', body: JSON.stringify({ supplierPriceId: Number(id), variantId: Number(el.dataset.pick) }) })
+            alert(r2.ok ? `Связано. Система запомнила название${r2.data.rematched > 1 ? `, довязано строк: ${r2.data.rematched}` : ''}.` : (r2.data && r2.data.error || 'Не получилось'))
+            loadUnmatched(); loadBatches()
+          }))
+        })
+        input.focus()
+      }))
+      box.querySelectorAll('[data-um-ignore]').forEach(btn => btn.addEventListener('click', async () => {
+        if (!confirm('Пометить «это не наш товар»? Такие строки система будет пропускать во всех будущих прайсах.')) return
+        const r2 = await api('/aliases', { method: 'POST', body: JSON.stringify({ supplierPriceId: Number(btn.dataset.umIgnore), ignore: true }) })
+        alert(r2.ok ? 'Запомнила: не наш товар.' : (r2.data && r2.data.error || 'Не получилось'))
+        loadUnmatched()
+      }))
+    }
+
+    // ── Цены: правила наценки ─────────────────────────────────────────────────
+    const CH_LABEL = { site: 'Сайт', avito: 'Авито' }
+    async function loadMarkupRules() {
+      const r = await api('/markup-rules').catch(() => null)
+      const el = document.getElementById('mrList')
+      if (!r || !r.ok) { el.textContent = 'Не удалось загрузить'; return }
+      if (!r.data.length) { el.innerHTML = '<div class="empty">Правил ещё нет — добавьте первое.<br>Пока правил нет, цены канала не пересчитываются.</div>'; return }
+      const isOwner = window.adminMe && window.adminMe.role === 'owner'
+      const byCh = {}
+      r.data.forEach(x => { (byCh[x.channel] = byCh[x.channel] || []).push(x) })
+      el.innerHTML = Object.entries(byCh).map(([ch, rules]) => `
+        <div class="mt" style="margin-top:8px"><b style="color:#ccc">${CH_LABEL[ch] || ch}</b></div>
+        ${rules.map(x => `<div class="list-i"><div style="flex:1">
+          <div class="nm mono">${fmt(x.minCost)} — ${x.maxCost === null ? '∞' : fmt(x.maxCost)} ₽ <span class="new">+${x.mode === 'percent' ? x.value + '%' : fmt(x.value) + ' ₽'}</span></div>
+        </div>
+        ${x.enabled ? '<span class="chip c-ok">включено</span>' : '<span class="chip c-off">выключено</span>'}
+        ${isOwner ? `<button class="btn b-nt sm" data-mr-toggle="${x.id}" data-mr-en="${x.enabled ? '0' : '1'}">${x.enabled ? 'Выключить' : 'Включить'}</button>` : ''}
+        </div>`).join('')}`).join('')
+      el.querySelectorAll('[data-mr-toggle]').forEach(btn => btn.addEventListener('click', async () => {
+        const r2 = await api(`/markup-rules/${btn.dataset.mrToggle}/${btn.dataset.mrEn === '1' ? 'enable' : 'disable'}`, { method: 'POST', body: '{}' })
+        if (!r2.ok) alert(r2.data && r2.data.error || 'Не получилось')
+        loadMarkupRules()
+      }))
+    }
+
+    document.getElementById('mrAddBtn').addEventListener('click', () => {
+      const f = document.getElementById('mrForm')
+      f.style.display = f.style.display === 'none' ? '' : 'none'
+    })
+    document.getElementById('mrCancel').addEventListener('click', () => { document.getElementById('mrForm').style.display = 'none' })
+    document.getElementById('mrSave').addEventListener('click', async () => {
+      const err = document.getElementById('mrErr'); err.textContent = ''
+      const body = {
+        minCost: Number(document.getElementById('mrMin').value || 0),
+        maxCost: document.getElementById('mrMax').value.trim() === '' ? null : Number(document.getElementById('mrMax').value),
+        mode: document.getElementById('mrMode').value,
+        value: Number(document.getElementById('mrValue').value.replace(',', '.')),
+        channel: document.getElementById('mrChannel').value,
+      }
+      const r = await api('/markup-rules', { method: 'POST', body: JSON.stringify(body) }).catch(() => null)
+      if (!r) { err.textContent = 'Нет связи с сервером'; return }
+      if (!r.ok) { err.textContent = r.data && r.data.error === 'validation' ? r.data.fields.map(f => f.message).join(' · ') : (r.data && r.data.error || 'Не получилось'); return }
+      if (r.data.integrityWarning) err.textContent = 'Сохранено. До рабочего набора не хватает: ' + r.data.integrityWarning
+      else document.getElementById('mrForm').style.display = 'none'
+      loadMarkupRules()
+    })
+
+    // ── Цены: поставщики ─────────────────────────────────────────────────────
+    let supEditId = null
+    async function loadSuppliers() {
+      const inactive = document.getElementById('supShowInactive').checked
+      const r = await api('/suppliers' + (inactive ? '?includeInactive=1' : '')).catch(() => null)
+      const el = document.getElementById('supList')
+      if (!r || !r.ok) { el.innerHTML = '<div class="empty">Не удалось загрузить</div>'; return }
+      window._suppliers = r.data
+      fillSupplierSelect()
+      if (!r.data.length) { el.innerHTML = '<div class="empty">Поставщиков пока нет.<br>Добавьте первого — и пересылайте его прайсы боту.</div>'; return }
+      const isOwner = window.adminMe && window.adminMe.role === 'owner'
+      el.innerHTML = r.data.map(s => {
+        const days = s.lastPriceAt ? Math.floor((Date.now() - new Date(s.lastPriceAt)) / 86400000) : null
+        const silent = days !== null && days >= 5
+        const chip = !s.isActive ? '<span class="chip c-off">выключен</span>' : silent ? '<span class="chip c-off">молчит</span>' : '<span class="chip c-ok">активен</span>'
+        const last = days === null ? 'прайсов ещё не было' : days === 0 ? 'прайс сегодня' : `прайс ${days} дн. назад`
+        return `<div class="list-i"><div style="flex:1">
+          <div class="nm">${esc(s.name)}</div>
+          <div class="mt">наценка ${s.markup}% · цены живут ${s.priceTtlDays} дн. · ${last}${String(s.chatId || '').startsWith('web:') ? ' · без чата' : ' · чат привязан'}</div>
+        </div>${chip}
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <button class="btn b-nt sm" data-sup-edit="${s.id}">Изменить</button>
+          ${isOwner ? `<button class="btn ${s.isActive ? 'b-dg' : 'b-nt'} sm" data-sup-toggle="${s.id}" data-sup-act="${s.isActive ? '0' : '1'}">${s.isActive ? 'Выключить' : 'Включить'}</button>` : ''}
+        </div></div>`
+      }).join('')
+      el.querySelectorAll('[data-sup-edit]').forEach(b => b.addEventListener('click', () => editSupplier(Number(b.dataset.supEdit))))
+      el.querySelectorAll('[data-sup-toggle]').forEach(b => b.addEventListener('click', () => toggleSupplier(Number(b.dataset.supToggle), b.dataset.supAct === '1')))
     }
     document.getElementById('supShowInactive').addEventListener('change', loadSuppliers)
-
+    document.getElementById('supAddBtn').addEventListener('click', () => {
+      resetSupForm()
+      document.getElementById('supForm').style.display = ''
+      document.getElementById('supName').focus()
+    })
     function editSupplier(id) {
       const s = (window._suppliers || []).find(x => x.id === id)
       if (!s) return
       supEditId = id
-      document.getElementById('supFormTitle').textContent = 'Изменить: ' + s.name
+      document.getElementById('supForm').style.display = ''
       document.getElementById('supName').value = s.name
       document.getElementById('supMarkup').value = s.markup
       document.getElementById('supTtl').value = s.priceTtlDays
       document.getElementById('supNotes').value = s.notes || ''
-      document.getElementById('supSave').textContent = 'Сохранить'
-      document.getElementById('supCancel').style.display = ''
-      document.querySelector('main').scrollTo({ top: 0, behavior: 'smooth' })
     }
-
     function resetSupForm() {
       supEditId = null
-      document.getElementById('supFormTitle').textContent = 'Новый поставщик'
       ;['supName', 'supMarkup', 'supTtl', 'supNotes'].forEach(id => { document.getElementById(id).value = '' })
-      document.getElementById('supSave').textContent = 'Добавить'
-      document.getElementById('supCancel').style.display = 'none'
       document.getElementById('supErr').textContent = ''
     }
-    document.getElementById('supCancel').addEventListener('click', resetSupForm)
-
+    document.getElementById('supCancel').addEventListener('click', () => { document.getElementById('supForm').style.display = 'none'; resetSupForm() })
     document.getElementById('supSave').addEventListener('click', async () => {
       const err = document.getElementById('supErr'); err.textContent = ''
       const body = { name: document.getElementById('supName').value }
@@ -272,205 +618,18 @@
       if (markup !== '') body.markup = Number(markup.replace(',', '.'))
       if (ttl !== '') body.priceTtlDays = Number(ttl)
       if (notes !== '' || supEditId) body.notes = notes
-      try {
-        const res = await fetch(supEditId ? '/admin/api/suppliers/' + supEditId : '/admin/api/suppliers', {
-          method: supEditId ? 'PUT' : 'POST',
-          headers: Object.assign({ 'Content-Type': 'application/json' }, headers),
-          body: JSON.stringify(body),
-        })
-        if (res.ok) { resetSupForm(); loadSuppliers(); return }
-        const e = await res.json().catch(() => ({}))
-        err.textContent = e.error === 'validation'
-          ? (e.fields || []).map(f => f.message).join(' · ')
-          : (e.error || 'Не удалось сохранить')
-      } catch { err.textContent = 'Нет связи с сервером' }
+      const r = await api(supEditId ? '/suppliers/' + supEditId : '/suppliers', { method: supEditId ? 'PUT' : 'POST', body: JSON.stringify(body) }).catch(() => null)
+      if (!r) { err.textContent = 'Нет связи с сервером'; return }
+      if (!r.ok) { err.textContent = r.data && r.data.error === 'validation' ? r.data.fields.map(f => f.message).join(' · ') : (r.data && r.data.error || 'Не удалось сохранить'); return }
+      document.getElementById('supForm').style.display = 'none'
+      resetSupForm(); loadSuppliers()
     })
-
-    // ── Разбор прайсов (PR-6, read-only) ─────────────────────────────────────
-    function fillSupplierSelect() {
-      const sel = document.getElementById('pbSupplier')
-      const cur = sel.value
-      sel.innerHTML = '<option value="">Поставщик не указан (TTL 3 дня)</option>' +
-        (window._suppliers || []).filter(s => s.isActive).map(s => `<option value="${s.id}">${esc(s.name)} (TTL ${s.priceTtlDays} дн.)</option>`).join('')
-      sel.value = cur
-    }
-
-    async function loadBatches() {
-      try {
-        const res = await fetch('/admin/api/price-batches?limit=8', { headers, cache: 'no-store' })
-        if (!res.ok) return
-        const list = await res.json()
-        document.getElementById('pbList').innerHTML = list.length ? list.map(b => {
-          const st = b.stats || {}
-          const dt = new Date(b.createdAt).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
-          return `<div style="padding:7px 0;border-bottom:1px solid #232326;cursor:pointer" data-batch="${b.id}">
-            #${b.id} · ${dt} · ${esc(b.supplier ? b.supplier.name : 'без поставщика')} · ${b.status} ·
-            узнано ${st.matchedRows ?? '?'}/${st.rows ?? '?'}${st.outOfCorridor ? ` · ⚠️ вне коридора ${st.outOfCorridor}` : ''}</div>`
-        }).join('') : 'Разборов ещё не было.'
-        document.querySelectorAll('#pbList [data-batch]').forEach(el =>
-          el.addEventListener('click', () => showBatchPreview(Number(el.dataset.batch))))
-      } catch { /* список — не критично */ }
-    }
-
-    document.getElementById('pbParse').addEventListener('click', async function () {
-      const err = document.getElementById('pbErr'); err.textContent = ''
-      this.disabled = true; this.textContent = 'Разбираем… (10–30 сек)'
-      try {
-        const res = await fetch('/admin/api/price-batches', {
-          method: 'POST',
-          headers: Object.assign({ 'Content-Type': 'application/json' }, headers),
-          body: JSON.stringify({
-            source: 'paste',
-            text: document.getElementById('pbText').value,
-            supplierId: document.getElementById('pbSupplier').value || null,
-          }),
-        })
-        const data = await res.json().catch(() => ({}))
-        if (!res.ok) {
-          err.textContent = data.error === 'validation' ? (data.fields || []).map(f => f.message).join(' · ') : (data.error || 'Не удалось разобрать')
-          return
-        }
-        if (data.reused) err.textContent = 'Этот прайс уже разбирали — показываю существующий разбор.'
-        await showBatchPreview(data.batchId)
-        loadBatches()
-      } catch { err.textContent = 'Нет связи с сервером' }
-      finally { this.disabled = false; this.textContent = 'Разобрать' }
-    })
-
-    async function showBatchPreview(batchId) {
-      const box = document.getElementById('pbPreview')
-      box.innerHTML = '<div class="empty">Загрузка предпросмотра…</div>'
-      try {
-        const res = await fetch('/admin/api/price-batches/' + batchId, { headers, cache: 'no-store' })
-        if (!res.ok) { box.innerHTML = '<div class="empty">Не удалось загрузить</div>'; return }
-        const { batch, rows, applyMode, canApply } = await res.json()
-        const st = batch.stats || {}
-        const isOwner = window.adminMe && window.adminMe.role === 'owner'
-        const applied = batch.status === 'applied'
-        const actions = applied
-          ? `${st.writebackFailed ? `<div class="mt" style="color:var(--bad)">⚠️ Запись в таблицу не проехала — цены заморожены от синка до повтора.</div>
-               <button class="btn-ghost" onclick="pbRetryWb(${batch.id})">Повторить запись в таблицу</button>` : ''}
-             ${isOwner ? `<button class="btn-ghost danger" onclick="pbRollback(${batch.id})">Откатить батч</button>` : ''}`
-          : batch.status === 'preview'
-          ? `<button class="btn-ghost" onclick="pbApply(${batch.id}, true)">Dry-run: показать, что применится</button>
-             ${canApply ? `${isOwner && st.outOfCorridor ? `<label class="mt" style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="pbIncludeOut"> применить и вне коридора ±15% (owner)</label>` : ''}
-               <button class="btn-main" onclick="pbApply(${batch.id}, false)">Применить цены</button>`
-             : `<div class="mt">Применение: режим «${applyMode}» — доступен только dry-run.</div>`}`
-          : `<div class="mt">Статус: ${esc(batch.status)}</div>`
-        const rub = n => n == null ? '—' : Number(n).toLocaleString('ru-RU') + ' ₽'
-        box.innerHTML = `<div class="card">
-          <h3>Разбор #${batch.id} <span class="chip ${st.unmatchedRows ? 'c-warn' : 'c-ok'}">узнано ${st.matchedRows}/${st.rows}</span></h3>
-          <div class="mt">Пар цена×вариант: ${st.matchedVariants} · не узнано: ${st.unmatchedRows} · игнор: ${st.ignoredRows} · вне коридора ±15%: ${st.outOfCorridor} · TTL ${st.ttlDays} дн.</div>
-          ${rows.map(r => r.matched ? `
-            <div style="padding:8px 0;border-bottom:1px solid #232326">
-              <div style="font-size:13px">${esc(r.productName)} <span class="mt">${esc(Object.entries(r.variantAttrs || {}).filter(([k]) => k !== 'fullName').map(([, v]) => v).join(' · '))}</span></div>
-              <div class="mt">закупка → ${rub(r.supplierPrice)} · сайт ${rub(r.currentPrice)} → <b style="color:var(--ac)">${rub(r.proposedPrice)}</b>
-                ${r.deltaPct != null ? `(${r.deltaPct > 0 ? '+' : ''}${r.deltaPct}%)` : ''}
-                <span class="chip ${r.corridor === 'in' ? 'c-ok' : 'c-warn'}" style="margin-left:6px">${r.corridor === 'in' ? 'в коридоре' : 'вне ±15%'}</span></div>
-            </div>` : `
-            <div style="padding:8px 0;border-bottom:1px solid #232326">
-              <div class="mono" style="font-size:12px;color:var(--warn)">не узнал: ${esc(r.rawLine)}</div>
-              <div class="mt">связать с товаром можно будет в PR-8 (очередь «не узнал»)</div>
-            </div>`).join('')}
-          <div id="pbApplyResult"></div>
-          ${actions}
-        </div>`
-      } catch { box.innerHTML = '<div class="empty">Нет связи с сервером</div>' }
-    }
-
-    async function pbApply(batchId, dryRun) {
-      const out = document.getElementById('pbApplyResult')
-      out.innerHTML = '<div class="mt">' + (dryRun ? 'Считаем dry-run…' : 'Применяем…') + '</div>'
-      try {
-        const res = await fetch(`/admin/api/price-batches/${batchId}/apply`, {
-          method: 'POST',
-          headers: Object.assign({ 'Content-Type': 'application/json' }, headers),
-          body: JSON.stringify({ dryRun, includeOutOfCorridor: !!document.getElementById('pbIncludeOut')?.checked }),
-        })
-        const d = await res.json()
-        if (!res.ok) { out.innerHTML = `<div class="mt" style="color:var(--bad)">${esc(d.error || 'Не получилось')}</div>`; return }
-        if (d.alreadyApplied) { out.innerHTML = '<div class="mt">Батч уже применён.</div>'; return }
-        const head = dryRun ? 'DRY-RUN (ничего не записано)' : 'ПРИМЕНЕНО'
-        out.innerHTML = `<div class="mt"><b>${head}:</b> применяется ${d.applied} · вне коридора (skip) ${d.skippedOutOfCorridor} · исчезло ${d.skippedGone}${d.writebackFailed ? ' · <span style="color:var(--bad)">writeback НЕ проехал</span>' : ''}${d.writebackMissing && d.writebackMissing.length ? ' · нет в листе: ' + d.writebackMissing.length : ''}</div>`
-        if (!dryRun) { showBatchPreview(batchId); loadBatches() }
-      } catch { out.innerHTML = '<div class="mt" style="color:var(--bad)">Нет связи с сервером</div>' }
-    }
-
-    async function pbRollback(batchId) {
-      if (!confirm('Откатить батч? Цены и закупки вернутся к значениям до применения (конфликтные строки не трогаем).')) return
-      try {
-        const res = await fetch(`/admin/api/price-batches/${batchId}/rollback`, { method: 'POST', headers })
-        const d = await res.json()
-        alert(res.ok ? `Откачено строк: ${d.applied}${d.conflicts && d.conflicts.length ? `, конфликтов (пропущено): ${d.conflicts.length}` : ''}` : (d.error || 'Не получилось'))
-        showBatchPreview(batchId); loadBatches()
-      } catch { alert('Нет связи с сервером') }
-    }
-
-    async function pbRetryWb(batchId) {
-      try {
-        const res = await fetch(`/admin/api/price-batches/${batchId}/retry-writeback`, { method: 'POST', headers })
-        const d = await res.json()
-        alert(res.ok ? 'Запись в таблицу проехала' + (d.writebackMissing && d.writebackMissing.length ? `, не найдено строк: ${d.writebackMissing.length}` : '') : (d.error || 'Снова не удалось'))
-        showBatchPreview(batchId)
-      } catch { alert('Нет связи с сервером') }
-    }
-
     async function toggleSupplier(id, activate) {
       const s = (window._suppliers || []).find(x => x.id === id)
-      if (!activate && !confirm(`Деактивировать поставщика «${s ? s.name : id}»? Он уйдёт из выбора цен, история сохранится.`)) return
-      try {
-        const res = await fetch(`/admin/api/suppliers/${id}/${activate ? 'activate' : 'deactivate'}`, { method: 'POST', headers })
-        if (!res.ok) { const e = await res.json().catch(() => ({})); alert(e.error || 'Не получилось'); return }
-        loadSuppliers()
-      } catch { alert('Нет связи с сервером') }
-    }
-
-    // Ручной запуск синка: 202 сразу, прогон идёт в фоне — обновляем карточку с задержкой
-    document.getElementById('syncBtn').addEventListener('click', async function () {
-      this.disabled = true; this.textContent = 'Запущено…'
-      try { await fetch('/admin/api/sync', { method: 'POST', headers }) } catch {}
-      setTimeout(() => { loadDashboard(); loadSyncRuns(); this.disabled = false; this.textContent = 'Обновить из таблицы' }, 15000)
-    })
-
-    const TRIGGER_LABEL = { cron: 'авто', manual: 'вручную', deploy: 'после деплоя' }
-    async function loadSyncRuns() {
-      try {
-        const res = await fetch('/admin/api/sync-runs?limit=10', { headers, cache: 'no-store' })
-        if (!res.ok) return
-        const runs = await res.json()
-        const el = document.getElementById('syncRuns')
-        if (!runs.length) { el.textContent = 'Прогонов ещё не было.'; return }
-        el.innerHTML = runs.map(r => {
-          const dt = new Date(r.startedAt).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
-          const status = r.ok === null ? '⏳' : (r.ok ? '✅' : '⛔')
-          const errs = Array.isArray(r.errors) && r.errors.length ? ` · ⚠️ ${r.errors.length}` : ''
-          const stats = r.rowsRead != null ? ` · строк ${r.rowsRead}, обновлено ${r.updated ?? 0}` : ''
-          return `<div style="padding:7px 0;border-bottom:1px solid #232326">${status} ${dt} (${TRIGGER_LABEL[r.trigger] || r.trigger})${stats}${errs}</div>`
-        }).join('')
-      } catch { /* оставляем как есть */ }
-    }
-
-    async function loadDashboard() {
-      try {
-        const res = await fetch('/admin/api/dashboard', { headers, cache: 'no-store' })
-        if (!res.ok) return
-        const d = await res.json()
-        // revenue = null для manager (видит только owner) → «—», не «NaN ₽»
-        const money = n => n == null ? '—' : fmt(n) + ' ₽'
-        document.getElementById('kOrdersToday').textContent = d.orders.today.count
-        document.getElementById('kRevenueToday').textContent = money(d.orders.today.revenue)
-        document.getElementById('kOrdersYesterday').textContent = d.orders.yesterday.count
-        document.getElementById('kRevenueYesterday').textContent = money(d.orders.yesterday.revenue)
-        const chip = document.getElementById('syncChip')
-        const info = document.getElementById('syncInfo')
-        if (d.lastSync) {
-          const dt = new Date(d.lastSync.startedAt)
-          const errs = Array.isArray(d.lastSync.errors) ? d.lastSync.errors.length : 0
-          chip.textContent = d.lastSync.ok === false ? 'ошибка' : (errs ? errs + ' warn' : 'ок')
-          chip.className = 'chip ' + (d.lastSync.ok === false ? 'c-bad' : (errs ? 'c-warn' : 'c-ok'))
-          info.textContent = `Последний прогон: ${dt.toLocaleString('ru-RU')} (${d.lastSync.trigger})`
-        }
-      } catch { /* KPI остаются прочерками */ }
+      if (!activate && !confirm(`Выключить поставщика «${s ? s.name : id}»? Он уйдёт из выбора цен, вся история сохранится.`)) return
+      const r = await api(`/suppliers/${id}/${activate ? 'activate' : 'deactivate'}`, { method: 'POST', body: '{}' }).catch(() => null)
+      if (!r || !r.ok) { alert(r && r.data && r.data.error || 'Не получилось'); return }
+      loadSuppliers()
     }
 
     boot()
