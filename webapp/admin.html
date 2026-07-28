@@ -142,6 +142,7 @@
         <div class="row" style="margin-top:10px"><span class="lbl">Применять автоматически</span><span class="spacer chip c-ok">если цена ±15%</span></div>
         <button class="btn b-nt" id="mrAddBtn">Добавить правило наценки</button>
         <div id="mrForm" style="display:none">
+          <div class="cap" id="mrFormTitle" style="margin:10px 0 6px">НОВОЕ ПРАВИЛО</div>
           <div class="row" style="gap:8px"><input class="inp" id="mrMin" placeholder="От, ₽" inputmode="numeric"><input class="inp" id="mrMax" placeholder="До, ₽ (пусто = ∞)" inputmode="numeric"></div>
           <div class="row" style="gap:8px">
             <select class="inp" id="mrMode"><option value="fixed">+ рублей</option><option value="percent">+ процентов</option></select>
@@ -151,6 +152,7 @@
           <button class="btn b-main" id="mrSave">Сохранить правило</button>
           <button class="btn b-nt" id="mrCancel">Отмена</button>
           <div class="mt" id="mrErr" style="color:var(--bad)"></div>
+          <div class="hint">Наценка применится при следующем пересчёте цен — уже выставленные цены не меняются задним числом.</div>
         </div>
         <div class="hint">Если цена из прайса меняет розницу сильнее коридора ±15% — система не применит её сама и спросит владельца.</div>
       </div>
@@ -298,7 +300,9 @@
       if (!r || !r.ok) { box.innerHTML = '<div class="empty">Не удалось загрузить</div>'; return }
       const missing = r.data.missing || []
       const inherited = r.data.inherited || []
-      attn.simUnknown = missing.reduce((s, x) => s + x.count, 0)
+      // На «Сегодня» выносим ТОЛЬКО то, что видит покупатель: скрытые строки
+      // (андроид-дубли без правила) — это управление словарём, а не тревога.
+      attn.simUnknown = r.data.visibleMissing || 0
       attn.simCountries = missing.length
       renderAttention()
 
@@ -317,7 +321,7 @@
         <h3>${missing.length} ${plural(missing.length, 'связка без правила', 'связки без правила', 'связок без правила')} «бренд + страна» <span class="chip c-bad right">нужна помощь</span></h3>
         ${missing.map(x => `<div class="list-i"><div style="flex:1">
           <div class="nm">${esc(x.country)}</div>
-          <div class="mt">${x.brand ? esc(x.brand) + ' · ' : ''}${x.count} ${plural(x.count, 'товар', 'товара', 'товаров')}${x.generations.length ? ' · поколения ' + x.generations.sort((a,b)=>a-b).join(', ') : ''} · напр. ${esc(String(x.example).slice(0, 40))}</div>
+          <div class="mt">${x.brand ? esc(x.brand) + ' · ' : ''}${x.count} ${plural(x.count, 'товар', 'товара', 'товаров')}${x.visible ? `, из них ${x.visible} на витрине` : ', на витрине нет'}${x.generations.length ? ' · поколения ' + x.generations.sort((a,b)=>a-b).join(', ') : ''} · напр. ${esc(String(x.example).slice(0, 40))}</div>
         </div>
         <button class="btn b-gh sm" data-sim-learn="${esc(x.country)}" data-sim-brand="${esc(x.brand || '')}">Задать SIM</button></div>`).join('')}
         <div class="hint">Скажете один раз — дальше система проставит сама во всех новых разборах.</div>
@@ -485,7 +489,7 @@
       const items = []
       if (attn.batches) items.push(`<div class="list-i"><div><div class="nm">${attn.batches} ${plural(attn.batches, 'новый прайс не применён', 'новых прайса не применены', 'новых прайсов не применены')}</div><div class="mt">${esc(attn.batchFrom)}</div></div></div>`)
       if (attn.unmatched) items.push(`<div class="list-i"><div><div class="nm">${attn.unmatched} ${plural(attn.unmatched, 'позицию система не узнала', 'позиции система не узнала', 'позиций система не узнала')}</div><div class="mt">нужно подсказать, что это за товар</div></div></div>`)
-      if (attn.simUnknown) items.push(`<div class="list-i" style="cursor:pointer" onclick="go('s-goods')"><div><div class="nm">SIM не определён у ${attn.simUnknown} ${plural(attn.simUnknown, 'товара', 'товаров', 'товаров')}</div><div class="mt">${attn.simCountries} ${plural(attn.simCountries, 'связка', 'связки', 'связок')} «бренд + страна» без правила — вкладка «Товары»</div></div></div>`)
+      if (attn.simUnknown) items.push(`<div class="list-i" style="cursor:pointer" onclick="go('s-goods')"><div><div class="nm">У ${attn.simUnknown} ${plural(attn.simUnknown, 'товара', 'товаров', 'товаров')} на витрине не задан тип SIM</div><div class="mt">заведите правило — вкладка «Товары»</div></div></div>`)
       if (attn.syncErrors) items.push(`<div class="list-i"><div><div class="nm">${attn.syncErrors} ${plural(attn.syncErrors, 'предупреждение синка', 'предупреждения синка', 'предупреждений синка')}</div><div class="mt">журнал — во вкладке «Ещё»</div></div></div>`)
       const card = document.getElementById('attentionCard')
       if (!items.length) { card.style.display = 'none'; return }
@@ -766,6 +770,7 @@
             <div class="nm">${ruleRange(x)} <span class="new">→ наценка ${ruleMarkup(x)}</span></div>
           </div>
           ${x.enabled ? '' : '<span class="chip c-off">выключено</span>'}
+          <button class="btn b-gh sm" data-mr-edit="${x.id}">Изменить</button>
           ${isOwner ? `<button class="btn b-nt sm" data-mr-toggle="${x.id}" data-mr-en="${x.enabled ? '0' : '1'}">${x.enabled ? 'Выключить' : 'Включить'}</button>` : ''}
           </div>`).join('')
 
@@ -784,32 +789,73 @@
         loadMarkupRules()
       }))
       el.querySelectorAll('[data-mr-add-ch]').forEach(btn => btn.addEventListener('click', () => {
+        mrFormReset()
         document.getElementById('mrForm').style.display = ''
         document.getElementById('mrChannel').value = btn.dataset.mrAddCh
         document.getElementById('mrMin').focus()
       }))
+      el.querySelectorAll('[data-mr-edit]').forEach(btn => btn.addEventListener('click', () => {
+        const x = r.data.find(v => String(v.id) === btn.dataset.mrEdit)
+        if (!x) return
+        mrEditId = x.id
+        document.getElementById('mrFormTitle').textContent = `ПРАВИЛО ${ruleRange(x).toUpperCase()}`
+        document.getElementById('mrMin').value = x.minCost
+        document.getElementById('mrMax').value = x.maxCost === null ? '' : x.maxCost
+        document.getElementById('mrMode').value = x.mode
+        document.getElementById('mrValue').value = x.value
+        document.getElementById('mrChannel').value = x.channel
+        document.getElementById('mrSave').textContent = 'Сохранить изменения'
+        document.getElementById('mrErr').textContent = ''
+        const f = document.getElementById('mrForm')
+        f.style.display = ''
+        f.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      }))
+    }
+
+    /** Одна форма на создание и правку: сбрасываем в режим «новое правило». */
+    let mrEditId = null
+    function mrFormReset() {
+      mrEditId = null
+      document.getElementById('mrFormTitle').textContent = 'НОВОЕ ПРАВИЛО'
+      document.getElementById('mrSave').textContent = 'Сохранить правило'
+      ;['mrMin', 'mrMax', 'mrValue'].forEach(id => { document.getElementById(id).value = '' })
+      document.getElementById('mrMode').value = 'fixed'
+      document.getElementById('mrErr').textContent = ''
     }
 
     document.getElementById('mrAddBtn').addEventListener('click', () => {
       const f = document.getElementById('mrForm')
-      f.style.display = f.style.display === 'none' ? '' : 'none'
+      const opening = f.style.display === 'none'
+      if (opening) mrFormReset()
+      f.style.display = opening ? '' : 'none'
     })
-    document.getElementById('mrCancel').addEventListener('click', () => { document.getElementById('mrForm').style.display = 'none' })
+    document.getElementById('mrCancel').addEventListener('click', () => {
+      document.getElementById('mrForm').style.display = 'none'
+      mrFormReset()
+    })
     document.getElementById('mrSave').addEventListener('click', async () => {
       const err = document.getElementById('mrErr'); err.textContent = ''
       const body = {
         minCost: Number(document.getElementById('mrMin').value || 0),
         maxCost: document.getElementById('mrMax').value.trim() === '' ? null : Number(document.getElementById('mrMax').value),
         mode: document.getElementById('mrMode').value,
-        value: Number(document.getElementById('mrValue').value.replace(',', '.')),
+        value: Number(String(document.getElementById('mrValue').value).replace(',', '.')),
         channel: document.getElementById('mrChannel').value,
       }
-      const r = await api('/markup-rules', { method: 'POST', body: JSON.stringify(body) }).catch(() => null)
+      const r = mrEditId === null
+        ? await api('/markup-rules', { method: 'POST', body: JSON.stringify(body) }).catch(() => null)
+        : await api(`/markup-rules/${mrEditId}`, { method: 'PUT', body: JSON.stringify(body) }).catch(() => null)
       if (!r) { err.textContent = 'Нет связи с сервером'; return }
-      if (!r.ok) { err.textContent = r.data && r.data.error === 'validation' ? r.data.fields.map(f => f.message).join(' · ') : (r.data && r.data.error || 'Не получилось'); return }
+      if (!r.ok) {
+        // 422: и по полям, и «Перекрытие …»/«Разрыв …» от проверки цепочки — показываем текстом у формы
+        err.textContent = r.data && r.data.error === 'validation'
+          ? r.data.fields.map(f => f.message).join(' · ')
+          : (r.data && r.data.error || 'Не получилось')
+        return
+      }
       if (r.data.integrityWarning) err.textContent = 'Сохранено. До рабочего набора не хватает: ' + r.data.integrityWarning
-      else document.getElementById('mrForm').style.display = 'none'
-      loadMarkupRules()
+      else { document.getElementById('mrForm').style.display = 'none'; mrFormReset() }
+      loadMarkupRules()   // список и плашка покрытия пересчитываются сразу
     })
 
     // ── Цены: поставщики ─────────────────────────────────────────────────────
