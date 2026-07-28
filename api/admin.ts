@@ -573,6 +573,119 @@ export function adminApiRouter(): Router {
     res.status(r.status).json(r)
   }))
 
+  // ── ВИТРИНА (пласт 1): баннеры, категории, бегущая строка, хиты ───────────
+  //
+  // Права: смотреть — оба; менять — owner+manager (операционка витрины);
+  // удалять баннер — owner (единственное необратимое действие раздела).
+  // Каждая мутация пишет AuditLog, каждая картинка проходит валидацию по
+  // содержимому, а не по имени файла.
+  router.get('/storefront', safe(async (_req, res) => {
+    const sf = await import('../lib/storefront-admin')
+    const [banners, categories, marquee, hits] = await Promise.all([
+      sf.listBanners(), sf.listCategories(), sf.getMarquee(), sf.listHits(),
+    ])
+    res.json({ banners, categories, marquee, hits })
+  }))
+
+  // Загрузка картинки: тело — сам файл (image/*), не base64. Ответ — публичная
+  // ссылка /photos/…webp, её кладут в баннер, категорию или в ячейку фото.
+  router.post('/photos/upload',
+    express.raw({ type: ['image/*', 'application/octet-stream'], limit: '6mb' }),
+    safe(async (req, res) => {
+      const { storePhoto } = await import('../lib/photo-store')
+      const body = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0)
+      const hint = String((req.query.name ?? 'photo')).slice(0, 60)
+      const r = await storePhoto(body, hint)
+      if (!r.ok) { res.status(r.status).json({ error: r.error }); return }
+      void logAdminAction({
+        adminTelegramId: req.admin!.telegramId, action: 'create', entity: 'Photo',
+        entityId: r.photo!.fileName, after: { url: r.photo!.url, bytes: r.photo!.bytes },
+      })
+      res.status(201).json(r.photo)
+    }))
+
+  router.post('/banners', safe(async (req, res) => {
+    const { createBanner } = await import('../lib/storefront-admin')
+    const r = await createBanner(req.admin!.telegramId, (req.body ?? {}) as Record<string, unknown>)
+    res.status(r.status).json(r.ok ? r.data : { error: r.error })
+  }))
+
+  router.put('/banners/:id', safe(async (req, res) => {
+    const id = parseInt(String(req.params.id), 10)
+    if (!Number.isInteger(id)) { res.status(422).json({ error: 'Неверный ID' }); return }
+    const { updateBanner } = await import('../lib/storefront-admin')
+    const r = await updateBanner(req.admin!.telegramId, id, (req.body ?? {}) as Record<string, unknown>)
+    res.status(r.status).json(r.ok ? { ok: true, ...(r.data as object) } : { error: r.error })
+  }))
+
+  router.post('/banners/:id/move', safe(async (req, res) => {
+    const id = parseInt(String(req.params.id), 10)
+    const dir = (req.body as { dir?: unknown })?.dir === 'down' ? 1 : -1
+    if (!Number.isInteger(id)) { res.status(422).json({ error: 'Неверный ID' }); return }
+    const { moveBanner } = await import('../lib/storefront-admin')
+    const r = await moveBanner(req.admin!.telegramId, id, dir as -1 | 1)
+    res.status(r.status).json(r.ok ? { ok: true } : { error: r.error })
+  }))
+
+  router.delete('/banners/:id', ownerOnly, safe(async (req, res) => {
+    const id = parseInt(String(req.params.id), 10)
+    if (!Number.isInteger(id)) { res.status(422).json({ error: 'Неверный ID' }); return }
+    const { deleteBanner } = await import('../lib/storefront-admin')
+    const r = await deleteBanner(req.admin!.telegramId, id)
+    res.status(r.status).json(r.ok ? { ok: true } : { error: r.error })
+  }))
+
+  router.put('/categories/:id/photo', safe(async (req, res) => {
+    const id = parseInt(String(req.params.id), 10)
+    if (!Number.isInteger(id)) { res.status(422).json({ error: 'Неверный ID' }); return }
+    const { setCategoryPhoto } = await import('../lib/storefront-admin')
+    const body = (req.body ?? {}) as { imageUrl?: unknown }
+    const r = await setCategoryPhoto(req.admin!.telegramId, id, body.imageUrl ?? null)
+    res.status(r.status).json(r.ok ? { ok: true } : { error: r.error })
+  }))
+
+  router.put('/settings/marquee', safe(async (req, res) => {
+    const { setMarquee } = await import('../lib/storefront-admin')
+    const r = await setMarquee(req.admin!.telegramId, (req.body as { value?: unknown })?.value)
+    res.status(r.status).json(r.ok ? { ok: true, ...(r.data as object) } : { error: r.error })
+  }))
+
+  router.post('/hits/:productId', safe(async (req, res) => {
+    const productId = parseInt(String(req.params.productId), 10)
+    if (!Number.isInteger(productId)) { res.status(422).json({ error: 'Неверный ID' }); return }
+    const { setHit } = await import('../lib/storefront-admin')
+    const r = await setHit(req.admin!.telegramId, productId, (req.body as { featured?: unknown })?.featured === true)
+    res.status(r.status).json(r.ok ? { ok: true, ...((r.data as object) ?? {}) } : { error: r.error })
+  }))
+
+  router.post('/cache-reset', safe(async (req, res) => {
+    const { bumpCacheVersion } = await import('../lib/storefront-admin')
+    const r = await bumpCacheVersion(req.admin!.telegramId)
+    res.status(r.status).json({ ok: true, ...(r.data as object) })
+  }))
+
+  // Поиск товаров (для хитов и карточек товара). Ищем по ВСЕМУ каталогу,
+  // включая скрытые — иначе не подсказать, почему товара нет на витрине.
+  router.get('/products', safe(async (req, res) => {
+    const q = String(req.query.q ?? '').trim()
+    if (q.length < 2) { res.json([]); return }
+    const products = await prisma.product.findMany({
+      where: { OR: [{ name: { contains: q, mode: 'insensitive' } }, { sku: { contains: q, mode: 'insensitive' } }] },
+      take: 20,
+      orderBy: [{ isFeatured: 'desc' }, { sortOrder: 'asc' }, { name: 'asc' }],
+      select: {
+        id: true, name: true, sku: true, photoUrl: true, isFeatured: true, isAvailable: true,
+        category: { select: { name: true } },
+        variants: { where: { inStock: true, quantity: { gt: 0 } }, select: { id: true }, take: 1 },
+      },
+    })
+    res.json(products.map(p => ({
+      id: p.id, name: p.name, sku: p.sku, photoUrl: p.photoUrl || null,
+      category: p.category?.name ?? null, isFeatured: p.isFeatured,
+      inStock: p.isAvailable && p.variants.length > 0,
+    })))
+  }))
+
   // ── Синк (PR-4): журнал прогонов + ручной запуск ──────────────────────────
   router.get('/sync-runs', safe(async (req, res) => {
     const limit = Math.min(Math.max(parseInt(String(req.query.limit ?? '20'), 10) || 20, 1), 100)
