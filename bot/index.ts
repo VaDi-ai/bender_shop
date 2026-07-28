@@ -257,6 +257,35 @@ function getWebhookPublicOrigin(): string {
   return 'https://bendershop.store'
 }
 
+/**
+ * URL веб-админки (Mini App /admin) — на том же хосте, что и витрина, поэтому
+ * BotFather-настройки домена менять не нужно. База резолвится тем же способом,
+ * что и webhook-origin: WEBAPP_URL → RAILWAY_PUBLIC_DOMAIN → bendershop.store.
+ */
+function getAdminUrl(): string {
+  const base = (WEBAPP_URL?.trim() || getWebhookPublicOrigin()).replace(/\/+$/, '')
+  // WEBAPP_URL может указывать прямо на витрину (…/shop) — берём хост
+  try {
+    const u = new URL(/^https?:\/\//i.test(base) ? base : `https://${base}`)
+    return `${u.protocol}//${u.host}/admin`
+  } catch {
+    return 'https://bendershop.store/admin'
+  }
+}
+const ADMIN_URL = getAdminUrl()
+
+/** Кнопка-меню (слева от поля ввода) для одного админа: в один тап в админку. */
+async function setAdminMenuButton(adminId: number): Promise<void> {
+  try {
+    await bot.telegram.setChatMenuButton({
+      chatId: adminId,
+      menuButton: { type: 'web_app', text: 'Админка', web_app: { url: ADMIN_URL } },
+    })
+  } catch (e) {
+    log.warn('setChatMenuButton (admin) failed', { adminId, error: e instanceof Error ? e.message : String(e) })
+  }
+}
+
 if (process.env.NODE_ENV === 'production' && !process.env.WEBHOOK_SECRET) {
   throw new Error('WEBHOOK_SECRET is required in production (webhook mode)')
 }
@@ -273,6 +302,22 @@ bot.start(async (ctx, next) => {
     return
   }
   return next()
+})
+
+// /admin — вход в веб-админку (Mini App). Кнопку показываем только админам,
+// но это лишь UX: сам мини-апп гейтит по подписи Telegram (requireAdmin).
+bot.command('admin', async (ctx) => {
+  const userId = ctx.from?.id
+  if (!userId || !ADMIN_IDS.includes(userId)) {
+    await ctx.reply('Команда только для администраторов.')
+    return
+  }
+  await ctx.reply(
+    '🛠 Веб-админка Bender Shop\n\nЦены и поставщики, разбор прайсов, витрина — в одном окне.',
+    Markup.inlineKeyboard([[Markup.button.webApp('🛠 Открыть админку', ADMIN_URL)]]),
+  )
+  // Ставим постоянную кнопку у поля ввода — чтобы дальше входить в один тап
+  await setAdminMenuButton(userId)
 })
 
 // /stats — быстрая статистика для админов
@@ -698,7 +743,19 @@ bot.start((ctx) => {
   return ctx.reply(
     `Привет, ${ctx.from?.first_name ?? ''}! Добро пожаловать в панель управления Bender Shop.`,
     adminKeyboard,
-  )
+  ).then(async () => {
+    // Веб-входы: витрина и новая админка. Старое бот-меню выше остаётся фолбэком.
+    if (userId) {
+      await ctx.reply(
+        'Быстрый вход:',
+        Markup.inlineKeyboard([[
+          Markup.button.webApp('🛍 Открыть магазин', WEBAPP_URL || ADMIN_URL.replace(/\/admin$/, '/shop')),
+          Markup.button.webApp('🛠 Админка', ADMIN_URL),
+        ]]),
+      )
+      await setAdminMenuButton(userId)
+    }
+  })
 })
 
 // ─── 📊 Аналитика ─────────────────────────────────────────────────────────────
@@ -1798,6 +1855,15 @@ bot.telegram.setMyCommands([
   { command: 'shop', description: 'Открыть магазин' },
 ]).catch((e) => log.error('setMyCommands error', { error: e instanceof Error ? e.message : String(e) }))
 
+// /admin — только в списке команд у самих админов (у покупателей его не видно)
+Promise.all(ADMIN_IDS.map(adminId =>
+  bot.telegram.setMyCommands([
+    { command: 'start', description: 'Главное меню' },
+    { command: 'shop', description: 'Открыть магазин' },
+    { command: 'admin', description: 'Веб-админка' },
+  ], { scope: { type: 'chat', chat_id: adminId } }),
+)).catch((e) => log.warn('setMyCommands (admin scope) failed', { error: e instanceof Error ? e.message : String(e) }))
+
 // Кнопка-меню Mini App в личных чатах
 if (WEBAPP_URL) {
   bot.telegram
@@ -1805,6 +1871,11 @@ if (WEBAPP_URL) {
       menuButton: { type: 'web_app', text: '🛍 Магазин', web_app: { url: WEBAPP_URL } },
     })
     .catch((e) => log.error('setChatMenuButton error', { error: e instanceof Error ? e.message : String(e) }))
+    // Персональные кнопки админов ставим ПОСЛЕ глобальной, иначе она их перетрёт:
+    // у покупателей остаётся «🛍 Магазин», у админов — «Админка».
+    .then(() => Promise.all(ADMIN_IDS.map(setAdminMenuButton)))
+    .then(() => log.info('Admin menu buttons set', { admins: ADMIN_IDS.length, url: ADMIN_URL }))
+    .catch(() => { /* setAdminMenuButton уже логирует свои ошибки */ })
 }
 
 startScheduler(bot)
