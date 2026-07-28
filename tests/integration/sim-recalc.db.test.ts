@@ -156,7 +156,8 @@ describe.skipIf(!RUN)('SIM recalc (PR-B)', () => {
         attributes: { fullName: 'Redmi Note 14S 4G 8/256 Blue', 'Страна': 'Россия' } },
     })
     const q2 = await loadSimQueue()
-    expect(q2.missing).toContainEqual(expect.objectContaining({ brand: 'Xiaomi', country: 'Россия', count: 1 }))
+    expect(q2.missing).toContainEqual(expect.objectContaining({ brand: 'Xiaomi', country: 'Россия', count: 1, visible: 1 }))
+    expect(q2.visibleMissing).toBe(1)   // товар активен и в наличии — алерт «Сегодня» его покажет
     // и при этом SIM ему не проставляется — в изменяемые разделы он не попал
     const p2 = await previewRecalc()
     expect([...p2.semantic, ...p2.added, ...p2.canonical].map((r: any) => r.variantId)).not.toContain(v.id)

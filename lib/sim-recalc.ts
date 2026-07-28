@@ -62,7 +62,20 @@ export interface RecalcPreview {
 export interface VariantRow {
   id: number
   attributes: unknown
-  product: { name: string; brand: string | null; category: { name: string } | null }
+  /** Витринные поля — только для счётчика «видно покупателю» (могут не приходить) */
+  inStock?: boolean
+  quantity?: number
+  product: { name: string; brand: string | null; category: { name: string } | null; isAvailable?: boolean }
+}
+
+/**
+ * Видит ли товар покупатель. Условия те же, что у витринного /api/products:
+ * товар активен, вариант в наличии и остаток больше нуля. Нужно, чтобы алерт
+ * на «Сегодня» не шумел про скрытые строки (андроид-дубли, которых на витрине
+ * нет и SIM им не ставится намеренно).
+ */
+export function isStorefrontVisible(v: VariantRow): boolean {
+  return v.product.isAvailable === true && v.inStock === true && (v.quantity ?? 0) > 0
 }
 
 /**
@@ -142,6 +155,8 @@ export interface SimQueueMissing {
   country: string
   brand: string | null
   count: number
+  /** Из них видно покупателю на витрине */
+  visible: number
   example: string
   generations: number[]
 }
@@ -149,8 +164,10 @@ export interface SimQueueMissing {
 export interface SimQueue {
   /** SIM не проставлен и правила нет — владельцу нужно завести правило */
   missing: SimQueueMissing[]
-  /** SIM стоит с прежних времён, правила под него нет — пересчёт не трогает */
+  /** SIM стоит с прежних времён, правила под него нет — обновление не трогает */
   inherited: InheritedRow[]
+  /** Сколько из missing реально видно покупателю — для алерта на «Сегодня» */
+  visibleMissing: number
 }
 
 /**
@@ -160,6 +177,7 @@ export interface SimQueue {
  */
 export function buildSimQueue(variants: VariantRow[], rules: SimRuleData[], aliases: AttrAliasData[]): SimQueue {
   const missing = new Map<string, SimQueueMissing>()
+  let visibleMissing = 0
   for (const v of variants) {
     const attrs = (v.attributes ?? {}) as Record<string, string>
     if (!isPhone(v, attrs)) continue
@@ -173,10 +191,11 @@ export function buildSimQueue(variants: VariantRow[], rules: SimRuleData[], alia
     const brand = r.missingBrand ?? null
     const key = `${brand ?? ''}|${r.missingKey!}`
     const cur = missing.get(key) ?? {
-      country: r.missingKey!, brand, count: 0,
+      country: r.missingKey!, brand, count: 0, visible: 0,
       example: attrs.fullName ?? v.product.name, generations: [],
     }
     cur.count++
+    if (isStorefrontVisible(v)) { cur.visible++; visibleMissing++ }
     const g = detectGeneration(attrs.fullName, v.product.name)
     if (g && !cur.generations.includes(g)) cur.generations.push(g)
     missing.set(key, cur)
@@ -184,12 +203,13 @@ export function buildSimQueue(variants: VariantRow[], rules: SimRuleData[], alia
   return {
     missing: [...missing.values()].sort((a, b) => b.count - a.count),
     inherited: buildPreview(variants, rules, aliases).inherited,
+    visibleMissing,
   }
 }
 
 const VARIANT_SELECT = {
-  id: true, attributes: true,
-  product: { select: { name: true, brand: true, category: { select: { name: true } } } },
+  id: true, attributes: true, inStock: true, quantity: true,
+  product: { select: { name: true, brand: true, isAvailable: true, category: { select: { name: true } } } },
 } as const
 
 /* eslint-disable @typescript-eslint/no-explicit-any */

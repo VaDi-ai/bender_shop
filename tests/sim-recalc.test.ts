@@ -12,7 +12,7 @@ import { describe, it, expect, vi } from 'vitest'
 vi.mock('../lib/prisma', () => ({ prisma: {} }))
 vi.mock('../lib/security-log', () => ({ logSecurityEvent: vi.fn() }))
 
-import { buildPreview, buildSimQueue, isPhone, VariantRow } from '../lib/sim-recalc'
+import { buildPreview, buildSimQueue, isPhone, isStorefrontVisible, VariantRow } from '../lib/sim-recalc'
 import { SIM_SEED, ALIAS_SEED, SimRuleData, AttrAliasData } from '../lib/sim-rules'
 import { ownerOnly, AdminRequest } from '../api/admin'
 import type { Response, NextFunction } from 'express'
@@ -182,6 +182,37 @@ describe('очередь обучения и пересчёт смотрят н�
     }], RULES, ALIASES)
     expect(q.missing).toHaveLength(0)
     expect(q.inherited).toHaveLength(0)
+  })
+
+  it('счётчик для «Сегодня» считает только видимое покупателю', () => {
+    const phone = (id: number, vis: { isAvailable: boolean; inStock: boolean; quantity: number }): VariantRow => ({
+      id,
+      attributes: { fullName: `Redmi Note ${id} 8/256`, 'Страна': 'Европа' },
+      inStock: vis.inStock, quantity: vis.quantity,
+      product: { name: `Redmi Note ${id}`, brand: 'Xiaomi', isAvailable: vis.isAvailable, category: { name: 'Смартфоны' } },
+    })
+    const rows = [
+      phone(1, { isAvailable: true, inStock: true, quantity: 3 }),    // видно
+      phone(2, { isAvailable: true, inStock: true, quantity: 0 }),    // остаток 0
+      phone(3, { isAvailable: true, inStock: false, quantity: 5 }),   // не в наличии
+      phone(4, { isAvailable: false, inStock: true, quantity: 5 }),   // товар скрыт
+    ]
+    const q = buildSimQueue(rows, RULES, ALIASES)
+    expect(q.missing[0]).toMatchObject({ brand: 'Xiaomi', count: 4, visible: 1 })
+    expect(q.visibleMissing).toBe(1)                 // алерт на «Сегодня» покажет 1, а не 4
+    expect(rows.map(isStorefrontVisible)).toEqual([true, false, false, false])
+  })
+
+  it('скрытые дубли без правила в алерт не попадают вовсе', () => {
+    const hidden: VariantRow = {
+      id: 10,
+      attributes: { fullName: 'Poco F6 5G 12/512 Green', 'Страна': 'Европа' },
+      inStock: false, quantity: 0,
+      product: { name: 'Poco F6', brand: 'Poco', isAvailable: false, category: { name: 'Смартфоны' } },
+    }
+    const q = buildSimQueue([hidden], RULES, ALIASES)
+    expect(q.missing).toHaveLength(1)     // в очереди на «Товарах» строка есть
+    expect(q.visibleMissing).toBe(0)      // а тревоги на «Сегодня» нет
   })
 
   it('не-телефоны в очередь не попадают', () => {
