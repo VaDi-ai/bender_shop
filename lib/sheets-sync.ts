@@ -14,6 +14,7 @@ import { readSheet, getProductSheetNames } from './google-sheets'
 import { normalizeCdnPhotoUrl, cleanPhotoUrl } from './cdn-photo-resolve'
 import { syncRunStart, syncRunFinish, SyncRunMeta } from './sync-run'
 import { decidePriceSync, getFrozenVariantIds } from './price-sync-policy'
+import { resolveSimType, loadSimRules, loadAttrAliases, attributesForExistingVariant, SimRuleData, AttrAliasData } from './sim-rules'
 import {
   applyMarkupRules as _applyMarkupRules,
   loadRules as _loadRules,
@@ -639,6 +640,9 @@ export async function syncProductsFromSheets(
   // sheetName обязателен: строки приходят с разных листов (полистовой учёт).
   const sheetWritebacks: Array<{ sheetName: string; rowIndex: number; price: number }> = []
 
+  // Этап 2: словарь SIM — один раз на прогон (unknown копится для очереди обучения)
+  await reloadSimDictionary()
+
   // PR-7: варианты applied-батчей с непроехавшим writeback — цену не трогаем
   const frozenVariantIds = await getFrozenVariantIds(prisma)
   if (frozenVariantIds.size > 0) {
@@ -795,7 +799,9 @@ export async function syncProductsFromSheets(
             productId: product.id,
             quantity: v.quantity,
             inStock: v.quantity > 0,
-            attributes: { ...v.attrs, fullName: v.fullName },
+            // PR-A: у СУЩЕСТВУЮЩЕГО варианта SIM сохраняет смысл — канонизируем
+            // только метку. Словарное значение применит PR-B по кнопке владельца.
+            attributes: { ...attributesForExistingVariant(v.attrs, entry.existing.attributes, simCtx.aliases), fullName: v.fullName },
           }
 
           // Фото всегда зеркало таблицы: пустая ячейка / нераспознанный URL → сбросить в каталоге
@@ -1006,6 +1012,11 @@ export async function syncProductsFromSheets(
     }
   } catch { /* audit is non-critical */ }
 
+  if (simCtx.unknown.size > 0) {
+    const top = [...simCtx.unknown.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10)
+    errors.push(`SIM не определён для стран: ${top.map(([c, n]) => `${c} (${n})`).join(', ')} — задайте правило в админке (Товары → SIM по странам)`)
+  }
+
   // Прерванный прогон (кнопка «стоп» в боте) — не успех: счётчики частичные
   const aborted = shouldAbort ? shouldAbort() : false
   await syncRunFinish(syncRunId, {
@@ -1173,10 +1184,10 @@ function getAttributes(row: SheetRow): Record<string, string> {
     }
   }
 
-  // iPhone — SIM по умолчанию eSIM (если не аксессуар)
-  if (/iphone/i.test(row.fullName) && !attrs['SIM'] && !/стекло|чехол|кейс|защит|case|glass/i.test(row.fullName)) {
-    attrs['SIM'] = 'eSIM'
-  }
+  // Хардкод «iPhone без SIM → eSIM» убран (Этап 2): resolveSimType намеренно
+  // возвращает null для неизвестной страны, и угадывание eSIM ломало бы это
+  // (напр. «Гонконг/США» — HK это 2 SIM). Нет правила → SIM не ставим,
+  // страна уходит в очередь обучения.
 
   return attrs
 }
@@ -1526,6 +1537,20 @@ export function extractProductName(fullName: string, brand: string): string {
 }
 
 /**
+ * Словарь SIM на прогон синка: грузится один раз в syncProductsFromSheets,
+ * unknown копит страны без правила → очередь обучения в админке.
+ */
+export const simCtx: { rules: SimRuleData[]; aliases: AttrAliasData[]; unknown: Map<string, number> } = {
+  rules: [], aliases: [], unknown: new Map(),
+}
+
+export async function reloadSimDictionary(): Promise<void> {
+  simCtx.rules = await loadSimRules()
+  simCtx.aliases = await loadAttrAliases('SIM')
+  simCtx.unknown = new Map()
+}
+
+/**
  * Извлекает атрибуты из полного названия модели.
  */
 function parseAttributes(fullName: string, brand: string, country: string): Record<string, string> {
@@ -1581,26 +1606,21 @@ function parseAttributes(fullName: string, brand: string, country: string): Reco
     }
   }
 
-  // ─── SIM ───
-  const simMatch = normalized.match(/\b(2Sim|eSim|e-Sim|1Sim\+eSim|Dual\s*SIM)\b/i)
-  if (simMatch) attrs['SIM'] = simMatch[1]!
-
-  // Fallback: SIM по стране для iPhone
-  if (!attrs['SIM'] && /iphone/i.test(normalized)) {
-    const countryMatch = fullName.match(/\((Индия|Япония|США|USA|India|Japan|Европа|Europe|ОАЭ|UAE|Таиланд|Thailand|Китай|China|Гонконг|Hong Kong)\)/i)
-    if (countryMatch) {
-      const c = countryMatch[1]!.toLowerCase()
-      if (['китай', 'china', 'гонконг', 'hong kong'].some(x => c.includes(x))) {
-        attrs['SIM'] = '2 SIM'
-      } else {
-        attrs['SIM'] = 'eSIM'
-      }
-    }
-  }
-
-  // Fallback: Samsung Galaxy — SIM + eSIM по умолчанию
-  if (!attrs['SIM'] && /samsung.*galaxy/i.test(normalized)) {
-    attrs['SIM'] = 'SIM + eSIM'
+  // ─── SIM: обучаемый словарь (Этап 2). Хардкод «Китай/Гонконг → 2 SIM, иначе
+  // eSIM» заменён на resolveSimType: явная метка → модельный оверрайд (Air) →
+  // страна+поколение. Нет правила → атрибут не ставим, страна попадёт в очередь
+  // обучения (не угадываем). Аксессуары SIM не получают.
+  const explicitSim = normalized.match(/\b(2Sim|2\s*SIM|eSim|e-Sim|1Sim\+eSim|SIM\s*\+\s*eSIM|Dual\s*SIM)\b/i)?.[1]
+  const simResolved = resolveSimType(
+    { explicit: explicitSim, country, brand, names: [fullName, normalized] },
+    simCtx.rules,
+    simCtx.aliases,
+  )
+  if (simResolved.simType) {
+    attrs['SIM'] = simResolved.simType
+  } else if (simResolved.reason === 'unknown' && /iphone/i.test(normalized)) {
+    // Копим ключи для очереди «не узнал» — показываем владельцу в админке
+    simCtx.unknown.set(simResolved.missingKey!, (simCtx.unknown.get(simResolved.missingKey!) ?? 0) + 1)
   }
 
   // ─── Connectivity (iPad) ───

@@ -185,11 +185,42 @@
       <div class="empty">Раздел появится на следующем этапе.<br>Пока витрина управляется из бота — раздел «🖼️ Витрина».</div>
     </section>
 
-    <!-- ═══ ТОВАРЫ (следующий этап) ═══ -->
+    <!-- ═══ ТОВАРЫ ═══ -->
     <section class="screen" id="s-goods">
       <h2>Товары</h2>
-      <div class="sub">Карточки, главное фото, предложения.</div>
-      <div class="empty">Раздел появится на следующем этапе.<br>Цены и наличие останутся в таблице — здесь они будут read-only.</div>
+      <div class="sub">Карточки и правила атрибутов.</div>
+
+      <div class="cap">SIM НЕ ОПРЕДЕЛЁН — ПОДСКАЖИТЕ</div>
+      <div id="simQueue"><div class="empty">Загрузка…</div></div>
+
+      <div class="cap">SIM ПО СТРАНАМ</div>
+      <div class="card">
+        <h3>Словарь SIM</h3>
+        <div id="simRules" class="mt">Загрузка…</div>
+        <button class="btn b-gh" id="simAddBtn">Добавить правило SIM</button>
+        <div id="simForm" style="display:none">
+          <input class="inp" id="simCountry" placeholder="Страна — как в таблице («Гонконг/США»)" maxlength="80">
+          <div class="row" style="gap:8px">
+            <select class="inp" id="simType"><option value="SIM + eSIM">SIM + eSIM</option><option value="eSIM">eSIM</option><option value="2 SIM">2 SIM</option></select>
+            <input class="inp" id="simGen" placeholder="с поколения (напр. 17)" inputmode="numeric">
+          </div>
+          <button class="btn b-main" id="simSave">Сохранить правило</button>
+          <button class="btn b-nt" id="simCancel">Отмена</button>
+          <div class="mt" id="simErr" style="color:var(--bad)"></div>
+        </div>
+        <div class="hint">Правило с поколением сильнее общего: «Япония → SIM + eSIM» плюс «Япония с 17 → eSIM» = у 17-х японских будет eSIM. Явная метка в названии всегда сильнее словаря.</div>
+      </div>
+
+      <div class="card">
+        <h3>Пересчёт SIM по каталогу <span class="chip c-off right">предпросмотр</span></h3>
+        <div class="mt" id="simRecalc">Загрузка…</div>
+        <div class="hint">Сейчас словарь применяется только к новым разборам таблицы. Массовый пересчёт уже проставленных значений придёт отдельной кнопкой — сначала посмотрите список изменений.</div>
+      </div>
+
+      <div class="card">
+        <h3>Карточки товаров <span class="chip c-off right">следующий этап</span></h3>
+        <div class="mt">Главное фото, скрытие с витрины, описания. Цены и наличие останутся в таблице — здесь будут read-only.</div>
+      </div>
     </section>
 
     <!-- ═══ ЕЩЁ ═══ -->
@@ -255,6 +286,100 @@
       window.adminMe = me
       gate.classList.add('hidden')
       loadDashboard(); loadSyncRuns(); loadSuppliers(); loadBatches(); loadUnmatched(); loadMarkupRules()
+      loadSimQueue(); loadSimRules(); loadSimRecalc()
+    }
+
+    // ── Словарь SIM (Этап 2) ──────────────────────────────────────────────────
+    async function loadSimQueue() {
+      const r = await api('/sim-queue').catch(() => null)
+      const box = document.getElementById('simQueue')
+      if (!r || !r.ok) { box.innerHTML = '<div class="empty">Не удалось загрузить</div>'; return }
+      attn.simUnknown = r.data.reduce((s, x) => s + x.count, 0)
+      attn.simCountries = r.data.length
+      renderAttention()
+      if (!r.data.length) { box.innerHTML = '<div class="empty">Для всех стран каталога правило есть 🎉<br>Новая страна появится здесь автоматически.</div>'; return }
+      box.innerHTML = `<div class="card">
+        <h3>${r.data.length} ${plural(r.data.length, 'страна без правила', 'страны без правила', 'стран без правила')} <span class="chip c-bad right">нужна помощь</span></h3>
+        ${r.data.map(x => `<div class="list-i"><div style="flex:1">
+          <div class="nm">${esc(x.country)}</div>
+          <div class="mt">${x.count} ${plural(x.count, 'товар', 'товара', 'товаров')}${x.generations.length ? ' · поколения ' + x.generations.sort((a,b)=>a-b).join(', ') : ''} · напр. ${esc(String(x.example).slice(0, 40))}</div>
+        </div>
+        <button class="btn b-gh sm" data-sim-learn="${esc(x.country)}">Задать SIM</button></div>`).join('')}
+        <div class="hint">Скажете один раз — дальше система проставит сама во всех новых разборах.</div>
+      </div>`
+      box.querySelectorAll('[data-sim-learn]').forEach(b => b.addEventListener('click', () => {
+        document.getElementById('simForm').style.display = ''
+        document.getElementById('simCountry').value = b.dataset.simLearn
+        document.getElementById('simForm').scrollIntoView({ behavior: 'smooth', block: 'center' })
+      }))
+    }
+
+    const SIM_CHIP = { '2 SIM': 'c-ok', 'eSIM': 'c-warn', 'SIM + eSIM': 'c-ok' }
+    async function loadSimRules() {
+      const r = await api('/sim-rules').catch(() => null)
+      const el = document.getElementById('simRules')
+      if (!r || !r.ok) { el.textContent = 'Не удалось загрузить'; return }
+      if (!r.data.length) { el.innerHTML = '<div class="empty">Словарь пуст — правила приедут с ближайшим перезапуском.</div>'; return }
+      const isOwner = window.adminMe && window.adminMe.role === 'owner'
+      // группируем: сначала модельные оверрайды, потом страны по алфавиту
+      const model = r.data.filter(x => x.modelMatch)
+      const byCountry = {}
+      r.data.filter(x => !x.modelMatch && x.country).forEach(x => { (byCountry[x.country] = byCountry[x.country] || []).push(x) })
+      const brandOnly = r.data.filter(x => !x.modelMatch && !x.country && x.brand)
+
+      el.innerHTML = (model.length ? `<div class="mt" style="margin-top:6px"><b style="color:#ccc">Правила по модели (сильнее страны)</b></div>` +
+        model.map(x => `<div class="list-i"><div style="flex:1"><div class="nm">модель «${esc(x.modelMatch)}»${x.modelGenFrom ? `, с ${x.modelGenFrom}-го поколения` : ''} → ${esc(x.simType)}</div></div>
+          ${isOwner ? `<button class="btn b-nt sm" data-sim-del="${x.id}">Удалить</button>` : ''}</div>`).join('') : '')
+        + Object.keys(byCountry).sort((a, b) => a.localeCompare(b, 'ru')).map(c => {
+          const rules = byCountry[c].sort((a, b) => (a.modelGenFrom ?? 0) - (b.modelGenFrom ?? 0))
+          const parts = rules.map(x => x.modelGenFrom ? `с ${x.modelGenFrom}-го — ${x.simType}` : x.simType)
+          const main = rules[rules.length - 1]
+          return `<div class="list-i"><div style="flex:1">
+            <div class="nm">${esc(c)} → ${esc(parts.join(', '))}</div>
+          </div><span class="chip ${SIM_CHIP[main.simType] || 'c-off'}">${esc(main.simType)}</span>
+          ${isOwner ? `<button class="btn b-nt sm" data-sim-del="${main.id}">Удалить</button>` : ''}</div>`
+        }).join('')
+        + brandOnly.map(x => `<div class="list-i"><div style="flex:1"><div class="nm">бренд ${esc(x.brand)} → ${esc(x.simType)}</div></div>
+          ${isOwner ? `<button class="btn b-nt sm" data-sim-del="${x.id}">Удалить</button>` : ''}</div>`).join('')
+
+      el.querySelectorAll('[data-sim-del]').forEach(b => b.addEventListener('click', async () => {
+        if (!confirm('Удалить правило? Страна вернётся в очередь «не определён».')) return
+        const r2 = await api('/sim-rules/' + b.dataset.simDel, { method: 'DELETE' })
+        if (!r2.ok) alert(r2.data && r2.data.error || 'Не получилось')
+        loadSimRules(); loadSimQueue()
+      }))
+    }
+
+    document.getElementById('simAddBtn').addEventListener('click', () => {
+      const f = document.getElementById('simForm')
+      f.style.display = f.style.display === 'none' ? '' : 'none'
+    })
+    document.getElementById('simCancel').addEventListener('click', () => { document.getElementById('simForm').style.display = 'none' })
+    document.getElementById('simSave').addEventListener('click', async () => {
+      const err = document.getElementById('simErr'); err.textContent = ''
+      const gen = document.getElementById('simGen').value.trim()
+      const r = await api('/sim-rules', { method: 'POST', body: JSON.stringify({
+        country: document.getElementById('simCountry').value,
+        simType: document.getElementById('simType').value,
+        modelGenFrom: gen === '' ? null : Number(gen),
+      }) }).catch(() => null)
+      if (!r) { err.textContent = 'Нет связи с сервером'; return }
+      if (!r.ok) { err.textContent = r.data && r.data.error === 'validation' ? r.data.fields.map(f => f.message).join(' · ') : (r.data && r.data.error || 'Не получилось'); return }
+      document.getElementById('simForm').style.display = 'none'
+      document.getElementById('simCountry').value = ''; document.getElementById('simGen').value = ''
+      loadSimRules(); loadSimQueue(); loadSimRecalc()
+    })
+
+    async function loadSimRecalc() {
+      const r = await api('/sim-recalc/preview').catch(() => null)
+      const el = document.getElementById('simRecalc')
+      if (!r || !r.ok) { el.textContent = 'Не удалось посчитать'; return }
+      const d = r.data
+      const top = Object.entries(d.byCountry || {}).sort((a, b) => b[1] - a[1]).slice(0, 6)
+      el.innerHTML = d.changeCount === 0 && d.canonicalizeCount === 0
+        ? 'Каталог уже соответствует словарю — пересчитывать нечего.'
+        : `Если применить словарь ко всему каталогу: <b>${d.changeCount}</b> ${plural(d.changeCount, 'товар сменит', 'товара сменят', 'товаров сменят')} тип SIM${d.canonicalizeCount ? `, ещё ${d.canonicalizeCount} — только приведение метки к канону` : ''}.
+           ${top.length ? '<br>Больше всего: ' + top.map(([c, n]) => `${esc(c)} — ${n}`).join(', ') : ''}`
     }
 
     // ── Сегодня ───────────────────────────────────────────────────────────────
@@ -277,11 +402,12 @@
     }
 
     // Требует внимания: реальные счётчики (preview-батчи, «не узнал», ошибки синка)
-    const attn = { batches: 0, batchFrom: '', unmatched: 0, syncErrors: 0 }
+    const attn = { batches: 0, batchFrom: '', unmatched: 0, syncErrors: 0, simUnknown: 0, simCountries: 0 }
     function renderAttention() {
       const items = []
       if (attn.batches) items.push(`<div class="list-i"><div><div class="nm">${attn.batches} ${plural(attn.batches, 'новый прайс не применён', 'новых прайса не применены', 'новых прайсов не применены')}</div><div class="mt">${esc(attn.batchFrom)}</div></div></div>`)
       if (attn.unmatched) items.push(`<div class="list-i"><div><div class="nm">${attn.unmatched} ${plural(attn.unmatched, 'позицию система не узнала', 'позиции система не узнала', 'позиций система не узнала')}</div><div class="mt">нужно подсказать, что это за товар</div></div></div>`)
+      if (attn.simUnknown) items.push(`<div class="list-i" style="cursor:pointer" onclick="go('s-goods')"><div><div class="nm">SIM не определён у ${attn.simUnknown} ${plural(attn.simUnknown, 'товара', 'товаров', 'товаров')}</div><div class="mt">${attn.simCountries} ${plural(attn.simCountries, 'страна', 'страны', 'стран')} без правила — вкладка «Товары»</div></div></div>`)
       if (attn.syncErrors) items.push(`<div class="list-i"><div><div class="nm">${attn.syncErrors} ${plural(attn.syncErrors, 'предупреждение синка', 'предупреждения синка', 'предупреждений синка')}</div><div class="mt">журнал — во вкладке «Ещё»</div></div></div>`)
       const card = document.getElementById('attentionCard')
       if (!items.length) { card.style.display = 'none'; return }
