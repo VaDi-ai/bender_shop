@@ -297,6 +297,25 @@
       <div class="sub">Журналы и системное.</div>
       <div class="card"><h3>Журнал синка</h3><div class="mt" id="syncRuns">Загрузка…</div></div>
       <div class="card"><h3>Кто что менял <span class="chip c-off right">скоро</span></h3><div class="mt">Каждое действие в админке уже пишется в журнал на сервере — просмотр появится после первых разделов Этапа 2.</div></div>
+
+      <div class="cap">КОМАНДА</div>
+      <div class="card" id="teamCard" style="display:none">
+        <h3>Доступ в админку</h3>
+        <div id="teamList" class="mt">Загрузка…</div>
+        <button class="btn b-gh" id="teamAddBtn">Добавить сотрудника</button>
+        <div id="teamForm" style="display:none">
+          <input class="inp" id="teamId" placeholder="Telegram ID — только цифры" inputmode="numeric" maxlength="15">
+          <input class="inp" id="teamName" placeholder="Имя (для списка)" maxlength="60">
+          <select class="inp" id="teamRole">
+            <option value="manager">Менеджер — операционка</option>
+            <option value="owner">Владелец — всё, включая деньги</option>
+          </select>
+          <button class="btn b-main" id="teamSave">Добавить</button>
+          <button class="btn b-nt" id="teamCancel">Отмена</button>
+          <div class="mt" id="teamErr" style="color:var(--bad)"></div>
+          <div class="hint">Менеджер ведёт товары и витрину, но не применяет цены, не удаляет и не видит выручку. Владелец может всё.</div>
+        </div>
+      </div>
     </section>
   </main>
 
@@ -354,8 +373,66 @@
       window.adminMe = me
       gate.classList.add('hidden')
       loadDashboard(); loadSyncRuns(); loadSuppliers(); loadBatches(); loadUnmatched(); loadMarkupRules()
-      loadSimQueue(); loadSimRules(); loadSimRecalc(); loadStorefront()
+      loadSimQueue(); loadSimRules(); loadSimRecalc(); loadStorefront(); loadTeam()
     }
+
+    // ── КОМАНДА: доступ в админку (только владелец) ───────────────────────────
+    const ROLE_HINT = { owner: 'владелец — всё, включая деньги', manager: 'менеджер — операционка' }
+
+    async function loadTeam() {
+      const isOwner = window.adminMe && window.adminMe.role === 'owner'
+      const card = document.getElementById('teamCard')
+      if (!isOwner) { card.style.display = 'none'; return }
+      card.style.display = ''
+      const r = await api('/team').catch(() => null)
+      const el = document.getElementById('teamList')
+      if (!r || !r.ok) { el.textContent = 'Не удалось загрузить'; return }
+      el.innerHTML = r.data.map(m => `<div class="list-i"><div style="flex:1">
+          <div class="nm">${esc(m.name || m.telegramId)}${m.isYou ? ' · это вы' : ''}</div>
+          <div class="mt">${ROLE_HINT[m.role]}${m.isActive ? '' : ' · доступ снят'}${m.fromEnv ? ' · прописан в настройках сервера' : ''}</div>
+        </div>
+        <span class="chip ${m.isActive ? (m.role === 'owner' ? 'c-ok' : 'c-off') : 'c-bad'}">${m.isActive ? (m.role === 'owner' ? 'владелец' : 'менеджер') : 'выключен'}</span>
+        ${m.isYou ? '' : `<button class="btn b-nt sm" data-team-role="${m.telegramId}" data-team-to="${m.role === 'owner' ? 'manager' : 'owner'}">${m.role === 'owner' ? 'Сделать менеджером' : 'Сделать владельцем'}</button>`}
+        ${m.isYou ? '' : `<button class="btn ${m.isActive ? 'b-dg' : 'b-gh'} sm" data-team-active="${m.telegramId}" data-team-on="${m.isActive ? '0' : '1'}">${m.isActive ? 'Снять доступ' : 'Вернуть доступ'}</button>`}
+      </div>`).join('')
+
+      el.querySelectorAll('[data-team-role]').forEach(b => b.addEventListener('click', async () => {
+        const to = b.dataset.teamTo
+        if (!confirm(to === 'owner' ? 'Сделать владельцем? Он сможет применять цены и видеть выручку.' : 'Сделать менеджером? Доступ к деньгам и удалению пропадёт.')) return
+        const r2 = await api('/team/' + b.dataset.teamRole, { method: 'PUT', body: JSON.stringify({ role: to }) }).catch(() => null)
+        if (!r2 || !r2.ok) alert(r2 && r2.data && r2.data.error || 'Не получилось')
+        loadTeam()
+      }))
+      el.querySelectorAll('[data-team-active]').forEach(b => b.addEventListener('click', async () => {
+        const on = b.dataset.teamOn === '1'
+        if (!on && !confirm('Снять доступ в админку? Сотрудник перестанет открывать панель.')) return
+        const r2 = await api('/team/' + b.dataset.teamActive, { method: 'PUT', body: JSON.stringify({ isActive: on }) }).catch(() => null)
+        if (!r2 || !r2.ok) { alert(r2 && r2.data && r2.data.error || 'Не получилось'); return }
+        if (r2.data && r2.data.note) alert(r2.data.note)
+        loadTeam()
+      }))
+    }
+
+    document.getElementById('teamAddBtn').addEventListener('click', () => {
+      const f = document.getElementById('teamForm')
+      f.style.display = f.style.display === 'none' ? '' : 'none'
+    })
+    document.getElementById('teamCancel').addEventListener('click', () => {
+      document.getElementById('teamForm').style.display = 'none'
+      ;['teamId', 'teamName'].forEach(id => { document.getElementById(id).value = '' })
+      document.getElementById('teamErr').textContent = ''
+    })
+    document.getElementById('teamSave').addEventListener('click', async () => {
+      const err = document.getElementById('teamErr'); err.textContent = ''
+      const r = await api('/team', { method: 'POST', body: JSON.stringify({
+        telegramId: document.getElementById('teamId').value,
+        name: document.getElementById('teamName').value,
+        role: document.getElementById('teamRole').value,
+      }) }).catch(() => null)
+      if (!r || !r.ok) { err.textContent = (r && r.data && r.data.error) || 'Не получилось'; return }
+      document.getElementById('teamCancel').click()
+      loadTeam()
+    })
 
     // ── ВИТРИНА: баннеры, категории, бегущая строка, хиты ─────────────────────
     let sfData = { banners: [], categories: [], marquee: '', hits: { manual: [] } }
@@ -476,19 +553,29 @@
     })
 
     let catEditId = null
+    let catShowAll = false
     function renderCategories() {
       const el = document.getElementById('catList')
-      const cats = sfData.categories || []
-      if (!cats.length) { el.innerHTML = '<div class="empty">Категорий пока нет — они появятся после синка с таблицей.</div>'; return }
+      const all = sfData.categories || []
+      if (!all.length) { el.innerHTML = '<div class="empty">Категорий пока нет — они появятся после синка с таблицей.</div>'; return }
+      const hidden = all.filter(c => !c.visible)
+      const cats = catShowAll ? all : all.filter(c => c.visible)
       const SRC = { custom: ['своё фото', 'c-ok'], auto: ['фото с новейшей модели', 'c-off'], none: ['фото нет ни у одной модели', 'c-warn'] }
       el.innerHTML = cats.map(c => `<div class="list-i">
         ${sfThumb(c.effectiveImageUrl)}
         <div style="flex:1"><div class="nm">${esc(c.name)}</div>
-          <div class="mt">${SRC[c.source][0]} · ${c.productCount} ${plural(c.productCount, 'товар', 'товара', 'товаров')}</div></div>
+          <div class="mt">${SRC[c.source][0]} · ${c.productCount} ${plural(c.productCount, 'товар', 'товара', 'товаров')}${c.visible ? '' : ' · не показывается покупателю'}</div></div>
         ${c.source === 'none' ? '<span class="chip c-warn">без фото</span>' : ''}
         <button class="btn b-gh sm" data-cat-set="${c.id}" data-cat-name="${esc(c.name)}">${c.source === 'custom' ? 'Заменить' : 'Поставить фото'}</button>
         ${c.source === 'custom' ? `<button class="btn b-nt sm" data-cat-reset="${c.id}">Вернуть авто</button>` : ''}
-      </div>`).join('')
+      </div>`).join('') + (hidden.length ? `<div class="hint" style="cursor:pointer" id="catToggleHidden">${
+        catShowAll
+          ? 'Скрыть категории без товаров в наличии'
+          : `Ещё ${hidden.length} ${plural(hidden.length, 'категория', 'категории', 'категорий')} сейчас не показывается покупателю — нет товаров в наличии. Показать`
+      }</div>` : '')
+
+      const toggle = document.getElementById('catToggleHidden')
+      if (toggle) toggle.addEventListener('click', () => { catShowAll = !catShowAll; renderCategories() })
 
       el.querySelectorAll('[data-cat-set]').forEach(b => b.addEventListener('click', () => {
         catEditId = Number(b.dataset.catSet)

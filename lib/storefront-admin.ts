@@ -163,6 +163,8 @@ export interface CategoryView {
   id: number
   name: string
   productCount: number
+  /** Показывается ли категория покупателю (есть товар в наличии) */
+  visible: boolean
   /** Своё фото категории (если владелец поставил) */
   customImageUrl: string | null
   /** Что реально увидит покупатель: своё фото или авто с новейшей модели */
@@ -173,6 +175,11 @@ export interface CategoryView {
 /**
  * Категории с фото. «Авто» — фото самой новой модели в наличии: ровно то же
  * правило, по которому витрина рисует обложку линейки.
+ *
+ * Возвращаем ВСЕ, помечая visible: в каталоге 90+ категорий, но покупателю
+ * видны единицы (у остальных нет товара в наличии). Показывать владельцу
+ * простыню из невидимых — шум, поэтому UI прячет их за «показать все», а
+ * не мы решаем за него, что их не существует.
  */
 export async function listCategories(): Promise<CategoryView[]> {
   const cats = await prisma.category.findMany({
@@ -198,6 +205,7 @@ export async function listCategories(): Promise<CategoryView[]> {
       id: c.id,
       name: c.name,
       productCount: c._count.products,
+      visible: c.products.length > 0,
       customImageUrl: custom,
       effectiveImageUrl: custom ?? auto,
       source: custom ? 'custom' : auto ? 'auto' : 'none',
