@@ -686,6 +686,26 @@ export function adminApiRouter(): Router {
     })))
   }))
 
+  // ── Команда магазина: кто имеет доступ (owner-only) ───────────────────────
+  router.get('/team', ownerOnly, safe(async (req, res) => {
+    const { listTeam } = await import('../lib/admin-team')
+    res.json(await listTeam(req.admin!.telegramId))
+  }))
+
+  router.post('/team', ownerOnly, safe(async (req, res) => {
+    const { addTeamMember } = await import('../lib/admin-team')
+    const r = await addTeamMember(req.admin!.telegramId, (req.body ?? {}) as Record<string, unknown>)
+    res.status(r.status).json(r.ok ? { ok: true, ...(r.data as object) } : { error: r.error })
+  }))
+
+  router.put('/team/:telegramId', ownerOnly, safe(async (req, res) => {
+    const id = String(req.params.telegramId ?? '')
+    if (!/^\d{5,15}$/.test(id)) { res.status(422).json({ error: 'Неверный Telegram ID' }); return }
+    const { updateTeamMember } = await import('../lib/admin-team')
+    const r = await updateTeamMember(req.admin!.telegramId, id, (req.body ?? {}) as Record<string, unknown>)
+    res.status(r.status).json(r.ok ? { ok: true, ...((r.data as object) ?? {}) } : { error: r.error })
+  }))
+
   // ── Синк (PR-4): журнал прогонов + ручной запуск ──────────────────────────
   router.get('/sync-runs', safe(async (req, res) => {
     const limit = Math.min(Math.max(parseInt(String(req.query.limit ?? '20'), 10) || 20, 1), 100)
