@@ -1,0 +1,162 @@
+/**
+ * Фото товара — зеркало таблицы. Тесты держат главный инвариант: без записи
+ * в лист в БД не пишем вовсе, иначе синк сотрёт фото ближайшим прогоном.
+ */
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+
+vi.mock('../lib/prisma', () => ({
+  prisma: {
+    productVariant: { findUnique: vi.fn(), update: vi.fn(), findMany: vi.fn() },
+    product: { findUnique: vi.fn(), update: vi.fn() },
+  },
+}))
+vi.mock('../lib/audit', () => ({ logAdminAction: vi.fn() }))
+
+import { prisma } from '../lib/prisma'
+import { buildPhotoUpdates, setVariantPhoto, setProductMainPhoto } from '../lib/photo-writeback'
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
+const pv = prisma.productVariant as any
+const pp = prisma.product as any
+const ACTOR = '900'
+const PHOTO = '/photos/iphone-17-pro.webp'
+
+const sheet = (rows: string[][]) => [{ name: 'iPhone', data: [['A', 'B', 'C', 'D', 'Название'], ...rows] }]
+
+beforeEach(() => {
+  ;[pv.findUnique, pv.update, pv.findMany, pp.findUnique, pp.update].forEach(f => f.mockReset())
+  pv.update.mockResolvedValue({})
+  pv.findMany.mockResolvedValue([{ photoUrls: [PHOTO] }])
+  pp.update.mockResolvedValue({})
+})
+
+describe('адресация строки в таблице', () => {
+  it('пишет в колонку фото найденной строки', () => {
+    const { updates, missing } = buildPhotoUpdates(
+      [{ fullName: 'iPhone 17 Pro 256 (Индия)', photo: PHOTO }],
+      sheet([['', '', '', '', 'iPhone 16 128 (Китай)'], ['', '', '', '', 'iPhone 17 Pro 256 (Индия)']]),
+    )
+    expect(missing).toEqual([])
+    expect(updates).toEqual([{ range: "'iPhone'!Q3", values: [[PHOTO]] }])
+  })
+
+  it('регистр и пробелы в названии не мешают', () => {
+    const { updates } = buildPhotoUpdates(
+      [{ fullName: '  IPHONE 17 PRO 256 (ИНДИЯ)  ', photo: PHOTO }],
+      sheet([['', '', '', '', 'iPhone 17 Pro 256 (Индия)']]),
+    )
+    expect(updates).toHaveLength(1)
+  })
+
+  it('нет строки — честно в missing, апдейтов нет', () => {
+    const { updates, missing } = buildPhotoUpdates(
+      [{ fullName: 'Товар, которого нет', photo: PHOTO }],
+      sheet([['', '', '', '', 'iPhone 17 Pro 256 (Индия)']]),
+    )
+    expect(updates).toEqual([])
+    expect(missing).toEqual(['товар, которого нет'])
+  })
+
+  it('снятие фото = пустая ячейка (ровно то, что синк трактует как «фото нет»)', () => {
+    const { updates } = buildPhotoUpdates(
+      [{ fullName: 'iPhone 17 Pro 256 (Индия)', photo: '' }],
+      sheet([['', '', '', '', 'iPhone 17 Pro 256 (Индия)']]),
+    )
+    expect(updates).toEqual([{ range: "'iPhone'!Q2", values: [['']] }])
+  })
+})
+
+describe('фото предложения', () => {
+  const variant = {
+    id: 7, productId: 3, photoUrls: [],
+    attributes: { fullName: 'iPhone 17 Pro 256 (Индия)', 'Страна': 'Индия' },
+  }
+
+  it('таблица первая, БД вторая', async () => {
+    pv.findUnique.mockResolvedValue(variant)
+    const seen: unknown[] = []
+    const wb = vi.fn(async (rows: unknown) => { seen.push(rows); return { missing: [] } })
+
+    const r = await setVariantPhoto(ACTOR, 7, PHOTO, wb)
+    expect(r).toMatchObject({ ok: true, photoUrl: PHOTO })
+    expect(seen[0]).toEqual([{ fullName: 'iPhone 17 Pro 256 (Индия)', photo: PHOTO }])
+    expect(pv.update).toHaveBeenCalledWith({ where: { id: 7 }, data: { photoUrls: [PHOTO] } })
+  })
+
+  it('лист недоступен → 503 и в БД НИЧЕГО не записано', async () => {
+    pv.findUnique.mockResolvedValue(variant)
+    const wb = vi.fn(async () => { throw new Error('google down') })
+    const r = await setVariantPhoto(ACTOR, 7, PHOTO, wb)
+    expect(r).toMatchObject({ ok: false, status: 503 })
+    expect(r.error).toContain('таблицу')
+    expect(pv.update).not.toHaveBeenCalled()          // фото-призрака не завели
+  })
+
+  it('строки нет в листе → 409 и в БД НИЧЕГО не записано (синк бы всё равно стёр)', async () => {
+    pv.findUnique.mockResolvedValue(variant)
+    const wb = vi.fn(async () => ({ missing: ['iphone 17 pro 256 (индия)'] }))
+    const r = await setVariantPhoto(ACTOR, 7, PHOTO, wb)
+    expect(r).toMatchObject({ ok: false, status: 409 })
+    expect(pv.update).not.toHaveBeenCalled()
+  })
+
+  it('мусорная ссылка отбивается до всякой записи', async () => {
+    pv.findUnique.mockResolvedValue(variant)
+    const wb = vi.fn(async () => ({ missing: [] }))
+    for (const bad of ['javascript:alert(1)', 'https://evil.example.com/x.png', '/photos/../../.env']) {
+      expect((await setVariantPhoto(ACTOR, 7, bad, wb)).status).toBe(422)
+    }
+    expect(wb).not.toHaveBeenCalled()
+    expect(pv.update).not.toHaveBeenCalled()
+  })
+
+  it('снятие фото чистит и ячейку, и базу', async () => {
+    pv.findUnique.mockResolvedValue({ ...variant, photoUrls: [PHOTO] })
+    pv.findMany.mockResolvedValue([{ photoUrls: [] }])
+    const wb = vi.fn(async () => ({ missing: [] }))
+    const r = await setVariantPhoto(ACTOR, 7, null, wb)
+    expect(r).toMatchObject({ ok: true, photoUrl: null })
+    expect(wb).toHaveBeenCalledWith([{ fullName: 'iPhone 17 Pro 256 (Индия)', photo: '' }])
+    expect(pv.update).toHaveBeenCalledWith({ where: { id: 7 }, data: { photoUrls: [] } })
+    expect(pp.update).toHaveBeenCalledWith({ where: { id: 3 }, data: { photos: [], photoUrl: null } })
+  })
+
+  it('без fullName писать некуда — 422 с объяснением', async () => {
+    pv.findUnique.mockResolvedValue({ ...variant, attributes: { 'Страна': 'Индия' } })
+    const wb = vi.fn(async () => ({ missing: [] }))
+    const r = await setVariantPhoto(ACTOR, 7, PHOTO, wb)
+    expect(r.status).toBe(422)
+    expect(r.error).toContain('таблице')
+    expect(wb).not.toHaveBeenCalled()
+  })
+
+  it('чужой вариант — 404', async () => {
+    pv.findUnique.mockResolvedValue(null)
+    expect((await setVariantPhoto(ACTOR, 999, PHOTO, vi.fn())).status).toBe(404)
+  })
+})
+
+describe('главное фото товара', () => {
+  it('ставится первому предложению — как его и берёт витрина', async () => {
+    pp.findUnique.mockResolvedValue({ id: 3, variants: [{ id: 11 }] })
+    pv.findUnique.mockResolvedValue({
+      id: 11, productId: 3, photoUrls: [],
+      attributes: { fullName: 'iPhone 17 Pro 256 (Индия)' },
+    })
+    const wb = vi.fn(async () => ({ missing: [] }))
+    const r = await setProductMainPhoto(ACTOR, 3, PHOTO, wb)
+    expect(r.ok).toBe(true)
+    expect(pv.update).toHaveBeenCalledWith({ where: { id: 11 }, data: { photoUrls: [PHOTO] } })
+    expect(pp.update).toHaveBeenCalledWith({ where: { id: 3 }, data: { photos: [PHOTO], photoUrl: PHOTO } })
+  })
+
+  it('у товара нет предложений — некуда ставить, 422', async () => {
+    pp.findUnique.mockResolvedValue({ id: 3, variants: [] })
+    expect((await setProductMainPhoto(ACTOR, 3, PHOTO, vi.fn())).status).toBe(422)
+  })
+
+  it('нет товара — 404', async () => {
+    pp.findUnique.mockResolvedValue(null)
+    expect((await setProductMainPhoto(ACTOR, 999, PHOTO, vi.fn())).status).toBe(404)
+  })
+})
