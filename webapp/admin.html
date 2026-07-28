@@ -325,6 +325,40 @@
       <div class="card"><h3>Журнал синка</h3><div class="mt" id="syncRuns">Загрузка…</div></div>
       <div class="card"><h3>Кто что менял <span class="chip c-off right">скоро</span></h3><div class="mt">Каждое действие в админке уже пишется в журнал на сервере — просмотр появится после первых разделов Этапа 2.</div></div>
 
+      <div class="cap">АНАЛИТИКА</div>
+      <div class="card">
+        <h3>Продажи <span class="chip c-off right" id="insRange">30 дней</span></h3>
+        <div id="insBox" class="mt">Загрузка…</div>
+        <button class="btn b-nt" id="insToggle">Показать за 7 дней</button>
+      </div>
+
+      <div class="cap">КЛИЕНТЫ</div>
+      <div class="card">
+        <h3>Найти клиента</h3>
+        <div class="mt" id="clStats">—</div>
+        <input class="inp" id="clSearch" placeholder="Имя или @username" maxlength="60">
+        <div id="clResults"></div>
+        <div id="clCard"></div>
+        <div class="hint">Телефон и почта зашифрованы. Менеджер видит их скрытыми — полностью показываем только владельцу.</div>
+      </div>
+
+      <div class="cap">РАССЫЛКИ</div>
+      <div class="card">
+        <h3>Сообщение покупателям</h3>
+        <div id="bcHistory" class="mt">Загрузка…</div>
+        <button class="btn b-gh" id="bcAddBtn">Создать рассылку</button>
+        <div id="bcForm" style="display:none">
+          <textarea class="inp" id="bcText" rows="5" maxlength="3000" placeholder="Текст сообщения — придёт в бот каждому покупателю"></textarea>
+          <button class="btn b-gh" id="bcPreviewBtn">Кому уйдёт</button>
+          <div id="bcPreview"></div>
+          <button class="btn b-nt" id="bcSelfBtn">Отправить себе для проверки</button>
+          <button class="btn b-dg" id="bcSendBtn">Отправить всем</button>
+          <button class="btn b-nt" id="bcCancel">Отмена</button>
+          <div class="mt" id="bcErr" style="color:var(--bad)"></div>
+          <div class="hint">Сообщение уйдёт живым людям и его нельзя отозвать. Сначала посмотрите, кому уйдёт, и отправьте себе.</div>
+        </div>
+      </div>
+
       <div class="cap">АКЦИИ</div>
       <div class="card">
         <h3>Акции <span class="chip c-off right" id="promoChip">—</span></h3>
@@ -437,7 +471,7 @@
       window.adminMe = me
       gate.classList.add('hidden')
       loadDashboard(); loadSyncRuns(); loadSuppliers(); loadBatches(); loadUnmatched(); loadMarkupRules()
-      loadSimQueue(); loadSimRules(); loadSimRecalc(); loadStorefront(); loadTeam(); loadPromotions()
+      loadSimQueue(); loadSimRules(); loadSimRecalc(); loadStorefront(); loadTeam(); loadPromotions(); loadInsights(); loadBroadcasts()
     }
 
     // ── ТОВАРЫ: карточка, фото (с записью в таблицу), описание, скрытие ───────
@@ -716,6 +750,134 @@
       if (!r || !r.ok) { alert(r && r.data && r.data.error || 'Не получилось'); return }
       alert(`Остановлено акций: ${r.data.stopped}. Прежние цены вернулись.`)
       loadPromotions()
+    })
+
+    // ── АНАЛИТИКА ─────────────────────────────────────────────────────────────
+    let insDays = 30
+    async function loadInsights() {
+      const r = await api('/insights?days=' + insDays).catch(() => null)
+      const el = document.getElementById('insBox')
+      if (!r || !r.ok) { el.textContent = 'Не удалось загрузить'; return }
+      const d = r.data
+      document.getElementById('insRange').textContent = d.range + ' дней'
+      document.getElementById('insToggle').textContent = insDays === 30 ? 'Показать за 7 дней' : 'Показать за 30 дней'
+      const peak = Math.max(1, ...d.byDay.map(x => x.orders))
+      el.innerHTML = `
+        <div class="kpi" style="margin-bottom:10px">
+          <div><div class="n">${d.orders.total}</div><div class="l">заказов за ${d.range} дней</div></div>
+          <div><div class="n">${d.revenue == null ? '—' : fmt(d.revenue) + ' ₽'}</div><div class="l">выручка${d.revenue == null ? ' · только владелец' : ''}</div></div>
+          <div><div class="n">${d.orders.avgCheck == null ? '—' : fmt(d.orders.avgCheck) + ' ₽'}</div><div class="l">средний чек</div></div>
+          <div><div class="n">${d.clients.total}</div><div class="l">покупателей в базе</div></div>
+        </div>
+        ${d.orders.total === 0
+          ? '<div class="empty">За этот период заказов не было.<br>Как только появится первый — он появится здесь.</div>'
+          : `<div class="mt">Заказы по дням</div>
+             <div style="display:flex;gap:2px;align-items:flex-end;height:56px;margin-top:8px">
+               ${d.byDay.map(x => `<div title="${x.date}: ${x.orders}" style="flex:1;background:${x.orders ? 'var(--ac)' : '#232326'};height:${Math.max(4, Math.round(x.orders / peak * 56))}px;border-radius:2px"></div>`).join('')}
+             </div>`}
+        ${d.topProducts.length ? '<div class="cap" style="margin:14px 0 6px">ЧТО ПОКУПАЮТ</div>' + d.topProducts.slice(0, 5).map(t => `
+          <div class="list-i"><div style="flex:1"><div class="nm">${esc(t.name)}</div>
+            <div class="mt">${t.qty} ${plural(t.qty, 'штука', 'штуки', 'штук')}${t.revenue == null ? '' : ' · ' + fmt(t.revenue) + ' ₽'}</div></div></div>`).join('') : ''}
+        ${d.hiddenForRole.length ? `<div class="hint">Скрыто для роли «менеджер»: ${d.hiddenForRole.join(', ')}.</div>` : ''}`
+      document.getElementById('clStats').textContent =
+        `Всего ${d.clients.total} · с заказами ${d.clients.withOrders} · новых за ${d.range} дней ${d.clients.newInRange}`
+    }
+    document.getElementById('insToggle').addEventListener('click', () => { insDays = insDays === 30 ? 7 : 30; loadInsights() })
+
+    // ── КЛИЕНТЫ ───────────────────────────────────────────────────────────────
+    let clTimer = null
+    document.getElementById('clSearch').addEventListener('input', e => {
+      clearTimeout(clTimer)
+      const q = e.target.value.trim()
+      const box = document.getElementById('clResults')
+      document.getElementById('clCard').innerHTML = ''
+      if (q.length < 2) { box.innerHTML = ''; return }
+      clTimer = setTimeout(async () => {
+        const r = await api('/clients?q=' + encodeURIComponent(q)).catch(() => null)
+        if (!r || !r.ok) { box.innerHTML = ''; return }
+        if (!r.data.length) { box.innerHTML = '<div class="hint">Никого не нашли. Ищем по имени и @username — телефон зашифрован, по нему поиска нет.</div>'; return }
+        box.innerHTML = r.data.map(c => `<div class="list-i"><div style="flex:1">
+            <div class="nm">${esc(c.name)}${c.telegramUsername ? ' · @' + esc(c.telegramUsername) : ''}</div>
+            <div class="mt">${c.ordersCount} ${plural(c.ordersCount, 'заказ', 'заказа', 'заказов')}${c.phone ? ' · ' + esc(c.phone) : ''}</div>
+          </div>
+          <button class="btn b-gh sm" data-cl-open="${c.id}">Открыть</button></div>`).join('')
+        box.querySelectorAll('[data-cl-open]').forEach(b => b.addEventListener('click', () => openClient(b.dataset.clOpen)))
+      }, 250)
+    })
+
+    async function openClient(id) {
+      const r = await api('/clients/' + id).catch(() => null)
+      const box = document.getElementById('clCard')
+      if (!r || !r.ok) { box.innerHTML = '<div class="empty">Не удалось открыть карточку</div>'; return }
+      const c = r.data
+      document.getElementById('clResults').innerHTML = ''
+      box.innerHTML = `<div class="cap" style="margin:12px 0 6px">${esc(c.name.toUpperCase())}</div>
+        <div class="mt">${esc(c.source)}${c.telegramUsername ? ' · @' + esc(c.telegramUsername) : ''}</div>
+        <div class="mt">${c.phone ? 'телефон ' + esc(c.phone) : 'телефона нет'}${c.email ? ' · ' + esc(c.email) : ''}</div>
+        <div class="mt">${c.ordersCount} ${plural(c.ordersCount, 'заказ', 'заказа', 'заказов')}${c.totalRevenue == null ? '' : ' на ' + fmt(c.totalRevenue) + ' ₽'}${c.pdnConsentAt ? ' · согласие на ПДн есть' : ' · согласия на ПДн нет'}</div>
+        ${c.orders.length ? c.orders.map(o => `<div class="list-i"><div style="flex:1">
+            <div class="nm">Заказ №${o.id} · ${esc(o.status)}</div>
+            <div class="mt">${new Date(o.createdAt).toLocaleDateString('ru-RU')} · ${o.items.map(i => esc(i.name) + ' ×' + i.qty).join(', ')}${o.total == null ? '' : ' · ' + fmt(o.total) + ' ₽'}</div>
+          </div></div>`).join('') : '<div class="empty">Заказов ещё не было — покупатель только смотрит.</div>'}`
+    }
+
+    // ── РАССЫЛКИ ──────────────────────────────────────────────────────────────
+    async function loadBroadcasts() {
+      const r = await api('/broadcasts').catch(() => null)
+      const el = document.getElementById('bcHistory')
+      const isOwner = window.adminMe && window.adminMe.role === 'owner'
+      document.getElementById('bcAddBtn').style.display = isOwner ? '' : 'none'
+      if (!r || !r.ok) { el.textContent = 'Не удалось загрузить'; return }
+      if (!r.data.length) {
+        el.innerHTML = '<div class="empty">Рассылок ещё не было.<br>' +
+          (isOwner ? 'Отправьте первую — покупатели получат сообщение в боте.' : 'Отправить рассылку может только владелец.') + '</div>'
+        return
+      }
+      el.innerHTML = r.data.map(b => `<div class="list-i"><div style="flex:1">
+          <div class="nm">${esc((b.messageText || '').slice(0, 60) || 'без текста')}</div>
+          <div class="mt">${new Date(b.createdAt).toLocaleString('ru-RU')} · ${b.target === 'self-test' ? 'проверка себе' : 'всем'} · доставлено ${b.totalSent}${b.totalFailed ? ', не дошло ' + b.totalFailed : ''}</div>
+        </div></div>`).join('')
+    }
+
+    document.getElementById('bcAddBtn').addEventListener('click', () => {
+      const f = document.getElementById('bcForm')
+      f.style.display = f.style.display === 'none' ? '' : 'none'
+    })
+    document.getElementById('bcCancel').addEventListener('click', () => {
+      document.getElementById('bcForm').style.display = 'none'
+      document.getElementById('bcPreview').innerHTML = ''
+      document.getElementById('bcErr').textContent = ''
+    })
+    document.getElementById('bcPreviewBtn').addEventListener('click', async () => {
+      const err = document.getElementById('bcErr'); err.textContent = ''
+      const box = document.getElementById('bcPreview'); box.innerHTML = 'Считаем…'
+      const r = await api('/broadcasts/preview', { method: 'POST', body: JSON.stringify({ text: document.getElementById('bcText').value }) }).catch(() => null)
+      if (!r || !r.ok) { box.innerHTML = ''; err.textContent = (r && r.data && r.data.error) || 'Не получилось'; return }
+      const d = r.data
+      box.innerHTML = `<div class="${d.recipients ? 'okbox' : 'warnbox'}" style="margin-top:10px">
+        Уйдёт <b>${d.recipients}</b> ${plural(d.recipients, 'покупателю', 'покупателям', 'покупателям')}${d.sample.length ? ': ' + d.sample.map(esc).join(', ') + '…' : ' — некому, в базе нет клиентов из Telegram'}
+        ${d.lastBroadcast ? `<br>Прошлая рассылка: ${new Date(d.lastBroadcast.createdAt).toLocaleDateString('ru-RU')}, доставлено ${d.lastBroadcast.totalSent}` : ''}
+      </div>`
+    })
+    document.getElementById('bcSelfBtn').addEventListener('click', async () => {
+      const err = document.getElementById('bcErr'); err.textContent = ''
+      const r = await api('/broadcasts/send', { method: 'POST', body: JSON.stringify({ text: document.getElementById('bcText').value, mode: 'self' }) }).catch(() => null)
+      if (!r || !r.ok) { err.textContent = (r && r.data && r.data.error) || 'Не получилось'; return }
+      alert('Отправили вам в бот — посмотрите, как выглядит, прежде чем слать всем.')
+      loadBroadcasts()
+    })
+    document.getElementById('bcSendBtn').addEventListener('click', async () => {
+      const err = document.getElementById('bcErr'); err.textContent = ''
+      const text = document.getElementById('bcText').value
+      if (!confirm('Отправить сообщение ВСЕМ покупателям?\n\nОтозвать его нельзя. Убедитесь, что отправляли себе и текст верный.')) return
+      const btn = document.getElementById('bcSendBtn'); btn.disabled = true; btn.textContent = 'Отправляем…'
+      try {
+        const r = await api('/broadcasts/send', { method: 'POST', body: JSON.stringify({ text }) }).catch(() => null)
+        if (!r || !r.ok) { err.textContent = (r && r.data && r.data.error) || 'Не получилось'; return }
+        alert(`Готово: доставлено ${r.data.sent}${r.data.failed ? `, не дошло ${r.data.failed} (заблокировали бота)` : ''}.`)
+        document.getElementById('bcCancel').click()
+        loadBroadcasts()
+      } finally { btn.disabled = false; btn.textContent = 'Отправить всем' }
     })
 
     // ── КОМАНДА: доступ в админку (только владелец) ───────────────────────────

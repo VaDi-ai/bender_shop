@@ -790,6 +790,53 @@ export function adminApiRouter(): Router {
     res.status(r.status).json(r.ok ? { ok: true } : { error: r.error })
   }))
 
+  // ── АНАЛИТИКА, КЛИЕНТЫ, РАССЫЛКИ (пласт 4) ────────────────────────────────
+  //
+  // Аналитика и клиенты — чтение; суммы и полные контакты видит только
+  // владелец (деньги и ПДн). Рассылка уходит живым людям и не отменяется —
+  // отправка owner-only, с обязательным предпросмотром и репетицией «себе».
+  router.get('/insights', safe(async (req, res) => {
+    const { getInsights } = await import('../lib/insights-admin')
+    const days = parseInt(String(req.query.days ?? '30'), 10) || 30
+    res.json(await getInsights(req.admin!.role as never, days))
+  }))
+
+  router.get('/clients', safe(async (req, res) => {
+    const { findClients } = await import('../lib/insights-admin')
+    res.json(await findClients(req.admin!.role as never, String(req.query.q ?? '')))
+  }))
+
+  router.get('/clients/:id', safe(async (req, res) => {
+    const id = parseInt(String(req.params.id), 10)
+    if (!Number.isInteger(id)) { res.status(422).json({ error: 'Неверный ID' }); return }
+    const { getClientCard } = await import('../lib/insights-admin')
+    const card = await getClientCard(req.admin!.role as never, id)
+    if (!card) { res.status(404).json({ error: 'Клиент не найден' }); return }
+    res.json(card)
+  }))
+
+  router.get('/broadcasts', safe(async (_req, res) => {
+    const { broadcastHistory } = await import('../lib/broadcast-admin')
+    res.json(await broadcastHistory())
+  }))
+
+  router.post('/broadcasts/preview', safe(async (req, res) => {
+    const { previewBroadcast } = await import('../lib/broadcast-admin')
+    const r = await previewBroadcast((req.body as { text?: unknown })?.text)
+    res.status(r.status).json(r.ok ? r.data : { error: r.error })
+  }))
+
+  router.post('/broadcasts/send', ownerOnly, safe(async (req, res) => {
+    const b = (req.body ?? {}) as { text?: unknown; mode?: unknown }
+    const { sendBroadcast } = await import('../lib/broadcast-admin')
+    // mode: 'self' — репетиция себе, 'dry' — только счёт получателей, иначе всем
+    const opts = b.mode === 'self'
+      ? { onlyTo: req.admin!.telegramId }
+      : b.mode === 'dry' ? { dryRun: true } : {}
+    const r = await sendBroadcast(req.admin!.telegramId, b.text, opts)
+    res.status(r.status).json(r.ok ? { ok: true, ...(r.data as object) } : { error: r.error })
+  }))
+
   // ── Команда магазина: кто имеет доступ (owner-only) ───────────────────────
   router.get('/team', ownerOnly, safe(async (req, res) => {
     const { listTeam } = await import('../lib/admin-team')
