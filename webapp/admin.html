@@ -325,6 +325,43 @@
       <div class="card"><h3>Журнал синка</h3><div class="mt" id="syncRuns">Загрузка…</div></div>
       <div class="card"><h3>Кто что менял <span class="chip c-off right">скоро</span></h3><div class="mt">Каждое действие в админке уже пишется в журнал на сервере — просмотр появится после первых разделов Этапа 2.</div></div>
 
+      <div class="cap">АКЦИИ</div>
+      <div class="card">
+        <h3>Акции <span class="chip c-off right" id="promoChip">—</span></h3>
+        <div id="promoList" class="mt">Загрузка…</div>
+        <button class="btn b-gh" id="promoAddBtn">Создать акцию</button>
+        <div id="promoForm" style="display:none">
+          <input class="inp" id="promoName" placeholder="Название — его увидит покупатель" maxlength="120">
+          <div class="row" style="gap:8px">
+            <select class="inp" id="promoFilterType">
+              <option value="category">Категория</option>
+              <option value="brand">Бренд</option>
+            </select>
+            <select class="inp" id="promoFilterValue"></select>
+          </div>
+          <div class="row" style="gap:8px">
+            <select class="inp" id="promoDiscountType">
+              <option value="percent">− процентов</option>
+              <option value="fixed">− рублей</option>
+            </select>
+            <input class="inp" id="promoValue" placeholder="Размер скидки" inputmode="decimal">
+          </div>
+          <button class="btn b-gh" id="promoPreviewBtn">Показать, что изменится</button>
+          <div id="promoPreview"></div>
+          <button class="btn b-main" id="promoSave">Сохранить черновик</button>
+          <button class="btn b-nt" id="promoCancel">Отмена</button>
+          <div class="mt" id="promoErr" style="color:var(--bad)"></div>
+          <div class="hint">Черновик цены не двигает. Запустить акцию может только владелец — и только после предпросмотра.</div>
+        </div>
+      </div>
+
+      <div class="card" id="promoDangerCard" style="display:none">
+        <h3 style="color:var(--bad)">Опасная зона</h3>
+        <div class="warnbox">Действия здесь влияют на весь магазин. Сначала прочитайте, что произойдёт.</div>
+        <button class="btn b-dg" id="promoStopAll">Отменить все акции</button>
+        <div class="hint">Прежние цены вернутся у всех товаров сразу. Отменённые акции останутся в списке черновиками.</div>
+      </div>
+
       <div class="cap">КОМАНДА</div>
       <div class="card" id="teamCard" style="display:none">
         <h3>Доступ в админку</h3>
@@ -400,7 +437,7 @@
       window.adminMe = me
       gate.classList.add('hidden')
       loadDashboard(); loadSyncRuns(); loadSuppliers(); loadBatches(); loadUnmatched(); loadMarkupRules()
-      loadSimQueue(); loadSimRules(); loadSimRecalc(); loadStorefront(); loadTeam()
+      loadSimQueue(); loadSimRules(); loadSimRecalc(); loadStorefront(); loadTeam(); loadPromotions()
     }
 
     // ── ТОВАРЫ: карточка, фото (с записью в таблицу), описание, скрытие ───────
@@ -563,6 +600,122 @@
         document.getElementById('pcDescForm').style.display = 'none'
         openProductCard(pcProduct.id)
       } finally { btn.disabled = false; btn.textContent = 'Сохранить описание' }
+    })
+
+    // ── АКЦИИ: черновик → предпросмотр → запуск → отмена ──────────────────────
+    let promoOptions = { categories: [], brands: [] }
+
+    async function loadPromotions() {
+      const r = await api('/promotions').catch(() => null)
+      const el = document.getElementById('promoList')
+      const isOwner = window.adminMe && window.adminMe.role === 'owner'
+      if (!r || !r.ok) { el.textContent = 'Не удалось загрузить'; return }
+      promoOptions = r.data.options || { categories: [], brands: [] }
+      fillPromoValues()
+
+      const list = r.data.promotions || []
+      const active = list.filter(p => p.isActive)
+      document.getElementById('promoChip').textContent = active.length ? `${active.length} ${plural(active.length, 'идёт', 'идут', 'идут')}` : 'нет активных'
+      document.getElementById('promoDangerCard').style.display = isOwner && active.length ? '' : 'none'
+
+      if (!list.length) {
+        el.innerHTML = '<div class="empty">Акций ещё не было.<br>Создайте первую — покупатели увидят её во вкладке «Акции».</div>'
+        return
+      }
+      el.innerHTML = list.map(p => `<div class="list-i"><div style="flex:1">
+          <div class="nm">${esc(p.name)} <span class="new">−${p.discountType === 'percent' ? p.discountValue + '%' : fmt(p.discountValue) + ' ₽'}</span></div>
+          <div class="mt">${esc(p.filterLabel)}${p.isActive ? ` · держит ${p.affected} ${plural(p.affected, 'товар', 'товара', 'товаров')}` : ' · цены не тронуты'}</div>
+        </div>
+        <span class="chip ${p.isActive ? 'c-ok' : 'c-off'}">${p.isActive ? 'идёт' : 'черновик'}</span>
+        ${isOwner ? (p.isActive
+          ? `<button class="btn b-dg sm" data-promo-stop="${p.id}">Остановить</button>`
+          : `<button class="btn b-main sm" data-promo-run="${p.id}" data-promo-name="${esc(p.name)}">Запустить</button>
+             <button class="btn b-nt sm" data-promo-del="${p.id}">Удалить</button>`) : ''}
+      </div>`).join('')
+
+      el.querySelectorAll('[data-promo-run]').forEach(b => b.addEventListener('click', async () => {
+        if (!confirm(`Запустить «${b.dataset.promoName}»?\n\nЦены снизятся сразу и покупатель увидит их немедленно. Прежние цены сохранятся — при остановке вернутся сами.`)) return
+        const r2 = await api(`/promotions/${b.dataset.promoRun}/launch`, { method: 'POST', body: '{}' }).catch(() => null)
+        if (!r2 || !r2.ok) { alert(r2 && r2.data && r2.data.error || 'Не получилось'); return }
+        alert(`Акция идёт: цены снижены у ${r2.data.variants} ${plural(r2.data.variants, 'товара', 'товаров', 'товаров')}. Пока она идёт, эти цены не обновляются из таблицы.`)
+        loadPromotions()
+      }))
+      el.querySelectorAll('[data-promo-stop]').forEach(b => b.addEventListener('click', async () => {
+        if (!confirm('Остановить акцию? Прежние цены вернутся сразу.')) return
+        const r2 = await api(`/promotions/${b.dataset.promoStop}/stop`, { method: 'POST', body: '{}' }).catch(() => null)
+        if (!r2 || !r2.ok) { alert(r2 && r2.data && r2.data.error || 'Не получилось'); return }
+        alert(`Готово: прежние цены вернулись у ${r2.data.restored} ${plural(r2.data.restored, 'товара', 'товаров', 'товаров')}.`)
+        loadPromotions()
+      }))
+      el.querySelectorAll('[data-promo-del]').forEach(b => b.addEventListener('click', async () => {
+        if (!confirm('Удалить черновик? Цены он не двигал, восстановить нельзя.')) return
+        const r2 = await api('/promotions/' + b.dataset.promoDel, { method: 'DELETE' }).catch(() => null)
+        if (!r2 || !r2.ok) alert(r2 && r2.data && r2.data.error || 'Не получилось')
+        loadPromotions()
+      }))
+    }
+
+    function fillPromoValues() {
+      const type = document.getElementById('promoFilterType').value
+      const vals = type === 'brand' ? promoOptions.brands : promoOptions.categories
+      document.getElementById('promoFilterValue').innerHTML =
+        (vals || []).map(v => `<option value="${esc(v)}">${esc(v)}</option>`).join('') || '<option value="">нет вариантов</option>'
+    }
+    document.getElementById('promoFilterType').addEventListener('change', fillPromoValues)
+
+    document.getElementById('promoAddBtn').addEventListener('click', () => {
+      const f = document.getElementById('promoForm')
+      f.style.display = f.style.display === 'none' ? '' : 'none'
+    })
+    document.getElementById('promoCancel').addEventListener('click', () => {
+      document.getElementById('promoForm').style.display = 'none'
+      document.getElementById('promoPreview').innerHTML = ''
+      document.getElementById('promoErr').textContent = ''
+      document.getElementById('promoName').value = ''
+      document.getElementById('promoValue').value = ''
+    })
+
+    function promoBody() {
+      return {
+        name: document.getElementById('promoName').value,
+        filterType: document.getElementById('promoFilterType').value,
+        filterValue: document.getElementById('promoFilterValue').value,
+        discountType: document.getElementById('promoDiscountType').value,
+        discountValue: Number(String(document.getElementById('promoValue').value).replace(',', '.')),
+      }
+    }
+
+    document.getElementById('promoPreviewBtn').addEventListener('click', async () => {
+      const err = document.getElementById('promoErr'); err.textContent = ''
+      const box = document.getElementById('promoPreview'); box.innerHTML = 'Считаем…'
+      const r = await api('/promotions/preview', { method: 'POST', body: JSON.stringify(promoBody()) }).catch(() => null)
+      if (!r || !r.ok) { box.innerHTML = ''; err.textContent = (r && r.data && r.data.error) || 'Не получилось'; return }
+      const d = r.data
+      box.innerHTML = `<div class="${d.warnings.length ? 'warnbox' : 'okbox'}" style="margin-top:10px">
+          <b>${d.count} ${plural(d.count, 'товар', 'товара', 'товаров')}</b> под акцией, из них в наличии ${d.inStockCount}. Средняя скидка ${fmt(d.avgDrop)} ₽.
+          ${d.warnings.map(w => '<br>⚠️ ' + esc(w)).join('')}
+        </div>` +
+        d.rows.slice(0, 6).map(x => `<div class="list-i"><div style="flex:1">
+            <div class="nm">${esc(x.name)}</div>
+            <div class="mt diff"><span class="old">${fmt(x.oldPrice)} ₽</span> → <span class="new">${fmt(x.newPrice)} ₽</span>${x.inStock ? '' : ' · нет в наличии'}</div>
+          </div></div>`).join('') +
+        (d.count > 6 ? `<div class="hint">…и ещё ${d.count - 6}</div>` : '')
+    })
+
+    document.getElementById('promoSave').addEventListener('click', async () => {
+      const err = document.getElementById('promoErr'); err.textContent = ''
+      const r = await api('/promotions', { method: 'POST', body: JSON.stringify(promoBody()) }).catch(() => null)
+      if (!r || !r.ok) { err.textContent = (r && r.data && r.data.error) || 'Не получилось'; return }
+      document.getElementById('promoCancel').click()
+      loadPromotions()
+    })
+
+    document.getElementById('promoStopAll').addEventListener('click', async () => {
+      if (!confirm('Отменить ВСЕ идущие акции? Прежние цены вернутся у всех товаров сразу.')) return
+      const r = await api('/promotions/stop-all', { method: 'POST', body: '{}' }).catch(() => null)
+      if (!r || !r.ok) { alert(r && r.data && r.data.error || 'Не получилось'); return }
+      alert(`Остановлено акций: ${r.data.stopped}. Прежние цены вернулись.`)
+      loadPromotions()
     })
 
     // ── КОМАНДА: доступ в админку (только владелец) ───────────────────────────
