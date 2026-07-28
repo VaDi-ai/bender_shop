@@ -8,7 +8,7 @@ const RUN = process.env.INTEGRATION_DB === '1'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 let prisma: any
-let seedSimDictionary: any, previewRecalc: any, applyRecalc: any, rollbackRecalc: any, lastRecalcState: any
+let seedSimDictionary: any, previewRecalc: any, applyRecalc: any, rollbackRecalc: any, lastRecalcState: any, loadSimQueue: any
 
 function assertDisposableDb(): void {
   const url = process.env.DATABASE_URL ?? ''
@@ -28,7 +28,7 @@ describe.skipIf(!RUN)('SIM recalc (PR-B)', () => {
     assertDisposableDb()
     ;({ prisma } = await import('../../lib/prisma'))
     ;({ seedSimDictionary } = await import('../../lib/sim-rules'))
-    ;({ previewRecalc, applyRecalc, rollbackRecalc, lastRecalcState } = await import('../../lib/sim-recalc'))
+    ;({ previewRecalc, applyRecalc, rollbackRecalc, lastRecalcState, loadSimQueue } = await import('../../lib/sim-recalc'))
   })
 
   beforeEach(async () => {
@@ -142,6 +142,27 @@ describe.skipIf(!RUN)('SIM recalc (PR-B)', () => {
     expect(rb.conflicts).toHaveLength(1)
     expect(rb.conflicts![0]).toMatchObject({ variantId: ids.india, expected: 'SIM + eSIM', actual: '2 SIM' })
     expect(await simOf('india')).toBe('2 SIM')        // чужая правка цела
+  })
+
+  it('очередь обучения видит те же строки, что и пересчёт', async () => {
+    const [p, q] = [await previewRecalc(), await loadSimQueue()]
+    // «стоит без правила» — один и тот же список в обоих местах
+    expect(q.inherited.map((r: any) => r.variantId)).toEqual(p.inherited.map((r: any) => r.variantId))
+    // андроид в категории «Смартфоны» (пересчёт считает телефоном) виден в «не узнал»
+    const cat = await prisma.category.create({ data: { name: 'Смартфоны Xiaomi' } })
+    const prod = await prisma.product.create({ data: { sku: 'rb-x', name: 'Redmi Note 14S', brand: 'Xiaomi', price: 20000, categoryId: cat.id, attributes: {} } })
+    const v = await prisma.productVariant.create({
+      data: { productId: prod.id, sku: 'rb-x-1', price: 20000, quantity: 1, inStock: true,
+        attributes: { fullName: 'Redmi Note 14S 4G 8/256 Blue', 'Страна': 'Россия' } },
+    })
+    const q2 = await loadSimQueue()
+    expect(q2.missing).toContainEqual(expect.objectContaining({ brand: 'Xiaomi', country: 'Россия', count: 1 }))
+    // и при этом SIM ему не проставляется — в изменяемые разделы он не попал
+    const p2 = await previewRecalc()
+    expect([...p2.semantic, ...p2.added, ...p2.canonical].map((r: any) => r.variantId)).not.toContain(v.id)
+    await prisma.productVariant.deleteMany({ where: { productId: prod.id } })
+    await prisma.product.delete({ where: { id: prod.id } })
+    await prisma.category.delete({ where: { id: cat.id } })
   })
 
   it('обучение правила переводит наследие в семантические смены', async () => {

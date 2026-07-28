@@ -43,6 +43,7 @@ export interface InheritedRow {
   variantId: number
   fullName: string
   country: string | null
+  brand: string | null
   current: string
 }
 
@@ -64,8 +65,14 @@ export interface VariantRow {
   product: { name: string; brand: string | null; category: { name: string } | null }
 }
 
-/** Телефон ли это (SIM имеет смысл): категория или распознанное поколение iPhone. */
-function isPhone(v: VariantRow, attrs: Record<string, string>): boolean {
+/**
+ * Телефон ли это (SIM имеет смысл): категория или распознанное поколение
+ * iPhone. ОДИН признак на пересчёт и на очередь обучения — иначе строка,
+ * которую пересчёт считает телефоном, не видна владельцу в очереди и правило
+ * под неё не завести (расхождение «категория точно Телефоны» против
+ * вхождения нашлось на живом каталоге: ~173 андроида).
+ */
+export function isPhone(v: VariantRow, attrs: Record<string, string> = (v.attributes ?? {}) as Record<string, string>): boolean {
   const cat = v.product.category?.name ?? ''
   if (/телефон|iphone|смартфон/i.test(cat)) return true
   return detectGeneration(attrs.fullName, v.product.name) !== null
@@ -101,7 +108,10 @@ export function buildPreview(variants: VariantRow[], rules: SimRuleData[], alias
     const curCanon = canonicalizeSim(cur, aliases) ?? cur
     if (!want.simType) {
       // значение есть, правила нет — наследие; пересчёт не трогает
-      inherited.push({ variantId: v.id, fullName: base.fullName, country: base.country, current: cur })
+      inherited.push({
+        variantId: v.id, fullName: base.fullName, country: base.country,
+        brand: want.missingBrand ?? v.product.brand ?? null, current: cur,
+      })
       continue
     }
     if (want.simType !== curCanon) semantic.push({ ...base, from: cur, to: want.simType, by: want.reason })
@@ -128,6 +138,55 @@ export function buildPreview(variants: VariantRow[], rules: SimRuleData[], alias
 /** Пересчёт каталога длиннее ценового батча — держим лок дольше 15 с. */
 const LOCK_TIMEOUT_MS = 60_000
 
+export interface SimQueueMissing {
+  country: string
+  brand: string | null
+  count: number
+  example: string
+  generations: number[]
+}
+
+export interface SimQueue {
+  /** SIM не проставлен и правила нет — владельцу нужно завести правило */
+  missing: SimQueueMissing[]
+  /** SIM стоит с прежних времён, правила под него нет — пересчёт не трогает */
+  inherited: InheritedRow[]
+}
+
+/**
+ * Очередь обучения словаря. Признак «телефон» — тот же isPhone, что у
+ * пересчёта; группировка по связке «бренд + страна», потому что страновые
+ * правила принадлежат Apple и правило под андроид заводится под бренд.
+ */
+export function buildSimQueue(variants: VariantRow[], rules: SimRuleData[], aliases: AttrAliasData[]): SimQueue {
+  const missing = new Map<string, SimQueueMissing>()
+  for (const v of variants) {
+    const attrs = (v.attributes ?? {}) as Record<string, string>
+    if (!isPhone(v, attrs)) continue
+    // explicit передаём: строка с уже проставленным SIM в «не узнал» не идёт —
+    // она попадёт в inherited, если правила под неё нет
+    const r = resolveSimType(
+      { explicit: attrs.SIM, country: attrs['Страна'], brand: v.product.brand, names: [attrs.fullName, v.product.name] },
+      rules, aliases,
+    )
+    if (r.reason !== 'unknown') continue
+    const brand = r.missingBrand ?? null
+    const key = `${brand ?? ''}|${r.missingKey!}`
+    const cur = missing.get(key) ?? {
+      country: r.missingKey!, brand, count: 0,
+      example: attrs.fullName ?? v.product.name, generations: [],
+    }
+    cur.count++
+    const g = detectGeneration(attrs.fullName, v.product.name)
+    if (g && !cur.generations.includes(g)) cur.generations.push(g)
+    missing.set(key, cur)
+  }
+  return {
+    missing: [...missing.values()].sort((a, b) => b.count - a.count),
+    inherited: buildPreview(variants, rules, aliases).inherited,
+  }
+}
+
 const VARIANT_SELECT = {
   id: true, attributes: true,
   product: { select: { name: true, brand: true, category: { select: { name: true } } } },
@@ -139,6 +198,14 @@ const VARIANT_SELECT = {
  * applyRecalc сюда передаётся tx из-под лока синка, чтобы preview и запись
  * видели ОДНО состояние каталога.
  */
+export async function loadSimQueue(): Promise<SimQueue> {
+  const [rules, aliases, variants] = await Promise.all([
+    loadSimRules(), loadAttrAliases('SIM'),
+    prisma.productVariant.findMany({ select: VARIANT_SELECT }),
+  ])
+  return buildSimQueue(variants as VariantRow[], rules, aliases)
+}
+
 export async function previewRecalc(db: any = prisma): Promise<RecalcPreview> {
   const [rules, aliases, variants] = await Promise.all([
     loadSimRules(), loadAttrAliases('SIM'),
