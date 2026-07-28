@@ -402,6 +402,19 @@ export function startApiServer(bot?: Telegraf): Server {
     log.info('CDN photo index built', { files: cdnPhotoIndex.exact.size })
   }
 
+  /**
+   * Картинка баннера/категории. Бот кладёт telegram file_id (отдаём через
+   * прокси /api/banner), веб-админка — готовую ссылку (/photos/... или
+   * https://): её отдаём как есть, прокси не нужен.
+   */
+  function publicImageFileUrl(imageFile: string | null): string | null {
+    if (!imageFile) return null
+    const v = imageFile.trim()
+    if (!v) return null
+    if (/^https?:\/\//i.test(v) || v.startsWith('/photos/')) return v
+    return '/api/banner/' + v
+  }
+
   function normalizePublicPhotoUrl(url: string): string {
     const s = cleanPhotoUrl(url)
     if (!s) return s
@@ -798,7 +811,7 @@ export function startApiServer(bot?: Telegraf): Server {
         name: c.name,
         textSide: c.textSide,
         productCount: c._count.products,
-        imageUrl: c.imageFile ? `/api/banner/${c.imageFile}` : null,
+        imageUrl: publicImageFileUrl(c.imageFile),
       }))
 
       res.json(payload)
@@ -1005,7 +1018,7 @@ export function startApiServer(bot?: Telegraf): Server {
       })
       const payload = banners.map((b) => ({
         id: b.id,
-        imageUrl: '/api/banner/' + b.imageFile,
+        imageUrl: publicImageFileUrl(b.imageFile),
         title: b.title ?? null,
         subtitle: b.subtitle ?? null,
         order: b.order,
@@ -1025,8 +1038,14 @@ export function startApiServer(bot?: Telegraf): Server {
       return
     }
 
-    const banner = await prisma.heroBanner.findFirst({ where: { imageFile: fileId } })
-    if (!banner) {
+    // file_id может принадлежать баннеру ИЛИ фото категории: раньше
+    // категорийные картинки из бота отдавали 404, потому что искали только
+    // в HeroBanner.
+    const [banner, category] = await Promise.all([
+      prisma.heroBanner.findFirst({ where: { imageFile: fileId }, select: { id: true } }),
+      prisma.category.findFirst({ where: { imageFile: fileId }, select: { id: true } }),
+    ])
+    if (!banner && !category) {
       res.status(404).send('Not found')
       return
     }
