@@ -604,13 +604,33 @@ export function startApiServer(bot?: Telegraf): Server {
     }
   )
 
+  // Telegram-webview кэширует HTML агрессивно: без этих заголовков владелец
+  // после деплоя видит СТАРУЮ страницу (headless — новую). Оба Mini App
+  // отдаём как no-store; ассеты (шрифты, фото) кэшируются своими правилами.
+  // Версия отданного HTML — чтобы по curl -I было видно, какая сборка у клиента
+  // (весь CSS/JS обоих Mini App инлайновый, внешние ассеты — только статичные
+  // шрифты и favicon, их кэш не мешает обновлениям).
+  const APP_VERSION = process.env.RAILWAY_GIT_COMMIT_SHA?.slice(0, 7)
+    || String(Math.floor(Date.now() / 1000))
+
+  function sendMiniApp(res: Response, html: Buffer): void {
+    res.setHeader('Content-Type', 'text/html; charset=utf-8')
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0')
+    res.setHeader('Pragma', 'no-cache')   // старые webview понимают только это
+    res.setHeader('Expires', '0')
+    res.setHeader('X-App-Version', APP_VERSION)
+    res.setHeader('Content-Length', String(html.length))
+    // res.end (не res.send): send сам проставляет ETag → кривые webview/прокси
+    // отвечают 304 из своего кэша даже при no-store. Здесь ETag не нужен вовсе.
+    res.end(html)
+  }
+
   app.get('/shop', (_req, res) => {
     if (!indexHtml) {
       res.status(503).send('webapp not available')
       return
     }
-    res.setHeader('Content-Type', 'text/html; charset=utf-8')
-    res.send(indexHtml)
+    sendMiniApp(res, indexHtml)
   })
 
   // ── GET /admin — админка (Mini App). HTML отдаётся всем, данные — за
@@ -620,8 +640,7 @@ export function startApiServer(bot?: Telegraf): Server {
       res.status(503).send('admin webapp not available')
       return
     }
-    res.setHeader('Content-Type', 'text/html; charset=utf-8')
-    res.send(adminHtml)
+    sendMiniApp(res, adminHtml)
   })
 
   // ── GET /health ────────────────────────────────────────────────────────────
