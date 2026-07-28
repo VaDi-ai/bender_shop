@@ -20,15 +20,19 @@ function assertDisposableDb(): void {
   }
 }
 
-/** Снимок живого каталога на момент планирования (страна × метка × кол-во). */
-const CATALOG_SNAPSHOT: Array<[string, string, number]> = [
-  ['Индия', 'eSIM', 60], ['Япония', 'eSIM', 49], ['ОАЭ', 'SIM + eSIM', 23],
-  ['Гонконг', '2 SIM', 21], ['Россия', 'SIM + eSIM', 16], ['Казахстан', 'SIM + eSIM', 12],
-  ['США', 'eSIM', 9], ['Китай', '2Sim', 8], ['Панама', 'SIM + eSIM', 4],
-  ['Индия', 'SIM + eSIM', 4], ['Гонконг', '2Sim', 3], ['Европа', 'SIM + eSIM', 3],
-  ['Таиланд', 'SIM + eSIM', 2], ['Сингапур', 'SIM + eSIM', 2], ['ОАЭ', 'eSIM', 2],
-  ['ЮАР', 'SIM + eSIM', 2], ['Малайзия', 'SIM + eSIM', 2], ['Европа', 'eSIM', 1],
-  ['Южная Корея', 'eSIM', 1], ['Япония', 'eSim', 1],
+/**
+ * Реальное влияние полного сида, посчитанное на живом каталоге (28.07.2026):
+ * 12 канонизаций метки + 65 смен значения, из них Индия 60.
+ * Строки снимка — (страна, текущая метка, поколение, кол-во).
+ */
+const CATALOG_SNAPSHOT: Array<[string, string, number, number]> = [
+  ['Индия', 'eSIM', 17, 60], ['Япония', 'eSIM', 17, 48], ['Япония', 'eSIM', 16, 1],
+  ['ОАЭ', 'SIM + eSIM', 16, 23], ['Гонконг', '2 SIM', 17, 21], ['Россия', 'SIM + eSIM', 17, 16],
+  ['Казахстан', 'SIM + eSIM', 17, 12], ['США', 'eSIM', 17, 9], ['Китай', '2Sim', 17, 8],
+  ['Панама', 'SIM + eSIM', 17, 4], ['Индия', 'SIM + eSIM', 17, 4], ['Гонконг', '2Sim', 17, 3],
+  ['Европа', 'SIM + eSIM', 17, 3], ['Таиланд', 'SIM + eSIM', 17, 2], ['Сингапур', 'SIM + eSIM', 17, 2],
+  ['ОАЭ', 'eSIM', 16, 2], ['ЮАР', 'SIM + eSIM', 17, 2], ['Малайзия', 'SIM + eSIM', 17, 2],
+  ['Европа', 'eSIM', 17, 1], ['Южная Корея', 'eSIM', 17, 1], ['Япония', 'eSim', 17, 1],
 ]
 
 describe.skipIf(!RUN)('SIM dictionary (реальная БД)', () => {
@@ -93,9 +97,8 @@ describe.skipIf(!RUN)('SIM dictionary (реальная БД)', () => {
 
     let canon = 0, changed = 0
     const byCountry: Record<string, number> = {}
-    for (const [country, label, count] of CATALOG_SNAPSHOT) {
-      // все строки снимка — iPhone 17-го поколения, кроме явно японских 16-х
-      const name = `iPhone 17 Pro 256 (${country})`
+    for (const [country, label, gen, count] of CATALOG_SNAPSHOT) {
+      const name = `iPhone ${gen} Pro 256 (${country})`
       const curCanon = canonicalizeSim(label, aliases) ?? label
       if (curCanon !== label) canon += count
       const want = resolveSimType({ country, names: [name] }, rules, aliases)
@@ -106,7 +109,9 @@ describe.skipIf(!RUN)('SIM dictionary (реальная БД)', () => {
     }
     expect(canon).toBe(12)                 // 2Sim ×11 + eSim ×1
     expect(byCountry['Индия']).toBe(60)    // главное изменение витрины
-    expect(changed).toBe(64)               // Индия 60 + ОАЭ 2 + Европа 1 + Япония 1
+    expect(changed).toBe(65)               // Индия 60 + ОАЭ 2 + Европа 1 + Япония 1 + Корея 1
+    // ОАЭ 16-го поколения (23 шт) НЕ меняются: правило «с 17-го → eSIM» их не задевает
+    expect(byCountry['ОАЭ']).toBe(2)
   })
 
   it('фильтр аксессуаров на живой выборке имён', async () => {

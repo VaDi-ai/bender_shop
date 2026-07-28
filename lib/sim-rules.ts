@@ -41,11 +41,13 @@ export const norm = (s: string | null | undefined): string => (s ?? '').trim().t
  * Для не-iPhone вернёт null — сработают только правила без modelGenFrom.
  */
 export function detectGeneration(...names: Array<string | null | undefined>): number | null {
+  // (?!\d) — не хватать «12» из «128GB»; (?!\s*(?:gb|tb)) — не считать объём
+  // памяти поколением («iPhone 128GB Black» → null, а не 12)
   for (const n of names) {
-    const m = /iphone\s+(?:se\s+)?(\d{1,2})/i.exec(n ?? '')
+    const m = /iphone\s+(?:se\s+)?(\d{1,2})(?!\d)(?!\s*(?:gb|tb))/i.exec(n ?? '')
     if (m) {
       const g = parseInt(m[1]!, 10)
-      if (g >= 5 && g <= 30) return g   // отсекаем «iPhone 128GB»-мусор
+      if (g >= 5 && g <= 30) return g
     }
   }
   return null
