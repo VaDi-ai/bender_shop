@@ -308,18 +308,18 @@ export async function rollbackRecalc(actorTelegramId: string): Promise<RollbackO
         where: { entity: 'SimRecalc', action: 'sim_recalc_batch' },
         orderBy: { id: 'desc' },
       })
-      if (!head) return { ok: false, status: 404, error: 'Пересчётов ещё не было' }
+      if (!head) return { ok: false, status: 404, error: 'Обновлений по словарю ещё не было' }
 
       const alreadyRolled = await tx.auditLog.findFirst({
         where: { entity: 'SimRecalc', action: 'sim_recalc_rollback', after: { path: ['recalcId'], equals: head.id } },
       })
-      if (alreadyRolled) return { ok: false, status: 409, error: 'Этот пересчёт уже откачен' }
+      if (alreadyRolled) return { ok: false, status: 409, error: 'Это обновление уже откачено' }
 
       const rows = await tx.auditLog.findMany({
         where: { entity: 'ProductVariant', action: 'sim_recalc', after: { path: ['recalcId'], equals: head.id } },
         orderBy: { id: 'asc' },
       })
-      if (!rows.length) return { ok: false, status: 404, error: 'Строки пересчёта не найдены' }
+      if (!rows.length) return { ok: false, status: 404, error: 'Строки обновления не найдены' }
 
       const conflicts: NonNullable<RollbackOutcome['conflicts']> = []
       let restored = 0
