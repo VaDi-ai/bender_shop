@@ -48,6 +48,7 @@ export type SecurityEvent =
   | 'admin_invalid_signature'
   | 'price_batch_applied'
   | 'price_out_of_corridor_applied'
+  | 'markup_rule_changed'
 
 // ─── Ссылка на бот для реалтайм-алертов ──────────────────────────────────────
 
@@ -119,6 +120,7 @@ const EVENT_DESCRIPTIONS: Record<SecurityEvent, string> = {
   admin_invalid_signature:    '🔑 Запрос к админ-API с неверной подписью Telegram',
   price_batch_applied:        '💰 Применён батч цен из разбора прайса',
   price_out_of_corridor_applied: '🚨 Применены цены ВНЕ коридора ±15% (owner-овеаррайд)',
+  markup_rule_changed:        '💰 Изменено правило наценки (влияет на пересчёт всех цен)',
 }
 
 const SENSITIVE_KEY_PATTERNS = ['token', 'key', 'hash', 'secret']

@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="ru"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>BENDER SHOP — админка (мокап)</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Onest:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0a0a0a;--card:#161618;--card2:#1c1c1e;--bd:#2c2c2e;--tx:#fff;--dim:#8a8a8a;--ac:#a8ff3e;--acf:#0a0a0a;--warn:#ffcc4d;--bad:#ff6b5e;--ok:#5ed17a;--slot:#f7f2f0}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+body{background:#000;font-family:'Onest',system-ui,sans-serif;font-weight:400;display:flex;justify-content:center;padding:18px;gap:18px;flex-wrap:wrap}
+.phone{width:390px;background:var(--bg);color:var(--tx);border-radius:26px;overflow:hidden;position:relative;height:860px;display:flex;flex-direction:column;box-shadow:0 18px 50px rgba(0,0,0,.6)}
+.mono{font-family:'JetBrains Mono',monospace}
+.top{padding:14px 16px;border-bottom:1px solid #1a1a1a;display:flex;align-items:center;gap:10px;background:rgba(10,10,10,.96)}
+.top .lg{font-family:'JetBrains Mono',monospace;color:var(--ac);font-weight:700;letter-spacing:1.5px;font-size:13px}
+.top .rl{margin-left:auto;font-size:11px;color:var(--dim)}
+.body{flex:1;overflow-y:auto;padding:14px 14px 20px;scrollbar-width:none}
+.body::-webkit-scrollbar{display:none}
+h2{font-size:19px;font-weight:600;margin-bottom:4px}
+.sub{font-size:12px;color:var(--dim);margin-bottom:14px;line-height:1.5}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:14px;margin-bottom:12px}
+.card h3{font-size:14px;font-weight:600;margin-bottom:8px;display:flex;align-items:center;gap:8px}
+.row{display:flex;align-items:center;gap:10px}
+.row+.row{margin-top:10px}
+.spacer{margin-left:auto}
+.chip{font-size:10px;padding:3px 8px;border-radius:20px;font-weight:500}
+.c-ok{background:rgba(94,209,122,.15);color:var(--ok)}
+.c-warn{background:rgba(255,204,77,.15);color:var(--warn)}
+.c-off{background:#232326;color:var(--dim)}
+.c-bad{background:rgba(255,107,94,.15);color:var(--bad)}
+.btn{font-family:'Onest';font-weight:600;font-size:13px;padding:12px 14px;border-radius:11px;border:none;width:100%;cursor:pointer;margin-top:10px}
+.b-main{background:var(--ac);color:var(--acf)}
+.b-gh{background:transparent;color:var(--ac);border:1px solid var(--ac)}
+.b-nt{background:#232326;color:#ddd}
+.b-dg{background:transparent;color:var(--bad);border:1px solid rgba(255,107,94,.5)}
+.btn.sm{width:auto;padding:9px 14px;font-size:12px;margin-top:0}
+.hint{font-size:11px;color:var(--dim);line-height:1.6;margin-top:9px;padding-left:20px;position:relative}
+.hint:before{content:"→";position:absolute;left:4px;color:var(--ac)}
+.kpi{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
+.kpi div{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:12px}
+.kpi .n{font-size:20px;font-weight:600}
+.kpi .l{font-size:11px;color:var(--dim);margin-top:2px}
+.list-i{display:flex;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid #232326;font-size:13px}
+.list-i:last-child{border-bottom:none}
+.ph{width:44px;height:44px;border-radius:9px;background:var(--slot);flex:none;display:flex;align-items:center;justify-content:center;font-size:9px;color:#8d8781}
+.nm{font-size:13px}.mt{font-size:11px;color:var(--dim);margin-top:2px}
+.empty{text-align:center;padding:26px 14px;border:1px dashed var(--bd);border-radius:14px;color:var(--dim);font-size:12.5px;line-height:1.7}
+.tabbar{display:flex;border-top:1px solid #1c1c1c;background:rgba(12,12,12,.98)}
+.tb{flex:1;padding:9px 2px 11px;text-align:center;font-size:9.5px;color:var(--dim);cursor:pointer}
+.tb.on{color:var(--ac)}
+.tb i{display:block;font-size:16px;font-style:normal;margin-bottom:3px}
+.inp{background:#0f0f10;border:1px solid var(--bd);border-radius:10px;padding:11px 12px;color:#fff;font-family:'Onest';font-size:13px;width:100%;margin-top:6px}
+.lbl{font-size:11px;color:var(--dim)}
+.warnbox{background:rgba(255,204,77,.08);border:1px solid rgba(255,204,77,.3);border-radius:12px;padding:12px;font-size:12px;line-height:1.6;color:#f0dfa8}
+.okbox{background:rgba(168,255,62,.07);border:1px solid rgba(168,255,62,.3);border-radius:12px;padding:12px;font-size:12px;line-height:1.6;color:#d6f8a8}
+.cap{font-family:'JetBrains Mono',monospace;font-size:9.5px;letter-spacing:1.5px;color:#5a5a5a;margin:16px 0 8px}
+.diff{font-family:'JetBrains Mono',monospace;font-size:12px}
+.old{color:var(--dim);text-decoration:line-through}.new{color:var(--ac)}
+.screen{display:none}.screen.on{display:block}
+.note{max-width:390px;color:#7a7a7a;font-size:11.5px;line-height:1.8;font-family:'JetBrains Mono',monospace;padding:10px}
+.note b{color:var(--ac);font-weight:500}
+</style></head><body>
+
+<div class="phone">
+  <div class="top"><span class="lg">BENDER//АДМИН</span><span class="rl">Магазин работает</span></div>
+  <div class="body">
+
+    <!-- ГЛАВНАЯ -->
+    <div class="screen on" id="s-home">
+      <h2>Что сегодня</h2>
+      <div class="sub">Коротко: что происходит и что требует вашего внимания.</div>
+      <div class="kpi">
+        <div><div class="n">12</div><div class="l">заказов сегодня</div></div>
+        <div><div class="n">148 200 ₽</div><div class="l">выручка</div></div>
+        <div><div class="n">31 400 ₽</div><div class="l">прибыль</div></div>
+        <div><div class="n">248</div><div class="l">заходов в магазин</div></div>
+      </div>
+
+      <div class="card">
+        <h3>⚠️ Требует внимания <span class="chip c-warn spacer">3</span></h3>
+        <div class="list-i"><div><div class="nm">4 новых прайса не разобраны</div><div class="mt">от Дубай-опт, Гонконг-1</div></div></div>
+        <div class="list-i"><div><div class="nm">7 позиций система не узнала</div><div class="mt">нужно подсказать, что это за товар</div></div></div>
+        <div class="list-i"><div><div class="nm">iPhone: нет в наличии</div><div class="mt">во всех 159 строках стоит 0</div></div></div>
+        <button class="btn b-main" onclick="go('s-prices')">Перейти к ценам</button>
+      </div>
+
+      <div class="card">
+        <h3>Быстрые действия</h3>
+        <button class="btn b-gh">Обновить сайт</button>
+        <div class="hint">Покупатели сразу увидят свежие цены и товары.</div>
+        <button class="btn b-nt">Посмотреть заказы</button>
+      </div>
+    </div>
+
+    <!-- ЦЕНЫ И ПОСТАВЩИКИ -->
+    <div class="screen" id="s-prices">
+      <h2>Цены и поставщики</h2>
+      <div class="sub">Разбираем прайсы, берём лучшую цену, ставим наценку.</div>
+
+      <div class="cap">НОВЫЕ ПРАЙСЫ</div>
+      <div class="card">
+        <h3>Дубай-опт <span class="chip c-warn spacer">не разобран</span></h3>
+        <div class="mt">Прислал сообщение 12 минут назад · 34 позиции</div>
+        <button class="btn b-main">Разобрать прайс</button>
+        <div class="hint">Система прочитает сообщение и покажет, какие цены изменятся. Ничего не применится, пока вы не подтвердите.</div>
+      </div>
+
+      <div class="cap">РАЗОБРАНО — ПРОВЕРЬТЕ И ПРИМЕНИТЕ</div>
+      <div class="card">
+        <h3>Гонконг-1 <span class="chip c-ok spacer">узнано 28 из 31</span></h3>
+        <div class="list-i"><div class="ph mono">фото</div><div style="flex:1"><div class="nm">iPhone 17 Pro Max 256 Black</div>
+          <div class="mt diff">закупка <span class="old">92 000</span> → <span class="new">88 500</span> · сайт <span class="new">128 500</span> · авито <span class="new">124 000</span></div></div></div>
+        <div class="list-i"><div class="ph mono">фото</div><div style="flex:1"><div class="nm">MacBook Air 15 M5</div>
+          <div class="mt diff">закупка <span class="old">104 000</span> → <span class="new">101 200</span> · сайт <span class="new">142 500</span> · авито <span class="new">138 000</span></div></div></div>
+        <button class="btn b-main">Применить цены</button>
+        <div class="hint">Обновятся 28 позиций. Наценка посчитается сама: сайт +45%, Авито +40%. Старые цены сохранятся — можно откатить.</div>
+        <button class="btn b-nt">Показать все 28 позиций</button>
+      </div>
+
+      <div class="cap">СИСТЕМА НЕ УЗНАЛА — ПОДСКАЖИТЕ</div>
+      <div class="card">
+        <h3>3 позиции <span class="chip c-bad spacer">нужна помощь</span></h3>
+        <div class="list-i"><div style="flex:1"><div class="nm mono">«айфон 17 про макс 256 чёрн дубай»</div>
+          <div class="mt">поставщик назвал по-своему — что это за товар?</div></div></div>
+        <button class="btn b-gh">Связать с товаром</button>
+        <div class="hint">Свяжете один раз — дальше система узнает это название сама, подсказывать больше не придётся.</div>
+      </div>
+
+      <div class="card">
+        <h3>Настройки наценки</h3>
+        <div class="row"><span class="lbl">Наценка на сайт</span><span class="spacer mono" style="color:var(--ac)">+45%</span></div>
+        <div class="row"><span class="lbl">Наценка на Авито</span><span class="spacer mono" style="color:var(--ac)">+40%</span></div>
+        <div class="row"><span class="lbl">Применять автоматически</span><span class="spacer chip c-ok">если цена ±15%</span></div>
+        <button class="btn b-nt">Изменить наценку</button>
+        <div class="hint">Если цена изменилась сильнее коридора — система не тронет её и спросит вас.</div>
+      </div>
+
+      <div class="card">
+        <h3>Поставщики</h3>
+        <div class="list-i"><div style="flex:1"><div class="nm">Дубай-опт</div><div class="mt">34 позиции · прайс 12 минут назад</div></div><span class="chip c-ok">активен</span></div>
+        <div class="list-i"><div style="flex:1"><div class="nm">Гонконг-1</div><div class="mt">31 позиция · прайс 2 часа назад</div></div><span class="chip c-ok">активен</span></div>
+        <div class="list-i"><div style="flex:1"><div class="nm">Китай-мелкий</div><div class="mt">прайса не было 6 дней</div></div><span class="chip c-off">молчит</span></div>
+        <button class="btn b-gh">Добавить поставщика</button>
+      </div>
+    </div>
+
+    <!-- ВИТРИНА -->
+    <div class="screen" id="s-shop">
+      <h2>Витрина</h2>
+      <div class="sub">Как магазин выглядит для покупателя.</div>
+
+      <div class="card">
+        <h3>Баннеры на главной</h3>
+        <div class="list-i"><div class="ph mono">фото</div><div style="flex:1"><div class="nm">MacBook Pro — работа с комфортом</div><div class="mt">показывается первым</div></div><span class="chip c-ok">включён</span></div>
+        <div class="list-i"><div class="ph mono">фото</div><div style="flex:1"><div class="nm">Galaxy S26</div><div class="mt">показывается вторым</div></div><span class="chip c-off">выключен</span></div>
+        <button class="btn b-main">Добавить баннер</button>
+        <div class="hint">Загрузите картинку и текст — баннер появится на главной сразу после сохранения.</div>
+      </div>
+
+      <div class="card">
+        <h3>Категории</h3>
+        <div class="list-i"><div class="ph mono">фото</div><div style="flex:1"><div class="nm">iPhone</div><div class="mt">фото: берётся с новейшей модели</div></div></div>
+        <div class="list-i"><div class="ph mono">нет</div><div style="flex:1"><div class="nm">AirPods</div><div class="mt">фото нет ни у одной модели</div></div><span class="chip c-warn">без фото</span></div>
+        <button class="btn b-gh">Заменить фото категории</button>
+        <div class="hint">По умолчанию берётся фото самой новой модели. Можно поставить своё — оно будет главнее.</div>
+      </div>
+
+      <div class="card">
+        <h3>Бегущая строка</h3>
+        <div class="mt">«Сайт в разработке. Скоро доступен к оформлению заказов»</div>
+        <button class="btn b-nt">Изменить текст</button>
+      </div>
+
+      <div class="card">
+        <h3>Хиты продаж</h3>
+        <div class="mt">Сейчас: по самой новой модели из каждой категории</div>
+        <button class="btn b-nt">Выбрать хиты вручную</button>
+        <div class="hint">Вручную выбранные товары встанут вперёд автоматических.</div>
+      </div>
+    </div>
+
+    <!-- ТОВАР -->
+    <div class="screen" id="s-goods">
+      <h2>Товары</h2>
+      <div class="sub">Карточки, фото, что показывать покупателю.</div>
+
+      <div class="card">
+        <h3>iPhone 17 Pro Max</h3>
+        <div class="mt" style="margin-bottom:10px">4 предложения: США, ОАЭ, Гонконг, Китай</div>
+        <div class="row"><div class="ph" style="width:70px;height:70px">превью</div>
+          <div style="flex:1"><div class="lbl">Главное фото</div><div class="mt">его видят в каталоге и поиске</div>
+          <button class="btn b-gh sm" style="margin-top:8px">Заменить фото</button></div></div>
+        <div class="hint">У товара одно главное фото. У предложений (разные страны) могут быть свои — они не влияют на превью.</div>
+      </div>
+
+      <div class="card">
+        <h3>Предложения товара</h3>
+        <div class="list-i"><div style="flex:1"><div class="nm">256 ГБ · Black · ОАЭ</div><div class="mt">SIM + eSIM · 128 500 ₽ · 3 шт</div></div><span class="chip c-ok">в наличии</span></div>
+        <div class="list-i"><div style="flex:1"><div class="nm">256 ГБ · Black · Китай</div><div class="mt">2 SIM · 124 000 ₽ · 0 шт</div></div><span class="chip c-off">нет</span></div>
+        <div class="hint">Тип SIM подставляется по стране. Если поставщик прислал иначе — поправьте вручную.</div>
+        <button class="btn b-nt">Изменить описание</button>
+        <button class="btn b-dg">Скрыть товар с витрины</button>
+      </div>
+    </div>
+
+    <!-- ЕЩЁ -->
+    <div class="screen" id="s-more">
+      <h2>Ещё</h2>
+      <div class="sub">Клиенты, рассылки, акции, настройки.</div>
+
+      <div class="card">
+        <h3>Рассылки</h3>
+        <div class="empty">Рассылок ещё не было.<br>Отправьте первую — покупатели получат сообщение в боте.
+        <button class="btn b-main" style="margin-top:14px">Создать рассылку</button></div>
+      </div>
+
+      <div class="card">
+        <h3>Акции</h3>
+        <div class="list-i"><div style="flex:1"><div class="nm">Скидка на MacBook −10%</div><div class="mt">создана, не запущена</div></div><span class="chip c-off">черновик</span></div>
+        <button class="btn b-main">Запустить акцию</button>
+        <div class="hint">Цены снизятся сразу. Старые цены сохранятся — при отмене вернутся сами.</div>
+        <button class="btn b-gh">Создать акцию</button>
+      </div>
+
+      <div class="card">
+        <h3>Клиенты</h3>
+        <div class="row"><span class="lbl">Всего покупателей</span><span class="spacer mono">2 858</span></div>
+        <div class="row"><span class="lbl">С заказами</span><span class="spacer mono">14</span></div>
+        <button class="btn b-nt">Найти клиента</button>
+      </div>
+
+      <div class="card">
+        <h3 style="color:var(--bad)">Опасная зона</h3>
+        <div class="warnbox">Действия здесь влияют на весь магазин. Сначала прочитайте, что произойдёт.</div>
+        <button class="btn b-dg">Отменить все акции</button>
+        <div class="hint">Цены вернутся к прежним у всех товаров сразу.</div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="tabbar">
+    <div class="tb on" onclick="go('s-home')"><i>▤</i>Сегодня</div>
+    <div class="tb" onclick="go('s-prices')"><i>₽</i>Цены</div>
+    <div class="tb" onclick="go('s-shop')"><i>◫</i>Витрина</div>
+    <div class="tb" onclick="go('s-goods')"><i>▣</i>Товары</div>
+    <div class="tb" onclick="go('s-more')"><i>⋯</i>Ещё</div>
+  </div>
+</div>
+
+<div class="note">
+  <b>Принципы, зашитые в мокап:</b><br>
+  • кнопка = <b>глагол + объект</b> («Разобрать прайс», «Применить цены», «Заменить фото»), раздел = существительное;<br>
+  • под каждой кнопкой — <b>что произойдёт дальше</b> и можно ли откатить;<br>
+  • статус всегда виден: включён / выключен / черновик / не разобран / нужна помощь;<br>
+  • пустое состояние = не «нет данных», а приглашение к действию;<br>
+  • опасное — отдельной зоной, красным, с описанием последствий;<br>
+  • флагман <b>«Цены»</b> — вторая вкладка: разобрать → проверить → применить, плюс очередь «не узнал» с обучением в один тап;<br>
+  • <b>самообучение</b>: связал название один раз → система запомнила, дальше сама.
+</div>
+
+<script>
+function go(id){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('on'));
+  document.getElementById(id).classList.add('on');
+  var m={'s-home':0,'s-prices':1,'s-shop':2,'s-goods':3,'s-more':4};
+  document.querySelectorAll('.tb').forEach((t,i)=>t.classList.toggle('on', i===m[id]));
+  document.querySelector('.body').scrollTop=0;
+}
+</script>
+</body></html>
