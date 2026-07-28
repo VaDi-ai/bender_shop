@@ -262,6 +262,7 @@
       const r = await api('/dashboard').catch(() => null)
       if (!r || !r.ok) return
       const d = r.data
+      if (!d || !d.orders) return   // неожиданный ответ не должен ронять экран
       document.getElementById('kOrdersToday').textContent = d.orders.today.count
       document.getElementById('kRevenueToday').textContent = d.orders.today.revenue == null ? '—' : rub(d.orders.today.revenue)
       const chip = document.getElementById('syncChip')
@@ -511,26 +512,77 @@
 
     // ── Цены: правила наценки ─────────────────────────────────────────────────
     const CH_LABEL = { site: 'Сайт', avito: 'Авито' }
+    const CHANNELS = ['site', 'avito']   // показываем оба всегда, даже пустые
+
+    /** Диапазон правила человеческой строкой: «от 1 000 ₽ до 5 000 ₽» / «от X ₽ и выше». */
+    function ruleRange(x) {
+      return x.maxCost === null
+        ? `от ${fmt(x.minCost)} ₽ и выше`
+        : `от ${fmt(x.minCost)} ₽ до ${fmt(x.maxCost)} ₽`
+    }
+    function ruleMarkup(x) {
+      return x.mode === 'percent' ? `+${x.value}%` : `+${fmt(x.value)} ₽`
+    }
+
+    /** Дыры покрытия канала: до первого правила, между правилами, после последнего. */
+    function coverageGaps(enabled) {
+      const gaps = []
+      if (!enabled.length) return gaps
+      if (enabled[0].minCost > 0) gaps.push(`0 — ${fmt(enabled[0].minCost)} ₽`)
+      for (let i = 0; i < enabled.length - 1; i++) {
+        const cur = enabled[i], next = enabled[i + 1]
+        if (cur.maxCost !== null && cur.maxCost < next.minCost) gaps.push(`${fmt(cur.maxCost)} — ${fmt(next.minCost)} ₽`)
+      }
+      const last = enabled[enabled.length - 1]
+      if (last.maxCost !== null) gaps.push(`${fmt(last.maxCost)} ₽ и выше`)
+      return gaps
+    }
+
     async function loadMarkupRules() {
       const r = await api('/markup-rules').catch(() => null)
       const el = document.getElementById('mrList')
       if (!r || !r.ok) { el.textContent = 'Не удалось загрузить'; return }
-      if (!r.data.length) { el.innerHTML = '<div class="empty">Правил ещё нет — добавьте первое.<br>Пока правил нет, цены канала не пересчитываются.</div>'; return }
       const isOwner = window.adminMe && window.adminMe.role === 'owner'
       const byCh = {}
       r.data.forEach(x => { (byCh[x.channel] = byCh[x.channel] || []).push(x) })
-      el.innerHTML = Object.entries(byCh).map(([ch, rules]) => `
-        <div class="mt" style="margin-top:8px"><b style="color:#ccc">${CH_LABEL[ch] || ch}</b></div>
-        ${rules.map(x => `<div class="list-i"><div style="flex:1">
-          <div class="nm mono">${fmt(x.minCost)} — ${x.maxCost === null ? '∞' : fmt(x.maxCost)} ₽ <span class="new">+${x.mode === 'percent' ? x.value + '%' : fmt(x.value) + ' ₽'}</span></div>
-        </div>
-        ${x.enabled ? '<span class="chip c-ok">включено</span>' : '<span class="chip c-off">выключено</span>'}
-        ${isOwner ? `<button class="btn b-nt sm" data-mr-toggle="${x.id}" data-mr-en="${x.enabled ? '0' : '1'}">${x.enabled ? 'Выключить' : 'Включить'}</button>` : ''}
-        </div>`).join('')}`).join('')
+
+      el.innerHTML = CHANNELS.map(ch => {
+        const rules = (byCh[ch] || []).slice().sort((a, b) => a.minCost - b.minCost)
+        const enabled = rules.filter(x => x.enabled)
+        const gaps = coverageGaps(enabled)
+        const head = `<div class="cap" style="margin:14px 0 6px">${CH_LABEL[ch]}</div>`
+
+        if (!rules.length) {
+          return head + `<div class="empty">Правила не заведены — канал не пересчитывается.
+            <button class="btn b-gh" style="margin-top:12px" data-mr-add-ch="${ch}">Добавить правило</button></div>`
+        }
+
+        const rows = rules.map(x => `
+          <div class="list-i"><div style="flex:1">
+            <div class="nm">${ruleRange(x)} <span class="new">→ наценка ${ruleMarkup(x)}</span></div>
+          </div>
+          ${x.enabled ? '' : '<span class="chip c-off">выключено</span>'}
+          ${isOwner ? `<button class="btn b-nt sm" data-mr-toggle="${x.id}" data-mr-en="${x.enabled ? '0' : '1'}">${x.enabled ? 'Выключить' : 'Включить'}</button>` : ''}
+          </div>`).join('')
+
+        const coverage = !enabled.length
+          ? `<div class="warnbox">Все правила канала выключены — цены не пересчитываются.</div>`
+          : gaps.length
+          ? `<div class="warnbox"><b>Не покрыто:</b> ${gaps.join(', ')} — для закупки в этом диапазоне наценка не применится (цена уйдёт равной закупочной).</div>`
+          : `<div class="okbox">Канал покрыт полностью: 0 ₽ — ∞, разрывов нет.</div>`
+
+        return head + rows + coverage
+      }).join('')
+
       el.querySelectorAll('[data-mr-toggle]').forEach(btn => btn.addEventListener('click', async () => {
         const r2 = await api(`/markup-rules/${btn.dataset.mrToggle}/${btn.dataset.mrEn === '1' ? 'enable' : 'disable'}`, { method: 'POST', body: '{}' })
         if (!r2.ok) alert(r2.data && r2.data.error || 'Не получилось')
         loadMarkupRules()
+      }))
+      el.querySelectorAll('[data-mr-add-ch]').forEach(btn => btn.addEventListener('click', () => {
+        document.getElementById('mrForm').style.display = ''
+        document.getElementById('mrChannel').value = btn.dataset.mrAddCh
+        document.getElementById('mrMin').focus()
       }))
     }
 

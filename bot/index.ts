@@ -745,16 +745,22 @@ bot.start((ctx) => {
     adminKeyboard,
   ).then(async () => {
     // Веб-входы: витрина и новая админка. Старое бот-меню выше остаётся фолбэком.
-    if (userId) {
-      await ctx.reply(
-        'Быстрый вход:',
-        Markup.inlineKeyboard([[
-          Markup.button.webApp('🛍 Открыть магазин', WEBAPP_URL || ADMIN_URL.replace(/\/admin$/, '/shop')),
-          Markup.button.webApp('🛠 Админка', ADMIN_URL),
-        ]]),
-      )
-      await setAdminMenuButton(userId)
+    if (!userId) return
+    const sent = await ctx.reply(
+      'Быстрый вход:',
+      Markup.inlineKeyboard([[
+        Markup.button.webApp('🛍 Открыть магазин', WEBAPP_URL || ADMIN_URL.replace(/\/admin$/, '/shop')),
+        Markup.button.webApp('🛠 Админка', ADMIN_URL),
+      ]]),
+    )
+    // Закрепляем свежее сообщение: старый пин Telegram заменяет сам при
+    // повторном pin в том же чате. Тихо — уведомление о пине не нужно.
+    try {
+      await ctx.telegram.pinChatMessage(ctx.chat.id, sent.message_id, { disable_notification: true })
+    } catch (e) {
+      log.warn('pin quick-entry failed', { userId, error: e instanceof Error ? e.message : String(e) })
     }
+    await setAdminMenuButton(userId)
   })
 })
 
