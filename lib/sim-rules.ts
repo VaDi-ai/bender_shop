@@ -134,6 +134,33 @@ export function resolveSimType(input: ResolveInput, rules: SimRuleData[], aliase
   return { simType: null, reason: 'unknown', missingKey: input.country?.trim() || '(без страны)' }
 }
 
+/**
+ * Атрибуты для СУЩЕСТВУЮЩЕГО варианта на синке (PR-A, граница безопасности).
+ *
+ * Словарь применяется только к новым разборам. У варианта, который уже есть в
+ * каталоге, SIM сохраняет СМЫСЛ: берём его текущее значение и канонизируем
+ * только метку («2Sim» → «2 SIM» — значение то же). Значение по словарю
+ * (напр. Индия eSIM → SIM + eSIM) НЕ применяется — это делает PR-B по кнопке
+ * владельца, после просмотра /sim-recalc/preview.
+ *
+ * Если у существующего варианта SIM не было — не добавляем: заполнение пустых
+ * это тоже изменение витрины, его показывает preview и применяет PR-B.
+ */
+export function attributesForExistingVariant(
+  newAttrs: Record<string, string>,
+  existingAttributes: unknown,
+  aliases: AttrAliasData[],
+): Record<string, string> {
+  const out = { ...newAttrs }
+  const cur = (existingAttributes as Record<string, unknown> | null)?.['SIM']
+  if (typeof cur === 'string' && cur.trim()) {
+    out.SIM = canonicalizeSim(cur, aliases) ?? cur
+  } else {
+    delete out.SIM
+  }
+  return out
+}
+
 // ─── Загрузка словаря ────────────────────────────────────────────────────────
 
 export async function loadSimRules(): Promise<SimRuleData[]> {

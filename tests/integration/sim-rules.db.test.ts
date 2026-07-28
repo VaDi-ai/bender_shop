@@ -9,7 +9,7 @@ const RUN = process.env.INTEGRATION_DB === '1'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 let prisma: any
-let seedSimDictionary: any, loadSimRules: any, loadAttrAliases: any, resolveSimType: any, canonicalizeSim: any, detectGeneration: any
+let seedSimDictionary: any, loadSimRules: any, loadAttrAliases: any, resolveSimType: any, canonicalizeSim: any, detectGeneration: any, attributesForExistingVariant: any
 
 function assertDisposableDb(): void {
   const url = process.env.DATABASE_URL ?? ''
@@ -39,7 +39,7 @@ describe.skipIf(!RUN)('SIM dictionary (реальная БД)', () => {
   beforeAll(async () => {
     assertDisposableDb()
     ;({ prisma } = await import('../../lib/prisma'))
-    ;({ seedSimDictionary, loadSimRules, loadAttrAliases, resolveSimType, canonicalizeSim, detectGeneration } = await import('../../lib/sim-rules'))
+    ;({ seedSimDictionary, loadSimRules, loadAttrAliases, resolveSimType, canonicalizeSim, detectGeneration, attributesForExistingVariant } = await import('../../lib/sim-rules'))
   })
 
   beforeEach(async () => {
@@ -112,6 +112,32 @@ describe.skipIf(!RUN)('SIM dictionary (реальная БД)', () => {
     expect(changed).toBe(65)               // Индия 60 + ОАЭ 2 + Европа 1 + Япония 1 + Корея 1
     // ОАЭ 16-го поколения (23 шт) НЕ меняются: правило «с 17-го → eSIM» их не задевает
     expect(byCountry['ОАЭ']).toBe(2)
+  })
+
+  it('путь синка: существующие варианты каталога не меняют смысл SIM, только метку', async () => {
+    await seedSimDictionary()
+    const rules = await loadSimRules()
+    const aliases = await loadAttrAliases('SIM')
+
+    // Эмулируем то, что делает buildPrismaOp для существующих вариантов:
+    // v.attrs посчитан словарём, existing.attributes — то, что уже в каталоге.
+    const catalog = [
+      { name: 'существующий индийский', existing: { SIM: 'eSIM', 'Страна': 'Индия' }, country: 'Индия', expect: 'eSIM' },
+      { name: 'существующий китайский 2Sim', existing: { SIM: '2Sim', 'Страна': 'Китай' }, country: 'Китай', expect: '2 SIM' },
+      { name: 'существующий японский', existing: { SIM: 'eSIM', 'Страна': 'Япония' }, country: 'Япония', expect: 'eSIM' },
+    ]
+    let semanticChanges = 0, labelChanges = 0
+    for (const c of catalog) {
+      const dictAttrs = { ...c.existing } as Record<string, string>
+      const want = resolveSimType({ country: c.country, names: [`iPhone 17 Pro (${c.country})`] }, rules, aliases)
+      if (want.simType) dictAttrs.SIM = want.simType          // как посчитал бы парсер
+      const merged = attributesForExistingVariant(dictAttrs, c.existing, aliases)
+      expect(merged.SIM).toBe(c.expect)
+      if (merged.SIM !== c.existing.SIM) labelChanges++
+      if (merged.SIM !== (canonicalizeSim(c.existing.SIM, aliases) ?? c.existing.SIM)) semanticChanges++
+    }
+    expect(semanticChanges).toBe(0)   // ни одной смены смысла на синке
+    expect(labelChanges).toBe(1)      // ровно канонизация «2Sim» → «2 SIM»
   })
 
   it('фильтр аксессуаров на живой выборке имён', async () => {

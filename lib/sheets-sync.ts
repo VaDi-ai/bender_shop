@@ -14,7 +14,7 @@ import { readSheet, getProductSheetNames } from './google-sheets'
 import { normalizeCdnPhotoUrl, cleanPhotoUrl } from './cdn-photo-resolve'
 import { syncRunStart, syncRunFinish, SyncRunMeta } from './sync-run'
 import { decidePriceSync, getFrozenVariantIds } from './price-sync-policy'
-import { resolveSimType, loadSimRules, loadAttrAliases, SimRuleData, AttrAliasData } from './sim-rules'
+import { resolveSimType, loadSimRules, loadAttrAliases, attributesForExistingVariant, SimRuleData, AttrAliasData } from './sim-rules'
 import {
   applyMarkupRules as _applyMarkupRules,
   loadRules as _loadRules,
@@ -799,7 +799,9 @@ export async function syncProductsFromSheets(
             productId: product.id,
             quantity: v.quantity,
             inStock: v.quantity > 0,
-            attributes: { ...v.attrs, fullName: v.fullName },
+            // PR-A: у СУЩЕСТВУЮЩЕГО варианта SIM сохраняет смысл — канонизируем
+            // только метку. Словарное значение применит PR-B по кнопке владельца.
+            attributes: { ...attributesForExistingVariant(v.attrs, entry.existing.attributes, simCtx.aliases), fullName: v.fullName },
           }
 
           // Фото всегда зеркало таблицы: пустая ячейка / нераспознанный URL → сбросить в каталоге
@@ -1182,10 +1184,10 @@ function getAttributes(row: SheetRow): Record<string, string> {
     }
   }
 
-  // iPhone — SIM по умолчанию eSIM (если не аксессуар)
-  if (/iphone/i.test(row.fullName) && !attrs['SIM'] && !/стекло|чехол|кейс|защит|case|glass/i.test(row.fullName)) {
-    attrs['SIM'] = 'eSIM'
-  }
+  // Хардкод «iPhone без SIM → eSIM» убран (Этап 2): resolveSimType намеренно
+  // возвращает null для неизвестной страны, и угадывание eSIM ломало бы это
+  // (напр. «Гонконг/США» — HK это 2 SIM). Нет правила → SIM не ставим,
+  // страна уходит в очередь обучения.
 
   return attrs
 }

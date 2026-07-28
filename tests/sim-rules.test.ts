@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { resolveSimType, detectGeneration, isAccessory, canonicalizeSim, SIM_SEED, ALIAS_SEED, norm, SimRuleData, AttrAliasData } from '../lib/sim-rules'
+import { resolveSimType, detectGeneration, isAccessory, canonicalizeSim, attributesForExistingVariant, SIM_SEED, ALIAS_SEED, norm, SimRuleData, AttrAliasData } from '../lib/sim-rules'
 
 // Словарь как после сида (id проставляем синтетически)
 const RULES: SimRuleData[] = SIM_SEED.map((r, i) => ({
@@ -115,5 +115,45 @@ describe('целостность сида', () => {
   it('ключ (country, brand, modelMatch, gen) уникален — upsert не конфликтует', () => {
     const keys = SIM_SEED.map(r => `${norm(r.country)}|${norm(r.brand)}|${norm(r.modelMatch)}|${r.modelGenFrom ?? 0}`)
     expect(new Set(keys).size).toBe(keys.length)
+  })
+})
+
+describe('граница PR-A: существующие варианты не переписываются словарём', () => {
+  // v.attrs — то, что насчитал парсер по словарю для этой строки листа
+  const dictAttrs = { 'Цвет': 'Black', 'Память': '256GB', SIM: 'SIM + eSIM' }
+
+  it('существующий индийский eSIM остаётся eSIM (смысл не меняется на синке)', () => {
+    const out = attributesForExistingVariant(dictAttrs, { SIM: 'eSIM', 'Цвет': 'Black' }, ALIASES)
+    expect(out.SIM).toBe('eSIM')          // НЕ 'SIM + eSIM' — это делает только PR-B
+    expect(out['Память']).toBe('256GB')   // остальные атрибуты обновляются как раньше
+  })
+
+  it('существующий «2Sim» канонизируется в «2 SIM» (метка, не смысл)', () => {
+    const out = attributesForExistingVariant({ ...dictAttrs, SIM: 'eSIM' }, { SIM: '2Sim' }, ALIASES)
+    expect(out.SIM).toBe('2 SIM')
+  })
+
+  it('у существующего варианта не было SIM — словарём не добавляем (это тоже правка витрины)', () => {
+    const out = attributesForExistingVariant(dictAttrs, { 'Цвет': 'Black' }, ALIASES)
+    expect('SIM' in out).toBe(false)
+  })
+
+  it('незнакомая существующая метка сохраняется как есть, а не заменяется словарём', () => {
+    const out = attributesForExistingVariant(dictAttrs, { SIM: 'три симки' }, ALIASES)
+    expect(out.SIM).toBe('три симки')
+  })
+
+  it('НОВЫЙ вариант получает значение словаря (ради этого PR-A и делался)', () => {
+    // для нового варианта attributesForExistingVariant не вызывается — идут v.attrs
+    expect(sim('Индия', 'iPhone 17 Pro 256 (Индия)').simType).toBe('SIM + eSIM')
+  })
+
+  it('новый iPhone с неизвестной/составной страной: SIM не ставим и не угадываем eSIM', () => {
+    for (const c of ['Гонконг/США', 'Италия/США', 'Зимбабве']) {
+      const r = sim(c, `iPhone 17 Pro 256 (${c})`)
+      expect(r.simType).toBeNull()
+      expect(r.reason).toBe('unknown')
+      expect(r.missingKey).toBe(c)
+    }
   })
 })
