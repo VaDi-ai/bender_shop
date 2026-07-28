@@ -1621,8 +1621,13 @@ function parseAttributes(fullName: string, brand: string, country: string): Reco
   if (simResolved.simType) {
     attrs['SIM'] = simResolved.simType
   } else if (simResolved.reason === 'unknown' && /iphone/i.test(normalized)) {
-    // Копим ключи для очереди «не узнал» — показываем владельцу в админке
-    simCtx.unknown.set(simResolved.missingKey!, (simCtx.unknown.get(simResolved.missingKey!) ?? 0) + 1)
+    // Копим ключи для очереди «не узнал» — показываем владельцу в админке.
+    // Ключ со связкой «бренд · страна»: страновые правила принадлежат Apple,
+    // и андроид требует своего правила, а не чужого странового.
+    const key = simResolved.missingBrand && simResolved.missingBrand.toLowerCase() !== 'apple'
+      ? `${simResolved.missingBrand} · ${simResolved.missingKey!}`
+      : simResolved.missingKey!
+    simCtx.unknown.set(key, (simCtx.unknown.get(key) ?? 0) + 1)
   }
 
   // ─── Connectivity (iPad) ───

@@ -108,9 +108,66 @@ describe('приоритеты и границы', () => {
   })
 })
 
+describe('страновые правила принадлежат Apple, а не всем подряд', () => {
+  it('iPhone в Индии — как раньше, SIM + eSIM', () => {
+    expect(sim('Индия', 'iPhone 17 Pro 256 (Индия)', { brand: 'Apple' })).toMatchObject({ simType: 'SIM + eSIM', reason: 'country' })
+  })
+
+  it('iPhone без заполненного бренда всё равно резолвится (бренд из имени)', () => {
+    expect(sim('Индия', 'iPhone 17 Pro 256 (Индия)').simType).toBe('SIM + eSIM')
+  })
+
+  it('Redmi в Индии — НЕ получает Apple-страновой SIM, уходит в очередь', () => {
+    const r = sim('Индия', 'Redmi Note 15 Pro 4G 12/512 Black', { brand: 'Redmi' })
+    expect(r.simType).toBeNull()
+    expect(r).toMatchObject({ reason: 'unknown', missingKey: 'Индия', missingBrand: 'Redmi' })
+  })
+
+  it('и остальные андроид-бренды каталога тоже', () => {
+    for (const [brand, name, country] of [
+      ['Poco', 'Poco X7 Pro 5G 8/256 Yellow', 'Европа'],
+      ['Google', 'Google Pixel 9a 8/256 iris', 'США'],
+      ['Honor', 'Honor X8d 8/128 Gray', 'Россия'],
+      ['Xiaomi', 'Xiaomi Mi 17 12/512Gb Black Leica', 'Европа'],
+      ['OnePlus', 'OnePlus 13s 12/512Gb Silk Green', 'Индия'],
+      ['Huawei', 'Huawei Pura 80 Pro 12/512 Black', 'Россия'],
+    ] as Array<[string, string, string]>) {
+      const r = sim(country, name, { brand })
+      expect(r.simType).toBeNull()
+      expect(r.reason).toBe('unknown')
+      expect(r.missingBrand).toBe(brand)
+    }
+  })
+
+  it('заведённое правило под бренд+страну начинает работать и Apple не задевает', () => {
+    const learned: SimRuleData[] = [...RULES, {
+      id: 999, country: 'Индия', countryNorm: 'индия', brandNorm: 'redmi',
+      modelMatch: '', modelGenFrom: 0, simType: '2 SIM', source: 'learned',
+    }]
+    expect(resolveSimType({ country: 'Индия', brand: 'Redmi', names: ['Redmi Note 15 Pro'] }, learned, ALIASES))
+      .toMatchObject({ simType: '2 SIM', reason: 'country' })
+    expect(resolveSimType({ country: 'Индия', brand: 'Apple', names: ['iPhone 17 Pro (Индия)'] }, learned, ALIASES))
+      .toMatchObject({ simType: 'SIM + eSIM', reason: 'country' })
+  })
+
+  it('Samsung живёт своим брендовым правилом', () => {
+    expect(resolveSimType({ brand: 'Samsung', country: 'Индия', names: ['Samsung Galaxy S26 Ultra'] }, RULES, ALIASES))
+      .toMatchObject({ simType: 'SIM + eSIM' })
+  })
+
+  it('модельный оверрайд Air жив', () => {
+    expect(sim('Индия', 'iPhone 17 Air 256 (Индия)', { brand: 'Apple' })).toMatchObject({ simType: 'eSIM', reason: 'model' })
+  })
+})
+
 describe('целостность сида', () => {
   it('все simType — из трёх канонических', () => {
     for (const r of SIM_SEED) expect(['2 SIM', 'eSIM', 'SIM + eSIM']).toContain(r.simType)
+  })
+  it('у всех страновых правил проставлен бренд — иначе они накроют андроид', () => {
+    for (const r of SIM_SEED) {
+      if (r.country) expect(norm(r.brand)).not.toBe('')
+    }
   })
   it('ключ (country, brand, modelMatch, gen) уникален — upsert не конфликтует', () => {
     const keys = SIM_SEED.map(r => `${norm(r.country)}|${norm(r.brand)}|${norm(r.modelMatch)}|${r.modelGenFrom ?? 0}`)

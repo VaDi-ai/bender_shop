@@ -544,15 +544,19 @@ export function adminApiRouter(): Router {
         select: { id: true, attributes: true, product: { select: { name: true, brand: true, category: { select: { name: true } } } } },
       }),
     ])
-    const missing = new Map<string, { country: string; count: number; example: string; generations: number[] }>()
+    // Группировка по связке «бренд + страна»: страновые правила словаря
+    // принадлежат Apple, поэтому для андроида правило заводится под бренд —
+    // иначе оно накроет и Apple той же страны.
+    const missing = new Map<string, { country: string; brand: string | null; count: number; example: string; generations: number[] }>()
     for (const v of variants) {
       const a = (v.attributes ?? {}) as Record<string, string>
       const isPhone = v.product.category?.name === 'Телефоны' || detectGeneration(a.fullName, v.product.name) !== null
       if (!isPhone) continue
       const r = resolveSimType({ explicit: a.SIM, country: a['Страна'], brand: v.product.brand, names: [a.fullName, v.product.name] }, rules, aliases)
       if (r.reason !== 'unknown') continue
-      const key = r.missingKey!
-      const cur = missing.get(key) ?? { country: key, count: 0, example: a.fullName ?? v.product.name, generations: [] }
+      const brand = r.missingBrand ?? null
+      const key = `${brand ?? ''}|${r.missingKey!}`
+      const cur = missing.get(key) ?? { country: r.missingKey!, brand, count: 0, example: a.fullName ?? v.product.name, generations: [] }
       cur.count++
       const g = detectGeneration(a.fullName, v.product.name)
       if (g && !cur.generations.includes(g)) cur.generations.push(g)
@@ -560,7 +564,7 @@ export function adminApiRouter(): Router {
     }
     // Второй раздел: SIM стоит, но правила нет (наследие старого хардкода —
     // пересчёт их не трогает, владелец решает, заводить ли правило)
-    const inherited: Array<{ variantId: number; fullName: string; country: string | null; current: string }> = []
+    const inherited: Array<{ variantId: number; fullName: string; country: string | null; brand: string | null; current: string }> = []
     for (const v of variants) {
       const a = (v.attributes ?? {}) as Record<string, string>
       if (!a.SIM) continue
@@ -568,7 +572,10 @@ export function adminApiRouter(): Router {
       if (!isPhone) continue
       const byDict = resolveSimType({ country: a['Страна'], brand: v.product.brand, names: [a.fullName, v.product.name] }, rules, aliases)
       if (byDict.reason === 'unknown') {   // 'accessory' сюда не попадает — чехлы не наш домен
-        inherited.push({ variantId: v.id, fullName: a.fullName ?? v.product.name, country: a['Страна'] ?? null, current: a.SIM })
+        inherited.push({
+          variantId: v.id, fullName: a.fullName ?? v.product.name,
+          country: a['Страна'] ?? null, brand: byDict.missingBrand ?? v.product.brand ?? null, current: a.SIM,
+        })
       }
     }
     res.json({
