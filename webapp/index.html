@@ -1799,6 +1799,40 @@
       } catch { /* keep defaults */ }
     }
 
+    // ── Пауза приёма заказов ──────────────────────────────────────────────────
+    // Владелец может поставить продажи на паузу (админка → «Ещё»). Каталог и
+    // цены остаются видны, оформление — нет. Гейт продублирован на сервере:
+    // POST /api/orders в это время отвечает 503, полагаться на клиент нельзя.
+    let salesPaused = false, salesPausedNote = ''
+
+    async function loadSalesPause() {
+      try {
+        const [flag, note] = await Promise.all([
+          fetch('/api/settings?key=maintenance&_=' + Date.now()).then(r => r.json()),
+          fetch('/api/settings?key=maintenance_note&_=' + Date.now()).then(r => r.json()),
+        ])
+        salesPaused = String(flag.value || '') === '1'
+        salesPausedNote = (note.value || '').trim() || 'Магазин временно не принимает заказы. Загляните чуть позже — товары и цены на месте.'
+      } catch { salesPaused = false }
+      renderSalesPause()
+    }
+
+    function renderSalesPause() {
+      const btn = document.getElementById('checkoutBtn')
+      let box = document.getElementById('salesPauseBox')
+      if (!salesPaused) {
+        if (box) box.remove()
+        return
+      }
+      if (!box && btn && btn.parentNode) {
+        box = document.createElement('div')
+        box.id = 'salesPauseBox'
+        box.style.cssText = 'margin:12px 16px;padding:12px 14px;border:1px solid rgba(255,204,77,.35);background:rgba(255,204,77,.08);border-radius:12px;color:#f0dfa8;font-size:13px;line-height:1.5'
+        btn.parentNode.insertBefore(box, btn)
+      }
+      if (box) box.textContent = salesPausedNote
+    }
+
     // ── Hero slider ───────────────────────────────────────────────────────────
     async function loadHeroSlider() {
       const sliderEl = document.getElementById('heroSlider')
@@ -3195,6 +3229,7 @@
     async function checkout() {
       if (window.__isSubmitting) return
       if (!cart.length) return
+      if (salesPaused) { showOrderError('ЗАКАЗЫ НА ПАУЗЕ', salesPausedNote); return }
       track('checkout_start', { itemCount: cart.length })
       if (!payMethod) { showToast('Выберите способ оплаты'); return }
       const consentBox = document.getElementById('consentCheckbox')
@@ -3285,7 +3320,7 @@
         const localVersion  = localStorage.getItem('cache_v') ?? ''
         if (localVersion && localVersion !== serverVersion) {
           localStorage.setItem('cache_v', serverVersion)
-          loadMarquee(); loadHeroSlider(); loadCategories(); loadProducts()
+          loadMarquee(); loadSalesPause(); loadHeroSlider(); loadCategories(); loadProducts()
         } else if (!localVersion) {
           localStorage.setItem('cache_v', serverVersion)
         }
@@ -3554,6 +3589,7 @@
 
     checkCacheVersion()
     loadMarquee()
+    loadSalesPause()
     loadHeroSlider()
     // Load trends before categories/products to apply AI ordering
     fetch('/api/trends').then(r => r.ok ? r.json() : null).then(t => {

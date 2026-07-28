@@ -396,6 +396,19 @@
         <div class="hint">Прежние цены вернутся у всех товаров сразу. Отменённые акции останутся в списке черновиками.</div>
       </div>
 
+      <div class="cap">ПАУЗА ПРОДАЖ</div>
+      <div class="card" id="maintCard">
+        <h3>Приём заказов <span class="chip c-off right" id="maintChip">—</span></h3>
+        <div class="mt" id="maintState">Загрузка…</div>
+        <div id="maintForm" style="display:none">
+          <input class="inp" id="maintNote" placeholder="Что увидит покупатель (необязательно)" maxlength="200">
+          <button class="btn b-dg" id="maintOn">Поставить приём заказов на паузу</button>
+          <button class="btn b-main" id="maintOff" style="display:none">Возобновить приём заказов</button>
+          <div class="mt" id="maintErr" style="color:var(--bad)"></div>
+          <div class="hint">Каталог и цены останутся на месте — перестанет работать только оформление. Заказы, уже оформленные, никуда не денутся.</div>
+        </div>
+      </div>
+
       <div class="cap">КОМАНДА</div>
       <div class="card" id="teamCard" style="display:none">
         <h3>Доступ в админку</h3>
@@ -471,7 +484,7 @@
       window.adminMe = me
       gate.classList.add('hidden')
       loadDashboard(); loadSyncRuns(); loadSuppliers(); loadBatches(); loadUnmatched(); loadMarkupRules()
-      loadSimQueue(); loadSimRules(); loadSimRecalc(); loadStorefront(); loadTeam(); loadPromotions(); loadInsights(); loadBroadcasts()
+      loadSimQueue(); loadSimRules(); loadSimRecalc(); loadStorefront(); loadTeam(); loadPromotions(); loadInsights(); loadBroadcasts(); loadMaintenance()
     }
 
     // ── ТОВАРЫ: карточка, фото (с записью в таблицу), описание, скрытие ───────
@@ -879,6 +892,36 @@
         loadBroadcasts()
       } finally { btn.disabled = false; btn.textContent = 'Отправить всем' }
     })
+
+    // ── ПАУЗА ПРОДАЖ ──────────────────────────────────────────────────────────
+    async function loadMaintenance() {
+      const r = await api('/maintenance').catch(() => null)
+      const isOwner = window.adminMe && window.adminMe.role === 'owner'
+      const st = document.getElementById('maintState')
+      if (!r || !r.ok) { st.textContent = 'Не удалось загрузить'; return }
+      const on = r.data.enabled
+      document.getElementById('maintChip').textContent = on ? 'на паузе' : 'идёт'
+      document.getElementById('maintChip').className = 'chip right ' + (on ? 'c-bad' : 'c-ok')
+      st.textContent = on
+        ? 'Заказы сейчас не принимаются' + (r.data.note ? ` · покупатель видит: «${r.data.note}»` : '')
+        : 'Покупатели могут оформлять заказы как обычно.'
+      document.getElementById('maintForm').style.display = isOwner ? '' : 'none'
+      document.getElementById('maintOn').style.display = isOwner && !on ? '' : 'none'
+      document.getElementById('maintOff').style.display = isOwner && on ? '' : 'none'
+      document.getElementById('maintNote').value = r.data.note || ''
+    }
+
+    async function setMaintenance(enabled) {
+      const err = document.getElementById('maintErr'); err.textContent = ''
+      if (enabled && !confirm('Поставить приём заказов на паузу?\n\nКаталог останется виден, но оформить заказ покупатель не сможет.')) return
+      const r = await api('/maintenance', { method: 'PUT', body: JSON.stringify({
+        enabled, note: document.getElementById('maintNote').value,
+      }) }).catch(() => null)
+      if (!r || !r.ok) { err.textContent = (r && r.data && r.data.error) || 'Не получилось'; return }
+      loadMaintenance()
+    }
+    document.getElementById('maintOn').addEventListener('click', () => setMaintenance(true))
+    document.getElementById('maintOff').addEventListener('click', () => setMaintenance(false))
 
     // ── КОМАНДА: доступ в админку (только владелец) ───────────────────────────
     const ROLE_HINT = { owner: 'владелец — всё, включая деньги', manager: 'менеджер — операционка' }
