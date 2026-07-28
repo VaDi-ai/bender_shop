@@ -734,6 +734,62 @@ export function adminApiRouter(): Router {
     res.status(r.status).json(r.ok ? { ok: true, ...((r.data as object) ?? {}) } : { error: r.error })
   }))
 
+  // ── АКЦИИ (пласт 3): черновик → предпросмотр → запуск → отмена ────────────
+  //
+  // Черновик и предпросмотр — операционка (owner+manager). Запуск, остановка
+  // и «отменить все» двигают ЦЕНЫ, поэтому только owner.
+  router.get('/promotions', safe(async (_req, res) => {
+    const { listPromotions, filterOptions } = await import('../lib/promotion-admin')
+    const [promotions, options] = await Promise.all([listPromotions(), filterOptions()])
+    res.json({ promotions, options })
+  }))
+
+  router.post('/promotions/preview', safe(async (req, res) => {
+    const b = (req.body ?? {}) as Record<string, unknown>
+    const { previewPromotion } = await import('../lib/promotion-admin')
+    const r = await previewPromotion(
+      b.filterType as never, String(b.filterValue ?? ''),
+      b.discountType as never, Number(b.discountValue),
+    )
+    res.status(r.status).json(r.ok ? r.data : { error: r.error })
+  }))
+
+  router.post('/promotions', safe(async (req, res) => {
+    const { createPromotion } = await import('../lib/promotion-admin')
+    const r = await createPromotion(req.admin!.telegramId, (req.body ?? {}) as Record<string, unknown>)
+    res.status(r.status).json(r.ok ? { ok: true, ...(r.data as object) } : { error: r.error })
+  }))
+
+  router.post('/promotions/stop-all', ownerOnly, safe(async (req, res) => {
+    const { stopAllPromotions } = await import('../lib/promotion-admin')
+    const r = await stopAllPromotions(req.admin!.telegramId)
+    res.status(r.status).json({ ok: true, ...(r.data as object) })
+  }))
+
+  router.post('/promotions/:id/launch', ownerOnly, safe(async (req, res) => {
+    const id = parseInt(String(req.params.id), 10)
+    if (!Number.isInteger(id)) { res.status(422).json({ error: 'Неверный ID' }); return }
+    const { launchPromotion } = await import('../lib/promotion-admin')
+    const r = await launchPromotion(req.admin!.telegramId, id)
+    res.status(r.status).json(r.ok ? { ok: true, ...(r.data as object) } : { error: r.error })
+  }))
+
+  router.post('/promotions/:id/stop', ownerOnly, safe(async (req, res) => {
+    const id = parseInt(String(req.params.id), 10)
+    if (!Number.isInteger(id)) { res.status(422).json({ error: 'Неверный ID' }); return }
+    const { stopPromotion } = await import('../lib/promotion-admin')
+    const r = await stopPromotion(req.admin!.telegramId, id)
+    res.status(r.status).json(r.ok ? { ok: true, ...(r.data as object) } : { error: r.error })
+  }))
+
+  router.delete('/promotions/:id', ownerOnly, safe(async (req, res) => {
+    const id = parseInt(String(req.params.id), 10)
+    if (!Number.isInteger(id)) { res.status(422).json({ error: 'Неверный ID' }); return }
+    const { deleteDraft } = await import('../lib/promotion-admin')
+    const r = await deleteDraft(req.admin!.telegramId, id)
+    res.status(r.status).json(r.ok ? { ok: true } : { error: r.error })
+  }))
+
   // ── Команда магазина: кто имеет доступ (owner-only) ───────────────────────
   router.get('/team', ownerOnly, safe(async (req, res) => {
     const { listTeam } = await import('../lib/admin-team')
