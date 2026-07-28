@@ -34,6 +34,7 @@ import { logSecurityEvent } from './security-log'
 import { applyMarkupRules, loadRules } from './markup-rules'
 import { classifyCorridor, priceDeltaPct, CorridorClass } from './price-batch'
 import { WRITEBACK_COLS } from './sheets-sync'
+import { withSyncLock, SyncLockBusy, SYNC_LOCK_BUSY_MESSAGE } from './sync-lock'
 
 export type ApplyMode = 'off' | 'test' | 'on'
 
@@ -118,26 +119,11 @@ export async function sheetPriceWriteback(rows: WritebackRow[]): Promise<{ missi
   return { missing }
 }
 
-const SYNC_LOCK_KEY = 73001
-
-class SyncLockBusy extends Error {}
 class BatchStatusChanged extends Error {
   constructor(public readonly currentStatus: string) { super('status changed') }
 }
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
-/**
- * Вся работа — в одной транзакции, первым стейтментом xact-lock синка:
- * авто-снятие на конце tx, никаких сессионных unlock на чужом коннекте
- * (не-блокер №2 ревью #31).
- */
-async function withSyncLock<T>(fn: (tx: any) => Promise<T>): Promise<T> {
-  return prisma.$transaction(async tx => {
-    const r = await tx.$queryRaw<[{ l: boolean }]>`SELECT pg_try_advisory_xact_lock(${SYNC_LOCK_KEY}) as "l"`
-    if (!r[0]?.l) throw new SyncLockBusy()
-    return fn(tx)
-  }, { timeout: 15_000 })
-}
 
 interface ComputedRows {
   rows: ApplyRowResult[]
@@ -270,7 +256,7 @@ export async function applyPriceBatch(opts: {
     computed = res.c
     outcome = res.o
   } catch (e) {
-    if (e instanceof SyncLockBusy) return { ok: false, status: 409, error: 'Идёт синхронизация с таблицей — повторите через минуту' }
+    if (e instanceof SyncLockBusy) return { ok: false, status: 409, error: SYNC_LOCK_BUSY_MESSAGE }
     if (e instanceof BatchStatusChanged) {
       return e.currentStatus === 'applied'
         ? { ok: true, status: 200, alreadyApplied: true }
@@ -377,7 +363,7 @@ export async function rollbackPriceBatch(opts: {
     restorable = res.localRestorable
     conflicts = res.localConflicts
   } catch (e) {
-    if (e instanceof SyncLockBusy) return { ok: false, status: 409, error: 'Идёт синхронизация с таблицей — повторите через минуту' }
+    if (e instanceof SyncLockBusy) return { ok: false, status: 409, error: SYNC_LOCK_BUSY_MESSAGE }
     if (e instanceof BatchStatusChanged) return { ok: false, status: 409, error: `Откат возможен только для applied-батча (сейчас «${e.currentStatus}»)` }
     throw e
   }

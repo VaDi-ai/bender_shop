@@ -212,9 +212,10 @@
       </div>
 
       <div class="card">
-        <h3>Пересчёт SIM по каталогу <span class="chip c-off right">предпросмотр</span></h3>
+        <h3>Пересчитать SIM по каталогу <span class="chip c-off right" id="simRecalcChip">предпросмотр</span></h3>
         <div class="mt" id="simRecalc">Загрузка…</div>
-        <div class="hint">Сейчас словарь применяется только к новым разборам таблицы. Массовый пересчёт уже проставленных значений придёт отдельной кнопкой — сначала посмотрите список изменений.</div>
+        <div id="simRecalcActions"></div>
+        <div class="hint">Пересчёт применит словарь ко всем товарам сразу. Старые значения сохранятся — пересчёт можно откатить.</div>
       </div>
 
       <div class="card">
@@ -294,19 +295,38 @@
       const r = await api('/sim-queue').catch(() => null)
       const box = document.getElementById('simQueue')
       if (!r || !r.ok) { box.innerHTML = '<div class="empty">Не удалось загрузить</div>'; return }
-      attn.simUnknown = r.data.reduce((s, x) => s + x.count, 0)
-      attn.simCountries = r.data.length
+      const missing = r.data.missing || []
+      const inherited = r.data.inherited || []
+      attn.simUnknown = missing.reduce((s, x) => s + x.count, 0)
+      attn.simCountries = missing.length
       renderAttention()
-      if (!r.data.length) { box.innerHTML = '<div class="empty">Для всех стран каталога правило есть 🎉<br>Новая страна появится здесь автоматически.</div>'; return }
-      box.innerHTML = `<div class="card">
-        <h3>${r.data.length} ${plural(r.data.length, 'страна без правила', 'страны без правила', 'стран без правила')} <span class="chip c-bad right">нужна помощь</span></h3>
-        ${r.data.map(x => `<div class="list-i"><div style="flex:1">
+
+      // Второй раздел: значение стоит с прежних времён, а правила под него нет
+      const inheritedHtml = inherited.length ? `<div class="card">
+        <h3>SIM стоит, но правила нет <span class="chip c-warn right">${inherited.length}</span></h3>
+        ${inherited.map(x => `<div class="list-i"><div style="flex:1">
+          <div class="nm">${esc(x.fullName)}</div>
+          <div class="mt">${esc(x.country || 'страна не указана')} · сейчас «${esc(x.current)}»</div>
+        </div>
+        <button class="btn b-gh sm" data-sim-learn="${esc(x.country || '')}">Задать правило</button></div>`).join('')}
+        <div class="hint">Пересчёт эти строки не трогает — значение оставили как есть. Заведите правило, и они попадут в обычный пересчёт.</div>
+      </div>` : ''
+
+      const missingHtml = missing.length ? `<div class="card">
+        <h3>${missing.length} ${plural(missing.length, 'страна без правила', 'страны без правила', 'стран без правила')} <span class="chip c-bad right">нужна помощь</span></h3>
+        ${missing.map(x => `<div class="list-i"><div style="flex:1">
           <div class="nm">${esc(x.country)}</div>
           <div class="mt">${x.count} ${plural(x.count, 'товар', 'товара', 'товаров')}${x.generations.length ? ' · поколения ' + x.generations.sort((a,b)=>a-b).join(', ') : ''} · напр. ${esc(String(x.example).slice(0, 40))}</div>
         </div>
         <button class="btn b-gh sm" data-sim-learn="${esc(x.country)}">Задать SIM</button></div>`).join('')}
         <div class="hint">Скажете один раз — дальше система проставит сама во всех новых разборах.</div>
-      </div>`
+      </div>` : '<div class="empty">Для всех стран каталога правило есть 🎉<br>Новая страна появится здесь автоматически.</div>'
+
+      box.innerHTML = missingHtml + inheritedHtml
+      bindSimLearn(box)
+    }
+
+    function bindSimLearn(box) {
       box.querySelectorAll('[data-sim-learn]').forEach(b => b.addEventListener('click', () => {
         document.getElementById('simForm').style.display = ''
         document.getElementById('simCountry').value = b.dataset.simLearn
@@ -373,13 +393,40 @@
     async function loadSimRecalc() {
       const r = await api('/sim-recalc/preview').catch(() => null)
       const el = document.getElementById('simRecalc')
+      const act = document.getElementById('simRecalcActions')
       if (!r || !r.ok) { el.textContent = 'Не удалось посчитать'; return }
       const d = r.data
-      const top = Object.entries(d.byCountry || {}).sort((a, b) => b[1] - a[1]).slice(0, 6)
-      el.innerHTML = d.changeCount === 0 && d.canonicalizeCount === 0
+      const c = d.counts || { semantic: 0, added: 0, canonical: 0, inherited: 0 }
+      const isOwner = window.adminMe && window.adminMe.role === 'owner'
+      const tops = o => Object.entries(o || {}).sort((a, b) => b[1] - a[1]).slice(0, 6)
+        .map(([k, n]) => `${esc(k)} — ${n}`).join(', ')
+      const top = tops(d.byCountry), topAdded = tops(d.addedByCountry)
+
+      el.innerHTML = (c.semantic + c.added + c.canonical) === 0
         ? 'Каталог уже соответствует словарю — пересчитывать нечего.'
-        : `Если применить словарь ко всему каталогу: <b>${d.changeCount}</b> ${plural(d.changeCount, 'товар сменит', 'товара сменят', 'товаров сменят')} тип SIM${d.canonicalizeCount ? `, ещё ${d.canonicalizeCount} — только приведение метки к канону` : ''}.
-           ${top.length ? '<br>Больше всего: ' + top.map(([c, n]) => `${esc(c)} — ${n}`).join(', ') : ''}`
+        : `<div class="list-i"><div style="flex:1"><div class="nm">Сменят значение SIM: <b>${c.semantic}</b></div>
+             <div class="mt">это увидит покупатель${top ? ' · ' + top : ''}</div></div>
+             <span class="chip ${c.semantic ? 'c-warn' : 'c-off'}">смысл</span></div>
+           <div class="list-i"><div style="flex:1"><div class="nm">Получат SIM впервые: <b>${c.added}</b></div>
+             <div class="mt">сейчас поле пустое${topAdded ? ' · ' + topAdded : ''}</div></div>
+             <span class="chip ${c.added ? 'c-warn' : 'c-off'}">впервые</span></div>
+           <div class="list-i"><div style="flex:1"><div class="nm">Только метка: <b>${c.canonical}</b></div>
+             <div class="mt">«2Sim» → «2 SIM» — значение не меняется</div></div><span class="chip c-off">косметика</span></div>
+           <div class="list-i"><div style="flex:1"><div class="nm">Стоит без правила: <b>${c.inherited}</b></div>
+             <div class="mt">пересчёт их не трогает — заведите правило выше</div></div><span class="chip c-off">не трогаем</span></div>`
+
+      // Кнопка «Пересчитать» намеренно НЕактивна до ревью и подтверждения владельцем
+      const last = d.lastRecalc
+      act.innerHTML = `
+        <button class="btn b-main" disabled title="Активируем после ревью и вашего подтверждения">Пересчитать SIM (ждёт подтверждения)</button>
+        ${isOwner && last && !last.rolledBack ? `<button class="btn b-dg" id="simRollbackBtn">Откатить пересчёт #${last.recalcId}</button>` : ''}`
+      const rb = document.getElementById('simRollbackBtn')
+      if (rb) rb.addEventListener('click', async () => {
+        if (!confirm('Откатить последний пересчёт SIM? Значения вернутся к тем, что были до него.')) return
+        const r2 = await api('/sim-recalc/rollback', { method: 'POST', body: '{}' }).catch(() => null)
+        alert(r2 && r2.ok ? `Откачено: ${r2.data.restored}${r2.data.conflicts && r2.data.conflicts.length ? `, пропущено изменённых: ${r2.data.conflicts.length}` : ''}` : (r2 && r2.data && r2.data.error || 'Не получилось'))
+        loadSimRecalc(); loadSimQueue()
+      })
     }
 
     // ── Сегодня ───────────────────────────────────────────────────────────────
