@@ -68,7 +68,8 @@ export async function previewBroadcast(raw: unknown): Promise<Outcome<BroadcastP
     ok: true, status: 200,
     data: {
       recipients: ids.length,
-      sample: sampleRows.map(r => r.telegramUsername ? '@' + r.telegramUsername : r.name),
+      // username в базе иногда уже с «@» — не плодим «@@»
+      sample: sampleRows.map(r => r.telegramUsername ? '@' + r.telegramUsername.replace(/^@+/, '') : r.name),
       text,
       lastBroadcast: last,
     },

@@ -658,6 +658,19 @@ export function adminApiRouter(): Router {
     res.status(r.status).json(r.ok ? { ok: true, ...((r.data as object) ?? {}) } : { error: r.error })
   }))
 
+  // Пауза приёма заказов — owner: это остановка продаж.
+  router.get('/maintenance', safe(async (_req, res) => {
+    const { getMaintenance } = await import('../lib/storefront-admin')
+    res.json(await getMaintenance())
+  }))
+
+  router.put('/maintenance', ownerOnly, safe(async (req, res) => {
+    const b = (req.body ?? {}) as { enabled?: unknown; note?: unknown }
+    const { setMaintenance } = await import('../lib/storefront-admin')
+    const r = await setMaintenance(req.admin!.telegramId, b.enabled === true, b.note)
+    res.status(r.status).json({ ok: true, ...(r.data as object) })
+  }))
+
   router.post('/cache-reset', safe(async (req, res) => {
     const { bumpCacheVersion } = await import('../lib/storefront-admin')
     const r = await bumpCacheVersion(req.admin!.telegramId)

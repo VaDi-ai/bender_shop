@@ -16,6 +16,7 @@ import { prisma } from './prisma'
 import { log } from './logger'
 import { logAdminAction } from './audit'
 import { getApiKeyValue, setApiKeyValue } from './api-key-store'
+import { logSecurityEvent } from './security-log'
 import { normalizePhotoLink } from './photo-store'
 
 export const MARQUEE_MAX = 200
@@ -293,6 +294,37 @@ export async function setHit(actor: string, productId: number, featured: boolean
     before: { isFeatured: p.isFeatured }, after: { isFeatured: featured },
   })
   return { ok: true, status: 200 }
+}
+
+// ─── Пауза приёма заказов ────────────────────────────────────────────────────
+
+export interface MaintenanceState { enabled: boolean; note: string }
+
+export async function getMaintenance(): Promise<MaintenanceState> {
+  const [flag, note] = await Promise.all([
+    getApiKeyValue('setting_maintenance'),
+    getApiKeyValue('setting_maintenance_note'),
+  ])
+  return { enabled: flag === '1', note: note ?? '' }
+}
+
+/**
+ * Пауза — не «сайт выключен»: каталог и цены остаются видимыми, перестаёт
+ * работать оформление заказа. Гейт стоит и на сервере (POST /api/orders), и
+ * в витрине, чтобы покупатель не заполнял форму впустую.
+ */
+export async function setMaintenance(actor: string, enabled: boolean, rawNote: unknown): Promise<Outcome<MaintenanceState>> {
+  const before = await getMaintenance()
+  const note = String(rawNote ?? '').replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, 200)
+  await setApiKeyValue('setting_maintenance', enabled ? '1' : '0')
+  await setApiKeyValue('setting_maintenance_note', note)
+  void logAdminAction({
+    adminTelegramId: actor, action: 'update', entity: 'Setting', entityId: 'maintenance',
+    before, after: { enabled, note },
+  })
+  void logSecurityEvent('maintenance_mode_toggled', { enabled, via: 'web' }, actor)
+  log.info('Maintenance mode changed from web admin', { enabled })
+  return { ok: true, status: 200, data: { enabled, note } }
 }
 
 // ─── Обновить сайт (сброс кэша витрины) ──────────────────────────────────────

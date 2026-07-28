@@ -865,7 +865,7 @@ export function startApiServer(bot?: Telegraf): Server {
   })
 
   // ── GET /api/settings ──────────────────────────────────────────────────────
-  const PUBLIC_SETTINGS = new Set(['marquee', 'store_name', 'currency', 'cache_version', 'hero_banners', 'promo_banner'])
+  const PUBLIC_SETTINGS = new Set(['marquee', 'store_name', 'currency', 'cache_version', 'hero_banners', 'promo_banner', 'maintenance', 'maintenance_note'])
 
   app.get('/api/settings', async (req, res, next) => {
     try {
@@ -1413,6 +1413,20 @@ export function startApiServer(bot?: Telegraf): Server {
 
   // ── POST /api/orders ───────────────────────────────────────────────────────
   app.post('/api/orders', async (req: Request, res: Response, next: NextFunction) => {
+    // Пауза приёма заказов (владелец включает в админке). Гейт именно
+    // серверный: витрина тоже прячет оформление, но полагаться на клиент,
+    // когда речь про деньги и обязательства перед покупателем, нельзя.
+    try {
+      if ((await getApiKeyValue('setting_maintenance')) === '1') {
+        const note = (await getApiKeyValue('setting_maintenance_note')) || ''
+        res.status(503).json({
+          error: note || 'Магазин временно не принимает заказы. Загляните чуть позже — товары и цены на месте.',
+          maintenance: true,
+        })
+        return
+      }
+    } catch { /* настройка недоступна — не мешаем продавать */ }
+
     const {
       items,
       customerName,
