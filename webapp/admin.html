@@ -396,15 +396,20 @@
       const act = document.getElementById('simRecalcActions')
       if (!r || !r.ok) { el.textContent = 'Не удалось посчитать'; return }
       const d = r.data
-      const c = d.counts || { semantic: 0, canonical: 0, inherited: 0 }
+      const c = d.counts || { semantic: 0, added: 0, canonical: 0, inherited: 0 }
       const isOwner = window.adminMe && window.adminMe.role === 'owner'
-      const top = Object.entries(d.byCountry || {}).sort((a, b) => b[1] - a[1]).slice(0, 6)
+      const tops = o => Object.entries(o || {}).sort((a, b) => b[1] - a[1]).slice(0, 6)
+        .map(([k, n]) => `${esc(k)} — ${n}`).join(', ')
+      const top = tops(d.byCountry), topAdded = tops(d.addedByCountry)
 
-      el.innerHTML = (c.semantic + c.canonical) === 0
+      el.innerHTML = (c.semantic + c.added + c.canonical) === 0
         ? 'Каталог уже соответствует словарю — пересчитывать нечего.'
-        : `<div class="list-i"><div style="flex:1"><div class="nm">Сменят тип SIM: <b>${c.semantic}</b></div>
-             <div class="mt">это увидит покупатель${top.length ? ' · ' + top.map(([k, n]) => `${esc(k)} — ${n}`).join(', ') : ''}</div></div>
+        : `<div class="list-i"><div style="flex:1"><div class="nm">Сменят значение SIM: <b>${c.semantic}</b></div>
+             <div class="mt">это увидит покупатель${top ? ' · ' + top : ''}</div></div>
              <span class="chip ${c.semantic ? 'c-warn' : 'c-off'}">смысл</span></div>
+           <div class="list-i"><div style="flex:1"><div class="nm">Получат SIM впервые: <b>${c.added}</b></div>
+             <div class="mt">сейчас поле пустое${topAdded ? ' · ' + topAdded : ''}</div></div>
+             <span class="chip ${c.added ? 'c-warn' : 'c-off'}">впервые</span></div>
            <div class="list-i"><div style="flex:1"><div class="nm">Только метка: <b>${c.canonical}</b></div>
              <div class="mt">«2Sim» → «2 SIM» — значение не меняется</div></div><span class="chip c-off">косметика</span></div>
            <div class="list-i"><div style="flex:1"><div class="nm">Стоит без правила: <b>${c.inherited}</b></div>

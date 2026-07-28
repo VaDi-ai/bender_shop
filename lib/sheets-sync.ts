@@ -14,6 +14,7 @@ import { readSheet, getProductSheetNames } from './google-sheets'
 import { normalizeCdnPhotoUrl, cleanPhotoUrl } from './cdn-photo-resolve'
 import { syncRunStart, syncRunFinish, SyncRunMeta } from './sync-run'
 import { decidePriceSync, getFrozenVariantIds } from './price-sync-policy'
+import { SYNC_LOCK_KEY } from './sync-lock'
 import { resolveSimType, loadSimRules, loadAttrAliases, attributesForExistingVariant, SimRuleData, AttrAliasData } from './sim-rules'
 import {
   applyMarkupRules as _applyMarkupRules,
@@ -465,8 +466,9 @@ export async function syncProductsFromSheets(
   total: number
   errors: string[]
 }> {
-  // Prevent concurrent syncs via PostgreSQL advisory lock
-  const lockAcquired = await prisma.$queryRaw<[{pg_try_advisory_lock: boolean}]>`SELECT pg_try_advisory_lock(73001) as "pg_try_advisory_lock"`
+  // Prevent concurrent syncs via PostgreSQL advisory lock (тот же ключ берут
+  // массовые записи из админки — lib/sync-lock.ts)
+  const lockAcquired = await prisma.$queryRaw<[{pg_try_advisory_lock: boolean}]>`SELECT pg_try_advisory_lock(${SYNC_LOCK_KEY}) as "pg_try_advisory_lock"`
   if (!lockAcquired[0]?.pg_try_advisory_lock) {
     log.warn('Sheets sync already running, skipping')
     // Пропуск из-за конкурентного прогона — не прогон, в журнал не пишем
@@ -1031,7 +1033,7 @@ export async function syncProductsFromSheets(
 
   return { created, updated, disabled, total: rows.length, errors }
   } finally {
-    await prisma.$queryRaw`SELECT pg_advisory_unlock(73001)`
+    await prisma.$queryRaw`SELECT pg_advisory_unlock(${SYNC_LOCK_KEY})`
   }
 }
 

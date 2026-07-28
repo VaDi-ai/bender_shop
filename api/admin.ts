@@ -586,7 +586,9 @@ export function adminApiRouter(): Router {
     res.json({
       counts: preview.counts,
       byCountry: preview.byCountry,
+      addedByCountry: preview.addedByCountry,
       semantic: preview.semantic.slice(0, 200),
+      added: preview.added.slice(0, 200),
       canonical: preview.canonical.slice(0, 100),
       inherited: preview.inherited.slice(0, 100),
       lastRecalc: last,

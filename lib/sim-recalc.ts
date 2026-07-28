@@ -4,11 +4,17 @@
  * PR-A применял словарь только к новым разборам; здесь — разовое применение
  * ко ВСЕМУ каталогу, с предпросмотром, транзакцией и откатом.
  *
- * Три раздела предпросмотра (смысл отдельно от косметики):
- *   • semantic    — меняется ЗНАЧЕНИЕ (это видит покупатель);
+ * Разделы предпросмотра (смысл, первичное проставление и косметика — врозь):
+ *   • semantic    — меняется ЗНАЧЕНИЕ существующего SIM (это видит покупатель);
+ *   • added       — SIM не было вовсе, словарь проставляет впервые;
  *   • canonical   — меняется только МЕТКА («2Sim» → «2 SIM»), смысл тот же;
  *   • inherited   — SIM стоит, но правила нет (наследие старого хардкода):
  *                   пересчёт их НЕ трогает, показываем владельцу для обучения.
+ * Применяются первые три; наследие — только к обучению.
+ *
+ * Запись идёт под тем же advisory-локом, что берёт часовой синк (73001):
+ * attributes — цельный JSON, параллельная запись потеряла бы одну из правок
+ * целиком. Лок занят → 409, вслепую не пишем.
  *
  * Откат: старое значение каждой строки лежит в AuditLog (entity ProductVariant,
  * action sim_recalc, after.recalcId — номер пачки). Конфликт-защита как в
@@ -16,6 +22,7 @@
  */
 import { prisma } from './prisma'
 import { log } from './logger'
+import { withSyncLock, SyncLockBusy, SYNC_LOCK_BUSY_MESSAGE } from './sync-lock'
 import {
   loadSimRules, loadAttrAliases, resolveSimType, canonicalizeSim, detectGeneration,
   SimRuleData, AttrAliasData,
@@ -41,10 +48,14 @@ export interface InheritedRow {
 
 export interface RecalcPreview {
   semantic: RecalcRow[]
+  added: RecalcRow[]
   canonical: RecalcRow[]
   inherited: InheritedRow[]
-  counts: { semantic: number; canonical: number; inherited: number }
+  counts: { semantic: number; added: number; canonical: number; inherited: number }
+  /** Разбивка ТОЛЬКО смен существующего значения — «что увидит покупатель». */
   byCountry: Record<string, number>
+  /** Разбивка первичных проставлений — отдельно, чтобы не смешивать со сменами. */
+  addedByCountry: Record<string, number>
 }
 
 export interface VariantRow {
@@ -62,6 +73,7 @@ function isPhone(v: VariantRow, attrs: Record<string, string>): boolean {
 
 export function buildPreview(variants: VariantRow[], rules: SimRuleData[], aliases: AttrAliasData[]): RecalcPreview {
   const semantic: RecalcRow[] = []
+  const added: RecalcRow[] = []
   const canonical: RecalcRow[] = []
   const inherited: InheritedRow[] = []
 
@@ -81,8 +93,9 @@ export function buildPreview(variants: VariantRow[], rules: SimRuleData[], alias
     }
 
     if (!cur) {
-      // SIM не было: если словарь знает — это семантическое добавление
-      if (want.simType) semantic.push({ ...base, from: '—', to: want.simType, by: want.reason })
+      // SIM не было вовсе: словарь его ПРОСТАВЛЯЕТ впервые. Это не смена
+      // значения — отдельный бакет, чтобы не раздувать «сменят значение».
+      if (want.simType) added.push({ ...base, from: '—', to: want.simType, by: want.reason })
       continue
     }
     const curCanon = canonicalizeSim(cur, aliases) ?? cur
@@ -95,25 +108,41 @@ export function buildPreview(variants: VariantRow[], rules: SimRuleData[], alias
     else if (curCanon !== cur) canonical.push({ ...base, from: cur, to: curCanon })
   }
 
-  const byCountry: Record<string, number> = {}
-  for (const r of semantic) byCountry[r.country ?? '—'] = (byCountry[r.country ?? '—'] ?? 0) + 1
+  const tally = (rows: RecalcRow[]): Record<string, number> => {
+    const out: Record<string, number> = {}
+    for (const r of rows) out[r.country ?? '—'] = (out[r.country ?? '—'] ?? 0) + 1
+    return out
+  }
 
   return {
-    semantic, canonical, inherited,
-    counts: { semantic: semantic.length, canonical: canonical.length, inherited: inherited.length },
-    byCountry,
+    semantic, added, canonical, inherited,
+    counts: {
+      semantic: semantic.length, added: added.length,
+      canonical: canonical.length, inherited: inherited.length,
+    },
+    byCountry: tally(semantic),
+    addedByCountry: tally(added),
   }
 }
+
+/** Пересчёт каталога длиннее ценового батча — держим лок дольше 15 с. */
+const LOCK_TIMEOUT_MS = 60_000
 
 const VARIANT_SELECT = {
   id: true, attributes: true,
   product: { select: { name: true, brand: true, category: { select: { name: true } } } },
 } as const
 
-export async function previewRecalc(): Promise<RecalcPreview> {
+/* eslint-disable @typescript-eslint/no-explicit-any */
+/**
+ * db — клиент чтения: снаружи это prisma (read-only предпросмотр), а в
+ * applyRecalc сюда передаётся tx из-под лока синка, чтобы preview и запись
+ * видели ОДНО состояние каталога.
+ */
+export async function previewRecalc(db: any = prisma): Promise<RecalcPreview> {
   const [rules, aliases, variants] = await Promise.all([
     loadSimRules(), loadAttrAliases('SIM'),
-    prisma.productVariant.findMany({ select: VARIANT_SELECT }),
+    db.productVariant.findMany({ select: VARIANT_SELECT }),
   ])
   return buildPreview(variants as VariantRow[], rules, aliases)
 }
@@ -122,8 +151,10 @@ export interface ApplyOutcome {
   ok: boolean
   status: number
   error?: string
+  /** Всего записано строк = semantic + added + canonical */
   changed?: number
   semantic?: number
+  added?: number
   canonical?: number
   inheritedUntouched?: number
   recalcId?: number
@@ -131,53 +162,65 @@ export interface ApplyOutcome {
 }
 
 /**
- * Применение: семантические смены + доканонизации, одной транзакцией.
- * Наследие (inherited) не трогается — у него нет словарного значения.
+ * Применение: смены значения + первичные проставления + доканонизации —
+ * одной транзакцией под локом синка. Наследие не трогается: словарного
+ * значения для него нет, сначала правило.
  */
 export async function applyRecalc(actorTelegramId: string): Promise<ApplyOutcome> {
-  const preview = await previewRecalc()
-  const rows = [...preview.semantic, ...preview.canonical]
-  if (!rows.length) {
-    return { ok: true, status: 200, noop: true, changed: 0, semantic: 0, canonical: 0, inheritedUntouched: preview.counts.inherited }
-  }
+  try {
+    return await withSyncLock(async tx => {
+      // Предпросмотр считается ВНУТРИ лока: между чтением и записью синк не
+      // вклинится, иначе он перезапишет весь JSON attributes целиком.
+      const preview = await previewRecalc(tx)
+      const rows = [...preview.semantic, ...preview.added, ...preview.canonical]
+      const counts = preview.counts
+      if (!rows.length) {
+        return {
+          ok: true, status: 200, noop: true, changed: 0,
+          semantic: 0, added: 0, canonical: 0, inheritedUntouched: counts.inherited,
+        }
+      }
 
-  const recalcId = await prisma.$transaction(async tx => {
-    // Шапка пачки: её id — номер пачки для отката
-    const head = await tx.auditLog.create({
-      data: {
-        adminTelegramId: actorTelegramId,
-        action: 'sim_recalc_batch', entity: 'SimRecalc',
-        after: { semantic: preview.counts.semantic, canonical: preview.counts.canonical } as object,
-      },
-      select: { id: true },
-    })
-
-    for (const r of rows) {
-      const v = await tx.productVariant.findUnique({ where: { id: r.variantId }, select: { attributes: true } })
-      if (!v) continue
-      const attrs = { ...((v.attributes ?? {}) as Record<string, unknown>) }
-      const before = attrs.SIM ?? null
-      attrs.SIM = r.to
-      await tx.productVariant.update({ where: { id: r.variantId }, data: { attributes: attrs as object } })
-      await tx.auditLog.create({
+      // Шапка пачки: её id — номер пачки для отката
+      const head = await tx.auditLog.create({
         data: {
           adminTelegramId: actorTelegramId,
-          action: 'sim_recalc', entity: 'ProductVariant', entityId: String(r.variantId),
-          before: { SIM: before } as object,
-          after: { SIM: r.to, recalcId: head.id } as object,
+          action: 'sim_recalc_batch', entity: 'SimRecalc',
+          after: { semantic: counts.semantic, added: counts.added, canonical: counts.canonical } as object,
         },
+        select: { id: true },
       })
-    }
-    return head.id
-  }, { timeout: 60_000 })
 
-  log.info('SIM recalc applied', { recalcId, ...preview.counts })
-  return {
-    ok: true, status: 200, recalcId,
-    changed: rows.length,
-    semantic: preview.counts.semantic,
-    canonical: preview.counts.canonical,
-    inheritedUntouched: preview.counts.inherited,
+      for (const r of rows) {
+        const v = await tx.productVariant.findUnique({ where: { id: r.variantId }, select: { attributes: true } })
+        if (!v) continue
+        const attrs = { ...((v.attributes ?? {}) as Record<string, unknown>) }
+        const before = attrs.SIM ?? null
+        attrs.SIM = r.to
+        await tx.productVariant.update({ where: { id: r.variantId }, data: { attributes: attrs as object } })
+        await tx.auditLog.create({
+          data: {
+            adminTelegramId: actorTelegramId,
+            action: 'sim_recalc', entity: 'ProductVariant', entityId: String(r.variantId),
+            before: { SIM: before } as object,
+            after: { SIM: r.to, recalcId: head.id } as object,
+          },
+        })
+      }
+
+      log.info('SIM recalc applied', { recalcId: head.id, ...counts })
+      return {
+        ok: true, status: 200, recalcId: head.id,
+        changed: rows.length,
+        semantic: counts.semantic,
+        added: counts.added,
+        canonical: counts.canonical,
+        inheritedUntouched: counts.inherited,
+      }
+    }, LOCK_TIMEOUT_MS)
+  } catch (e) {
+    if (e instanceof SyncLockBusy) return { ok: false, status: 409, error: SYNC_LOCK_BUSY_MESSAGE }
+    throw e
   }
 }
 
@@ -190,58 +233,64 @@ export interface RollbackOutcome {
   recalcId?: number
 }
 
-/** Откат последней непрокаченной пачки sim_recalc. */
+/** Откат последней непрокаченной пачки sim_recalc — тоже под локом синка. */
 export async function rollbackRecalc(actorTelegramId: string): Promise<RollbackOutcome> {
-  const head = await prisma.auditLog.findFirst({
-    where: { entity: 'SimRecalc', action: 'sim_recalc_batch' },
-    orderBy: { id: 'desc' },
-  })
-  if (!head) return { ok: false, status: 404, error: 'Пересчётов ещё не было' }
+  try {
+    return await withSyncLock(async tx => {
+      const head = await tx.auditLog.findFirst({
+        where: { entity: 'SimRecalc', action: 'sim_recalc_batch' },
+        orderBy: { id: 'desc' },
+      })
+      if (!head) return { ok: false, status: 404, error: 'Пересчётов ещё не было' }
 
-  const alreadyRolled = await prisma.auditLog.findFirst({
-    where: { entity: 'SimRecalc', action: 'sim_recalc_rollback', after: { path: ['recalcId'], equals: head.id } },
-  })
-  if (alreadyRolled) return { ok: false, status: 409, error: 'Этот пересчёт уже откачен' }
+      const alreadyRolled = await tx.auditLog.findFirst({
+        where: { entity: 'SimRecalc', action: 'sim_recalc_rollback', after: { path: ['recalcId'], equals: head.id } },
+      })
+      if (alreadyRolled) return { ok: false, status: 409, error: 'Этот пересчёт уже откачен' }
 
-  const rows = await prisma.auditLog.findMany({
-    where: { entity: 'ProductVariant', action: 'sim_recalc', after: { path: ['recalcId'], equals: head.id } },
-    orderBy: { id: 'asc' },
-  })
-  if (!rows.length) return { ok: false, status: 404, error: 'Строки пересчёта не найдены' }
+      const rows = await tx.auditLog.findMany({
+        where: { entity: 'ProductVariant', action: 'sim_recalc', after: { path: ['recalcId'], equals: head.id } },
+        orderBy: { id: 'asc' },
+      })
+      if (!rows.length) return { ok: false, status: 404, error: 'Строки пересчёта не найдены' }
 
-  const conflicts: NonNullable<RollbackOutcome['conflicts']> = []
-  let restored = 0
+      const conflicts: NonNullable<RollbackOutcome['conflicts']> = []
+      let restored = 0
 
-  await prisma.$transaction(async tx => {
-    for (const r of rows) {
-      const variantId = Number(r.entityId)
-      const applied = (r.after as Record<string, unknown>)?.SIM as string
-      const before = (r.before as Record<string, unknown>)?.SIM as string | null
-      const v = await tx.productVariant.findUnique({ where: { id: variantId }, select: { attributes: true } })
-      if (!v) continue
-      const attrs = { ...((v.attributes ?? {}) as Record<string, unknown>) }
-      const current = (attrs.SIM as string | undefined) ?? null
-      if (current !== applied) {
-        // после пересчёта значение меняли — чужую правку не перетираем
-        conflicts.push({ variantId, expected: applied, actual: current })
-        continue
+      for (const r of rows) {
+        const variantId = Number(r.entityId)
+        const applied = (r.after as Record<string, unknown>)?.SIM as string
+        const before = (r.before as Record<string, unknown>)?.SIM as string | null
+        const v = await tx.productVariant.findUnique({ where: { id: variantId }, select: { attributes: true } })
+        if (!v) continue
+        const attrs = { ...((v.attributes ?? {}) as Record<string, unknown>) }
+        const current = (attrs.SIM as string | undefined) ?? null
+        if (current !== applied) {
+          // после пересчёта значение меняли — чужую правку не перетираем
+          conflicts.push({ variantId, expected: applied, actual: current })
+          continue
+        }
+        if (before === null || before === undefined) delete attrs.SIM
+        else attrs.SIM = before
+        await tx.productVariant.update({ where: { id: variantId }, data: { attributes: attrs as object } })
+        restored++
       }
-      if (before === null || before === undefined) delete attrs.SIM
-      else attrs.SIM = before
-      await tx.productVariant.update({ where: { id: variantId }, data: { attributes: attrs as object } })
-      restored++
-    }
-    await tx.auditLog.create({
-      data: {
-        adminTelegramId: actorTelegramId,
-        action: 'sim_recalc_rollback', entity: 'SimRecalc',
-        after: { recalcId: head.id, restored, conflicts: conflicts.length } as object,
-      },
-    })
-  }, { timeout: 60_000 })
 
-  log.info('SIM recalc rolled back', { recalcId: head.id, restored, conflicts: conflicts.length })
-  return { ok: true, status: 200, restored, conflicts, recalcId: head.id }
+      await tx.auditLog.create({
+        data: {
+          adminTelegramId: actorTelegramId,
+          action: 'sim_recalc_rollback', entity: 'SimRecalc',
+          after: { recalcId: head.id, restored, conflicts: conflicts.length } as object,
+        },
+      })
+
+      log.info('SIM recalc rolled back', { recalcId: head.id, restored, conflicts: conflicts.length })
+      return { ok: true, status: 200, restored, conflicts, recalcId: head.id }
+    }, LOCK_TIMEOUT_MS)
+  } catch (e) {
+    if (e instanceof SyncLockBusy) return { ok: false, status: 409, error: SYNC_LOCK_BUSY_MESSAGE }
+    throw e
+  }
 }
 
 /** Есть ли применённый и неоткаченный пересчёт (для кнопки «Откатить» в UI). */

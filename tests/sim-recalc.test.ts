@@ -1,10 +1,11 @@
 /**
  * PR-B — предпросмотр пересчёта SIM на снимке боевого каталога.
  *
- * Числа снимка сверены с продом 28.07.2026 (GET /admin/api/sim-recalc/preview):
+ * Числа снимка сверены с продом (GET /admin/api/sim-recalc/preview):
  * 65 смен смысла (Индия 60, ОАЭ 2, Европа 1, Япония 1, Южная Корея 1)
  * и 3 доканонизации метки (строки, которых уже нет в листе, поэтому синк
- * их не поправил). Плюс 2 строки наследия — составная страна без правила.
+ * их не поправил). Плюс 2 строки наследия — составная страна без правила
+ * и 5 строк без SIM вовсе (бакет added — проставление впервые).
  */
 import { describe, it, expect, vi } from 'vitest'
 
@@ -45,6 +46,9 @@ const SNAPSHOT: Array<[string, string | null, number, number]> = [
   // ── меняется только МЕТКА (3) ──────────────────────────────────────────
   ['Китай', '2Sim', 17, 2],
   ['Гонконг', '2Sim', 17, 1],
+  // ── SIM не было вовсе: проставляем впервые (5) ─────────────────────────
+  ['Казахстан', null, 17, 3],
+  ['Россия', null, 16, 2],
   // ── наследие: значение стоит, правила нет (2) ──────────────────────────
   ['Индия/Япония', 'eSIM', 15, 2],
   // ── не меняется ничего (контроль) ──────────────────────────────────────
@@ -76,8 +80,22 @@ function variantsFromSnapshot(): VariantRow[] {
 describe('предпросмотр пересчёта SIM на снимке каталога', () => {
   const preview = buildPreview(variantsFromSnapshot(), RULES, ALIASES)
 
-  it('три раздела: 65 смыслов / 3 метки / 2 наследия', () => {
-    expect(preview.counts).toEqual({ semantic: 65, canonical: 3, inherited: 2 })
+  it('четыре раздела: 65 смыслов / 5 впервые / 3 метки / 2 наследия', () => {
+    expect(preview.counts).toEqual({ semantic: 65, added: 5, canonical: 3, inherited: 2 })
+  })
+
+  it('пустые НЕ попадают в «сменят значение» — это отдельный бакет added', () => {
+    expect(preview.semantic.every(r => r.from !== '—')).toBe(true)
+    expect(preview.added.every(r => r.from === '—')).toBe(true)
+    expect(preview.addedByCountry).toEqual({ 'Казахстан': 3, 'Россия': 2 })
+  })
+
+  it('сумма изменяемых = semantic + added + canonical, наследие вне её', () => {
+    const changeable = preview.semantic.length + preview.added.length + preview.canonical.length
+    expect(changeable).toBe(73)
+    const ids = new Set([...preview.semantic, ...preview.added, ...preview.canonical].map(r => r.variantId))
+    expect(ids.size).toBe(changeable)                                    // пересечений между бакетами нет
+    for (const r of preview.inherited) expect(ids.has(r.variantId)).toBe(false)
   })
 
   it('смысловые смены разложены по странам как на проде', () => {
@@ -98,8 +116,8 @@ describe('предпросмотр пересчёта SIM на снимке ка
   })
 
   it('уже верные строки не попадают ни в один раздел', () => {
-    const touched = [...preview.semantic, ...preview.canonical, ...preview.inherited].length
-    expect(touched).toBe(70)                    // 65 + 3 + 2, остальные 133 строки чистые
+    const touched = [...preview.semantic, ...preview.added, ...preview.canonical, ...preview.inherited].length
+    expect(touched).toBe(75)                    // 65 + 5 + 3 + 2, остальные 133 строки чистые
   })
 
   it('аксессуары и не-телефоны словарь не трогает', () => {
@@ -107,7 +125,7 @@ describe('предпросмотр пересчёта SIM на снимке ка
       { id: 9001, attributes: { fullName: 'Чехол Apple для iPhone 17 Pro', 'Страна': 'Индия', SIM: 'eSIM' }, product: { name: 'Чехол Apple', brand: 'Apple', category: { name: 'Аксессуары' } } },
       { id: 9002, attributes: { fullName: 'Apple Mac Mini M4 (Индия)', 'Страна': 'Индия' }, product: { name: 'Apple Mac Mini M4', brand: 'Apple', category: { name: 'Mac' } } },
     ], RULES, ALIASES)
-    expect(p.counts).toEqual({ semantic: 0, canonical: 0, inherited: 0 })
+    expect(p.counts).toEqual({ semantic: 0, added: 0, canonical: 0, inherited: 0 })
   })
 
   it('iPhone Air — модельный оверрайд сильнее страны', () => {
