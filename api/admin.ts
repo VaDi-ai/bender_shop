@@ -686,6 +686,54 @@ export function adminApiRouter(): Router {
     })))
   }))
 
+  // ── ТОВАРЫ (пласт 2): карточка, фото, описание, скрытие с витрины ─────────
+  //
+  // Фото и описание уходят ПИСБЭКОМ в таблицу и только потом в БД: синк —
+  // зеркало листа, и запись «только в базу» он бы стёр ближайшим прогоном.
+  router.get('/products/:id', safe(async (req, res) => {
+    const id = parseInt(String(req.params.id), 10)
+    if (!Number.isInteger(id)) { res.status(422).json({ error: 'Неверный ID' }); return }
+    const { getProductCard } = await import('../lib/product-admin')
+    const card = await getProductCard(id)
+    if (!card) { res.status(404).json({ error: 'Товар не найден' }); return }
+    res.json(card)
+  }))
+
+  router.put('/products/:id/photo', safe(async (req, res) => {
+    const id = parseInt(String(req.params.id), 10)
+    if (!Number.isInteger(id)) { res.status(422).json({ error: 'Неверный ID' }); return }
+    const { setProductMainPhoto } = await import('../lib/photo-writeback')
+    const body = (req.body ?? {}) as { imageUrl?: unknown }
+    const r = await setProductMainPhoto(req.admin!.telegramId, id, body.imageUrl == null ? null : String(body.imageUrl))
+    res.status(r.status).json(r.ok ? { ok: true, photoUrl: r.photoUrl, productPhotos: r.productPhotos, fullName: r.fullName } : { error: r.error })
+  }))
+
+  router.put('/variants/:id/photo', safe(async (req, res) => {
+    const id = parseInt(String(req.params.id), 10)
+    if (!Number.isInteger(id)) { res.status(422).json({ error: 'Неверный ID' }); return }
+    const { setVariantPhoto } = await import('../lib/photo-writeback')
+    const body = (req.body ?? {}) as { imageUrl?: unknown }
+    const r = await setVariantPhoto(req.admin!.telegramId, id, body.imageUrl == null ? null : String(body.imageUrl))
+    res.status(r.status).json(r.ok ? { ok: true, photoUrl: r.photoUrl, productPhotos: r.productPhotos, fullName: r.fullName } : { error: r.error })
+  }))
+
+  router.put('/products/:id/description', safe(async (req, res) => {
+    const id = parseInt(String(req.params.id), 10)
+    if (!Number.isInteger(id)) { res.status(422).json({ error: 'Неверный ID' }); return }
+    const { setProductDescription } = await import('../lib/product-admin')
+    const r = await setProductDescription(req.admin!.telegramId, id, (req.body as { text?: unknown })?.text)
+    res.status(r.status).json(r.ok ? { ok: true, ...((r.data as object) ?? {}) } : { error: r.error })
+  }))
+
+  // Скрытие товара с витрины — owner: это прямое вычитание из продаж.
+  router.post('/products/:id/visibility', ownerOnly, safe(async (req, res) => {
+    const id = parseInt(String(req.params.id), 10)
+    if (!Number.isInteger(id)) { res.status(422).json({ error: 'Неверный ID' }); return }
+    const { setProductVisible } = await import('../lib/product-admin')
+    const r = await setProductVisible(req.admin!.telegramId, id, (req.body as { visible?: unknown })?.visible === true)
+    res.status(r.status).json(r.ok ? { ok: true, ...((r.data as object) ?? {}) } : { error: r.error })
+  }))
+
   // ── Команда магазина: кто имеет доступ (owner-only) ───────────────────────
   router.get('/team', ownerOnly, safe(async (req, res) => {
     const { listTeam } = await import('../lib/admin-team')

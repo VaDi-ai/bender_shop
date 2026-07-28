@@ -254,7 +254,34 @@
     <!-- ═══ ТОВАРЫ ═══ -->
     <section class="screen" id="s-goods">
       <h2>Товары</h2>
-      <div class="sub">Карточки и правила атрибутов.</div>
+      <div class="sub">Карточки, фото, что показывать покупателю.</div>
+
+      <div class="cap">КАРТОЧКА ТОВАРА</div>
+      <div class="card">
+        <h3>Найти товар</h3>
+        <input class="inp" id="pcSearch" placeholder="Начните вводить: «айфон», «macbook»…" maxlength="60">
+        <div id="pcResults"></div>
+        <div id="pcCard" style="display:none"></div>
+        <div id="pcPhotoForm" style="display:none">
+          <div class="cap" id="pcPhotoTitle" style="margin:10px 0 6px">ФОТО</div>
+          <input class="inp" type="file" id="pcFile" accept="image/jpeg,image/png,image/webp">
+          <input class="inp" id="pcUrl" placeholder="или путь /photos/файл.webp" maxlength="500">
+          <img id="pcPreview" alt="" style="display:none;width:100%;border-radius:11px;margin-top:10px">
+          <button class="btn b-main" id="pcPhotoSave">Поставить фото</button>
+          <button class="btn b-nt" id="pcPhotoCancel">Отмена</button>
+          <div class="mt" id="pcPhotoErr" style="color:var(--bad)"></div>
+          <div class="hint">Ссылка запишется в колонку «Фото» той же строки таблицы — иначе ближайший синк стёр бы её. Покупатель увидит фото сразу.</div>
+        </div>
+        <div id="pcDescForm" style="display:none">
+          <div class="cap" style="margin:10px 0 6px">ОПИСАНИЕ</div>
+          <textarea class="inp" id="pcDesc" rows="4" maxlength="2000" placeholder="Что важно знать покупателю"></textarea>
+          <button class="btn b-main" id="pcDescSave">Сохранить описание</button>
+          <button class="btn b-nt" id="pcDescCancel">Отмена</button>
+          <div class="mt" id="pcDescErr" style="color:var(--bad)"></div>
+          <div class="hint">Текст уйдёт и в таблицу (колонка «Описание») — так он переживёт синк.</div>
+        </div>
+        <div class="hint" id="pcHint">Найдите товар, чтобы посмотреть предложения, поменять фото и описание.</div>
+      </div>
 
       <div class="cap">SIM НЕ ОПРЕДЕЛЁН — ПОДСКАЖИТЕ</div>
       <div id="simQueue"><div class="empty">Загрузка…</div></div>
@@ -375,6 +402,168 @@
       loadDashboard(); loadSyncRuns(); loadSuppliers(); loadBatches(); loadUnmatched(); loadMarkupRules()
       loadSimQueue(); loadSimRules(); loadSimRecalc(); loadStorefront(); loadTeam()
     }
+
+    // ── ТОВАРЫ: карточка, фото (с записью в таблицу), описание, скрытие ───────
+    let pcProduct = null           // открытая карточка
+    let pcPhotoTarget = null       // {kind:'product'|'variant', id, label}
+    let pcSearchTimer = null
+
+    document.getElementById('pcSearch').addEventListener('input', e => {
+      clearTimeout(pcSearchTimer)
+      const q = e.target.value.trim()
+      const box = document.getElementById('pcResults')
+      if (q.length < 2) { box.innerHTML = ''; return }
+      pcSearchTimer = setTimeout(async () => {
+        const r = await api('/products?q=' + encodeURIComponent(q)).catch(() => null)
+        if (!r || !r.ok) { box.innerHTML = ''; return }
+        if (!r.data.length) { box.innerHTML = '<div class="hint">Ничего не нашли. Попробуйте часть названия — «17 pro», «air»</div>'; return }
+        box.innerHTML = r.data.map(p => `<div class="list-i">
+          ${sfThumb(p.photoUrl)}
+          <div style="flex:1"><div class="nm">${esc(p.name)}</div>
+            <div class="mt">${esc(p.category || 'без категории')}${p.inStock ? '' : ' · нет в наличии'}</div></div>
+          <button class="btn b-gh sm" data-pc-open="${p.id}">Открыть</button>
+        </div>`).join('')
+        box.querySelectorAll('[data-pc-open]').forEach(b => b.addEventListener('click', () => openProductCard(b.dataset.pcOpen)))
+      }, 250)
+    })
+
+    async function openProductCard(id) {
+      const r = await api('/products/' + id).catch(() => null)
+      const box = document.getElementById('pcCard')
+      if (!r || !r.ok) { box.style.display = ''; box.innerHTML = '<div class="empty">Не удалось открыть карточку</div>'; return }
+      pcProduct = r.data
+      document.getElementById('pcResults').innerHTML = ''
+      document.getElementById('pcSearch').value = ''
+      document.getElementById('pcHint').style.display = 'none'
+      renderProductCard()
+    }
+
+    function renderProductCard() {
+      const p = pcProduct
+      const box = document.getElementById('pcCard')
+      const isOwner = window.adminMe && window.adminMe.role === 'owner'
+      box.style.display = ''
+      box.innerHTML = `
+        <div class="cap" style="margin:12px 0 6px">${esc(p.name.toUpperCase())}</div>
+        <div class="list-i">
+          ${sfThumb(p.mainPhoto)}
+          <div style="flex:1">
+            <div class="nm">${esc(p.category || 'без категории')}${p.brand ? ' · ' + esc(p.brand) : ''}</div>
+            <div class="mt">${p.offers.length} ${plural(p.offers.length, 'предложение', 'предложения', 'предложений')}${p.countries.length ? ': ' + p.countries.map(esc).join(', ') : ''}</div>
+            <div class="mt">${p.inStockCount ? `в наличии ${p.inStockCount} · от ${fmt(p.priceFrom)} ₽` : 'нет в наличии — покупателю не показывается'}</div>
+          </div>
+          <span class="chip ${p.isAvailable ? (p.inStockCount ? 'c-ok' : 'c-off') : 'c-bad'}">${p.isAvailable ? (p.inStockCount ? 'на витрине' : 'нет в наличии') : 'скрыт'}</span>
+        </div>
+        <button class="btn b-gh sm" data-pc-photo="product">${p.mainPhoto ? 'Заменить главное фото' : 'Поставить главное фото'}</button>
+        ${p.mainPhoto ? '<button class="btn b-nt sm" data-pc-photo-clear="product">Убрать фото</button>' : ''}
+        <div class="hint">Главное фото видно в каталоге и поиске. Оно берётся у первого предложения — его и меняем.</div>
+
+        <div class="cap" style="margin:14px 0 6px">ПРЕДЛОЖЕНИЯ</div>
+        ${p.offers.map(o => `<div class="list-i">
+          ${sfThumb(o.photoUrl)}
+          <div style="flex:1">
+            <div class="nm">${esc(Object.values(o.attrs).join(' · ') || o.fullName)}</div>
+            <div class="mt">${o.sim ? esc(o.sim) + ' · ' : ''}${fmt(o.price)} ₽ · ${o.quantity} шт</div>
+          </div>
+          <span class="chip ${o.visible ? 'c-ok' : 'c-off'}">${o.visible ? 'в наличии' : 'нет'}</span>
+          <button class="btn b-nt sm" data-pc-photo="variant" data-pc-vid="${o.variantId}" data-pc-label="${esc(Object.values(o.attrs).join(' · '))}">Фото</button>
+        </div>`).join('')}
+        <div class="hint">Цены, остатки и страна приезжают из таблицы — здесь их не меняют. Фото и описание можно.</div>
+
+        <div class="cap" style="margin:14px 0 6px">ОПИСАНИЕ</div>
+        <div class="mt">${p.description ? esc(p.description) : 'Описания нет — покупатель видит только характеристики.'}</div>
+        <button class="btn b-nt sm" data-pc-desc="1">${p.description ? 'Изменить описание' : 'Добавить описание'}</button>
+
+        ${isOwner ? `<div class="cap" style="margin:14px 0 6px">ОПАСНАЯ ЗОНА</div>
+          <button class="btn ${p.isAvailable ? 'b-dg' : 'b-gh'}" data-pc-vis="${p.isAvailable ? '0' : '1'}">${p.isAvailable ? 'Скрыть товар с витрины' : 'Вернуть товар на витрину'}</button>
+          <div class="hint">${p.isAvailable ? 'Товар пропадёт из каталога и поиска. Заказы по нему больше не оформят. Вернуть можно этой же кнопкой.' : 'Товар снова появится в каталоге, если есть остатки.'}</div>` : ''}
+      `
+
+      box.querySelectorAll('[data-pc-photo]').forEach(b => b.addEventListener('click', () => {
+        pcPhotoTarget = b.dataset.pcPhoto === 'product'
+          ? { kind: 'product', id: p.id, label: p.name }
+          : { kind: 'variant', id: b.dataset.pcVid, label: b.dataset.pcLabel }
+        document.getElementById('pcPhotoTitle').textContent = 'ФОТО · ' + String(pcPhotoTarget.label).toUpperCase().slice(0, 40)
+        document.getElementById('pcPhotoErr').textContent = ''
+        const f = document.getElementById('pcPhotoForm')
+        f.style.display = ''
+        f.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      }))
+      box.querySelectorAll('[data-pc-photo-clear]').forEach(b => b.addEventListener('click', async () => {
+        if (!confirm('Убрать главное фото? В таблице ячейка «Фото» очистится, товар останется без картинки.')) return
+        await savePhoto({ kind: 'product', id: p.id }, null)
+      }))
+      const descBtn = box.querySelector('[data-pc-desc]')
+      if (descBtn) descBtn.addEventListener('click', () => {
+        document.getElementById('pcDesc').value = p.description || ''
+        document.getElementById('pcDescErr').textContent = ''
+        const f = document.getElementById('pcDescForm')
+        f.style.display = ''
+        f.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      })
+      const visBtn = box.querySelector('[data-pc-vis]')
+      if (visBtn) visBtn.addEventListener('click', async () => {
+        const to = visBtn.dataset.pcVis === '1'
+        if (!to && !confirm(`Скрыть «${p.name}» с витрины? Покупатели перестанут его видеть и заказывать.`)) return
+        const r = await api(`/products/${p.id}/visibility`, { method: 'POST', body: JSON.stringify({ visible: to }) }).catch(() => null)
+        if (!r || !r.ok) { alert(r && r.data && r.data.error || 'Не получилось'); return }
+        openProductCard(p.id)
+      })
+    }
+
+    async function savePhoto(target, url) {
+      const path = target.kind === 'product' ? `/products/${target.id}/photo` : `/variants/${target.id}/photo`
+      const r = await api(path, { method: 'PUT', body: JSON.stringify({ imageUrl: url }) }).catch(() => null)
+      if (!r || !r.ok) { return { error: (r && r.data && r.data.error) || 'Не получилось' } }
+      if (pcProduct) openProductCard(pcProduct.id)
+      return {}
+    }
+
+    document.getElementById('pcFile').addEventListener('change', () => {
+      const f = document.getElementById('pcFile').files[0]
+      const img = document.getElementById('pcPreview')
+      if (!f) { img.style.display = 'none'; return }
+      const fr = new FileReader()
+      fr.onload = () => { img.src = fr.result; img.style.display = '' }
+      fr.readAsDataURL(f)
+    })
+    document.getElementById('pcPhotoCancel').addEventListener('click', () => {
+      document.getElementById('pcPhotoForm').style.display = 'none'
+      document.getElementById('pcUrl').value = ''
+      document.getElementById('pcFile').value = ''
+      document.getElementById('pcPreview').style.display = 'none'
+      document.getElementById('pcPhotoErr').textContent = ''
+      pcPhotoTarget = null
+    })
+    document.getElementById('pcPhotoSave').addEventListener('click', async () => {
+      const err = document.getElementById('pcPhotoErr'); err.textContent = ''
+      if (!pcPhotoTarget) { err.textContent = 'Сначала выберите, какому фото менять картинку'; return }
+      const btn = document.getElementById('pcPhotoSave'); btn.disabled = true; btn.textContent = 'Сохраняем в таблицу…'
+      try {
+        let url = document.getElementById('pcUrl').value.trim()
+        if (!url) url = await uploadPhoto(document.getElementById('pcFile'), err)
+        if (!url) { if (!err.textContent) err.textContent = 'Выберите файл или вставьте ссылку'; return }
+        const res = await savePhoto(pcPhotoTarget, url)
+        if (res.error) { err.textContent = res.error; return }
+        document.getElementById('pcPhotoCancel').click()
+      } finally { btn.disabled = false; btn.textContent = 'Поставить фото' }
+    })
+
+    document.getElementById('pcDescCancel').addEventListener('click', () => {
+      document.getElementById('pcDescForm').style.display = 'none'
+      document.getElementById('pcDescErr').textContent = ''
+    })
+    document.getElementById('pcDescSave').addEventListener('click', async () => {
+      const err = document.getElementById('pcDescErr'); err.textContent = ''
+      if (!pcProduct) { err.textContent = 'Сначала откройте товар'; return }
+      const btn = document.getElementById('pcDescSave'); btn.disabled = true; btn.textContent = 'Сохраняем в таблицу…'
+      try {
+        const r = await api(`/products/${pcProduct.id}/description`, { method: 'PUT', body: JSON.stringify({ text: document.getElementById('pcDesc').value }) }).catch(() => null)
+        if (!r || !r.ok) { err.textContent = (r && r.data && r.data.error) || 'Не получилось'; return }
+        document.getElementById('pcDescForm').style.display = 'none'
+        openProductCard(pcProduct.id)
+      } finally { btn.disabled = false; btn.textContent = 'Сохранить описание' }
+    })
 
     // ── КОМАНДА: доступ в админку (только владелец) ───────────────────────────
     const ROLE_HINT = { owner: 'владелец — всё, включая деньги', manager: 'менеджер — операционка' }
