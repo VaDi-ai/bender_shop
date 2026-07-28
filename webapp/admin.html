@@ -444,17 +444,11 @@
     }
 
     // ── Цены: очередь «не узнал» + связывание ────────────────────────────────
-    let _productsCache = null
-    async function productsForSearch() {
-      if (_productsCache) return _productsCache
-      const res = await fetch('/api/products', { cache: 'no-store' })
-      const prods = await res.json()
-      _productsCache = prods.flatMap(p => (p.variants || []).map(v => ({
-        variantId: v.id,
-        label: p.name + ' · ' + Object.entries(v.attributes || {}).filter(([k]) => k !== 'fullName').map(([, x]) => x).join(' · '),
-        search: (p.name + ' ' + Object.values(v.attributes || {}).join(' ')).toLowerCase(),
-      })))
-      return _productsCache
+    // Поиск по ВСЕМУ каталогу (админский эндпоинт): витринный /api/products
+    // скрывает товары не в наличии, а прайс обычно приходит именно на них
+    async function searchVariants(q) {
+      const r = await api('/variants?q=' + encodeURIComponent(q)).catch(() => null)
+      return r && r.ok ? r.data : []
     }
 
     async function loadUnmatched() {
@@ -490,17 +484,20 @@
         panel.style.display = panel.style.display === 'none' ? '' : 'none'
         const input = box.querySelector(`[data-um-search="${id}"]`)
         const results = box.querySelector(`[data-um-results="${id}"]`)
-        const all = await productsForSearch()
+        let searchTimer
         input.addEventListener('input', () => {
-          const q = input.value.trim().toLowerCase()
+          clearTimeout(searchTimer)
+          searchTimer = setTimeout(async () => {
+          const q = input.value.trim()
           if (q.length < 2) { results.innerHTML = ''; return }
-          const found = all.filter(x => x.search.includes(q)).slice(0, 6)
-          results.innerHTML = found.map(x => `<div class="list-i" style="cursor:pointer" data-pick="${x.variantId}"><div class="nm">${esc(x.label)}</div></div>`).join('') || '<div class="mt">Ничего не нашлось</div>'
+          const found = await searchVariants(q)
+          results.innerHTML = found.map(x => `<div class="list-i" style="cursor:pointer" data-pick="${x.variantId}"><div style="flex:1"><div class="nm">${esc(x.productName)} · ${esc(x.attrs)}</div><div class="mt">${fmt(x.price)} ₽${x.inStock ? '' : ' · нет в наличии'}</div></div></div>`).join('') || '<div class="mt">Ничего не нашлось</div>'
           results.querySelectorAll('[data-pick]').forEach(el => el.addEventListener('click', async () => {
             const r2 = await api('/aliases', { method: 'POST', body: JSON.stringify({ supplierPriceId: Number(id), variantId: Number(el.dataset.pick) }) })
             alert(r2.ok ? `Связано. Система запомнила название${r2.data.rematched > 1 ? `, довязано строк: ${r2.data.rematched}` : ''}.` : (r2.data && r2.data.error || 'Не получилось'))
             loadUnmatched(); loadBatches()
           }))
+          }, 250)
         })
         input.focus()
       }))

@@ -435,6 +435,35 @@ export function adminApiRouter(): Router {
     res.json(await listUnmatched(limit))
   }))
 
+  // Поиск вариантов для связывания «не узнал» — по ВСЕМУ каталогу, включая
+  // товары не в наличии: витринный /api/products их скрывает, а прайс чаще
+  // всего приходит именно на закончившийся товар (находка сквозного QA).
+  router.get('/variants', safe(async (req, res) => {
+    const q = String(req.query.q ?? '').trim()
+    if (q.length < 2) { res.json([]); return }
+    const variants = await prisma.productVariant.findMany({
+      where: {
+        OR: [
+          { product: { name: { contains: q, mode: 'insensitive' } } },
+          { sku: { contains: q, mode: 'insensitive' } },
+        ],
+      },
+      take: 20,
+      orderBy: { id: 'asc' },
+      select: { id: true, attributes: true, price: true, inStock: true, product: { select: { name: true } } },
+    })
+    res.json(variants.map(v => {
+      const attrs = (v.attributes ?? {}) as Record<string, string>
+      return {
+        variantId: v.id,
+        productName: v.product.name,
+        attrs: Object.entries(attrs).filter(([k]) => k !== 'fullName').map(([, x]) => x).join(' · '),
+        price: Number(v.price),
+        inStock: v.inStock,
+      }
+    }))
+  }))
+
   router.post('/aliases', safe(async (req, res) => {
     const body = (req.body ?? {}) as Record<string, unknown>
     const supplierPriceId = parseInt(String(body.supplierPriceId), 10)
