@@ -88,6 +88,8 @@ export interface ResolveResult {
   reason: 'explicit' | 'model' | 'country' | 'accessory' | 'unknown'
   /** Ключ для очереди обучения, когда правило не найдено */
   missingKey?: string
+  /** Бренд той же строки: правило заводится под связку «бренд + страна» */
+  missingBrand?: string | null
 }
 
 export function resolveSimType(input: ResolveInput, rules: SimRuleData[], aliases: AttrAliasData[]): ResolveResult {
@@ -99,8 +101,8 @@ export function resolveSimType(input: ResolveInput, rules: SimRuleData[], aliase
   if (explicit) return { simType: explicit, reason: 'explicit' }
 
   const gen = detectGeneration(...input.names)
-  const brandNorm = norm(input.brand)
   const haystack = input.names.map(n => norm(n)).join(' ')
+  const brandNorm = effectiveBrand(input.brand, haystack)
 
   const genOk = (r: SimRuleData) => r.modelGenFrom === 0 || (gen !== null && gen >= r.modelGenFrom)
   const brandOk = (r: SimRuleData) => r.brandNorm === '' || r.brandNorm === brandNorm
@@ -130,8 +132,26 @@ export function resolveSimType(input: ResolveInput, rules: SimRuleData[], aliase
     if (brandHit) return { simType: brandHit.simType, reason: 'country' }
   }
 
-  // 5. Не знаем — не угадываем
-  return { simType: null, reason: 'unknown', missingKey: input.country?.trim() || '(без страны)' }
+  // 5. Не знаем — не угадываем. Сюда попадает и андроид без своего правила:
+  // страновой словарь Apple к нему не применяется. В очередь отдаём страну И
+  // бренд — правило заводится под связку, иначе оно накроет и Apple.
+  return {
+    simType: null, reason: 'unknown',
+    missingKey: input.country?.trim() || '(без страны)',
+    missingBrand: (input.brand ?? '').trim() || brandNorm || null,
+  }
+}
+
+/**
+ * Бренд варианта. Если в карточке он не проставлен — достаём из имени: у
+ * страновых правил теперь brandNorm='apple', и iPhone без заполненного бренда
+ * иначе перестал бы резолвиться.
+ */
+export function effectiveBrand(brand: string | null | undefined, haystack: string): string {
+  const b = norm(brand)
+  if (b) return b
+  if (/\b(iphone|ipad|macbook|airpods|apple)\b/.test(haystack)) return 'apple'
+  return ''
 }
 
 /**
@@ -182,24 +202,35 @@ export async function loadAttrAliases(attrKey?: string): Promise<AttrAliasData[]
 
 type SeedRule = { country?: string; brand?: string; modelMatch?: string; modelGenFrom?: number; simType: SimType; note?: string }
 
-/** Полный сид от архитектора (актуально на iPhone 17). */
+/** Бренд страновых правил: словарь стран описывает рынок Apple, не андроид. */
+const APPLE = 'Apple'
+
+/**
+ * Полный сид от архитектора (актуально на iPhone 17).
+ *
+ * ВСЕ страновые правила привязаны к бренду Apple: словарь описывает поведение
+ * рынка именно Apple («в США eSIM-only с 14-го», «в ОАЭ с 17-го»). К Redmi,
+ * Poco, Honor, Xiaomi, OnePlus, Huawei, Google это неприменимо — у большинства
+ * две физические SIM без eSIM, и страновой дефолт был бы угадыванием. Не-Apple
+ * без своего правила уходит в очередь обучения, SIM не проставляется.
+ */
 export const SIM_SEED: SeedRule[] = [
   // Две физические SIM — все поколения
-  ...['Китай', 'Гонконг', 'Макао'].map(country => ({ country, simType: '2 SIM' as SimType })),
+  ...['Китай', 'Гонконг', 'Макао'].map(country => ({ country, brand: APPLE, simType: '2 SIM' as SimType })),
 
   // eSIM-only: США (с iPhone 14; в каталоге ≥15, поэтому база)
-  { country: 'США', simType: 'eSIM' },
+  { country: 'США', brand: APPLE, simType: 'eSIM' },
 
   // Гибрид, но с iPhone 17 — eSIM-only (переезд рынка)
   ...['Япония', 'ОАЭ', 'Канада', 'Мексика', 'Саудовская Аравия', 'Бахрейн', 'Кувейт', 'Оман', 'Катар', 'Гуам']
     .flatMap(country => ([
-      { country, simType: 'SIM + eSIM' as SimType },
-      { country, modelGenFrom: 17, simType: 'eSIM' as SimType, note: 'рынок перешёл на eSIM-only с iPhone 17' },
+      { country, brand: APPLE, simType: 'SIM + eSIM' as SimType },
+      { country, brand: APPLE, modelGenFrom: 17, simType: 'eSIM' as SimType, note: 'рынок перешёл на eSIM-only с iPhone 17' },
     ])),
 
   // Гибрид во всех поколениях
   ...['Европа', 'Индия', 'Таиланд', 'Казахстан', 'Индонезия', 'Россия', 'Панама', 'Малайзия', 'Сингапур', 'Корея', 'Южная Корея', 'ЮАР']
-    .map(country => ({ country, simType: 'SIM + eSIM' as SimType })),
+    .map(country => ({ country, brand: APPLE, simType: 'SIM + eSIM' as SimType })),
 
   // Модельный оверрайд: iPhone Air — eSIM во всём мире, страна не важна
   { modelMatch: 'air', modelGenFrom: 17, simType: 'eSIM', note: 'iPhone 17 Air — eSIM-only глобально' },
@@ -238,11 +269,20 @@ export async function seedSimDictionary(): Promise<{ rules: number; aliases: num
     if (existing && existing.source === 'learned') continue
     await prisma.simRule.upsert({
       where,
-      update: { simType: r.simType, country: r.country ?? null, note: r.note ?? null },
+      update: { simType: r.simType, country: r.country ?? null, brand: r.brand ?? null, note: r.note ?? null },
       create: { ...key, country: r.country ?? null, brand: r.brand ?? null, simType: r.simType, source: 'seed', note: r.note ?? null },
     })
     rules++
   }
+  // Миграция сида: прежние страновые правила заводились без бренда
+  // (brandNorm=''), из-за чего Apple-словарь накрывал и андроид. Новые ключи
+  // созданы выше; старые seed-строки убираем. learned не трогаем — владелец
+  // мог завести бесбрендовое правило осознанно.
+  const retired = await prisma.simRule.deleteMany({
+    where: { source: 'seed', brandNorm: '', countryNorm: { not: '' } },
+  })
+  if (retired.count) log.info('SIM dictionary: retired brand-less country rules', { count: retired.count })
+
   let aliases = 0
   for (const a of ALIAS_SEED) {
     const where = { attrKey_rawNorm: { attrKey: a.attrKey, rawNorm: a.raw } }

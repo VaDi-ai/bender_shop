@@ -69,6 +69,26 @@ describe.skipIf(!RUN)('SIM dictionary (реальная БД)', () => {
     expect((await prisma.simRule.findUnique({ where: { id: india.id } })).simType).toBe('eSIM')
   })
 
+  it('миграция сида: прежние бесбрендовые страновые правила уходят, learned остаются', async () => {
+    // как выглядел словарь до привязки к бренду
+    await prisma.simRule.create({ data: { country: 'Индия', countryNorm: 'индия', brandNorm: '', modelMatch: '', modelGenFrom: 0, simType: 'SIM + eSIM', source: 'seed' } })
+    await prisma.simRule.create({ data: { country: 'Зимбабве', countryNorm: 'зимбабве', brandNorm: '', modelMatch: '', modelGenFrom: 0, simType: '2 SIM', source: 'learned' } })
+
+    await seedSimDictionary()
+
+    expect(await prisma.simRule.findFirst({ where: { countryNorm: 'индия', brandNorm: '' } })).toBeNull()
+    expect((await prisma.simRule.findFirst({ where: { countryNorm: 'индия', brandNorm: 'apple', modelGenFrom: 0 } })).simType).toBe('SIM + eSIM')
+    // правило владельца не тронуто
+    expect((await prisma.simRule.findFirst({ where: { countryNorm: 'зимбабве' } })).source).toBe('learned')
+
+    // и на живом резолве: iPhone — как раньше, Redmi — в очередь
+    const rules = await loadSimRules()
+    const aliases = await loadAttrAliases('SIM')
+    expect(resolveSimType({ country: 'Индия', brand: 'Apple', names: ['iPhone 17 Pro (Индия)'] }, rules, aliases).simType).toBe('SIM + eSIM')
+    expect(resolveSimType({ country: 'Индия', brand: 'Redmi', names: ['Redmi Note 15 Pro'] }, rules, aliases))
+      .toMatchObject({ simType: null, reason: 'unknown', missingBrand: 'Redmi' })
+  })
+
   it('обучение из очереди: неизвестная страна → правило → резолвится', async () => {
     await seedSimDictionary()
     let rules = await loadSimRules()

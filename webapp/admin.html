@@ -200,6 +200,7 @@
         <button class="btn b-gh" id="simAddBtn">Добавить правило SIM</button>
         <div id="simForm" style="display:none">
           <input class="inp" id="simCountry" placeholder="Страна — как в таблице («Гонконг/США»)" maxlength="80">
+          <input class="inp" id="simBrand" placeholder="Бренд — Apple, Redmi, Honor… (пусто = любой)" maxlength="40">
           <div class="row" style="gap:8px">
             <select class="inp" id="simType"><option value="SIM + eSIM">SIM + eSIM</option><option value="eSIM">eSIM</option><option value="2 SIM">2 SIM</option></select>
             <input class="inp" id="simGen" placeholder="с поколения (напр. 17)" inputmode="numeric">
@@ -208,7 +209,7 @@
           <button class="btn b-nt" id="simCancel">Отмена</button>
           <div class="mt" id="simErr" style="color:var(--bad)"></div>
         </div>
-        <div class="hint">Правило с поколением сильнее общего: «Япония → SIM + eSIM» плюс «Япония с 17 → eSIM» = у 17-х японских будет eSIM. Явная метка в названии всегда сильнее словаря.</div>
+        <div class="hint">Бренд обязателен для стран: словарь стран описывает рынок Apple, у андроида SIM другой. Пустой бренд = правило накроет все бренды этой страны.<br>Правило с поколением сильнее общего: «Япония → SIM + eSIM» плюс «Япония с 17 → eSIM» = у 17-х японских будет eSIM. Явная метка в названии всегда сильнее словаря.</div>
       </div>
 
       <div class="card">
@@ -308,7 +309,7 @@
           <div class="nm">${esc(x.fullName)}</div>
           <div class="mt">${esc(x.country || 'страна не указана')} · сейчас «${esc(x.current)}»</div>
         </div>
-        <button class="btn b-gh sm" data-sim-learn="${esc(x.country || '')}">Задать правило</button></div>`).join('')}
+        <button class="btn b-gh sm" data-sim-learn="${esc(x.country || '')}" data-sim-brand="${esc(x.brand || '')}">Задать правило</button></div>`).join('')}
         <div class="hint">Пересчёт эти строки не трогает — значение оставили как есть. Заведите правило, и они попадут в обычный пересчёт.</div>
       </div>` : ''
 
@@ -316,9 +317,9 @@
         <h3>${missing.length} ${plural(missing.length, 'страна без правила', 'страны без правила', 'стран без правила')} <span class="chip c-bad right">нужна помощь</span></h3>
         ${missing.map(x => `<div class="list-i"><div style="flex:1">
           <div class="nm">${esc(x.country)}</div>
-          <div class="mt">${x.count} ${plural(x.count, 'товар', 'товара', 'товаров')}${x.generations.length ? ' · поколения ' + x.generations.sort((a,b)=>a-b).join(', ') : ''} · напр. ${esc(String(x.example).slice(0, 40))}</div>
+          <div class="mt">${x.brand ? esc(x.brand) + ' · ' : ''}${x.count} ${plural(x.count, 'товар', 'товара', 'товаров')}${x.generations.length ? ' · поколения ' + x.generations.sort((a,b)=>a-b).join(', ') : ''} · напр. ${esc(String(x.example).slice(0, 40))}</div>
         </div>
-        <button class="btn b-gh sm" data-sim-learn="${esc(x.country)}">Задать SIM</button></div>`).join('')}
+        <button class="btn b-gh sm" data-sim-learn="${esc(x.country)}" data-sim-brand="${esc(x.brand || '')}">Задать SIM</button></div>`).join('')}
         <div class="hint">Скажете один раз — дальше система проставит сама во всех новых разборах.</div>
       </div>` : '<div class="empty">Для всех стран каталога правило есть 🎉<br>Новая страна появится здесь автоматически.</div>'
 
@@ -330,6 +331,7 @@
       box.querySelectorAll('[data-sim-learn]').forEach(b => b.addEventListener('click', () => {
         document.getElementById('simForm').style.display = ''
         document.getElementById('simCountry').value = b.dataset.simLearn
+        document.getElementById('simBrand').value = b.dataset.simBrand || ''
         document.getElementById('simForm').scrollIntoView({ behavior: 'smooth', block: 'center' })
       }))
     }
@@ -355,7 +357,7 @@
           const parts = rules.map(x => x.modelGenFrom ? `с ${x.modelGenFrom}-го — ${x.simType}` : x.simType)
           const main = rules[rules.length - 1]
           return `<div class="list-i"><div style="flex:1">
-            <div class="nm">${esc(c)} → ${esc(parts.join(', '))}</div>
+            <div class="nm">${esc(c)}${main.brand ? ' · ' + esc(main.brand) : ' · любой бренд'} → ${esc(parts.join(', '))}</div>
           </div><span class="chip ${SIM_CHIP[main.simType] || 'c-off'}">${esc(main.simType)}</span>
           ${isOwner ? `<button class="btn b-nt sm" data-sim-del="${main.id}">Удалить</button>` : ''}</div>`
         }).join('')
@@ -380,6 +382,7 @@
       const gen = document.getElementById('simGen').value.trim()
       const r = await api('/sim-rules', { method: 'POST', body: JSON.stringify({
         country: document.getElementById('simCountry').value,
+        brand: document.getElementById('simBrand').value,
         simType: document.getElementById('simType').value,
         modelGenFrom: gen === '' ? null : Number(gen),
       }) }).catch(() => null)
@@ -387,6 +390,7 @@
       if (!r.ok) { err.textContent = r.data && r.data.error === 'validation' ? r.data.fields.map(f => f.message).join(' · ') : (r.data && r.data.error || 'Не получилось'); return }
       document.getElementById('simForm').style.display = 'none'
       document.getElementById('simCountry').value = ''; document.getElementById('simGen').value = ''
+      document.getElementById('simBrand').value = ''
       loadSimRules(); loadSimQueue(); loadSimRecalc()
     })
 
