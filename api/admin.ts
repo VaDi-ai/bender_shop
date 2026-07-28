@@ -558,43 +558,51 @@ export function adminApiRouter(): Router {
       if (g && !cur.generations.includes(g)) cur.generations.push(g)
       missing.set(key, cur)
     }
-    res.json([...missing.values()].sort((a, b) => b.count - a.count))
-  }))
-
-  // Что изменится при пересчёте всего каталога (PR-B применит; здесь только показ)
-  router.get('/sim-recalc/preview', safe(async (_req, res) => {
-    const { loadSimRules, loadAttrAliases, resolveSimType, canonicalizeSim, detectGeneration } = await import('../lib/sim-rules')
-    const [rules, aliases, variants] = await Promise.all([
-      loadSimRules(), loadAttrAliases('SIM'),
-      prisma.productVariant.findMany({
-        select: { id: true, attributes: true, product: { select: { name: true, brand: true, category: { select: { name: true } } } } },
-      }),
-    ])
-    const canonOnly: Array<Record<string, unknown>> = []
-    const changed: Array<Record<string, unknown>> = []
+    // Второй раздел: SIM стоит, но правила нет (наследие старого хардкода —
+    // пересчёт их не трогает, владелец решает, заводить ли правило)
+    const inherited: Array<{ variantId: number; fullName: string; country: string | null; current: string }> = []
     for (const v of variants) {
       const a = (v.attributes ?? {}) as Record<string, string>
-      const cur = a.SIM
-      if (!cur) continue
-      const isPhone = v.product.category?.name === 'Телефоны' || detectGeneration(a.fullName, v.product.name) !== null
+      if (!a.SIM) continue
+      const isPhone = /телефон|iphone|смартфон/i.test(v.product.category?.name ?? '') || detectGeneration(a.fullName, v.product.name) !== null
       if (!isPhone) continue
-      const curCanon = canonicalizeSim(cur, aliases) ?? cur
-      if (curCanon !== cur) canonOnly.push({ variantId: v.id, fullName: a.fullName, from: cur, to: curCanon })
-      // Пересчёт по словарю игнорирует текущее значение (explicit не передаём)
-      const want = resolveSimType({ country: a['Страна'], brand: v.product.brand, names: [a.fullName, v.product.name] }, rules, aliases)
-      if (want.simType && want.simType !== curCanon) {
-        changed.push({ variantId: v.id, fullName: a.fullName, country: a['Страна'] ?? null, from: curCanon, to: want.simType, by: want.reason })
+      const byDict = resolveSimType({ country: a['Страна'], brand: v.product.brand, names: [a.fullName, v.product.name] }, rules, aliases)
+      if (byDict.reason === 'unknown') {   // 'accessory' сюда не попадает — чехлы не наш домен
+        inherited.push({ variantId: v.id, fullName: a.fullName ?? v.product.name, country: a['Страна'] ?? null, current: a.SIM })
       }
     }
-    const byCountry: Record<string, number> = {}
-    for (const c of changed) byCountry[String(c.country ?? '—')] = (byCountry[String(c.country ?? '—')] ?? 0) + 1
     res.json({
-      canonicalizeCount: canonOnly.length,
-      changeCount: changed.length,
-      byCountry,
-      canonicalize: canonOnly.slice(0, 50),
-      changes: changed.slice(0, 200),
+      missing: [...missing.values()].sort((a, b) => b.count - a.count),
+      inherited,
     })
+  }))
+
+  // ── Пересчёт SIM по каталогу (PR-B) ──────────────────────────────────────
+  // Предпросмотр read-only: три раздела, чтобы смысл был виден отдельно от
+  // косметики. Применение и откат — owner-only, транзакцией, с AuditLog.
+  router.get('/sim-recalc/preview', safe(async (_req, res) => {
+    const { previewRecalc, lastRecalcState } = await import('../lib/sim-recalc')
+    const [preview, last] = await Promise.all([previewRecalc(), lastRecalcState()])
+    res.json({
+      counts: preview.counts,
+      byCountry: preview.byCountry,
+      semantic: preview.semantic.slice(0, 200),
+      canonical: preview.canonical.slice(0, 100),
+      inherited: preview.inherited.slice(0, 100),
+      lastRecalc: last,
+    })
+  }))
+
+  router.post('/sim-recalc/apply', ownerOnly, safe(async (req, res) => {
+    const { applyRecalc } = await import('../lib/sim-recalc')
+    const r = await applyRecalc(req.admin!.telegramId)
+    res.status(r.status).json(r)
+  }))
+
+  router.post('/sim-recalc/rollback', ownerOnly, safe(async (req, res) => {
+    const { rollbackRecalc } = await import('../lib/sim-recalc')
+    const r = await rollbackRecalc(req.admin!.telegramId)
+    res.status(r.status).json(r)
   }))
 
   // ── Синк (PR-4): журнал прогонов + ручной запуск ──────────────────────────
