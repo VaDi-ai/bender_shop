@@ -1,0 +1,233 @@
+/**
+ * Обучаемый словарь SIM-типа (Этап 2, PR-A).
+ *
+ * Заменяет хардкод sheets-sync «iPhone + Китай/Гонконг → 2 SIM, иначе eSIM».
+ *
+ * Приоритет резолва (утверждён владельцем):
+ *   1) явная метка в имени варианта  → канон через AttrValueAlias
+ *   2) модельный оверрайд (iPhone Air → eSIM во всём мире, страна игнорируется)
+ *   3) правило по стране + поколению (максимальный modelGenFrom ≤ поколения)
+ *   4) нет правила → SIM НЕ проставляем, строка идёт в очередь «не узнал»
+ *
+ * PR-A строго безопасный: словарь работает только для НОВЫХ разборов синка,
+ * существующие атрибуты каталога не трогаются (пересчёт — отдельный PR-B).
+ */
+import { prisma } from './prisma'
+import { log } from './logger'
+
+export const SIM_CANON = ['2 SIM', 'eSIM', 'SIM + eSIM'] as const
+export type SimType = typeof SIM_CANON[number]
+
+export interface SimRuleData {
+  id: number
+  country: string | null
+  countryNorm: string
+  brand: string | null
+  modelMatch: string | null
+  modelGenFrom: number | null
+  simType: string
+  source: string
+}
+
+export interface AttrAliasData { attrKey: string; rawNorm: string; canonical: string }
+
+export const norm = (s: string | null | undefined): string => (s ?? '').trim().toLowerCase()
+
+/**
+ * Поколение модели из имени: «iPhone 17 Pro Max 256 …» → 17.
+ * Для не-iPhone вернёт null — сработают только правила без modelGenFrom.
+ */
+export function detectGeneration(...names: Array<string | null | undefined>): number | null {
+  for (const n of names) {
+    const m = /iphone\s+(?:se\s+)?(\d{1,2})/i.exec(n ?? '')
+    if (m) {
+      const g = parseInt(m[1]!, 10)
+      if (g >= 5 && g <= 30) return g   // отсекаем «iPhone 128GB»-мусор
+    }
+  }
+  return null
+}
+
+/**
+ * Аксессуары не получают SIM: стекло/чехол/кабель «для iPhone» проходят по
+ * имени, но телефоном не являются (найдено на живом каталоге — «Защитное
+ * стекло Remax для iPhone»).
+ */
+const ACCESSORY_RE = /(чехол|стекло|плёнк|пленк|кабель|адаптер|зарядк|наклейк|держател|подставк|сумк|ремеш|бампер|case|glass|cover|charger)/i
+
+export function isAccessory(...names: Array<string | null | undefined>): boolean {
+  return names.some(n => ACCESSORY_RE.test(n ?? ''))
+}
+
+/** Канонизация сырого значения SIM по словарю алиасов (+ встроенные дефолты). */
+export function canonicalizeSim(raw: string | null | undefined, aliases: AttrAliasData[]): string | null {
+  const r = norm(raw)
+  if (!r) return null
+  const hit = aliases.find(a => a.attrKey === 'SIM' && a.rawNorm === r)
+  if (hit) return hit.canonical
+  return null
+}
+
+export interface ResolveInput {
+  /** Значение SIM, явно найденное в имени варианта (если было) */
+  explicit?: string | null
+  country?: string | null
+  brand?: string | null
+  /** Полное имя варианта и/или товара — для поколения, модели и фильтра аксессуаров */
+  names: Array<string | null | undefined>
+}
+
+export interface ResolveResult {
+  simType: string | null
+  /** Откуда взялось значение — для UI/логов/тестов */
+  reason: 'explicit' | 'model' | 'country' | 'accessory' | 'unknown'
+  /** Ключ для очереди обучения, когда правило не найдено */
+  missingKey?: string
+}
+
+export function resolveSimType(input: ResolveInput, rules: SimRuleData[], aliases: AttrAliasData[]): ResolveResult {
+  // 0. Аксессуары — SIM не проставляем вообще
+  if (isAccessory(...input.names)) return { simType: null, reason: 'accessory' }
+
+  // 1. Явная метка сильнее словаря
+  const explicit = canonicalizeSim(input.explicit, aliases)
+  if (explicit) return { simType: explicit, reason: 'explicit' }
+
+  const gen = detectGeneration(...input.names)
+  const brandNorm = norm(input.brand)
+  const haystack = input.names.map(n => norm(n)).join(' ')
+
+  const genOk = (r: SimRuleData) => r.modelGenFrom === null || (gen !== null && gen >= r.modelGenFrom)
+  const brandOk = (r: SimRuleData) => r.brand === null || norm(r.brand) === brandNorm
+  // Максимальный подходящий modelGenFrom выигрывает (переезд рынка на eSIM-only)
+  const byGenDesc = (a: SimRuleData, b: SimRuleData) => (b.modelGenFrom ?? -1) - (a.modelGenFrom ?? -1)
+
+  // 2. Модельный оверрайд (iPhone Air → eSIM во всём мире)
+  const modelHit = rules
+    .filter(r => r.modelMatch && haystack.includes(norm(r.modelMatch)) && genOk(r) && brandOk(r))
+    .sort(byGenDesc)[0]
+  if (modelHit) return { simType: modelHit.simType, reason: 'model' }
+
+  // 3. Правило по стране (полная строка, включая составные «Гонконг/США»)
+  const cNorm = norm(input.country)
+  if (cNorm) {
+    const countryHit = rules
+      .filter(r => r.modelMatch === null && r.countryNorm === cNorm && genOk(r) && brandOk(r))
+      .sort(byGenDesc)[0]
+    if (countryHit) return { simType: countryHit.simType, reason: 'country' }
+  }
+
+  // 4. Брендовое правило без страны (Samsung Galaxy → SIM + eSIM)
+  if (brandNorm) {
+    const brandHit = rules
+      .filter(r => r.modelMatch === null && r.countryNorm === '' && r.brand !== null && norm(r.brand) === brandNorm && genOk(r))
+      .sort(byGenDesc)[0]
+    if (brandHit) return { simType: brandHit.simType, reason: 'country' }
+  }
+
+  // 5. Не знаем — не угадываем
+  return { simType: null, reason: 'unknown', missingKey: input.country?.trim() || '(без страны)' }
+}
+
+// ─── Загрузка словаря ────────────────────────────────────────────────────────
+
+export async function loadSimRules(): Promise<SimRuleData[]> {
+  const rows = await prisma.simRule.findMany({
+    select: { id: true, country: true, countryNorm: true, brand: true, modelMatch: true, modelGenFrom: true, simType: true, source: true },
+  })
+  return rows
+}
+
+export async function loadAttrAliases(attrKey?: string): Promise<AttrAliasData[]> {
+  const rows = await prisma.attrValueAlias.findMany({
+    where: attrKey ? { attrKey } : undefined,
+    select: { attrKey: true, rawNorm: true, canonical: true },
+  })
+  return rows
+}
+
+// ─── Сид (идемпотентный; learned-правила не перетираются) ────────────────────
+
+type SeedRule = { country?: string; brand?: string; modelMatch?: string; modelGenFrom?: number; simType: SimType; note?: string }
+
+/** Полный сид от архитектора (актуально на iPhone 17). */
+export const SIM_SEED: SeedRule[] = [
+  // Две физические SIM — все поколения
+  ...['Китай', 'Гонконг', 'Макао'].map(country => ({ country, simType: '2 SIM' as SimType })),
+
+  // eSIM-only: США (с iPhone 14; в каталоге ≥15, поэтому база)
+  { country: 'США', simType: 'eSIM' },
+
+  // Гибрид, но с iPhone 17 — eSIM-only (переезд рынка)
+  ...['Япония', 'ОАЭ', 'Канада', 'Мексика', 'Саудовская Аравия', 'Бахрейн', 'Кувейт', 'Оман', 'Катар', 'Гуам']
+    .flatMap(country => ([
+      { country, simType: 'SIM + eSIM' as SimType },
+      { country, modelGenFrom: 17, simType: 'eSIM' as SimType, note: 'рынок перешёл на eSIM-only с iPhone 17' },
+    ])),
+
+  // Гибрид во всех поколениях
+  ...['Европа', 'Индия', 'Таиланд', 'Казахстан', 'Индонезия', 'Россия', 'Панама', 'Малайзия', 'Сингапур', 'Корея', 'Южная Корея', 'ЮАР']
+    .map(country => ({ country, simType: 'SIM + eSIM' as SimType })),
+
+  // Модельный оверрайд: iPhone Air — eSIM во всём мире, страна не важна
+  { modelMatch: 'air', modelGenFrom: 17, simType: 'eSIM', note: 'iPhone 17 Air — eSIM-only глобально' },
+
+  // Перенос прежнего хардкода Samsung из sheets-sync
+  { brand: 'Samsung', simType: 'SIM + eSIM', note: 'перенесено из хардкода sheets-sync' },
+]
+
+/** Канон меток: то, что раньше приходило сырьём из листа. */
+export const ALIAS_SEED: Array<{ attrKey: string; raw: string; canonical: string }> = [
+  { attrKey: 'SIM', raw: '2sim', canonical: '2 SIM' },
+  { attrKey: 'SIM', raw: '2 sim', canonical: '2 SIM' },
+  { attrKey: 'SIM', raw: 'dual sim', canonical: '2 SIM' },
+  { attrKey: 'SIM', raw: '2 сим', canonical: '2 SIM' },
+  { attrKey: 'SIM', raw: 'esim', canonical: 'eSIM' },
+  { attrKey: 'SIM', raw: 'e-sim', canonical: 'eSIM' },
+  { attrKey: 'SIM', raw: 'есим', canonical: 'eSIM' },
+  { attrKey: 'SIM', raw: '1sim+esim', canonical: 'SIM + eSIM' },
+  { attrKey: 'SIM', raw: 'sim+esim', canonical: 'SIM + eSIM' },
+  { attrKey: 'SIM', raw: 'sim + esim', canonical: 'SIM + eSIM' },
+]
+
+export async function seedSimDictionary(): Promise<{ rules: number; aliases: number }> {
+  let rules = 0
+  for (const r of SIM_SEED) {
+    const countryNorm = norm(r.country)
+    const where = {
+      countryNorm_brand_modelMatch_modelGenFrom: {
+        countryNorm,
+        brand: r.brand ?? null,
+        modelMatch: r.modelMatch ?? null,
+        modelGenFrom: r.modelGenFrom ?? null,
+      },
+    }
+    const existing = await prisma.simRule.findUnique({ where })
+    // learned не перетираем — владелец мог поправить правило под себя
+    if (existing && existing.source === 'learned') continue
+    await prisma.simRule.upsert({
+      where,
+      update: { simType: r.simType, country: r.country ?? null, note: r.note ?? null },
+      create: {
+        country: r.country ?? null, countryNorm, brand: r.brand ?? null,
+        modelMatch: r.modelMatch ?? null, modelGenFrom: r.modelGenFrom ?? null,
+        simType: r.simType, source: 'seed', note: r.note ?? null,
+      },
+    })
+    rules++
+  }
+  let aliases = 0
+  for (const a of ALIAS_SEED) {
+    const where = { attrKey_rawNorm: { attrKey: a.attrKey, rawNorm: a.raw } }
+    const existing = await prisma.attrValueAlias.findUnique({ where })
+    if (existing && existing.source === 'learned') continue
+    await prisma.attrValueAlias.upsert({
+      where,
+      update: { canonical: a.canonical },
+      create: { attrKey: a.attrKey, rawNorm: a.raw, canonical: a.canonical, source: 'seed' },
+    })
+    aliases++
+  }
+  log.info('SIM dictionary seeded', { rules, aliases })
+  return { rules, aliases }
+}

@@ -722,6 +722,55 @@ model SyncRun {
   @@index([startedAt])
 }
 
+// ═══════════════ Этап 2 — обучаемый словарь атрибутов (SIM по стране) ═══════
+//
+// Заменяет хардкод «iPhone + Китай/Гонконг → 2 SIM, иначе eSIM» в sheets-sync.
+// Правило выбирается по стране (полная строка, включая составные «Гонконг/США»)
+// + опциональному бренду + максимальному modelGenFrom ≤ поколения модели.
+// modelGenFrom закрывает переезды рынков на eSIM-only (US с 14, JP/AE/Канада… с 17).
+
+/// Словарь «страна (+поколение/бренд/модель) → тип SIM».
+model SimRule {
+  id           Int      @id @default(autoincrement())
+  /// Как в каталоге: «Индия», «Гонконг/США». null — правило не по стране (модельное/брендовое)
+  country      String?
+  /// lower(trim(country)) для лукапа; '' если правило не по стране
+  countryNorm  String   @default("")
+  /// Ограничение по бренду (null = любой)
+  brand        String?
+  /// Подстрока имени модели, lower — модельный оверрайд («air»); сильнее страны
+  modelMatch   String?
+  /// Правило действует с этого поколения (null = любое); выигрывает максимальное подходящее
+  modelGenFrom Int?
+  /// Канон: "2 SIM" | "eSIM" | "SIM + eSIM"
+  simType      String
+  /// seed — из поставки; learned — выучено владельцем (сид не перетирает learned)
+  source       String   @default("seed")
+  note         String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([countryNorm, brand, modelMatch, modelGenFrom])
+  @@index([countryNorm])
+  @@index([modelMatch])
+}
+
+/// Нормализация сырых значений атрибутов к канону («2Sim» → «2 SIM»).
+model AttrValueAlias {
+  id        Int      @id @default(autoincrement())
+  /// Ключ атрибута: "SIM", "Цвет", …
+  attrKey   String
+  /// lower(trim(raw)) — как пришло из листа/прайса
+  rawNorm   String
+  canonical String
+  source    String   @default("seed")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([attrKey, rawNorm])
+  @@index([attrKey])
+}
+
 /// Жизненный цикл разбора прайса поставщика (ADMIN-DESIGN §7.2).
 model PriceApplyBatch {
   id         Int       @id @default(autoincrement())

@@ -483,6 +483,119 @@ export function adminApiRouter(): Router {
   router.post('/markup-rules/:id/enable', ownerOnly, safe(setMarkupRuleEnabled(true)))
   router.post('/markup-rules/:id/disable', ownerOnly, safe(setMarkupRuleEnabled(false)))
 
+  // ── Словарь SIM по странам (Этап 2 / PR-A) ────────────────────────────────
+  // Учат owner+manager (операционка); удаление seed-правил — owner-only.
+  router.get('/sim-rules', safe(async (_req, res) => {
+    const rules = await prisma.simRule.findMany({ orderBy: [{ countryNorm: 'asc' }, { modelGenFrom: 'asc' }] })
+    res.json(rules)
+  }))
+
+  router.post('/sim-rules', safe(async (req, res) => {
+    const b = (req.body ?? {}) as Record<string, unknown>
+    const { SIM_CANON, norm } = await import('../lib/sim-rules')
+    const simType = String(b.simType ?? '')
+    if (!(SIM_CANON as readonly string[]).includes(simType)) {
+      res.status(422).json({ error: 'validation', fields: [{ field: 'simType', message: `Тип SIM — один из: ${SIM_CANON.join(', ')}` }] }); return
+    }
+    const country = typeof b.country === 'string' && b.country.trim() ? b.country.trim() : null
+    const modelMatch = typeof b.modelMatch === 'string' && b.modelMatch.trim() ? b.modelMatch.trim().toLowerCase() : null
+    const brand = typeof b.brand === 'string' && b.brand.trim() ? b.brand.trim() : null
+    if (!country && !modelMatch && !brand) {
+      res.status(422).json({ error: 'validation', fields: [{ field: 'country', message: 'Укажите страну, модель или бренд' }] }); return
+    }
+    const modelGenFrom = b.modelGenFrom === undefined || b.modelGenFrom === null || b.modelGenFrom === ''
+      ? null : parseInt(String(b.modelGenFrom), 10)
+    if (modelGenFrom !== null && (!Number.isInteger(modelGenFrom) || modelGenFrom < 5 || modelGenFrom > 30)) {
+      res.status(422).json({ error: 'validation', fields: [{ field: 'modelGenFrom', message: 'Поколение — целое от 5 до 30 или пусто' }] }); return
+    }
+    const where = { countryNorm_brand_modelMatch_modelGenFrom: { countryNorm: norm(country), brand, modelMatch, modelGenFrom } }
+    const before = await prisma.simRule.findUnique({ where })
+    const rule = await prisma.simRule.upsert({
+      where,
+      update: { simType, source: 'learned', note: typeof b.note === 'string' ? b.note.slice(0, 300) : undefined },
+      create: { country, countryNorm: norm(country), brand, modelMatch, modelGenFrom, simType, source: 'learned', note: typeof b.note === 'string' ? b.note.slice(0, 300) : null },
+    })
+    void logAdminAction({
+      adminTelegramId: req.admin!.telegramId,
+      action: before ? 'update' : 'create', entity: 'SimRule', entityId: rule.id,
+      before: before ? { simType: before.simType } : undefined,
+      after: { country, modelMatch, modelGenFrom, simType },
+    })
+    res.status(before ? 200 : 201).json(rule)
+  }))
+
+  router.delete('/sim-rules/:id', ownerOnly, safe(async (req, res) => {
+    const id = parseInt(String(req.params.id), 10)
+    if (!Number.isInteger(id)) { res.status(422).json({ error: 'validation', fields: [{ field: 'id', message: 'Неверный ID' }] }); return }
+    const rule = await prisma.simRule.findUnique({ where: { id } })
+    if (!rule) { res.status(404).json({ error: 'Правило не найдено' }); return }
+    await prisma.simRule.delete({ where: { id } })
+    void logAdminAction({ adminTelegramId: req.admin!.telegramId, action: 'delete', entity: 'SimRule', entityId: id, before: { country: rule.country, simType: rule.simType, source: rule.source } })
+    res.json({ ok: true })
+  }))
+
+  // Очередь «SIM не определён»: страны каталога, для которых нет правила
+  router.get('/sim-queue', safe(async (_req, res) => {
+    const { loadSimRules, loadAttrAliases, resolveSimType, detectGeneration } = await import('../lib/sim-rules')
+    const [rules, aliases, variants] = await Promise.all([
+      loadSimRules(), loadAttrAliases('SIM'),
+      prisma.productVariant.findMany({
+        select: { id: true, attributes: true, product: { select: { name: true, brand: true, category: { select: { name: true } } } } },
+      }),
+    ])
+    const missing = new Map<string, { country: string; count: number; example: string; generations: number[] }>()
+    for (const v of variants) {
+      const a = (v.attributes ?? {}) as Record<string, string>
+      const isPhone = v.product.category?.name === 'Телефоны' || detectGeneration(a.fullName, v.product.name) !== null
+      if (!isPhone) continue
+      const r = resolveSimType({ explicit: a.SIM, country: a['Страна'], brand: v.product.brand, names: [a.fullName, v.product.name] }, rules, aliases)
+      if (r.reason !== 'unknown') continue
+      const key = r.missingKey!
+      const cur = missing.get(key) ?? { country: key, count: 0, example: a.fullName ?? v.product.name, generations: [] }
+      cur.count++
+      const g = detectGeneration(a.fullName, v.product.name)
+      if (g && !cur.generations.includes(g)) cur.generations.push(g)
+      missing.set(key, cur)
+    }
+    res.json([...missing.values()].sort((a, b) => b.count - a.count))
+  }))
+
+  // Что изменится при пересчёте всего каталога (PR-B применит; здесь только показ)
+  router.get('/sim-recalc/preview', safe(async (_req, res) => {
+    const { loadSimRules, loadAttrAliases, resolveSimType, canonicalizeSim, detectGeneration } = await import('../lib/sim-rules')
+    const [rules, aliases, variants] = await Promise.all([
+      loadSimRules(), loadAttrAliases('SIM'),
+      prisma.productVariant.findMany({
+        select: { id: true, attributes: true, product: { select: { name: true, brand: true, category: { select: { name: true } } } } },
+      }),
+    ])
+    const canonOnly: Array<Record<string, unknown>> = []
+    const changed: Array<Record<string, unknown>> = []
+    for (const v of variants) {
+      const a = (v.attributes ?? {}) as Record<string, string>
+      const cur = a.SIM
+      if (!cur) continue
+      const isPhone = v.product.category?.name === 'Телефоны' || detectGeneration(a.fullName, v.product.name) !== null
+      if (!isPhone) continue
+      const curCanon = canonicalizeSim(cur, aliases) ?? cur
+      if (curCanon !== cur) canonOnly.push({ variantId: v.id, fullName: a.fullName, from: cur, to: curCanon })
+      // Пересчёт по словарю игнорирует текущее значение (explicit не передаём)
+      const want = resolveSimType({ country: a['Страна'], brand: v.product.brand, names: [a.fullName, v.product.name] }, rules, aliases)
+      if (want.simType && want.simType !== curCanon) {
+        changed.push({ variantId: v.id, fullName: a.fullName, country: a['Страна'] ?? null, from: curCanon, to: want.simType, by: want.reason })
+      }
+    }
+    const byCountry: Record<string, number> = {}
+    for (const c of changed) byCountry[String(c.country ?? '—')] = (byCountry[String(c.country ?? '—')] ?? 0) + 1
+    res.json({
+      canonicalizeCount: canonOnly.length,
+      changeCount: changed.length,
+      byCountry,
+      canonicalize: canonOnly.slice(0, 50),
+      changes: changed.slice(0, 200),
+    })
+  }))
+
   // ── Синк (PR-4): журнал прогонов + ручной запуск ──────────────────────────
   router.get('/sync-runs', safe(async (req, res) => {
     const limit = Math.min(Math.max(parseInt(String(req.query.limit ?? '20'), 10) || 20, 1), 100)

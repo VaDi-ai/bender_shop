@@ -107,6 +107,7 @@ import { handleSupplierMessage, requestPriceFromAllSuppliers } from '../webhooks
 import { cancelPromotion } from '../lib/promotions'
 import { logSecurityEvent, initSecurityAlerts } from '../lib/security-log'
 import { seedAdminUsers } from '../lib/admin-users'
+import { seedSimDictionary } from '../lib/sim-rules'
 import { createBackupBuffer } from '../lib/backup'
 import { aiSuggestions, storeSuggestion } from './ai/agent'
 
@@ -1894,8 +1895,9 @@ const httpServer = startApiServer(process.env.NODE_ENV === 'production' ? bot : 
 ;(async () => {
   try {
     await seedAdminUsers()
+    await seedSimDictionary()   // словарь SIM: идемпотентно, learned не перетирается
   } catch (e) {
-    log.error('AdminUser seed error', { error: e instanceof Error ? e.message : String(e) })
+    log.error('Startup seed error', { error: e instanceof Error ? e.message : String(e) })
   }
 })()
 
