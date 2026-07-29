@@ -24,6 +24,8 @@ export interface OfferView {
   quantity: number
   inStock: boolean
   photoUrl: string | null
+  /** Атрибуты, поправленные руками — словарь их не трогает */
+  overrides: string[]
   /** Видит ли это предложение покупатель прямо сейчас */
   visible: boolean
 }
@@ -76,13 +78,14 @@ export async function getProductCard(productId: number): Promise<ProductCard | n
     return {
       variantId: v.id,
       fullName: attrs.fullName ?? p.name,
-      attrs: Object.fromEntries(Object.entries(attrs).filter(([k]) => k !== 'fullName')),
+      attrs: Object.fromEntries(Object.entries(attrs).filter(([k]) => k !== 'fullName' && k !== 'attrOverrides')),
       country: attrs['Страна'] ?? null,
       sim: attrs.SIM ?? null,
       price: Number(v.price),
       quantity: v.quantity,
       inStock: v.inStock,
       photoUrl: v.photoUrls[0] ?? null,
+      overrides: Object.keys((attrs as unknown as { attrOverrides?: object }).attrOverrides ?? {}),
       visible,
     }
   })

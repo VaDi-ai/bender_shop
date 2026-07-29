@@ -308,6 +308,17 @@
           <div class="mt" id="pcPhotoErr" style="color:var(--bad)"></div>
           <div class="hint">Ссылка запишется в колонку «Фото» той же строки таблицы — иначе ближайший синк стёр бы её. Покупатель увидит фото сразу.</div>
         </div>
+        <div id="pcAttrForm" style="display:none">
+          <div class="cap" id="pcAttrTitle" style="margin:10px 0 6px">АТРИБУТ ПРЕДЛОЖЕНИЯ</div>
+          <input class="inp" id="pcAttrKey" placeholder="Название: SIM, Цвет, Память" maxlength="40">
+          <input class="inp" id="pcAttrVal" placeholder="Значение (пусто — снять ручную правку)" maxlength="100">
+          <button class="btn b-main" id="pcAttrSave">Сохранить атрибут</button>
+          <button class="btn b-nt" id="pcAttrCancel">Отмена</button>
+          <div class="mt" id="pcAttrErr" style="color:var(--bad)"></div>
+          <div id="pcAttrSuggest"></div>
+          <div class="hint">Ручная правка сильнее словаря: синк её не пересчитает, а «обновить по словарю» такие строки пропускает.</div>
+        </div>
+
         <div id="pcDescForm" style="display:none">
           <div class="cap" style="margin:10px 0 6px">ОПИСАНИЕ</div>
           <textarea class="inp" id="pcDesc" rows="4" maxlength="2000" placeholder="Что важно знать покупателю"></textarea>
@@ -447,6 +458,16 @@
 
       <div class="hub-page" id="hub-parser" style="display:none">
         <div class="hint">Здесь видно, чему система научилась на разборе таблицы и прайсов. Товары правят на вкладке «Товары» — сюда ходят смотреть словарь.</div>
+
+        <div class="cap">ЧЕМУ НАУЧИЛСЯ</div>
+        <div class="card">
+          <h3>Словарь <span class="chip c-off right" id="dictChip">—</span></h3>
+          <div id="dictSuggest"></div>
+          <div id="dictList" class="mt">Загрузка…</div>
+          <div class="hint">«Забыть» останавливает будущий вывод по правилу. Значения, которые оно уже проставило товарам, не откатываются — их двигает только «Обновить по словарю».</div>
+          <div class="cap" style="margin:14px 0 6px">ПРАВКА → ПРАВИЛО</div>
+          <div id="dictLog" class="mt">—</div>
+        </div>
       <div class="cap">SIM НЕ ОПРЕДЕЛЁН — ПОДСКАЖИТЕ</div>
       <div id="simQueue"><div class="empty">Загрузка…</div></div>
 
@@ -538,7 +559,7 @@
       window.adminMe = me
       gate.classList.add('hidden')
       loadDashboard(); loadSyncRuns(); loadSuppliers(); loadBatches(); loadUnmatched(); loadMarkupRules()
-      loadSimQueue(); loadSimRules(); loadSimRecalc(); loadStorefront(); loadTeam(); loadIssues(); loadPromotions(); loadInsights(); loadBroadcasts(); loadMaintenance()
+      loadSimQueue(); loadSimRules(); loadSimRecalc(); loadDictionary(); loadStorefront(); loadTeam(); loadIssues(); loadPromotions(); loadInsights(); loadBroadcasts(); loadMaintenance()
     }
 
     // ── ОШИБКИ В ТОВАРАХ: идём от проблемы к карточке ─────────────────────────
@@ -656,7 +677,9 @@
           </div>
           <div class="sf-item-actions">
             <button class="btn b-nt sm" data-pc-photo="variant" data-pc-vid="${o.variantId}" data-pc-label="${esc(Object.values(o.attrs).join(' · '))}">${o.photoUrl ? 'Заменить фото' : 'Поставить фото'}</button>
+            <button class="btn b-gh sm" data-attr-edit="${o.variantId}">Поправить атрибут</button>
           </div>
+          ${o.overrides && o.overrides.length ? `<div class="hint">Поправлено руками: ${o.overrides.map(esc).join(', ')} — словарь их не трогает.</div>` : ''}
         </div>`).join('')}
         <div class="hint">Цены, остатки и страна приезжают из таблицы — здесь их не меняют. Фото и описание можно.</div>
 
@@ -683,6 +706,7 @@
         if (!confirm('Убрать главное фото? В таблице ячейка «Фото» очистится, товар останется без картинки.')) return
         await savePhoto({ kind: 'product', id: p.id }, null)
       }))
+      bindAttrEdit(box)
       const descBtn = box.querySelector('[data-pc-desc]')
       if (descBtn) descBtn.addEventListener('click', () => {
         document.getElementById('pcDesc').value = p.description || ''
@@ -700,6 +724,62 @@
         openProductCard(p.id)
       })
     }
+
+    // ── Правка атрибута + предложение выучить правило ─────────────────────────
+    let pcAttrVid = null
+
+    function bindAttrEdit(box) {
+      box.querySelectorAll('[data-attr-edit]').forEach(b => b.addEventListener('click', () => {
+        pcAttrVid = Number(b.dataset.attrEdit)
+        document.getElementById('pcAttrErr').textContent = ''
+        document.getElementById('pcAttrSuggest').innerHTML = ''
+        const f = document.getElementById('pcAttrForm')
+        f.style.display = ''
+        f.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      }))
+    }
+
+    document.getElementById('pcAttrCancel').addEventListener('click', () => {
+      document.getElementById('pcAttrForm').style.display = 'none'
+      document.getElementById('pcAttrKey').value = ''
+      document.getElementById('pcAttrVal').value = ''
+      document.getElementById('pcAttrSuggest').innerHTML = ''
+      pcAttrVid = null
+    })
+
+    document.getElementById('pcAttrSave').addEventListener('click', async () => {
+      const err = document.getElementById('pcAttrErr'); err.textContent = ''
+      if (!pcAttrVid) { err.textContent = 'Сначала выберите предложение'; return }
+      const key = document.getElementById('pcAttrKey').value.trim()
+      if (!key) { err.textContent = 'Укажите название атрибута'; return }
+      const body = {}; body[key] = document.getElementById('pcAttrVal').value
+      const r = await api(`/variants/${pcAttrVid}/attributes`, { method: 'PUT', body: JSON.stringify(body) }).catch(() => null)
+      if (!r || !r.ok) { err.textContent = (r && r.data && r.data.error) || 'Не получилось'; return }
+
+      const isOwner = window.adminMe && window.adminMe.role === 'owner'
+      const sug = r.data.suggestion
+      const box = document.getElementById('pcAttrSuggest')
+      if (sug && isOwner) {
+        // Формулировку показываем ДО записи — владелец соглашается осознанно
+        box.innerHTML = `<div class="okbox" style="margin-top:10px">
+          Вы поправили это ${sug.count} раз${sug.count > 4 ? '' : 'а'}. Запомнить как правило?<br><b>${esc(sug.phrase)}</b>
+          <button class="btn b-main sm" style="margin-top:10px" id="pcLearnBtn">Запомнить для всех таких</button>
+        </div>`
+        document.getElementById('pcLearnBtn').addEventListener('click', async () => {
+          const r2 = await api('/parser/learn', { method: 'POST', body: JSON.stringify({
+            attr: sug.attr, value: sug.value, brand: sug.brand, country: sug.country,
+          }) }).catch(() => null)
+          if (!r2 || !r2.ok) { err.textContent = (r2 && r2.data && r2.data.error) || 'Не получилось'; return }
+          box.innerHTML = `<div class="okbox" style="margin-top:10px">Запомнил: ${esc(sug.phrase)}. Правило видно в «Ещё → Парсер», там же его можно забыть.</div>`
+          loadDictionary()
+        })
+      } else if (sug) {
+        box.innerHTML = '<div class="hint">Похоже на повторяющийся случай — записать правило может владелец.</div>'
+      } else {
+        document.getElementById('pcAttrCancel').click()
+      }
+      if (pcProduct) openProductCard(pcProduct.id)
+    })
 
     async function savePhoto(target, url) {
       const path = target.kind === 'product' ? `/products/${target.id}/photo` : `/variants/${target.id}/photo`
@@ -874,6 +954,68 @@
       alert(`Остановлено акций: ${r.data.stopped}. Прежние цены вернулись.`)
       loadPromotions()
     })
+
+    // ── ПАРСЕР: витрина словаря, предложения, журнал обучения ─────────────────
+    let dictShowSeed = false
+
+    async function loadDictionary() {
+      const r = await api('/parser/dictionary').catch(() => null)
+      const el = document.getElementById('dictList')
+      if (!r || !r.ok) { el.textContent = 'Не удалось загрузить'; return }
+      const isOwner = window.adminMe && window.adminMe.role === 'owner'
+      const learned = r.data.rules.filter(x => !x.fromSeed)
+      const seed = r.data.rules.filter(x => x.fromSeed)
+      document.getElementById('dictChip').textContent = `${learned.length} выучено · ${seed.length} базовых`
+
+      const sug = r.data.patterns || []
+      document.getElementById('dictSuggest').innerHTML = sug.length
+        ? sug.map(pt => `<div class="okbox" style="margin-top:10px">
+            Заметил повтор ${pt.count} раз: <b>${esc(pt.phrase)}</b>
+            ${isOwner ? `<button class="btn b-main sm" style="margin-top:10px" data-learn='${esc(JSON.stringify({ attr: pt.attr, value: pt.value, brand: pt.brand, country: pt.country }))}'>Запомнить</button>` : '<br>Записать правило может владелец.'}
+          </div>`).join('')
+        : ''
+
+      const row = x => `<div class="sf-item">
+        <div class="sf-item-head"><div class="grow">
+          <div class="nm">${esc(x.phrase)}</div>
+          <div class="mt">${x.fromSeed ? 'базовое правило' : 'выучено из ваших правок'}</div>
+        </div><span class="chip ${x.fromSeed ? 'c-off' : 'c-ok'}">${x.fromSeed ? 'сид' : 'выучено'}</span></div>
+        ${isOwner ? `<div class="sf-item-actions"><button class="btn b-nt sm" data-forget="${x.kind}:${x.id}">Забыть</button></div>` : ''}
+      </div>`
+
+      el.innerHTML = (learned.length
+          ? learned.map(row).join('')
+          : '<div class="empty">Пока ничего не выучено.<br>Поправьте атрибут в карточке товара трижды — система предложит запомнить правило.</div>')
+        + (seed.length ? `<div class="hint" style="cursor:pointer" id="dictSeedToggle">${dictShowSeed ? 'Скрыть базовые правила' : `Показать ${seed.length} базовых правил`}</div>` : '')
+        + (dictShowSeed ? seed.map(row).join('') : '')
+
+      const t = document.getElementById('dictSeedToggle')
+      if (t) t.addEventListener('click', () => { dictShowSeed = !dictShowSeed; loadDictionary() })
+
+      document.querySelectorAll('[data-learn]').forEach(b => b.addEventListener('click', async () => {
+        const p = JSON.parse(b.dataset.learn)
+        if (!confirm(`Запомнить правило?\n\nОно будет применяться ко всем новым разборам. Уже проставленные значения не изменятся.`)) return
+        const r2 = await api('/parser/learn', { method: 'POST', body: JSON.stringify(p) }).catch(() => null)
+        if (!r2 || !r2.ok) { alert(r2 && r2.data && r2.data.error || 'Не получилось'); return }
+        loadDictionary()
+      }))
+
+      el.querySelectorAll('[data-forget]').forEach(b => b.addEventListener('click', async () => {
+        const [kind, id] = b.dataset.forget.split(':')
+        if (!confirm('Забыть правило?\n\nСистема перестанет применять его к НОВЫМ разборам. Значения, которые оно уже проставило товарам, останутся как есть — их меняет только «Обновить по словарю».')) return
+        const r2 = await api(`/parser/rules/${kind}/${id}`, { method: 'DELETE' }).catch(() => null)
+        if (!r2 || !r2.ok) { alert(r2 && r2.data && r2.data.error || 'Не получилось'); return }
+        if (r2.data && r2.data.note) alert(r2.data.note)
+        loadDictionary()
+      }))
+
+      const jr = r.data.journal || []
+      document.getElementById('dictLog').innerHTML = jr.length
+        ? jr.map(j => `<div class="list-i"><div style="flex:1">
+            <div class="nm">${j.action === 'rule_learned' ? 'Запомнил' : 'Забыл'}: ${esc(j.phrase)}</div>
+            <div class="mt">${new Date(j.at).toLocaleString('ru-RU')}</div></div></div>`).join('')
+        : '<div class="hint">Пока пусто: тут появится, что и когда система выучила с ваших правок.</div>'
+    }
 
     // ── ХАБ «ЕЩЁ»: плитки → страница внутри вкладки ────────────────────────────
     const HUB_TITLES = {
