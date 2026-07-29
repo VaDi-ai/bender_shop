@@ -135,8 +135,8 @@ export async function matchVariants(parsed: ParsedLine[]): Promise<{ matched: Ma
         // матч; ноль или несколько — unmatched: цену на «все варианты сразу» или
         // на первый попавшийся не размазываем.
         const candidates = filterByAttrs(product.variants, p)
-        if (candidates.length === 1) {
-          const picked = candidates[0]
+        const picked = candidates.length === 1 ? candidates[0] : undefined
+        if (picked) {
           matched.push({
             rawLine: p.rawLine, parsed: p,
             variantId: picked.id, variantSku: picked.sku,
@@ -163,8 +163,9 @@ export async function matchVariants(parsed: ParsedLine[]): Promise<{ matched: Ma
       .filter((product) => normalizeModelName(product.name) === modelNorm)
       .flatMap((product) => filterByAttrs(product.variants, p).map((variant) => ({ product, variant })))
 
-    if (candidates.length === 1) {
-      const { product, variant } = candidates[0]
+    const single = candidates.length === 1 ? candidates[0] : undefined
+    if (single) {
+      const { product, variant } = single
       matched.push({
         rawLine: p.rawLine, parsed: p,
         variantId: variant.id, variantSku: variant.sku,
