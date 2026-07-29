@@ -53,10 +53,12 @@ export interface Pattern extends PatternKey {
 }
 
 export function rulePhrase(p: Omit<Pattern, 'count' | 'phrase' | 'conflicting' | 'conflictsWithExisting'>): string {
-  const who = [p.brand, p.country].filter(Boolean).join(' из ')
+  // Без склонений: «из Индия» читается как ошибка, а падежи всех стран мы не
+  // угадаем — держим нейтральную форму «бренд · страна».
+  const who = [p.brand, p.country].filter(Boolean).join(' · ')
   return p.attr === 'SIM'
-    ? `Все ${who || 'товары'} → ${p.value}`
-    : `Значение «${p.attr}» у ${who || 'всех товаров'} → ${p.value}`
+    ? `Все ${who || 'товары'} → SIM: ${p.value}`
+    : `Все ${who || 'товары'} → ${p.attr}: ${p.value}`
 }
 
 interface RawEdit { attr: string; value: string; variantId: number }

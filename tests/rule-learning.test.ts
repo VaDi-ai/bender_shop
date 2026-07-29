@@ -51,8 +51,11 @@ describe('ключ паттерна нормализованный, а не сы
       .not.toBe(patternKey({ attr: 'Цвет', brand: 'Redmi', country: 'Индия' }))
   })
   it('формулировка человеческая', () => {
+    // без склонений: «из Индия» читалось бы как ошибка
     expect(rulePhrase({ attr: 'SIM', brand: 'Apple', country: 'Индия', value: 'SIM + eSIM' }))
-      .toBe('Все Apple из Индии → SIM + eSIM')
+      .toBe('Все Apple · Индия → SIM: SIM + eSIM')
+    expect(rulePhrase({ attr: 'Цвет', brand: null, country: 'Китай', value: 'Полночный' }))
+      .toBe('Все Китай → Цвет: Полночный')
   })
 })
 
