@@ -50,6 +50,23 @@
     .kpi .l { font-size:11px; color:var(--dim); margin-top:2px; }
     .list-i { display:flex; align-items:center; gap:10px; padding:11px 0; border-bottom:1px solid #232326; font-size:13px; }
     .list-i:last-of-type { border-bottom:none; }
+    /* Строка с 3+ действиями: на 390px они не влезают в один ряд — контент
+       обрезался слева, а крайняя кнопка уезжала за экран. Поэтому два яруса:
+       сверху читаемое содержимое, снизу действия с переносом. */
+    .sf-item { display:flex; flex-direction:column; align-items:stretch; gap:8px; padding:11px 0; border-bottom:1px solid #232326; font-size:13px; }
+    .sf-item:last-of-type { border-bottom:none; }
+    .sf-item-head { display:flex; align-items:center; gap:10px; min-width:0; }
+    .sf-item-head > .grow { flex:1; min-width:0; }
+    .sf-item-actions { display:flex; flex-wrap:wrap; gap:8px; }
+    .sf-item-actions .btn.sm { margin-top:0; flex:0 1 auto; }
+    /* Миниатюра: класс использовался в разметке, но стиля не было — пустой div
+       растягивал строку. Размер и слот как в мокапе. */
+    .ph { width:44px; height:44px; border-radius:9px; background:var(--slot,#f7f2f0); flex:none;
+          display:flex; align-items:center; justify-content:center; font-size:9px; color:#8d8781;
+          background-size:cover; background-position:center; }
+    .chip { flex:none; }
+    /* Длинные слова (fullName из таблицы, ссылки) не должны распирать строку */
+    .nm, .mt { overflow-wrap:anywhere; }
     .nm { font-size:13px; line-height:1.4; }
     .mt { font-size:11px; color:var(--dim); margin-top:2px; line-height:1.5; }
     .empty { text-align:center; padding:22px 14px; border:1px dashed var(--bd); border-radius:14px; color:var(--dim); font-size:12.5px; line-height:1.7; }
@@ -501,11 +518,13 @@
         const r = await api('/products?q=' + encodeURIComponent(q)).catch(() => null)
         if (!r || !r.ok) { box.innerHTML = ''; return }
         if (!r.data.length) { box.innerHTML = '<div class="hint">Ничего не нашли. Попробуйте часть названия — «17 pro», «air»</div>'; return }
-        box.innerHTML = r.data.map(p => `<div class="list-i">
-          ${sfThumb(p.photoUrl)}
-          <div style="flex:1"><div class="nm">${esc(p.name)}</div>
-            <div class="mt">${esc(p.category || 'без категории')}${p.inStock ? '' : ' · нет в наличии'}</div></div>
-          <button class="btn b-gh sm" data-pc-open="${p.id}">Открыть</button>
+        box.innerHTML = r.data.map(p => `<div class="sf-item">
+          <div class="sf-item-head">
+            ${sfThumb(p.photoUrl)}
+            <div class="grow"><div class="nm">${esc(p.name)}</div>
+              <div class="mt">${esc(p.category || 'без категории')}${p.inStock ? '' : ' · нет в наличии'}</div></div>
+          </div>
+          <div class="sf-item-actions"><button class="btn b-gh sm" data-pc-open="${p.id}">Открыть карточку</button></div>
         </div>`).join('')
         box.querySelectorAll('[data-pc-open]').forEach(b => b.addEventListener('click', () => openProductCard(b.dataset.pcOpen)))
       }, 250)
@@ -529,28 +548,36 @@
       box.style.display = ''
       box.innerHTML = `
         <div class="cap" style="margin:12px 0 6px">${esc(p.name.toUpperCase())}</div>
-        <div class="list-i">
-          ${sfThumb(p.mainPhoto)}
-          <div style="flex:1">
-            <div class="nm">${esc(p.category || 'без категории')}${p.brand ? ' · ' + esc(p.brand) : ''}</div>
-            <div class="mt">${p.offers.length} ${plural(p.offers.length, 'предложение', 'предложения', 'предложений')}${p.countries.length ? ': ' + p.countries.map(esc).join(', ') : ''}</div>
-            <div class="mt">${p.inStockCount ? `в наличии ${p.inStockCount} · от ${fmt(p.priceFrom)} ₽` : 'нет в наличии — покупателю не показывается'}</div>
+        <div class="sf-item">
+          <div class="sf-item-head">
+            ${sfThumb(p.mainPhoto)}
+            <div class="grow">
+              <div class="nm">${esc(p.category || 'без категории')}${p.brand ? ' · ' + esc(p.brand) : ''}</div>
+              <div class="mt">${p.offers.length} ${plural(p.offers.length, 'предложение', 'предложения', 'предложений')}${p.countries.length ? ': ' + p.countries.map(esc).join(', ') : ''}</div>
+              <div class="mt">${p.inStockCount ? `в наличии ${p.inStockCount} · от ${fmt(p.priceFrom)} ₽` : 'нет в наличии — покупателю не показывается'}</div>
+            </div>
+            <span class="chip ${p.isAvailable ? (p.inStockCount ? 'c-ok' : 'c-off') : 'c-bad'}">${p.isAvailable ? (p.inStockCount ? 'на витрине' : 'нет в наличии') : 'скрыт'}</span>
           </div>
-          <span class="chip ${p.isAvailable ? (p.inStockCount ? 'c-ok' : 'c-off') : 'c-bad'}">${p.isAvailable ? (p.inStockCount ? 'на витрине' : 'нет в наличии') : 'скрыт'}</span>
+          <div class="sf-item-actions">
+            <button class="btn b-gh sm" data-pc-photo="product">${p.mainPhoto ? 'Заменить главное фото' : 'Поставить главное фото'}</button>
+            ${p.mainPhoto ? '<button class="btn b-nt sm" data-pc-photo-clear="product">Убрать фото</button>' : ''}
+          </div>
         </div>
-        <button class="btn b-gh sm" data-pc-photo="product">${p.mainPhoto ? 'Заменить главное фото' : 'Поставить главное фото'}</button>
-        ${p.mainPhoto ? '<button class="btn b-nt sm" data-pc-photo-clear="product">Убрать фото</button>' : ''}
         <div class="hint">Главное фото видно в каталоге и поиске. Оно берётся у первого предложения — его и меняем.</div>
 
         <div class="cap" style="margin:14px 0 6px">ПРЕДЛОЖЕНИЯ</div>
-        ${p.offers.map(o => `<div class="list-i">
-          ${sfThumb(o.photoUrl)}
-          <div style="flex:1">
-            <div class="nm">${esc(Object.values(o.attrs).join(' · ') || o.fullName)}</div>
-            <div class="mt">${o.sim ? esc(o.sim) + ' · ' : ''}${fmt(o.price)} ₽ · ${o.quantity} шт</div>
+        ${p.offers.map(o => `<div class="sf-item">
+          <div class="sf-item-head">
+            ${sfThumb(o.photoUrl)}
+            <div class="grow">
+              <div class="nm">${esc(Object.values(o.attrs).join(' · ') || o.fullName)}</div>
+              <div class="mt">${o.sim ? esc(o.sim) + ' · ' : ''}${fmt(o.price)} ₽ · ${o.quantity} шт</div>
+            </div>
+            <span class="chip ${o.visible ? 'c-ok' : 'c-off'}">${o.visible ? 'в наличии' : 'нет'}</span>
           </div>
-          <span class="chip ${o.visible ? 'c-ok' : 'c-off'}">${o.visible ? 'в наличии' : 'нет'}</span>
-          <button class="btn b-nt sm" data-pc-photo="variant" data-pc-vid="${o.variantId}" data-pc-label="${esc(Object.values(o.attrs).join(' · '))}">Фото</button>
+          <div class="sf-item-actions">
+            <button class="btn b-nt sm" data-pc-photo="variant" data-pc-vid="${o.variantId}" data-pc-label="${esc(Object.values(o.attrs).join(' · '))}">${o.photoUrl ? 'Заменить фото' : 'Поставить фото'}</button>
+          </div>
         </div>`).join('')}
         <div class="hint">Цены, остатки и страна приезжают из таблицы — здесь их не меняют. Фото и описание можно.</div>
 
@@ -669,15 +696,18 @@
         el.innerHTML = '<div class="empty">Акций ещё не было.<br>Создайте первую — покупатели увидят её во вкладке «Акции».</div>'
         return
       }
-      el.innerHTML = list.map(p => `<div class="list-i"><div style="flex:1">
-          <div class="nm">${esc(p.name)} <span class="new">−${p.discountType === 'percent' ? p.discountValue + '%' : fmt(p.discountValue) + ' ₽'}</span></div>
-          <div class="mt">${esc(p.filterLabel)}${p.isActive ? ` · держит ${p.affected} ${plural(p.affected, 'товар', 'товара', 'товаров')}` : ' · цены не тронуты'}</div>
+      el.innerHTML = list.map(p => `<div class="sf-item">
+        <div class="sf-item-head">
+          <div class="grow">
+            <div class="nm">${esc(p.name)} <span class="new">−${p.discountType === 'percent' ? p.discountValue + '%' : fmt(p.discountValue) + ' ₽'}</span></div>
+            <div class="mt">${esc(p.filterLabel)}${p.isActive ? ` · держит ${p.affected} ${plural(p.affected, 'товар', 'товара', 'товаров')}` : ' · цены не тронуты'}</div>
+          </div>
+          <span class="chip ${p.isActive ? 'c-ok' : 'c-off'}">${p.isActive ? 'идёт' : 'черновик'}</span>
         </div>
-        <span class="chip ${p.isActive ? 'c-ok' : 'c-off'}">${p.isActive ? 'идёт' : 'черновик'}</span>
-        ${isOwner ? (p.isActive
+        ${isOwner ? `<div class="sf-item-actions">${p.isActive
           ? `<button class="btn b-dg sm" data-promo-stop="${p.id}">Остановить</button>`
           : `<button class="btn b-main sm" data-promo-run="${p.id}" data-promo-name="${esc(p.name)}">Запустить</button>
-             <button class="btn b-nt sm" data-promo-del="${p.id}">Удалить</button>`) : ''}
+             <button class="btn b-nt sm" data-promo-del="${p.id}">Удалить</button>`}</div>` : ''}
       </div>`).join('')
 
       el.querySelectorAll('[data-promo-run]').forEach(b => b.addEventListener('click', async () => {
@@ -809,11 +839,13 @@
         const r = await api('/clients?q=' + encodeURIComponent(q)).catch(() => null)
         if (!r || !r.ok) { box.innerHTML = ''; return }
         if (!r.data.length) { box.innerHTML = '<div class="hint">Никого не нашли. Ищем по имени и @username — телефон зашифрован, по нему поиска нет.</div>'; return }
-        box.innerHTML = r.data.map(c => `<div class="list-i"><div style="flex:1">
+        box.innerHTML = r.data.map(c => `<div class="sf-item">
+          <div class="sf-item-head"><div class="grow">
             <div class="nm">${esc(c.name)}${c.telegramUsername ? ' · @' + esc(c.telegramUsername) : ''}</div>
             <div class="mt">${c.ordersCount} ${plural(c.ordersCount, 'заказ', 'заказа', 'заказов')}${c.phone ? ' · ' + esc(c.phone) : ''}</div>
-          </div>
-          <button class="btn b-gh sm" data-cl-open="${c.id}">Открыть</button></div>`).join('')
+          </div></div>
+          <div class="sf-item-actions"><button class="btn b-gh sm" data-cl-open="${c.id}">Открыть карточку</button></div>
+        </div>`).join('')
         box.querySelectorAll('[data-cl-open]').forEach(b => b.addEventListener('click', () => openClient(b.dataset.clOpen)))
       }, 250)
     })
@@ -934,13 +966,18 @@
       const r = await api('/team').catch(() => null)
       const el = document.getElementById('teamList')
       if (!r || !r.ok) { el.textContent = 'Не удалось загрузить'; return }
-      el.innerHTML = r.data.map(m => `<div class="list-i"><div style="flex:1">
-          <div class="nm">${esc(m.name || m.telegramId)}${m.isYou ? ' · это вы' : ''}</div>
-          <div class="mt">${ROLE_HINT[m.role]}${m.isActive ? '' : ' · доступ снят'}${m.fromEnv ? ' · прописан в настройках сервера' : ''}</div>
+      el.innerHTML = r.data.map(m => `<div class="sf-item">
+        <div class="sf-item-head">
+          <div class="grow">
+            <div class="nm">${esc(m.name || m.telegramId)}${m.isYou ? ' · это вы' : ''}</div>
+            <div class="mt">${ROLE_HINT[m.role]}${m.isActive ? '' : ' · доступ снят'}${m.fromEnv ? ' · прописан в настройках сервера' : ''}</div>
+          </div>
+          <span class="chip ${m.isActive ? (m.role === 'owner' ? 'c-ok' : 'c-off') : 'c-bad'}">${m.isActive ? (m.role === 'owner' ? 'владелец' : 'менеджер') : 'выключен'}</span>
         </div>
-        <span class="chip ${m.isActive ? (m.role === 'owner' ? 'c-ok' : 'c-off') : 'c-bad'}">${m.isActive ? (m.role === 'owner' ? 'владелец' : 'менеджер') : 'выключен'}</span>
-        ${m.isYou ? '' : `<button class="btn b-nt sm" data-team-role="${m.telegramId}" data-team-to="${m.role === 'owner' ? 'manager' : 'owner'}">${m.role === 'owner' ? 'Сделать менеджером' : 'Сделать владельцем'}</button>`}
-        ${m.isYou ? '' : `<button class="btn ${m.isActive ? 'b-dg' : 'b-gh'} sm" data-team-active="${m.telegramId}" data-team-on="${m.isActive ? '0' : '1'}">${m.isActive ? 'Снять доступ' : 'Вернуть доступ'}</button>`}
+        ${m.isYou ? '' : `<div class="sf-item-actions">
+          <button class="btn b-nt sm" data-team-role="${m.telegramId}" data-team-to="${m.role === 'owner' ? 'manager' : 'owner'}">${m.role === 'owner' ? 'Сделать менеджером' : 'Сделать владельцем'}</button>
+          <button class="btn ${m.isActive ? 'b-dg' : 'b-gh'} sm" data-team-active="${m.telegramId}" data-team-on="${m.isActive ? '0' : '1'}">${m.isActive ? 'Снять доступ' : 'Вернуть доступ'}</button>
+        </div>`}
       </div>`).join('')
 
       el.querySelectorAll('[data-team-role]').forEach(b => b.addEventListener('click', async () => {
@@ -1011,17 +1048,21 @@
         list.innerHTML = '<div class="empty">Баннеров пока нет.<br>Добавьте первый — он появится на главной вместо логотипа.</div>'
         return
       }
-      list.innerHTML = b.map((x, i) => `<div class="list-i">
-        ${sfThumb(x.imageUrl)}
-        <div style="flex:1">
-          <div class="nm">${esc(x.title || '(без заголовка)')}</div>
-          <div class="mt">${x.isActive ? `показывается ${x.slot}-м` : 'скрыт от покупателя'}${x.subtitle ? ' · ' + esc(x.subtitle) : ''}</div>
+      list.innerHTML = b.map((x, i) => `<div class="sf-item">
+        <div class="sf-item-head">
+          ${sfThumb(x.imageUrl)}
+          <div class="grow">
+            <div class="nm">${esc(x.title || '(без заголовка)')}</div>
+            <div class="mt">${x.isActive ? `показывается ${x.slot}-м` : 'скрыт от покупателя'}${x.subtitle && !/^[-—–]$/.test(x.subtitle.trim()) ? ' · ' + esc(x.subtitle) : ''}</div>
+          </div>
+          <span class="chip ${x.isActive ? 'c-ok' : 'c-off'}">${x.isActive ? 'включён' : 'выключен'}</span>
         </div>
-        <span class="chip ${x.isActive ? 'c-ok' : 'c-off'}">${x.isActive ? 'включён' : 'выключен'}</span>
-        <button class="btn b-nt sm" data-bn-move="${x.id}" data-bn-dir="up" ${i === 0 ? 'disabled' : ''}>↑</button>
-        <button class="btn b-nt sm" data-bn-move="${x.id}" data-bn-dir="down" ${i === b.length - 1 ? 'disabled' : ''}>↓</button>
-        <button class="btn b-nt sm" data-bn-toggle="${x.id}" data-bn-on="${x.isActive ? '0' : '1'}">${x.isActive ? 'Выключить' : 'Включить'}</button>
-        ${isOwner ? `<button class="btn b-dg sm" data-bn-del="${x.id}">Удалить</button>` : ''}
+        <div class="sf-item-actions">
+          <button class="btn b-nt sm" data-bn-move="${x.id}" data-bn-dir="up" ${i === 0 ? 'disabled' : ''}>↑ выше</button>
+          <button class="btn b-nt sm" data-bn-move="${x.id}" data-bn-dir="down" ${i === b.length - 1 ? 'disabled' : ''}>↓ ниже</button>
+          <button class="btn b-nt sm" data-bn-toggle="${x.id}" data-bn-on="${x.isActive ? '0' : '1'}">${x.isActive ? 'Выключить' : 'Включить'}</button>
+          ${isOwner ? `<button class="btn b-dg sm" data-bn-del="${x.id}">Удалить</button>` : ''}
+        </div>
       </div>`).join('')
 
       list.querySelectorAll('[data-bn-move]').forEach(btn => btn.addEventListener('click', async () => {
@@ -1108,13 +1149,17 @@
       const hidden = all.filter(c => !c.visible)
       const cats = catShowAll ? all : all.filter(c => c.visible)
       const SRC = { custom: ['своё фото', 'c-ok'], auto: ['фото с новейшей модели', 'c-off'], none: ['фото нет ни у одной модели', 'c-warn'] }
-      el.innerHTML = cats.map(c => `<div class="list-i">
-        ${sfThumb(c.effectiveImageUrl)}
-        <div style="flex:1"><div class="nm">${esc(c.name)}</div>
-          <div class="mt">${SRC[c.source][0]} · ${c.productCount} ${plural(c.productCount, 'товар', 'товара', 'товаров')}${c.visible ? '' : ' · не показывается покупателю'}</div></div>
-        ${c.source === 'none' ? '<span class="chip c-warn">без фото</span>' : ''}
-        <button class="btn b-gh sm" data-cat-set="${c.id}" data-cat-name="${esc(c.name)}">${c.source === 'custom' ? 'Заменить' : 'Поставить фото'}</button>
-        ${c.source === 'custom' ? `<button class="btn b-nt sm" data-cat-reset="${c.id}">Вернуть авто</button>` : ''}
+      el.innerHTML = cats.map(c => `<div class="sf-item">
+        <div class="sf-item-head">
+          ${sfThumb(c.effectiveImageUrl)}
+          <div class="grow"><div class="nm">${esc(c.name)}</div>
+            <div class="mt">${SRC[c.source][0]} · ${c.productCount} ${plural(c.productCount, 'товар', 'товара', 'товаров')}${c.visible ? '' : ' · не показывается покупателю'}</div></div>
+          ${c.source === 'none' ? '<span class="chip c-warn">без фото</span>' : ''}
+        </div>
+        <div class="sf-item-actions">
+          <button class="btn b-gh sm" data-cat-set="${c.id}" data-cat-name="${esc(c.name)}">${c.source === 'custom' ? 'Заменить фото' : 'Поставить фото'}</button>
+          ${c.source === 'custom' ? `<button class="btn b-nt sm" data-cat-reset="${c.id}">Вернуть авто</button>` : ''}
+        </div>
       </div>`).join('') + (hidden.length ? `<div class="hint" style="cursor:pointer" id="catToggleHidden">${
         catShowAll
           ? 'Скрыть категории без товаров в наличии'
@@ -1189,12 +1234,16 @@
         el.innerHTML = '<div class="empty">Ручных хитов нет.<br>Витрина показывает топ-новинку каждой линейки — это нормальный режим.</div>'
         return
       }
-      el.innerHTML = hits.map(h => `<div class="list-i">
-        ${sfThumb(h.photoUrl)}
-        <div style="flex:1"><div class="nm">${esc(h.name)}</div>
-          <div class="mt">${esc(h.category || 'без категории')}${h.inStock ? '' : ' · нет в наличии — покупателю не показывается'}</div></div>
-        ${h.inStock ? '' : '<span class="chip c-warn">нет в наличии</span>'}
-        <button class="btn b-nt sm" data-hit-off="${h.id}">Убрать из хитов</button>
+      el.innerHTML = hits.map(h => `<div class="sf-item">
+        <div class="sf-item-head">
+          ${sfThumb(h.photoUrl)}
+          <div class="grow"><div class="nm">${esc(h.name)}</div>
+            <div class="mt">${esc(h.category || 'без категории')}${h.inStock ? '' : ' · нет в наличии — покупателю не показывается'}</div></div>
+          ${h.inStock ? '' : '<span class="chip c-warn">нет в наличии</span>'}
+        </div>
+        <div class="sf-item-actions">
+          <button class="btn b-nt sm" data-hit-off="${h.id}">Убрать из хитов</button>
+        </div>
       </div>`).join('')
       el.querySelectorAll('[data-hit-off]').forEach(b => b.addEventListener('click', async () => {
         const r = await api(`/hits/${b.dataset.hitOff}`, { method: 'POST', body: JSON.stringify({ featured: false }) }).catch(() => null)
@@ -1213,11 +1262,14 @@
         const r = await api('/products?q=' + encodeURIComponent(q)).catch(() => null)
         if (!r || !r.ok) { box.innerHTML = ''; return }
         if (!r.data.length) { box.innerHTML = '<div class="hint">Ничего не нашли — попробуйте другое слово</div>'; return }
-        box.innerHTML = r.data.map(p => `<div class="list-i">
-          ${sfThumb(p.photoUrl)}
-          <div style="flex:1"><div class="nm">${esc(p.name)}</div>
-            <div class="mt">${esc(p.category || 'без категории')}${p.inStock ? '' : ' · нет в наличии'}</div></div>
-          ${p.isFeatured ? '<span class="chip c-ok">уже хит</span>' : `<button class="btn b-gh sm" data-hit-on="${p.id}">В хиты</button>`}
+        box.innerHTML = r.data.map(p => `<div class="sf-item">
+          <div class="sf-item-head">
+            ${sfThumb(p.photoUrl)}
+            <div class="grow"><div class="nm">${esc(p.name)}</div>
+              <div class="mt">${esc(p.category || 'без категории')}${p.inStock ? '' : ' · нет в наличии'}</div></div>
+            ${p.isFeatured ? '<span class="chip c-ok">уже хит</span>' : ''}
+          </div>
+          ${p.isFeatured ? '' : `<div class="sf-item-actions"><button class="btn b-gh sm" data-hit-on="${p.id}">В хиты</button></div>`}
         </div>`).join('')
         box.querySelectorAll('[data-hit-on]').forEach(b => b.addEventListener('click', async () => {
           const r2 = await api(`/hits/${b.dataset.hitOn}`, { method: 'POST', body: JSON.stringify({ featured: true }) }).catch(() => null)
@@ -1251,21 +1303,27 @@
       // Второй раздел: значение стоит с прежних времён, а правила под него нет
       const inheritedHtml = inherited.length ? `<div class="card">
         <h3>SIM стоит, но правила нет <span class="chip c-warn right">${inherited.length}</span></h3>
-        ${inherited.map(x => `<div class="list-i"><div style="flex:1">
-          <div class="nm">${esc(x.fullName)}</div>
-          <div class="mt">${esc(x.country || 'страна не указана')} · сейчас «${esc(x.current)}»</div>
-        </div>
-        <button class="btn b-gh sm" data-sim-learn="${esc(x.country || '')}" data-sim-brand="${esc(x.brand || '')}">Задать правило</button></div>`).join('')}
+        ${inherited.map(x => `<div class="sf-item">
+          <div class="sf-item-head"><div class="grow">
+            <div class="nm">${esc(x.fullName)}</div>
+            <div class="mt">${esc(x.country || 'страна не указана')} · сейчас «${esc(x.current)}»</div>
+          </div></div>
+          <div class="sf-item-actions">
+            <button class="btn b-gh sm" data-sim-learn="${esc(x.country || '')}" data-sim-brand="${esc(x.brand || '')}">Задать правило</button>
+          </div></div>`).join('')}
         <div class="hint">Обновление по словарю эти строки не трогает — значение оставили как есть. Заведите правило, и они попадут в общий список.</div>
       </div>` : ''
 
       const missingHtml = missing.length ? `<div class="card">
         <h3>${missing.length} ${plural(missing.length, 'связка без правила', 'связки без правила', 'связок без правила')} «бренд + страна» <span class="chip c-bad right">нужна помощь</span></h3>
-        ${missing.map(x => `<div class="list-i"><div style="flex:1">
-          <div class="nm">${esc(x.country)}</div>
-          <div class="mt">${x.brand ? esc(x.brand) + ' · ' : ''}${x.count} ${plural(x.count, 'товар', 'товара', 'товаров')}${x.visible ? `, из них ${x.visible} на витрине` : ', на витрине нет'}${x.generations.length ? ' · поколения ' + x.generations.sort((a,b)=>a-b).join(', ') : ''} · напр. ${esc(String(x.example).slice(0, 40))}</div>
-        </div>
-        <button class="btn b-gh sm" data-sim-learn="${esc(x.country)}" data-sim-brand="${esc(x.brand || '')}">Задать SIM</button></div>`).join('')}
+        ${missing.map(x => `<div class="sf-item">
+          <div class="sf-item-head"><div class="grow">
+            <div class="nm">${x.brand ? esc(x.brand) + ' · ' : ''}${esc(x.country)}</div>
+            <div class="mt">${x.count} ${plural(x.count, 'товар', 'товара', 'товаров')}${x.visible ? `, из них ${x.visible} на витрине` : ', на витрине нет'}${x.generations.length ? ' · поколения ' + x.generations.sort((a,b)=>a-b).join(', ') : ''} · напр. ${esc(String(x.example).slice(0, 40))}</div>
+          </div></div>
+          <div class="sf-item-actions">
+            <button class="btn b-gh sm" data-sim-learn="${esc(x.country)}" data-sim-brand="${esc(x.brand || '')}">Задать SIM</button>
+          </div></div>`).join('')}
         <div class="hint">Скажете один раз — дальше система проставит сама во всех новых разборах.</div>
       </div>` : '<div class="empty">Для всех стран каталога правило есть 🎉<br>Новая страна появится здесь автоматически.</div>'
 
@@ -1708,12 +1766,15 @@
         }
 
         const rows = rules.map(x => `
-          <div class="list-i"><div style="flex:1">
-            <div class="nm">${ruleRange(x)} <span class="new">→ наценка ${ruleMarkup(x)}</span></div>
-          </div>
-          ${x.enabled ? '' : '<span class="chip c-off">выключено</span>'}
-          <button class="btn b-gh sm" data-mr-edit="${x.id}">Изменить</button>
-          ${isOwner ? `<button class="btn b-nt sm" data-mr-toggle="${x.id}" data-mr-en="${x.enabled ? '0' : '1'}">${x.enabled ? 'Выключить' : 'Включить'}</button>` : ''}
+          <div class="sf-item">
+            <div class="sf-item-head">
+              <div class="grow"><div class="nm">${ruleRange(x)} <span class="new">→ наценка ${ruleMarkup(x)}</span></div></div>
+              ${x.enabled ? '' : '<span class="chip c-off">выключено</span>'}
+            </div>
+            <div class="sf-item-actions">
+              <button class="btn b-gh sm" data-mr-edit="${x.id}">Изменить</button>
+              ${isOwner ? `<button class="btn b-nt sm" data-mr-toggle="${x.id}" data-mr-en="${x.enabled ? '0' : '1'}">${x.enabled ? 'Выключить' : 'Включить'}</button>` : ''}
+            </div>
           </div>`).join('')
 
         const coverage = !enabled.length
@@ -1816,14 +1877,18 @@
         const silent = days !== null && days >= 5
         const chip = !s.isActive ? '<span class="chip c-off">выключен</span>' : silent ? '<span class="chip c-off">молчит</span>' : '<span class="chip c-ok">активен</span>'
         const last = days === null ? 'прайсов ещё не было' : days === 0 ? 'прайс сегодня' : `прайс ${days} дн. назад`
-        return `<div class="list-i"><div style="flex:1">
-          <div class="nm">${esc(s.name)}</div>
-          <div class="mt">наценка ${s.markup}% · цены живут ${s.priceTtlDays} дн. · ${last}${String(s.chatId || '').startsWith('web:') ? ' · без чата' : ' · чат привязан'}</div>
-        </div>${chip}
-        <div style="display:flex;flex-direction:column;gap:6px">
-          <button class="btn b-nt sm" data-sup-edit="${s.id}">Изменить</button>
-          ${isOwner ? `<button class="btn ${s.isActive ? 'b-dg' : 'b-nt'} sm" data-sup-toggle="${s.id}" data-sup-act="${s.isActive ? '0' : '1'}">${s.isActive ? 'Выключить' : 'Включить'}</button>` : ''}
-        </div></div>`
+        return `<div class="sf-item">
+          <div class="sf-item-head">
+            <div class="grow">
+              <div class="nm">${esc(s.name)}</div>
+              <div class="mt">наценка ${s.markup}% · цены живут ${s.priceTtlDays} дн. · ${last}${String(s.chatId || '').startsWith('web:') ? ' · без чата' : ' · чат привязан'}</div>
+            </div>${chip}
+          </div>
+          <div class="sf-item-actions">
+            <button class="btn b-nt sm" data-sup-edit="${s.id}">Изменить</button>
+            ${isOwner ? `<button class="btn ${s.isActive ? 'b-dg' : 'b-nt'} sm" data-sup-toggle="${s.id}" data-sup-act="${s.isActive ? '0' : '1'}">${s.isActive ? 'Выключить' : 'Включить'}</button>` : ''}
+          </div>
+        </div>`
       }).join('')
       el.querySelectorAll('[data-sup-edit]').forEach(b => b.addEventListener('click', () => editSupplier(Number(b.dataset.supEdit))))
       el.querySelectorAll('[data-sup-toggle]').forEach(b => b.addEventListener('click', () => toggleSupplier(Number(b.dataset.supToggle), b.dataset.supAct === '1')))
