@@ -66,6 +66,17 @@
     .hub-tile .ht-s { font-size:11px; color:var(--dim); line-height:1.4; }
     .hub-back { background:none; border:none; color:var(--ac); font-family:'Onest'; font-size:13px; font-weight:600;
                 padding:0; margin-bottom:10px; cursor:pointer; }
+    /* Значение атрибута прямо в строке предложения — тапаешь и правишь */
+    .attr-chip { display:inline-block; padding:3px 9px; border-radius:8px; background:#232326; border:1px solid var(--bd);
+                 font-size:12.5px; line-height:1.5; cursor:pointer; margin:2px 4px 2px 0; }
+    .attr-chip.ovr { border-color:var(--ac); color:var(--ac); }
+    .attr-chip.fixed { background:transparent; border-style:dashed; cursor:default; color:var(--dim); }
+    .attr-edit { border-top:1px dashed var(--bd); margin-top:8px; padding-top:8px; }
+    .attr-edit .lbl { font-size:11px; color:var(--dim); margin-bottom:6px; }
+    #toast { position:fixed; left:50%; bottom:calc(var(--tabbar-h) + 16px); transform:translateX(-50%);
+             background:var(--ac); color:var(--acf); font-weight:600; font-size:13px; padding:10px 16px;
+             border-radius:11px; opacity:0; pointer-events:none; transition:opacity .2s ease; z-index:60; }
+    #toast.on { opacity:1; }
     .sf-item-actions { display:flex; flex-wrap:wrap; gap:8px; }
     .sf-item-actions .btn.sm { margin-top:0; flex:0 1 auto; }
     /* Миниатюра: класс использовался в разметке, но стиля не было — пустой div
@@ -308,18 +319,6 @@
           <div class="mt" id="pcPhotoErr" style="color:var(--bad)"></div>
           <div class="hint">Ссылка запишется в колонку «Фото» той же строки таблицы — иначе ближайший синк стёр бы её. Покупатель увидит фото сразу.</div>
         </div>
-        <div id="pcAttrForm" style="display:none">
-          <div class="cap" id="pcAttrTitle" style="margin:10px 0 6px">АТРИБУТ ПРЕДЛОЖЕНИЯ</div>
-          <input class="inp" id="pcAttrKey" placeholder="Название: SIM, Цвет, Память" maxlength="40">
-          <input class="inp" id="pcAttrVal" placeholder="Значение (пусто — снять ручную правку)" maxlength="100">
-          <button class="btn b-main" id="pcAttrSave">Сохранить атрибут</button>
-          <button class="btn b-nt" id="pcAttrCancel">Отмена</button>
-          <div class="mt" id="pcAttrErr" style="color:var(--bad)"></div>
-          <div id="pcAttrSuggest"></div>
-          <div class="hint">Ручная правка сильнее словаря: синк её не пересчитает, а «обновить по словарю» такие строки пропускает.</div>
-          <div class="hint">Запомнить «для всех таких» система умеет пока только для типа SIM. Правка любого другого атрибута меняет ровно это предложение и на другие товары не распространяется.</div>
-        </div>
-
         <div id="pcDescForm" style="display:none">
           <div class="cap" style="margin:10px 0 6px">ОПИСАНИЕ</div>
           <textarea class="inp" id="pcDesc" rows="4" maxlength="2000" placeholder="Что важно знать покупателю"></textarea>
@@ -506,6 +505,8 @@
     </section>
   </main>
 
+  <div id="toast"></div>
+
   <nav id="tabbar">
     <button class="tb on" data-s="s-home"><i>▤</i>Сегодня</button>
     <button class="tb" data-s="s-prices"><i>₽</i>Цены</button>
@@ -671,18 +672,18 @@
           <div class="sf-item-head">
             ${sfThumb(o.photoUrl)}
             <div class="grow">
-              <div class="nm">${esc(Object.values(o.attrs).join(' · ') || o.fullName)}</div>
+              <div class="nm">${attrChips(o)}</div>
               <div class="mt">${fmt(o.price)} ₽ · ${o.quantity} шт</div>
             </div>
             <span class="chip ${o.visible ? 'c-ok' : 'c-off'}">${o.visible ? 'в наличии' : 'нет'}</span>
           </div>
+          <div id="attrEdit-${o.variantId}"></div>
           <div class="sf-item-actions">
             <button class="btn b-nt sm" data-pc-photo="variant" data-pc-vid="${o.variantId}" data-pc-label="${esc(Object.values(o.attrs).join(' · '))}">${o.photoUrl ? 'Заменить фото' : 'Поставить фото'}</button>
-            <button class="btn b-gh sm" data-attr-edit="${o.variantId}">Поправить атрибут</button>
           </div>
           ${o.overrides && o.overrides.length ? `<div class="hint">Поправлено руками: ${o.overrides.map(esc).join(', ')} — словарь их не трогает.</div>` : ''}
         </div>`).join('')}
-        <div class="hint">Цены, остатки и страна приезжают из таблицы — здесь их не меняют. Фото и описание можно.</div>
+        <div class="hint">Тапните значение атрибута, чтобы поправить его. Цены, остатки и страна приезжают из таблицы — их здесь не меняют.</div>
 
         <div class="cap" style="margin:14px 0 6px">ОПИСАНИЕ</div>
         <div class="mt">${p.description ? esc(p.description) : 'Описания нет — покупатель видит только характеристики.'}</div>
@@ -726,61 +727,102 @@
       })
     }
 
-    // ── Правка атрибута + предложение выучить правило ─────────────────────────
-    let pcAttrVid = null
+    // ── Правка атрибута прямо в строке предложения (два касания) ──────────────
+    // Названия атрибута владелец не вводит: правит то, что видит в карточке.
+    const SIM_VALUES = ['2 SIM', 'eSIM', 'SIM + eSIM']
+    const FROM_SHEET = ['Страна']              // приезжает из таблицы — здесь не правим
 
-    function bindAttrEdit(box) {
-      box.querySelectorAll('[data-attr-edit]').forEach(b => b.addEventListener('click', () => {
-        pcAttrVid = Number(b.dataset.attrEdit)
-        document.getElementById('pcAttrErr').textContent = ''
-        document.getElementById('pcAttrSuggest').innerHTML = ''
-        const f = document.getElementById('pcAttrForm')
-        f.style.display = ''
-        f.scrollIntoView({ behavior: 'smooth', block: 'center' })
-      }))
+    function attrChips(o) {
+      const ovr = o.overrides || []
+      const parts = Object.entries(o.attrs).map(([k, v]) => {
+        const fixed = FROM_SHEET.includes(k)
+        return fixed
+          ? `<span class="attr-chip fixed" title="из таблицы">${esc(v)}</span>`
+          : `<span class="attr-chip${ovr.includes(k) ? ' ovr' : ''}" data-attr-tap="${o.variantId}" data-attr-key="${esc(k)}" data-attr-val="${esc(v)}">${esc(v)}</span>`
+      })
+      return parts.join('') || esc(o.fullName)
     }
 
-    document.getElementById('pcAttrCancel').addEventListener('click', () => {
-      document.getElementById('pcAttrForm').style.display = 'none'
-      document.getElementById('pcAttrKey').value = ''
-      document.getElementById('pcAttrVal').value = ''
-      document.getElementById('pcAttrSuggest').innerHTML = ''
-      pcAttrVid = null
-    })
+    function toast(text) {
+      const t = document.getElementById('toast')
+      t.textContent = text; t.classList.add('on')
+      clearTimeout(t._timer)
+      t._timer = setTimeout(() => t.classList.remove('on'), 1800)
+    }
 
-    document.getElementById('pcAttrSave').addEventListener('click', async () => {
-      const err = document.getElementById('pcAttrErr'); err.textContent = ''
-      if (!pcAttrVid) { err.textContent = 'Сначала выберите предложение'; return }
-      const key = document.getElementById('pcAttrKey').value.trim()
-      if (!key) { err.textContent = 'Укажите название атрибута'; return }
-      const body = {}; body[key] = document.getElementById('pcAttrVal').value
-      const r = await api(`/variants/${pcAttrVid}/attributes`, { method: 'PUT', body: JSON.stringify(body) }).catch(() => null)
-      if (!r || !r.ok) { err.textContent = (r && r.data && r.data.error) || 'Не получилось'; return }
+    /** Инлайн-редактор под строкой предложения. */
+    function openAttrEditor(variantId, key, current) {
+      document.querySelectorAll('[id^="attrEdit-"]').forEach(e => { e.innerHTML = '' })
+      const box = document.getElementById('attrEdit-' + variantId)
+      if (!box) return
+      box.innerHTML = key === 'SIM'
+        ? `<div class="attr-edit"><div class="lbl">SIM — тапните значение</div>
+             <div class="sf-item-actions">
+               ${SIM_VALUES.map(v => `<button class="btn ${v === current ? 'b-main' : 'b-nt'} sm" data-attr-set="${esc(v)}">${esc(v)}</button>`).join('')}
+               <button class="btn b-gh sm" data-attr-set="">Очистить</button>
+             </div></div>`
+        : `<div class="attr-edit"><div class="lbl">${esc(key)}</div>
+             <input class="inp" id="attrInput-${variantId}" maxlength="100" value="${esc(current)}">
+             <div class="sf-item-actions" style="margin-top:8px">
+               <button class="btn b-main sm" data-attr-save="1">Сохранить</button>
+               <button class="btn b-gh sm" data-attr-set="">Очистить</button>
+               <button class="btn b-nt sm" data-attr-close="1">Отмена</button>
+             </div></div>`
 
-      const isOwner = window.adminMe && window.adminMe.role === 'owner'
+      box.querySelectorAll('[data-attr-set]').forEach(b =>
+        b.addEventListener('click', () => saveAttr(variantId, key, b.dataset.attrSet)))
+      const saveBtn = box.querySelector('[data-attr-save]')
+      if (saveBtn) saveBtn.addEventListener('click', () =>
+        saveAttr(variantId, key, document.getElementById('attrInput-' + variantId).value))
+      const closeBtn = box.querySelector('[data-attr-close]')
+      if (closeBtn) closeBtn.addEventListener('click', () => { box.innerHTML = '' })
+      box.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+    }
+
+    async function saveAttr(variantId, key, value) {
+      const box = document.getElementById('attrEdit-' + variantId)
+      const body = {}; body[key] = value
+      const r = await api(`/variants/${variantId}/attributes`, { method: 'PUT', body: JSON.stringify(body) }).catch(() => null)
+      if (!r || !r.ok) { toast((r && r.data && r.data.error) || 'Не получилось'); return }
+
+      // Обновляем значение на месте, не перезагружая всю карточку
+      const offer = pcProduct && pcProduct.offers.find(o => String(o.variantId) === String(variantId))
+      if (offer) {
+        const attrs = r.data.attributes || {}
+        offer.attrs = Object.fromEntries(Object.entries(attrs).filter(([k]) => k !== 'fullName' && k !== 'attrOverrides'))
+        offer.overrides = r.data.overrides || []
+      }
+      toast(value ? 'Готово' : 'Ручная правка снята')
+      renderProductCard()
+
+      // Подсказка обучения — как была: только SIM, только по нажатию владельца
       const sug = r.data.suggestion
-      const box = document.getElementById('pcAttrSuggest')
+      const isOwner = window.adminMe && window.adminMe.role === 'owner'
       if (sug && isOwner) {
-        // Формулировку показываем ДО записи — владелец соглашается осознанно
-        box.innerHTML = `<div class="okbox" style="margin-top:10px">
+        const again = document.getElementById('attrEdit-' + variantId)
+        if (!again) return
+        again.innerHTML = `<div class="okbox" style="margin-top:10px">
           Вы поправили это ${sug.count} раз${sug.count > 4 ? '' : 'а'}. Запомнить как правило?<br><b>${esc(sug.phrase)}</b>
-          <button class="btn b-main sm" style="margin-top:10px" id="pcLearnBtn">Запомнить для всех таких</button>
-        </div>`
-        document.getElementById('pcLearnBtn').addEventListener('click', async () => {
+          <div class="sf-item-actions" style="margin-top:10px">
+            <button class="btn b-main sm" id="attrLearnBtn">Запомнить для всех таких</button>
+            <button class="btn b-nt sm" data-attr-close="1">Не надо</button>
+          </div></div>`
+        again.querySelector('[data-attr-close]').addEventListener('click', () => { again.innerHTML = '' })
+        document.getElementById('attrLearnBtn').addEventListener('click', async () => {
           const r2 = await api('/parser/learn', { method: 'POST', body: JSON.stringify({
             attr: sug.attr, value: sug.value, brand: sug.brand, country: sug.country,
           }) }).catch(() => null)
-          if (!r2 || !r2.ok) { err.textContent = (r2 && r2.data && r2.data.error) || 'Не получилось'; return }
-          box.innerHTML = `<div class="okbox" style="margin-top:10px">Запомнил: ${esc(sug.phrase)}. Правило видно в «Ещё → Парсер», там же его можно забыть.</div>`
+          if (!r2 || !r2.ok) { toast((r2 && r2.data && r2.data.error) || 'Не получилось'); return }
+          again.innerHTML = `<div class="okbox">Запомнил: ${esc(sug.phrase)}. Правило видно в «Ещё → Парсер», там же его можно забыть.</div>`
           loadDictionary()
         })
-      } else if (sug) {
-        box.innerHTML = '<div class="hint">Похоже на повторяющийся случай — записать правило может владелец.</div>'
-      } else {
-        document.getElementById('pcAttrCancel').click()
       }
-      if (pcProduct) openProductCard(pcProduct.id)
-    })
+    }
+
+    function bindAttrEdit(box) {
+      box.querySelectorAll('[data-attr-tap]').forEach(c => c.addEventListener('click', () =>
+        openAttrEditor(Number(c.dataset.attrTap), c.dataset.attrKey, c.dataset.attrVal)))
+    }
 
     async function savePhoto(target, url) {
       const path = target.kind === 'product' ? `/products/${target.id}/photo` : `/variants/${target.id}/photo`
