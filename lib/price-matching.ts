@@ -1,13 +1,24 @@
 /**
  * Матчинг распарсенных строк прайса к вариантам товара.
- * Вынесено из bot/admin/pricing.ts БЕЗ изменения логики (PR-6): нужен и
- * бот-флоу, и веб-батчам разбора прайсов; lib не должен импортировать bot.
+ * Вынесено из bot/admin/pricing.ts (PR-6): нужен и бот-флоу, и веб-батчам
+ * разбора прайсов; lib не должен импортировать bot.
+ *
+ * Принцип: строка либо ТОЧНО ложится на один вариант, либо уходит в unmatched
+ * («не узнал») — неверный матч хуже очереди. Поэтому:
+ * - модель сравнивается с именем товара ТОЧНО (нормализованное равенство,
+ *   не подстрока): «iPhone 17 Pro» не попадает в «iPhone 17 Pro Max»;
+ * - память/цвет сверяются с конкретными ключами атрибутов («Память»/«Цвет»),
+ *   а не includes по всем значениям подряд;
+ * - если после фильтров кандидатов больше одного (дубли товаров, варианты
+ *   разных стран/SIM при одинаковой памяти и цвете) — unmatched, а не «первый
+ *   попавшийся» и не «все варианты продукта».
  *
  * Порядок матчинга (обучение алиасами):
  * 1) PriceAlias по трём ключам: «model storage color» / «model» / rawLine;
  *    isIgnored → строка игнорируется; alias.variantId → прямое попадание;
- *    alias.productId → подбор варианта по storage/color (или все варианты).
- * 2) Поиск товара по имени (contains, insensitive) + фильтр по storage/color.
+ *    alias.productId → подбор варианта по storage/color, только однозначный.
+ * 2) Поиск товара по имени: contains — лишь предвыборка, дальше точное
+ *    нормализованное равенство имени и однозначный вариант.
  */
 import { prisma } from './prisma'
 
@@ -30,6 +41,47 @@ export type MatchedVariant = {
   categoryId?: number
   currentPrice: number
   supplierPrice: number
+}
+
+const STORAGE_ATTR = 'Память'
+const COLOR_ATTR = 'Цвет'
+
+/** Нормализация имени модели/товара: регистр, ё→е, схлопнутые пробелы. */
+export function normalizeModelName(s: string): string {
+  return s.toLowerCase().replace(/ё/g, 'е').replace(/\s+/g, ' ').trim()
+}
+
+/** «256», «256GB», «256 Gb» → «256gb»; «1TB»/«1 Тб» не смешиваются с «1GB». */
+export function normalizeStorage(s: string): string {
+  const compact = s.toLowerCase().replace(/[\s.]+/g, '')
+  return /^\d+$/.test(compact) ? compact + 'gb' : compact
+}
+
+function normalizeColor(s: string): string {
+  return s.toLowerCase().replace(/\s+/g, ' ').trim()
+}
+
+type VariantLike = { attributes: unknown }
+
+/**
+ * Варианты, ТОЧНО совпавшие по заявленным в строке память/цвет.
+ * Сверка только с ключами «Память»/«Цвет»: попадание подстроки в другие
+ * атрибуты (fullName, Страна…) совпадением не считается. Вариант без нужного
+ * ключа при заявленном значении — не кандидат: «не смог сверить» ≠ «совпало».
+ */
+function filterByAttrs<V extends VariantLike>(variants: V[], p: ParsedLine): V[] {
+  return variants.filter((v) => {
+    const attrs = (v.attributes ?? {}) as Record<string, unknown>
+    if (p.storage) {
+      const val = attrs[STORAGE_ATTR]
+      if (typeof val !== 'string' || normalizeStorage(val) !== normalizeStorage(p.storage)) return false
+    }
+    if (p.color) {
+      const val = attrs[COLOR_ATTR]
+      if (typeof val !== 'string' || normalizeColor(val) !== normalizeColor(p.color)) return false
+    }
+    return true
+  })
 }
 
 export async function matchVariants(parsed: ParsedLine[]): Promise<{ matched: MatchedVariant[]; unmatched: ParsedLine[]; ignored: ParsedLine[] }> {
@@ -79,16 +131,11 @@ export async function matchVariants(parsed: ParsedLine[]): Promise<{ matched: Ma
         include: { variants: true },
       })
       if (product) {
-        // Найти подходящий вариант по storage/color
-        let picked: typeof product.variants[0] | undefined
-        for (const variant of product.variants) {
-          const attrs = variant.attributes as Record<string, string>
-          const vals = Object.values(attrs).map(v => v.toLowerCase())
-          if (p.storage && !vals.some(v => v.includes(p.storage!))) continue
-          if (p.color && !vals.some(v => v.includes(p.color!.toLowerCase()))) continue
-          picked = variant
-          break
-        }
+        // Алиас указывает товар, вариант ищем по память/цвет. Однозначно нашёлся —
+        // матч; ноль или несколько — unmatched: цену на «все варианты сразу» или
+        // на первый попавшийся не размазываем.
+        const candidates = filterByAttrs(product.variants, p)
+        const picked = candidates.length === 1 ? candidates[0] : undefined
         if (picked) {
           matched.push({
             rawLine: p.rawLine, parsed: p,
@@ -98,52 +145,38 @@ export async function matchVariants(parsed: ParsedLine[]): Promise<{ matched: Ma
             categoryId: product.categoryId ?? undefined,
             currentPrice: Number(picked.price), supplierPrice: p.price,
           })
-          continue
+        } else {
+          unmatched.push(p)
         }
-        // Если вариант не найден по атрибутам — применить ко всем вариантам этого продукта
-        if (product.variants.length > 0) {
-          for (const variant of product.variants) {
-            matched.push({
-              rawLine: p.rawLine, parsed: p,
-              variantId: variant.id, variantSku: variant.sku,
-              productId: product.id, productName: product.name,
-              brand: product.brand ?? undefined,
-              categoryId: product.categoryId ?? undefined,
-              currentPrice: Number(variant.price), supplierPrice: p.price,
-            })
-          }
-          continue
-        }
+        continue
       }
     }
 
-    // 2. Стандартный поиск по имени (без алиаса)
+    // 2. Стандартный поиск по имени (без алиаса): contains — только предвыборка
+    // из БД, реальное условие — точное нормализованное равенство имени.
     const products = await prisma.product.findMany({
       where: { name: { contains: p.model, mode: 'insensitive' } },
       include: { variants: true },
     })
-    if (!products.length) { unmatched.push(p); continue }
+    const modelNorm = normalizeModelName(p.model)
+    const candidates = products
+      .filter((product) => normalizeModelName(product.name) === modelNorm)
+      .flatMap((product) => filterByAttrs(product.variants, p).map((variant) => ({ product, variant })))
 
-    let found: MatchedVariant | null = null
-    outer:
-    for (const product of products) {
-      for (const variant of product.variants) {
-        const attrs = variant.attributes as Record<string, string>
-        const vals = Object.values(attrs).map((v) => v.toLowerCase())
-        if (p.storage && !vals.some((v) => v.includes(p.storage!))) continue
-        if (p.color && !vals.some((v) => v.includes(p.color!.toLowerCase()))) continue
-        found = {
-          rawLine: p.rawLine, parsed: p,
-          variantId: variant.id, variantSku: variant.sku,
-          productId: product.id, productName: product.name,
-          brand: product.brand ?? undefined,
-          categoryId: product.categoryId ?? undefined,
-          currentPrice: Number(variant.price), supplierPrice: p.price,
-        }
-        break outer
-      }
+    const single = candidates.length === 1 ? candidates[0] : undefined
+    if (single) {
+      const { product, variant } = single
+      matched.push({
+        rawLine: p.rawLine, parsed: p,
+        variantId: variant.id, variantSku: variant.sku,
+        productId: product.id, productName: product.name,
+        brand: product.brand ?? undefined,
+        categoryId: product.categoryId ?? undefined,
+        currentPrice: Number(variant.price), supplierPrice: p.price,
+      })
+    } else {
+      unmatched.push(p)
     }
-    found ? matched.push(found) : unmatched.push(p)
   }
   return { matched, unmatched, ignored }
 }
