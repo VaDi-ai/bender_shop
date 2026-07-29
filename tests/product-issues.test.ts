@@ -22,7 +22,10 @@ const product = (over: Record<string, unknown> = {}) => ({
   category: { name: 'iPhone' }, variants: [variant()], ...over,
 })
 
-beforeEach(() => pp.findMany.mockReset())
+beforeEach(() => {
+  pp.findMany.mockReset()
+  pp.findMany.mockResolvedValue([])      // по умолчанию каталог пуст — тесты сами кладут нужное
+})
 
 describe('какие ошибки видит владелец', () => {
   it('здоровый товар ошибок не даёт', async () => {
