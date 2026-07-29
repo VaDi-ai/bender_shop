@@ -736,13 +736,58 @@ export function adminApiRouter(): Router {
     res.status(r.status).json(r.ok ? { ok: true, photoUrl: r.photoUrl, productPhotos: r.productPhotos, fullName: r.fullName } : { error: r.error })
   }))
 
+  // ── ПАРСЕР: что выучено, что предлагается, журнал обучения ────────────────
+  router.get('/parser/dictionary', safe(async (_req, res) => {
+    const { listDictionary, ripePatterns, learningLog } = await import('../lib/rule-learning')
+    const [rules, patterns, journal] = await Promise.all([listDictionary(), ripePatterns(), learningLog()])
+    res.json({ rules, patterns, journal })
+  }))
+
+  // Запись правила — owner: меняет поведение системы на весь каталог
+  router.post('/parser/learn', ownerOnly, safe(async (req, res) => {
+    const b = (req.body ?? {}) as Record<string, unknown>
+    const { learnRule } = await import('../lib/rule-learning')
+    const r = await learnRule(req.admin!.telegramId, {
+      attr: String(b.attr ?? ''), value: String(b.value ?? ''),
+      brand: b.brand ? String(b.brand) : null, country: b.country ? String(b.country) : null,
+    })
+    res.status(r.status).json(r.ok ? { ok: true, ...(r.data as object) } : { error: r.error })
+  }))
+
+  router.delete('/parser/rules/:kind/:id', ownerOnly, safe(async (req, res) => {
+    const id = parseInt(String(req.params.id), 10)
+    if (!Number.isInteger(id)) { res.status(422).json({ error: 'Неверный ID' }); return }
+    const { forgetRule } = await import('../lib/rule-learning')
+    const r = await forgetRule(req.admin!.telegramId, String(req.params.kind), id)
+    res.status(r.status).json(r.ok ? { ok: true, ...((r.data as object) ?? {}) } : { error: r.error })
+  }))
+
   // Ручная правка атрибутов предложения (owner+manager): override сильнее словаря
   router.put('/variants/:id/attributes', safe(async (req, res) => {
     const id = parseInt(String(req.params.id), 10)
     if (!Number.isInteger(id)) { res.status(422).json({ error: 'Неверный ID' }); return }
     const { setVariantAttributes } = await import('../lib/product-admin')
-    const r = await setVariantAttributes(req.admin!.telegramId, id, (req.body ?? {}) as Record<string, unknown>)
-    res.status(r.status).json(r.ok ? { ok: true, ...(r.data as object) } : { error: r.error })
+    const body = (req.body ?? {}) as Record<string, unknown>
+    const r = await setVariantAttributes(req.admin!.telegramId, id, body)
+    if (!r.ok) { res.status(r.status).json({ error: r.error }); return }
+
+    // Появился ли повторяющийся паттерн — покажем владельцу формулировку ДО
+    // записи. Само правило не пишется: только по нажатию «Запомнить».
+    let suggestion = null
+    try {
+      const { patternFor } = await import('../lib/rule-learning')
+      const v = await prisma.productVariant.findUnique({
+        where: { id }, select: { attributes: true, product: { select: { brand: true } } },
+      })
+      const attrs = (v?.attributes ?? {}) as Record<string, string>
+      for (const [attr, val] of Object.entries(body)) {
+        if (attr === 'attrOverrides' || !val) continue
+        const found = await patternFor(attr, v?.product.brand ?? null, attrs['Страна'] ?? null, String(val))
+        if (found) { suggestion = found; break }
+      }
+    } catch (e) { log.warn('pattern detect failed', { error: e instanceof Error ? e.message : String(e) }) }
+
+    res.json({ ok: true, ...(r.data as object), suggestion })
   }))
 
   router.put('/products/:id/description', safe(async (req, res) => {
