@@ -199,3 +199,95 @@ export async function sheetDescriptionWriteback(
 
 /** Тип писбэка фото прокидываем наружу, чтобы роут не импортировал два модуля. */
 export type { PhotoWritebackFn }
+
+// ─── Ошибки в товарах (шаг 2) ────────────────────────────────────────────────
+
+export type IssueKind = 'no_photo' | 'no_sim' | 'no_description' | 'no_stock' | 'bad_photo'
+
+export interface IssueRow { productId: number; name: string; category: string | null; detail: string }
+
+export interface IssuesView {
+  counts: Record<IssueKind, number>
+  groups: Array<{ kind: IssueKind; title: string; hint: string; count: number; rows: IssueRow[] }>
+  /** Сколько товаров вообще видит покупатель — знаменатель для честности */
+  visibleProducts: number
+}
+
+const ISSUE_TITLES: Record<IssueKind, [string, string]> = {
+  no_photo:       ['Без фото', 'в каталоге пустая карточка — покупатель проходит мимо'],
+  no_sim:         ['Без типа SIM', 'телефон на витрине, а какая SIM — непонятно'],
+  no_description: ['Без описания', 'нечего прочитать перед покупкой'],
+  no_stock:       ['Показывается, но купить нельзя', 'товар на витрине, а остатков нет'],
+  bad_photo:      ['Битая ссылка на фото', 'картинка не с нашего домена — у покупателя не откроется'],
+}
+
+/**
+ * Ошибки считаем ТОЛЬКО по тому, что видит покупатель: в каталоге 800+ скрытых
+ * дублей, и «проблемы» по ним утопили бы раздел. Скрытый товар — не ошибка,
+ * это решение владельца.
+ */
+export async function listProductIssues(limitPerKind = 20): Promise<IssuesView> {
+  const { isPhone } = await import('./sim-recalc')
+  const products = await prisma.product.findMany({
+    where: { isAvailable: true },
+    select: {
+      id: true, name: true, description: true, photoUrl: true, photos: true,
+      category: { select: { name: true } },
+      variants: { select: { id: true, inStock: true, quantity: true, attributes: true, photoUrls: true } },
+    },
+  })
+
+  const buckets: Record<IssueKind, IssueRow[]> = {
+    no_photo: [], no_sim: [], no_description: [], no_stock: [], bad_photo: [],
+  }
+  let visibleProducts = 0
+
+  for (const p of products) {
+    const live = p.variants.filter(v => v.inStock && v.quantity > 0)
+    const base = { productId: p.id, name: p.name, category: p.category?.name ?? null }
+
+    if (!live.length) {
+      // Товар помечен доступным, но купить нечего — витрина его и не покажет,
+      // зато владелец думает, что он продаётся.
+      buckets.no_stock.push({ ...base, detail: `${p.variants.length} ${p.variants.length === 1 ? 'предложение' : 'предложений'}, все с нулевым остатком` })
+      continue
+    }
+    visibleProducts++
+
+    const photos = [p.photoUrl, ...(p.photos ?? [])].filter(Boolean) as string[]
+    if (!photos.length) buckets.no_photo.push({ ...base, detail: 'ни у одного предложения нет фото' })
+    else {
+      const bad = photos.filter(u => !u.startsWith('/photos/') && !u.startsWith('https://'))
+      if (bad.length) buckets.bad_photo.push({ ...base, detail: bad[0]!.slice(0, 60) })
+    }
+
+    if (!p.description || !p.description.trim()) buckets.no_description.push({ ...base, detail: 'описание пустое' })
+
+    const noSim = live.filter(v => {
+      const attrs = (v.attributes ?? {}) as Record<string, string>
+      return isPhone({ id: v.id, attributes: attrs, product: { name: p.name, brand: null, category: p.category } }) && !attrs.SIM
+    })
+    if (noSim.length) {
+      buckets.no_sim.push({ ...base, detail: `${noSim.length} из ${live.length} предложений без типа SIM` })
+    }
+  }
+
+  const counts = Object.fromEntries(
+    (Object.keys(buckets) as IssueKind[]).map(k => [k, buckets[k].length]),
+  ) as Record<IssueKind, number>
+
+  return {
+    counts,
+    visibleProducts,
+    groups: (Object.keys(buckets) as IssueKind[])
+      .filter(k => buckets[k].length)
+      .sort((a, b) => buckets[b].length - buckets[a].length)
+      .map(kind => ({
+        kind,
+        title: ISSUE_TITLES[kind][0],
+        hint: ISSUE_TITLES[kind][1],
+        count: buckets[kind].length,
+        rows: buckets[kind].slice(0, limitPerKind),
+      })),
+  }
+}

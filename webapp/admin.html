@@ -285,6 +285,13 @@
       <h2>Товары</h2>
       <div class="sub">Карточки, фото, что показывать покупателю.</div>
 
+      <div class="cap">ЧТО ПОЧИНИТЬ</div>
+      <div class="card">
+        <h3>Ошибки в товарах <span class="chip c-off right" id="issuesChip">—</span></h3>
+        <div id="issuesBox" class="mt">Загрузка…</div>
+        <div class="hint">Считаем только то, что видит покупатель. Скрытые товары и дубли сюда не попадают — это ваше решение, а не ошибка.</div>
+      </div>
+
       <div class="cap">КАРТОЧКА ТОВАРА</div>
       <div class="card">
         <h3>Найти товар</h3>
@@ -531,7 +538,49 @@
       window.adminMe = me
       gate.classList.add('hidden')
       loadDashboard(); loadSyncRuns(); loadSuppliers(); loadBatches(); loadUnmatched(); loadMarkupRules()
-      loadSimQueue(); loadSimRules(); loadSimRecalc(); loadStorefront(); loadTeam(); loadPromotions(); loadInsights(); loadBroadcasts(); loadMaintenance()
+      loadSimQueue(); loadSimRules(); loadSimRecalc(); loadStorefront(); loadTeam(); loadIssues(); loadPromotions(); loadInsights(); loadBroadcasts(); loadMaintenance()
+    }
+
+    // ── ОШИБКИ В ТОВАРАХ: идём от проблемы к карточке ─────────────────────────
+    let issuesOpen = null
+
+    async function loadIssues() {
+      const r = await api('/products/issues').catch(() => null)
+      const el = document.getElementById('issuesBox')
+      if (!r || !r.ok) { el.textContent = 'Не удалось посчитать'; return }
+      const d = r.data
+      const total = d.groups.reduce((s, g) => s + g.count, 0)
+      document.getElementById('issuesChip').textContent = total ? `${total} ${plural(total, 'товар', 'товара', 'товаров')}` : 'всё в порядке'
+      if (!total) {
+        el.innerHTML = `<div class="empty">У всех ${d.visibleProducts} видимых товаров есть фото, описание и остатки 🎉</div>`
+        return
+      }
+      el.innerHTML = d.groups.map(g => `
+        <div class="sf-item">
+          <div class="sf-item-head"><div class="grow">
+            <div class="nm">${esc(g.title)}: <b>${g.count}</b></div>
+            <div class="mt">${esc(g.hint)}</div>
+          </div></div>
+          <div class="sf-item-actions">
+            <button class="btn b-gh sm" data-issue="${g.kind}">${issuesOpen === g.kind ? 'Свернуть' : 'Показать товары'}</button>
+          </div>
+          ${issuesOpen === g.kind ? g.rows.map(rw => `<div class="sf-item">
+            <div class="sf-item-head"><div class="grow">
+              <div class="nm">${esc(rw.name)}</div>
+              <div class="mt">${esc(rw.category || 'без категории')} · ${esc(rw.detail)}</div>
+            </div></div>
+            <div class="sf-item-actions"><button class="btn b-nt sm" data-issue-open="${rw.productId}">Открыть карточку</button></div>
+          </div>`).join('') + (g.count > g.rows.length ? `<div class="hint">Показаны первые ${g.rows.length} из ${g.count}</div>` : '') : ''}
+        </div>`).join('')
+
+      el.querySelectorAll('[data-issue]').forEach(b => b.addEventListener('click', () => {
+        issuesOpen = issuesOpen === b.dataset.issue ? null : b.dataset.issue
+        loadIssues()
+      }))
+      el.querySelectorAll('[data-issue-open]').forEach(b => b.addEventListener('click', () => {
+        openProductCard(b.dataset.issueOpen)
+        document.getElementById('pcCard').scrollIntoView({ behavior: 'smooth', block: 'start' })
+      }))
     }
 
     // ── ТОВАРЫ: карточка, фото (с записью в таблицу), описание, скрытие ───────
