@@ -48,11 +48,13 @@ export interface InheritedRow {
 }
 
 export interface RecalcPreview {
+  /** Поправлено руками — словарь их не трогает */
+  manual: InheritedRow[]
   semantic: RecalcRow[]
   added: RecalcRow[]
   canonical: RecalcRow[]
   inherited: InheritedRow[]
-  counts: { semantic: number; added: number; canonical: number; inherited: number }
+  counts: { semantic: number; added: number; canonical: number; inherited: number; manual: number }
   /** Разбивка ТОЛЬКО смен существующего значения — «что увидит покупатель». */
   byCountry: Record<string, number>
   /** Разбивка первичных проставлений — отдельно, чтобы не смешивать со сменами. */
@@ -93,6 +95,7 @@ export function isPhone(v: VariantRow, attrs: Record<string, string> = (v.attrib
 
 export function buildPreview(variants: VariantRow[], rules: SimRuleData[], aliases: AttrAliasData[]): RecalcPreview {
   const semantic: RecalcRow[] = []
+  const manual: InheritedRow[] = []
   const added: RecalcRow[] = []
   const canonical: RecalcRow[] = []
   const inherited: InheritedRow[] = []
@@ -105,6 +108,14 @@ export function buildPreview(variants: VariantRow[], rules: SimRuleData[], alias
     // Пересчёт игнорирует текущее значение (explicit не передаём) — считаем «как надо по словарю»
     const want = resolveSimType({ country: attrs['Страна'], brand: v.product.brand, names }, rules, aliases)
     if (want.reason === 'accessory') continue   // чехол/стекло «для iPhone 17» — не наш домен
+
+    // Ручная правка сильнее словаря: такие строки обновление не трогает
+    const ovr = (attrs as unknown as { attrOverrides?: Record<string, { value: string }> }).attrOverrides
+    if (ovr && ovr.SIM) {
+      manual.push({ variantId: v.id, fullName: attrs.fullName ?? v.product.name, country: attrs['Страна'] ?? null,
+        brand: v.product.brand ?? null, current: ovr.SIM.value })
+      continue
+    }
     const base = {
       variantId: v.id,
       fullName: attrs.fullName ?? v.product.name,
@@ -138,10 +149,10 @@ export function buildPreview(variants: VariantRow[], rules: SimRuleData[], alias
   }
 
   return {
-    semantic, added, canonical, inherited,
+    semantic, added, canonical, inherited, manual,
     counts: {
       semantic: semantic.length, added: added.length,
-      canonical: canonical.length, inherited: inherited.length,
+      canonical: canonical.length, inherited: inherited.length, manual: manual.length,
     },
     byCountry: tally(semantic),
     addedByCountry: tally(added),

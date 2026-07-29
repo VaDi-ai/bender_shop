@@ -736,6 +736,15 @@ export function adminApiRouter(): Router {
     res.status(r.status).json(r.ok ? { ok: true, photoUrl: r.photoUrl, productPhotos: r.productPhotos, fullName: r.fullName } : { error: r.error })
   }))
 
+  // Ручная правка атрибутов предложения (owner+manager): override сильнее словаря
+  router.put('/variants/:id/attributes', safe(async (req, res) => {
+    const id = parseInt(String(req.params.id), 10)
+    if (!Number.isInteger(id)) { res.status(422).json({ error: 'Неверный ID' }); return }
+    const { setVariantAttributes } = await import('../lib/product-admin')
+    const r = await setVariantAttributes(req.admin!.telegramId, id, (req.body ?? {}) as Record<string, unknown>)
+    res.status(r.status).json(r.ok ? { ok: true, ...(r.data as object) } : { error: r.error })
+  }))
+
   router.put('/products/:id/description', safe(async (req, res) => {
     const id = parseInt(String(req.params.id), 10)
     if (!Number.isInteger(id)) { res.status(422).json({ error: 'Неверный ID' }); return }

@@ -291,3 +291,70 @@ export async function listProductIssues(limitPerKind = 20): Promise<IssuesView> 
       })),
   }
 }
+
+
+// ─── Ручная правка атрибутов предложения (шаг 3) ─────────────────────────────
+
+/** Отметка «поправлено руками»: живёт в том же JSON, схему не меняем. */
+export interface AttrOverride { value: string; by: string; at: string }
+
+const SYSTEM_KEYS = new Set(['fullName', 'attrOverrides'])
+
+/**
+ * Правит атрибуты одного предложения и помечает их как override.
+ *
+ * Override всегда сильнее словаря: синк не пересчитывает такие ключи, а
+ * обновление по словарю их пропускает. Значение null снимает ручную правку —
+ * ключ возвращается под управление разбора.
+ */
+export async function setVariantAttributes(
+  actor: string,
+  variantId: number,
+  changes: Record<string, unknown>,
+): Promise<Outcome> {
+  const v = await prisma.productVariant.findUnique({
+    where: { id: variantId },
+    select: { id: true, attributes: true, productId: true },
+  })
+  if (!v) return bad(404, 'Предложение не найдено')
+
+  const entries = Object.entries(changes ?? {}).filter(([k]) => !SYSTEM_KEYS.has(k))
+  if (!entries.length) return bad(422, 'Нечего менять')
+  for (const [k, val] of entries) {
+    if (!k.trim() || k.length > 40) return bad(422, `Странное название атрибута: «${k.slice(0, 20)}»`)
+    if (val !== null && String(val).length > 100) return bad(422, `Значение «${k}» длиннее 100 символов`)
+  }
+
+  const attrs = { ...((v.attributes ?? {}) as Record<string, unknown>) }
+  const overrides = { ...((attrs.attrOverrides ?? {}) as Record<string, AttrOverride>) }
+  const before: Record<string, unknown> = {}
+  const at = new Date().toISOString()
+
+  for (const [key, raw] of entries) {
+    before[key] = attrs[key] ?? null
+    if (raw === null || String(raw).trim() === '') {
+      // снятие ручной правки: значение остаётся, но им снова управляет разбор
+      delete overrides[key]
+      if (raw === null) delete attrs[key]
+    } else {
+      const value = String(raw).trim()
+      attrs[key] = value
+      overrides[key] = { value, by: actor, at }
+    }
+  }
+  attrs.attrOverrides = overrides
+
+  await prisma.productVariant.update({ where: { id: variantId }, data: { attributes: attrs as object } })
+  void logAdminAction({
+    adminTelegramId: actor, action: 'variant_attrs', entity: 'ProductVariant', entityId: variantId,
+    before, after: { ...Object.fromEntries(entries.map(([k]) => [k, attrs[k] ?? null])), overrides: Object.keys(overrides) },
+  })
+  log.info('Variant attributes edited', { variantId, keys: entries.map(([k]) => k) })
+  return { ok: true, status: 200, data: { attributes: attrs, overrides: Object.keys(overrides) } }
+}
+
+/** Ключи, которые владелец поправил руками — их не трогают ни синк, ни словарь. */
+export function overriddenKeys(attributes: unknown): string[] {
+  const o = ((attributes ?? {}) as Record<string, unknown>).attrOverrides
+  return o && typeof o === 'object' ? Object.keys(o as object) : []
+}

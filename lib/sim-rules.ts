@@ -172,8 +172,20 @@ export function attributesForExistingVariant(
   aliases: AttrAliasData[],
 ): Record<string, string> {
   const out = { ...newAttrs }
+  // Ручная правка владельца сильнее любого разбора: ключи с отметкой
+  // attrOverrides возвращаем как есть и словарём не пересчитываем.
+  const overrides = ((existingAttributes ?? {}) as Record<string, unknown>).attrOverrides as
+    Record<string, { value: string }> | undefined
+  if (overrides && typeof overrides === 'object') {
+    out.attrOverrides = overrides as unknown as string
+    for (const [key, ov] of Object.entries(overrides)) {
+      if (ov && typeof ov.value === 'string') out[key] = ov.value
+    }
+  }
   const cur = (existingAttributes as Record<string, unknown> | null)?.['SIM']
-  if (typeof cur === 'string' && cur.trim()) {
+  if (overrides?.SIM) {
+    // SIM поправлен руками — оставляем ровно то, что сказал владелец
+  } else if (typeof cur === 'string' && cur.trim()) {
     out.SIM = canonicalizeSim(cur, aliases) ?? cur
   } else {
     delete out.SIM
