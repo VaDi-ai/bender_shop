@@ -1529,6 +1529,7 @@
     let heroSlides  = []
     let sliderIdx   = 0
     let sliderTimer = null
+    let sliderBound = false   // слушатели слайдера вешаются один раз
 
     // Card quick-select state: productId → {attrKey: selectedVal}
     const cardSelectedAttrs = new Map()
@@ -1858,11 +1859,26 @@
         heroSlides = await res.json()
       } catch { heroSlides = [] }
 
+      // Перерисовка «с нуля»: функцию зовут повторно (проверка версии кэша идёт
+      // каждые 30 с и после «Обновить сайт»), а раньше слайды и точки просто
+      // ДОБАВЛЯЛИСЬ — от одного баннера в БД на витрине появлялись две точки и
+      // два слайда, а таймеры автопрокрутки копились.
+      clearInterval(sliderTimer); sliderTimer = null
+      sliderIdx = 0
+      sliderEl.querySelectorAll('.hero-slide, .hero-slider-fallback').forEach(el => el.remove())
+      dotsEl.innerHTML = ''
+      navEl.classList.add('hidden')
+
       if (!heroSlides.length) {
+        dotsEl.style.display = 'none'
         sliderEl.insertAdjacentHTML('afterbegin',
           `<div class="hero-slider-fallback"><div class="hero-slider-fallback-text">BENDER <span>SHOP</span></div></div>`)
         return
       }
+
+      // Одна точка ни о чём не говорит — показываем пагинацию только когда
+      // баннеров правда несколько (как уже сделано для стрелок).
+      dotsEl.style.display = heroSlides.length > 1 ? '' : 'none'
 
       const fadeEl = sliderEl.querySelector('.slider-bottom-fade')
       heroSlides.forEach((s, i) => {
@@ -1889,15 +1905,22 @@
       })
 
       if (heroSlides.length > 1) { navEl.classList.remove('hidden'); startSliderAuto() }
-      prevBtn.addEventListener('click', () => manualGoToSlide((sliderIdx - 1 + heroSlides.length) % heroSlides.length))
-      nextBtn.addEventListener('click', () => manualGoToSlide((sliderIdx + 1) % heroSlides.length))
 
-      let touchStartX = 0
-      sliderEl.addEventListener('touchstart', e => { touchStartX = e.touches[0].clientX }, { passive: true })
-      sliderEl.addEventListener('touchend', e => {
-        const dx = e.changedTouches[0].clientX - touchStartX
-        if (Math.abs(dx) > 50) manualGoToSlide(dx < 0 ? (sliderIdx + 1) % heroSlides.length : (sliderIdx - 1 + heroSlides.length) % heroSlides.length)
-      }, { passive: true })
+      // Слушатели — один раз на страницу: они читают актуальные heroSlides,
+      // а при перерисовке раньше вешались повторно (клик листал через раз).
+      if (!sliderBound) {
+        sliderBound = true
+        prevBtn.addEventListener('click', () => manualGoToSlide((sliderIdx - 1 + heroSlides.length) % heroSlides.length))
+        nextBtn.addEventListener('click', () => manualGoToSlide((sliderIdx + 1) % heroSlides.length))
+
+        let touchStartX = 0
+        sliderEl.addEventListener('touchstart', e => { touchStartX = e.touches[0].clientX }, { passive: true })
+        sliderEl.addEventListener('touchend', e => {
+          const dx = e.changedTouches[0].clientX - touchStartX
+          if (!heroSlides.length) return
+          if (Math.abs(dx) > 50) manualGoToSlide(dx < 0 ? (sliderIdx + 1) % heroSlides.length : (sliderIdx - 1 + heroSlides.length) % heroSlides.length)
+        }, { passive: true })
+      }
     }
 
     function goToSlide(idx) {
