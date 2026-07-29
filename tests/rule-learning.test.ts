@@ -107,6 +107,26 @@ describe('детектор повторов', () => {
     expect(await ripePatterns()).toEqual([])
   })
 
+  it('правки не-SIM атрибутов предложения НЕ дают — даже если их много', async () => {
+    audit.findMany.mockResolvedValue([
+      edit(1, 'Цвет', 'White'), edit(2, 'Цвет', 'White'), edit(3, 'Цвет', 'White'), edit(4, 'Цвет', 'White'),
+    ])
+    pv.findMany.mockResolvedValue([1, 2, 3, 4].map(i => variant(i, 'Redmi', 'Индия')))
+    expect(await detectPatterns()).toEqual([])
+    expect(await ripePatterns()).toEqual([])
+  })
+
+  it('в смеси правок остаётся только SIM-паттерн', async () => {
+    audit.findMany.mockResolvedValue([
+      edit(1, 'SIM', '2 SIM'), edit(2, 'SIM', '2 SIM'), edit(3, 'SIM', '2 SIM'),
+      edit(4, 'Цвет', 'White'), edit(5, 'Цвет', 'White'), edit(6, 'Цвет', 'White'),
+    ])
+    pv.findMany.mockResolvedValue([1, 2, 3, 4, 5, 6].map(i => variant(i, 'Redmi', 'Индия')))
+    const ripe = await ripePatterns()
+    expect(ripe).toHaveLength(1)
+    expect(ripe[0].attr).toBe('SIM')
+  })
+
   it('пустой журнал — пустой результат, без похода в каталог', async () => {
     audit.findMany.mockResolvedValue([])
     expect(await detectPatterns()).toEqual([])
@@ -122,10 +142,11 @@ describe('запись правила — только явная и тольк�
     expect(alias.upsert).not.toHaveBeenCalled()
   })
 
-  it('прочий атрибут пишется как AttrValueAlias, тоже learned', async () => {
-    const r = await learnRule(ACTOR, { attr: 'Цвет', brand: 'Redmi', country: null, value: 'Полночный' })
-    expect(r.ok).toBe(true)
-    expect(alias.upsert.mock.calls[0][0].create).toMatchObject({ attrKey: 'Цвет', source: 'learned' })
+  it('не-SIM атрибут правилом не становится — честный отказ вместо пустышки', async () => {
+    const r = await learnRule(ACTOR, { attr: 'Цвет', brand: 'Redmi', country: 'Индия', value: 'White' })
+    expect(r).toMatchObject({ ok: false, status: 422 })
+    expect(r.error).toContain('только тип SIM')
+    expect(alias.upsert).not.toHaveBeenCalled()
     expect(sim.upsert).not.toHaveBeenCalled()
   })
 

@@ -15,9 +15,16 @@
  *     текст строки;
  *   • предложение появляется только при ≥3 одинаковых правках.
  *
- * Пространство гипотез узкое — ровно три формы правил, все уже есть в схеме:
- * SimRule (атрибут SIM), AttrValueAlias (прочие значения), PriceAlias
- * (связывание прайса, живёт отдельно и работает как раньше).
+ * Обобщаем ТОЛЬКО тип SIM (SimRule). Присвоение любого другого атрибута по
+ * бренду и стране существующими формами не выразимо: AttrValueAlias — это
+ * нормализация НАПИСАНИЯ значения при разборе, общая на весь каталог, и
+ * бренда со страной он не знает вовсе. Показывать владельцу формулировку
+ * «Все Redmi · Индия → Цвет: White» и записывать при этом общекаталожный
+ * алиас значило бы врать: система такое правило не выполняет. Пока формы для
+ * этого нет — предложения по не-SIM атрибутам не даём совсем.
+ *
+ * PriceAlias (связывание строки прайса с товаром) живёт отдельно и работает
+ * как раньше.
  */
 import { prisma } from './prisma'
 import { log } from './logger'
@@ -25,6 +32,8 @@ import { logAdminAction } from './audit'
 import { norm } from './sim-rules'
 
 export const REPEATS_REQUIRED = 3
+/** Единственный атрибут, который умеем обобщать в правило. */
+export const LEARNABLE_ATTR = 'SIM'
 const WINDOW_DAYS = 30
 
 export interface Outcome<T = unknown> { ok: boolean; status: number; error?: string; data?: T }
@@ -56,9 +65,7 @@ export function rulePhrase(p: Omit<Pattern, 'count' | 'phrase' | 'conflicting' |
   // Без склонений: «из Индия» читается как ошибка, а падежи всех стран мы не
   // угадаем — держим нейтральную форму «бренд · страна».
   const who = [p.brand, p.country].filter(Boolean).join(' · ')
-  return p.attr === 'SIM'
-    ? `Все ${who || 'товары'} → SIM: ${p.value}`
-    : `Все ${who || 'товары'} → ${p.attr}: ${p.value}`
+  return `Все ${who || 'товары'} → ${p.attr}: ${p.value}`
 }
 
 interface RawEdit { attr: string; value: string; variantId: number }
@@ -80,6 +87,8 @@ async function recentEdits(): Promise<RawEdit[]> {
     const after = (r.after ?? {}) as Record<string, unknown>
     for (const [attr, value] of Object.entries(after)) {
       if (attr === 'overrides' || value === null || value === undefined) continue
+      // Обобщаем только SIM — остальное правилом не выражается (см. шапку)
+      if (attr !== LEARNABLE_ATTR) continue
       const v = String(value).trim()
       if (!v) continue
       out.push({ attr, value: v, variantId })
@@ -119,10 +128,9 @@ export async function detectPatterns(): Promise<Pattern[]> {
     groups.set(k, g)
   }
 
-  const [simRules, aliases] = await Promise.all([
-    prisma.simRule.findMany({ select: { countryNorm: true, brandNorm: true, modelMatch: true, simType: true } }),
-    prisma.attrValueAlias.findMany({ select: { attrKey: true, rawNorm: true, canonical: true } }),
-  ])
+  const simRules = await prisma.simRule.findMany({
+    select: { countryNorm: true, brandNorm: true, modelMatch: true, simType: true },
+  })
 
   const out: Pattern[] = []
   for (const g of groups.values()) {
@@ -132,13 +140,8 @@ export async function detectPatterns(): Promise<Pattern[]> {
     const key = { ...g.key, value: topValue }
 
     let conflictsWithExisting: string | null = null
-    if (key.attr === 'SIM') {
-      const hit = simRules.find(r => r.modelMatch === '' && r.countryNorm === norm(key.country) && (r.brandNorm === '' || r.brandNorm === norm(key.brand)))
-      if (hit && hit.simType !== topValue) conflictsWithExisting = hit.simType
-    } else {
-      const hit = aliases.find(a => a.attrKey === key.attr && a.rawNorm === norm(topValue))
-      if (hit && hit.canonical !== topValue) conflictsWithExisting = hit.canonical
-    }
+    const hit = simRules.find(r => r.modelMatch === '' && r.countryNorm === norm(key.country) && (r.brandNorm === '' || r.brandNorm === norm(key.brand)))
+    if (hit && hit.simType !== topValue) conflictsWithExisting = hit.simType
 
     out.push({ ...key, count, conflicting, conflictsWithExisting, phrase: rulePhrase(key) })
   }
@@ -164,53 +167,41 @@ export async function patternFor(attr: string, brand: string | null, country: st
 // ─── Запись правила ──────────────────────────────────────────────────────────
 
 /**
- * Пишет правило в словарь. Только три формы; всё остальное остаётся ручной
- * правкой конкретной строки. Вызывается ТОЛЬКО по явному согласию владельца.
+ * Пишет правило в словарь — сейчас это только SimRule. Всё остальное остаётся
+ * ручной правкой конкретной строки. Вызывается ТОЛЬКО по явному согласию.
  */
 export async function learnRule(actor: string, p: PatternKey): Promise<Outcome> {
   const attr = String(p.attr ?? '').trim()
   const value = String(p.value ?? '').trim()
   if (!attr || !value) return bad(422, 'Не понял, какое правило записывать')
+  if (attr !== LEARNABLE_ATTR) {
+    // Честный отказ вместо правила-пустышки: присвоение атрибута по бренду и
+    // стране нашими формами не выражается, а общекаталожный алиас — это про
+    // написание значения, а не про «у этого бренда всегда так».
+    return bad(422, `Пока умеем обобщать только тип SIM. «${attr}» останется ручной правкой этой строки — на других товарах она ничего не изменит`)
+  }
   if (!p.brand && !p.country) return bad(422, 'Правило не к чему привязать — нужен бренд или страна')
 
-  if (attr === 'SIM') {
-    const key = {
-      countryNorm: norm(p.country), brandNorm: norm(p.brand), modelMatch: '', modelGenFrom: 0,
-    }
-    const existing = await prisma.simRule.findUnique({
-      where: { countryNorm_brandNorm_modelMatch_modelGenFrom: key },
-    })
-    if (existing && existing.simType !== value) {
-      return bad(409, `Правило для этой связки уже есть: ${existing.simType}. Сначала забудьте старое`)
-    }
-    const rule = await prisma.simRule.upsert({
-      where: { countryNorm_brandNorm_modelMatch_modelGenFrom: key },
-      update: { simType: value, source: 'learned', note: 'выучено из правок владельца' },
-      create: { ...key, country: p.country, brand: p.brand, simType: value, source: 'learned', note: 'выучено из правок владельца' },
-    })
-    void logAdminAction({
-      adminTelegramId: actor, action: 'rule_learned', entity: 'SimRule', entityId: rule.id,
-      after: { attr, brand: p.brand, country: p.country, value, phrase: rulePhrase(p) },
-    })
-    log.info('Rule learned from edits', { kind: 'SimRule', id: rule.id })
-    return { ok: true, status: 201, data: { kind: 'SimRule', id: rule.id, phrase: rulePhrase(p) } }
+  const key = {
+    countryNorm: norm(p.country), brandNorm: norm(p.brand), modelMatch: '', modelGenFrom: 0,
   }
-
-  // Прочие атрибуты обобщаются только как канон значения
-  const where = { attrKey_rawNorm: { attrKey: attr, rawNorm: norm(value) } }
-  const existing = await prisma.attrValueAlias.findUnique({ where })
-  if (existing && existing.canonical !== value) {
-    return bad(409, `Для «${value}» уже задан канон «${existing.canonical}». Сначала забудьте старое`)
+  const existing = await prisma.simRule.findUnique({
+    where: { countryNorm_brandNorm_modelMatch_modelGenFrom: key },
+  })
+  if (existing && existing.simType !== value) {
+    return bad(409, `Правило для этой связки уже есть: ${existing.simType}. Сначала забудьте старое`)
   }
-  const alias = await prisma.attrValueAlias.upsert({
-    where, update: { canonical: value, source: 'learned' },
-    create: { attrKey: attr, rawNorm: norm(value), canonical: value, source: 'learned' },
+  const rule = await prisma.simRule.upsert({
+    where: { countryNorm_brandNorm_modelMatch_modelGenFrom: key },
+    update: { simType: value, source: 'learned', note: 'выучено из правок владельца' },
+    create: { ...key, country: p.country, brand: p.brand, simType: value, source: 'learned', note: 'выучено из правок владельца' },
   })
   void logAdminAction({
-    adminTelegramId: actor, action: 'rule_learned', entity: 'AttrValueAlias', entityId: alias.id,
-    after: { attr, value, phrase: rulePhrase(p) },
+    adminTelegramId: actor, action: 'rule_learned', entity: 'SimRule', entityId: rule.id,
+    after: { attr, brand: p.brand, country: p.country, value, phrase: rulePhrase(p) },
   })
-  return { ok: true, status: 201, data: { kind: 'AttrValueAlias', id: alias.id, phrase: rulePhrase(p) } }
+  log.info('Rule learned from edits', { kind: 'SimRule', id: rule.id })
+  return { ok: true, status: 201, data: { kind: 'SimRule', id: rule.id, phrase: rulePhrase(p) } }
 }
 
 // ─── Витрина словаря ─────────────────────────────────────────────────────────
