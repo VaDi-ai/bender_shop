@@ -672,7 +672,7 @@
             ${sfThumb(o.photoUrl)}
             <div class="grow">
               <div class="nm">${esc(Object.values(o.attrs).join(' · ') || o.fullName)}</div>
-              <div class="mt">${o.sim ? esc(o.sim) + ' · ' : ''}${fmt(o.price)} ₽ · ${o.quantity} шт</div>
+              <div class="mt">${fmt(o.price)} ₽ · ${o.quantity} шт</div>
             </div>
             <span class="chip ${o.visible ? 'c-ok' : 'c-off'}">${o.visible ? 'в наличии' : 'нет'}</span>
           </div>

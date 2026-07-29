@@ -373,7 +373,11 @@ async function launchPromotion(ctx: Context, userId: number, withNotification: b
       filterValue: state.filterValue,
       startsAt: state.startsAt ?? null,
       endsAt: state.endsAt ?? null,
-      isActive: true,
+      // Черновик: активной акцию делает applyPromotion после того, как
+      // запишет снимки старых цен. Раньше здесь стояло true — и applyPromotion
+      // падал на собственном гейте «Акция уже активна» ДО записи снимков,
+      // оставляя акцию-призрак: помечена идущей, снимков нет, скидки нет.
+      isActive: false,
     },
   })
 
@@ -383,7 +387,11 @@ async function launchPromotion(ctx: Context, userId: number, withNotification: b
   } catch (err) {
     // Лок синка занят: цены НЕ тронуты. Говорим человеческим текстом и не падаем.
     if (err instanceof SyncLockBusy) {
-      await ctx.reply(`⏳ ${SYNC_LOCK_BUSY_MESSAGE}\n\nАкция «${state.name}» сохранена, цены пока не менялись — запустите её ещё раз через минуту.`)
+      await ctx.reply(
+        `⏳ ${SYNC_LOCK_BUSY_MESSAGE}\n\n` +
+        `Акция «${state.name}» сохранена черновиком, цены не менялись. ` +
+        `Запустить её можно в веб-админке: «Ещё» → «Акции» → «Запустить».`,
+      )
       return
     }
     throw err

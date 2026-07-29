@@ -65,6 +65,35 @@ describe.skipIf(!RUN)('акции под локом синка', () => {
 
   const priceOf = async () => Number((await prisma.productVariant.findUnique({ where: { id: variantId } })).price)
 
+  it('черновик → applyPromotion сам делает акцию активной (путь бота)', async () => {
+    // Бот создаёт акцию черновиком: активной её делает applyPromotion ПОСЛЕ
+    // записи снимков. Если создать сразу активной, гейт «уже активна» рубит
+    // запуск до снимков — так и появлялся призрак.
+    const before = await prisma.promotion.findUnique({ where: { id: promoId } })
+    expect(before.isActive).toBe(false)
+
+    expect(await applyPromotion(promoId)).toBe(1)
+    const after = await prisma.promotion.findUnique({ where: { id: promoId } })
+    expect(after.isActive).toBe(true)
+    expect(await prisma.promotionPrice.count({ where: { promotionId: promoId } })).toBe(1)
+
+    // повторный запуск уже активной — тот самый гейт
+    await expect(applyPromotion(promoId)).rejects.toThrow('уже активна')
+  })
+
+  it('лок занят при создании: акция остаётся черновиком и повтор её поднимает', async () => {
+    await prisma.$transaction(async (tx: any) => {
+      await tx.$queryRaw`SELECT pg_try_advisory_xact_lock(73001) as "l"`
+      await expect(applyPromotion(promoId)).rejects.toBeInstanceOf(SyncLockBusy)
+    })
+    const stuck = await prisma.promotion.findUnique({ where: { id: promoId } })
+    expect(stuck.isActive).toBe(false)                       // черновик, не призрак
+    expect(await prisma.promotionPrice.count()).toBe(0)
+
+    expect(await applyPromotion(promoId)).toBe(1)            // повтор реально работает
+    expect((await prisma.promotion.findUnique({ where: { id: promoId } })).isActive).toBe(true)
+  })
+
   it('лок свободен: скидка применяется и снимается как раньше', async () => {
     expect(await applyPromotion(promoId)).toBe(1)
     expect(await priceOf()).toBe(90000)
