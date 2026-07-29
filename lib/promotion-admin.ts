@@ -16,6 +16,7 @@ import { logAdminAction } from './audit'
 import { logSecurityEvent } from './security-log'
 import { roundPrice } from './currency'
 import { findVariantsByFilter, applyPromotion, cancelPromotion, filterLabel } from './promotions'
+import { SyncLockBusy, SYNC_LOCK_BUSY_MESSAGE } from './sync-lock'
 
 export type Discount = 'percent' | 'fixed'
 export type Filter = 'category' | 'brand' | 'products' | 'attribute'
@@ -168,6 +169,7 @@ export async function launchPromotion(actor: string, id: number): Promise<Outcom
   try {
     count = await applyPromotion(id)
   } catch (e) {
+    if (e instanceof SyncLockBusy) return bad(409, SYNC_LOCK_BUSY_MESSAGE)
     const msg = e instanceof Error ? e.message : String(e)
     log.error('Promotion launch failed', { id, error: msg })
     return bad(409, msg.includes('параллельно') ? 'Акцию только что меняли — откройте заново и повторите' : 'Не получилось запустить акцию')
@@ -190,7 +192,13 @@ export async function stopPromotion(actor: string, id: number): Promise<Outcome>
   if (!promo.isActive) return bad(409, 'Акция и так не идёт')
 
   const restored = promo._count.prices
-  await cancelPromotion(id)
+  try {
+    await cancelPromotion(id)
+  } catch (e) {
+    if (e instanceof SyncLockBusy) return bad(409, SYNC_LOCK_BUSY_MESSAGE)
+    log.error('Promotion stop failed', { id, error: e instanceof Error ? e.message : String(e) })
+    return bad(409, 'Не получилось остановить акцию — попробуйте ещё раз')
+  }
   void logAdminAction({
     adminTelegramId: actor, action: 'promotion_cancel', entity: 'Promotion', entityId: id,
     before: { isActive: true, variants: restored }, after: { isActive: false },
@@ -203,13 +211,28 @@ export async function stopPromotion(actor: string, id: number): Promise<Outcome>
 export async function stopAllPromotions(actor: string): Promise<Outcome> {
   const active = await prisma.promotion.findMany({ where: { isActive: true }, select: { id: true, name: true } })
   if (!active.length) return { ok: true, status: 200, data: { stopped: 0 } }
-  for (const p of active) await cancelPromotion(p.id)
+
+  let stopped = 0
+  for (const p of active) {
+    try {
+      await cancelPromotion(p.id)
+      stopped++
+    } catch (e) {
+      if (e instanceof SyncLockBusy) {
+        // Часть акций уже остановлена — говорим об этом честно, а не «всё готово»
+        return bad(409, stopped
+          ? `Остановлено ${stopped} из ${active.length}, дальше помешала синхронизация с таблицей — повторите через минуту`
+          : SYNC_LOCK_BUSY_MESSAGE)
+      }
+      throw e
+    }
+  }
   void logAdminAction({
     adminTelegramId: actor, action: 'promotion_cancel_all', entity: 'Promotion',
     before: { active: active.map(a => a.name) }, after: { active: [] },
   })
-  void logSecurityEvent('promotion_cancelled', { all: true, count: active.length, via: 'web' }, actor)
-  return { ok: true, status: 200, data: { stopped: active.length } }
+  void logSecurityEvent('promotion_cancelled', { all: true, count: stopped, via: 'web' }, actor)
+  return { ok: true, status: 200, data: { stopped } }
 }
 
 /** Черновик можно удалить: цен он не двигал. Идущую акцию — только остановить. */

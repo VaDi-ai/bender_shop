@@ -5,10 +5,19 @@
  *   applyPromotion  — применить скидку к вариантам, сохранить оригинальные цены
  *   cancelPromotion — откатить цены, деактивировать акцию
  *   findVariantsByFilter — выборка вариантов по фильтру акции
+ *
+ * Запись цен идёт под общим advisory-локом синка (lib/sync-lock.ts, ключ
+ * 73001) — тем же, что держат применение цен и обновление SIM. Без него
+ * параллельный часовой синк мог затереть скидку прямо в момент её применения
+ * (или восстановленную цену в момент отмены): заморозка активной акции
+ * защищает steady-state, но не сам момент apply/cancel. Лок занят → наверх
+ * летит SyncLockBusy, вызывающая сторона отвечает человеческим «идёт
+ * синхронизация, повторите» и НИЧЕГО не пишет.
  */
 
 import { Decimal } from '@prisma/client/runtime/client'
 import { prisma } from './prisma'
+import { withSyncLock } from './sync-lock'
 import { roundPrice } from './currency'
 import { DiscountType, FilterType } from '../generated/prisma/client'
 import log from './logger'
@@ -69,6 +78,9 @@ export async function findVariantsByFilter(
   return []
 }
 
+/** Акция может задевать до 1000 строк — держим лок дольше ценового батча. */
+const PROMO_LOCK_TIMEOUT_MS = 60_000
+
 // ─── Применение акции ─────────────────────────────────────────────────────────
 
 export async function applyPromotion(promotionId: number): Promise<number> {
@@ -81,7 +93,7 @@ export async function applyPromotion(promotionId: number): Promise<number> {
 
   let variantCount = 0
 
-  await prisma.$transaction(async (tx) => {
+  await withSyncLock(async (tx) => {
     // Optimistic lock: verify nobody modified the promotion concurrently
     const current = await tx.promotion.findUniqueOrThrow({ where: { id: promotionId } })
     if (current.updatedAt.getTime() !== snapshotUpdatedAt.getTime()) {
@@ -125,7 +137,7 @@ export async function applyPromotion(promotionId: number): Promise<number> {
     })
 
     variantCount = variants.length
-  })
+  }, PROMO_LOCK_TIMEOUT_MS)
 
   return variantCount
 }
@@ -133,7 +145,7 @@ export async function applyPromotion(promotionId: number): Promise<number> {
 // ─── Отмена акции ─────────────────────────────────────────────────────────────
 
 export async function cancelPromotion(promotionId: number): Promise<void> {
-  await prisma.$transaction(async (tx) => {
+  await withSyncLock(async (tx) => {
     const prices = await tx.promotionPrice.findMany({ where: { promotionId } })
 
     // Delete snapshot rows FIRST — ensures no partial state where prices are restored
@@ -152,7 +164,7 @@ export async function cancelPromotion(promotionId: number): Promise<void> {
       where: { id: promotionId },
       data: { isActive: false },
     })
-  })
+  }, PROMO_LOCK_TIMEOUT_MS)
 }
 
 // ─── Строковое описание фильтра ───────────────────────────────────────────────

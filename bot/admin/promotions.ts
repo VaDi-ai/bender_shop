@@ -18,6 +18,7 @@ import { Context, Markup, Telegraf } from 'telegraf'
 import { prisma } from '../../lib/prisma'
 import { BroadcastType, DiscountType, FilterType } from '../../generated/prisma/client'
 import { applyPromotion, cancelPromotion, findVariantsByFilter, filterLabel } from '../../lib/promotions'
+import { SyncLockBusy, SYNC_LOCK_BUSY_MESSAGE } from '../../lib/sync-lock'
 import { getUserId } from '../helpers'
 import { logSecurityEvent } from '../../lib/security-log'
 
@@ -376,7 +377,17 @@ async function launchPromotion(ctx: Context, userId: number, withNotification: b
     },
   })
 
-  const varCount = await applyPromotion(promo.id)
+  let varCount: number
+  try {
+    varCount = await applyPromotion(promo.id)
+  } catch (err) {
+    // Лок синка занят: цены НЕ тронуты. Говорим человеческим текстом и не падаем.
+    if (err instanceof SyncLockBusy) {
+      await ctx.reply(`⏳ ${SYNC_LOCK_BUSY_MESSAGE}\n\nАкция «${state.name}» сохранена, цены пока не менялись — запустите её ещё раз через минуту.`)
+      return
+    }
+    throw err
+  }
   try { await logSecurityEvent('promotion_created', { promoId: promo.id, name: state.name, discountType: state.discountType, discountValue: state.discountValue, varCount, adminId: userId }, userId) } catch { /* logging failure should not break the operation */ }
 
   if (withNotification) {
@@ -762,7 +773,14 @@ export function setupPromotionsHandlers(bot: Telegraf): void {
     const promo = await prisma.promotion.findUnique({ where: { id: promoId } })
     if (!promo) return await ctx.reply('Акция не найдена.')
 
-    await cancelPromotion(promoId)
+    try {
+      await cancelPromotion(promoId)
+    } catch (err) {
+      if (err instanceof SyncLockBusy) {
+        return await ctx.reply(`⏳ ${SYNC_LOCK_BUSY_MESSAGE}\n\nЦены не тронуты — завершите акцию ещё раз через минуту.`)
+      }
+      throw err
+    }
     try { await logSecurityEvent('promotion_cancelled', { promoId, name: promo.name, adminId: getUserId(ctx) }, getUserId(ctx)) } catch { /* logging failure should not break the operation */ }
 
     return await ctx.reply(
