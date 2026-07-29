@@ -105,6 +105,7 @@ import {
 } from './admin/suppliers'
 import { handleSupplierMessage, requestPriceFromAllSuppliers } from '../webhooks/supplier'
 import { cancelPromotion } from '../lib/promotions'
+import { SyncLockBusy } from '../lib/sync-lock'
 import { logSecurityEvent, initSecurityAlerts } from '../lib/security-log'
 import { seedAdminUsers } from '../lib/admin-users'
 import { seedSimDictionary } from '../lib/sim-rules'
@@ -2008,7 +2009,16 @@ setInterval(async () => {
       where: { isActive: true, endsAt: { lt: new Date() } },
     })
     for (const promo of expired) {
-      await cancelPromotion(promo.id)
+      try {
+        await cancelPromotion(promo.id)
+      } catch (err) {
+        // Идёт синк — цены не тронуты. Не шумим админам: попробуем через 10 минут.
+        if (err instanceof SyncLockBusy) {
+          log.info('Promotion auto-cancel postponed: sync lock busy', { promoId: promo.id })
+          continue
+        }
+        throw err
+      }
       for (const adminId of ADMIN_IDS) {
         try {
           await bot.telegram.sendMessage(
