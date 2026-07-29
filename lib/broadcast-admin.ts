@@ -31,7 +31,10 @@ export interface Outcome<T = unknown> {
 const bad = (status: number, error: string): Outcome => ({ ok: false, status, error })
 
 export interface BroadcastPreview {
+  /** Кому бот физически может написать */
   recipients: number
+  /** Всего клиентов в базе — чтобы разрыв «14 из 2943» был объяснён, а не пугал */
+  totalClients: number
   /** Примеры получателей — чтобы владелец видел, что это живые люди, а не «all» */
   sample: string[]
   text: string
@@ -50,24 +53,28 @@ function cleanText(raw: unknown): string {
   return String(raw ?? '').replace(/\u0000/g, '').trim()
 }
 
-export async function previewBroadcast(raw: unknown): Promise<Outcome<BroadcastPreview>> {
+/**
+ * Кому уйдёт. Текст здесь НЕ обязателен: владелец хочет увидеть охват до
+ * того, как напишет сообщение. Текст проверяется только на отправке.
+ */
+export async function previewBroadcast(raw?: unknown): Promise<Outcome<BroadcastPreview>> {
   const text = cleanText(raw)
-  if (!text) return bad(422, 'Текст рассылки пустой — покупатели получат пустое сообщение') as Outcome<BroadcastPreview>
-  if (text.length > BROADCAST_MAX) return bad(422, `Текст длиннее ${BROADCAST_MAX} символов — Telegram столько не примет`) as Outcome<BroadcastPreview>
 
-  const [ids, sampleRows, last] = await Promise.all([
+  const [ids, sampleRows, last, totalClients] = await Promise.all([
     telegramRecipients(),
     prisma.client.findMany({
       where: { source: 'telegram', externalId: { not: null } },
       select: { name: true, telegramUsername: true }, take: 5, orderBy: { lastPurchaseDate: 'desc' },
     }),
     prisma.broadcastLog.findFirst({ orderBy: { id: 'desc' }, select: { createdAt: true, target: true, totalSent: true, totalFailed: true } }),
+    prisma.client.count(),
   ])
 
   return {
     ok: true, status: 200,
     data: {
       recipients: ids.length,
+      totalClients,
       // username в базе иногда уже с «@» — не плодим «@@»
       sample: sampleRows.map(r => r.telegramUsername ? '@' + r.telegramUsername.replace(/^@+/, '') : r.name),
       text,

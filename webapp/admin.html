@@ -370,11 +370,13 @@
         <div id="bcForm" style="display:none">
           <textarea class="inp" id="bcText" rows="5" maxlength="3000" placeholder="Текст сообщения — придёт в бот каждому покупателю"></textarea>
           <button class="btn b-gh" id="bcPreviewBtn">Кому уйдёт</button>
+          <div class="hint">Можно нажать до того, как напишете текст — покажем охват.</div>
           <div id="bcPreview"></div>
           <button class="btn b-nt" id="bcSelfBtn">Отправить себе для проверки</button>
           <button class="btn b-dg" id="bcSendBtn">Отправить всем</button>
           <button class="btn b-nt" id="bcCancel">Отмена</button>
           <div class="mt" id="bcErr" style="color:var(--bad)"></div>
+          <div class="hint">Рассылка уходит через бота — всем, кто им пользовался. Выбора аудитории нет: кому бот может написать, тому и уйдёт.</div>
           <div class="hint">Сообщение уйдёт живым людям и его нельзя отозвать. Сначала посмотрите, кому уйдёт, и отправьте себе.</div>
         </div>
       </div>
@@ -899,11 +901,16 @@
     document.getElementById('bcPreviewBtn').addEventListener('click', async () => {
       const err = document.getElementById('bcErr'); err.textContent = ''
       const box = document.getElementById('bcPreview'); box.innerHTML = 'Считаем…'
+      // Текст для подсчёта охвата не нужен — он проверяется только на отправке
       const r = await api('/broadcasts/preview', { method: 'POST', body: JSON.stringify({ text: document.getElementById('bcText').value }) }).catch(() => null)
       if (!r || !r.ok) { box.innerHTML = ''; err.textContent = (r && r.data && r.data.error) || 'Не получилось'; return }
       const d = r.data
+      const unreachable = Math.max(0, (d.totalClients || 0) - d.recipients)
       box.innerHTML = `<div class="${d.recipients ? 'okbox' : 'warnbox'}" style="margin-top:10px">
-        Уйдёт <b>${d.recipients}</b> ${plural(d.recipients, 'покупателю', 'покупателям', 'покупателям')}${d.sample.length ? ': ' + d.sample.map(esc).join(', ') + '…' : ' — некому, в базе нет клиентов из Telegram'}
+        Получат <b>${d.recipients}</b> из ${fmt(d.totalClients || 0)} ${plural(d.totalClients || 0, 'клиента', 'клиентов', 'клиентов')}${
+          unreachable ? ` — остальные ${fmt(unreachable)} пришли не из Telegram, бот им написать не может` : ''}
+        ${d.sample.length ? '<br>Например: ' + d.sample.map(esc).join(', ') + '…' : ''}
+        ${d.recipients ? '' : '<br>Отправлять некому: в базе нет клиентов, которые писали боту.'}
         ${d.lastBroadcast ? `<br>Прошлая рассылка: ${new Date(d.lastBroadcast.createdAt).toLocaleDateString('ru-RU')}, доставлено ${d.lastBroadcast.totalSent}` : ''}
       </div>`
     })
