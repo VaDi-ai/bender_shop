@@ -81,7 +81,7 @@ describe('предпросмотр пересчёта SIM на снимке ка
   const preview = buildPreview(variantsFromSnapshot(), RULES, ALIASES)
 
   it('четыре раздела: 65 смыслов / 5 впервые / 3 метки / 2 наследия', () => {
-    expect(preview.counts).toEqual({ semantic: 65, added: 5, canonical: 3, inherited: 2 })
+    expect(preview.counts).toEqual({ semantic: 65, added: 5, canonical: 3, inherited: 2, manual: 0 })
   })
 
   it('пустые НЕ попадают в «сменят значение» — это отдельный бакет added', () => {
@@ -125,7 +125,7 @@ describe('предпросмотр пересчёта SIM на снимке ка
       { id: 9001, attributes: { fullName: 'Чехол Apple для iPhone 17 Pro', 'Страна': 'Индия', SIM: 'eSIM' }, product: { name: 'Чехол Apple', brand: 'Apple', category: { name: 'Аксессуары' } } },
       { id: 9002, attributes: { fullName: 'Apple Mac Mini M4 (Индия)', 'Страна': 'Индия' }, product: { name: 'Apple Mac Mini M4', brand: 'Apple', category: { name: 'Mac' } } },
     ], RULES, ALIASES)
-    expect(p.counts).toEqual({ semantic: 0, added: 0, canonical: 0, inherited: 0 })
+    expect(p.counts).toEqual({ semantic: 0, added: 0, canonical: 0, inherited: 0, manual: 0 })
   })
 
   it('iPhone Air — модельный оверрайд сильнее страны', () => {

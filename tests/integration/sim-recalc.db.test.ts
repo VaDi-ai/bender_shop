@@ -76,7 +76,7 @@ describe.skipIf(!RUN)('SIM recalc (PR-B)', () => {
 
   it('preview даёт ЧЕТЫРЕ раздельных блока: смысл / впервые / метка / наследие', async () => {
     const p = await previewRecalc()
-    expect(p.counts).toEqual({ semantic: 1, added: 1, canonical: 1, inherited: 1 })
+    expect(p.counts).toEqual({ semantic: 1, added: 1, canonical: 1, inherited: 1, manual: 0 })
     expect(p.semantic[0]).toMatchObject({ variantId: ids.india, from: 'eSIM', to: 'SIM + eSIM', country: 'Индия' })
     expect(p.added[0]).toMatchObject({ variantId: ids.nosim, from: '—', to: 'SIM + eSIM', country: 'Казахстан' })
     expect(p.canonical[0]).toMatchObject({ variantId: ids.china, from: '2Sim', to: '2 SIM' })
