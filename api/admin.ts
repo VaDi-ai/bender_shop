@@ -703,6 +703,12 @@ export function adminApiRouter(): Router {
   //
   // Фото и описание уходят ПИСБЭКОМ в таблицу и только потом в БД: синк —
   // зеркало листа, и запись «только в базу» он бы стёр ближайшим прогоном.
+  // Ошибки в товарах: идём ОТ проблем, а не от словаря. Только видимое покупателю.
+  router.get('/products/issues', safe(async (_req, res) => {
+    const { listProductIssues } = await import('../lib/product-admin')
+    res.json(await listProductIssues())
+  }))
+
   router.get('/products/:id', safe(async (req, res) => {
     const id = parseInt(String(req.params.id), 10)
     if (!Number.isInteger(id)) { res.status(422).json({ error: 'Неверный ID' }); return }
