@@ -989,7 +989,9 @@
     }
 
     /* ════════ Phase 2 — Мобильная главная (Onest, неон, беж-слот, таббар) ════════ */
-    :root { --tabbar-h: 62px; --slot-edge: #e6e0dd; }
+    /* --banner-bg: подложка баннера. Белая — у баннеров владельца фон белый,
+       и свободное место сверху читается как продолжение картинки. */
+    :root { --tabbar-h: 62px; --slot-edge: #e6e0dd; --banner-bg: #ffffff; }
     /* Onest как основной шрифт витрины (§11); лого/моно остаются JetBrains Mono */
     body { font-family: 'Onest', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
     /* место под фиксированный таббар (последний элемент — футер — не должен прятаться под ним) */
@@ -1000,8 +1002,13 @@
 
     /* ── Баннер: пропорции ~½ экрана + аккуратные контролы (§1, механику не трогаем) ── */
     #homeView .hero-slider { height: 52vh; max-height: 460px; min-height: 320px; border-radius: 0 0 20px 20px; }
-    /* слайд заполняет блок целиком, фото по центру, тёмный фолбэк */
-    #homeView .hero-slide { top: 0; left: 0; right: 0; bottom: 0; background-size: cover !important; background-position: center center !important; background-repeat: no-repeat; background-color: var(--bg); }
+    /* Баннер показываем ЦЕЛИКОМ: contain никогда не режет — владелец грузит
+       картинки разных пропорций. Прижимаем к низу, чтобы свободное место
+       осталось СВЕРХУ, и подкладываем светлый фон: у баннеров подложка белая,
+       и пустая полоса читается как продолжение картинки, а не как дыра.
+       Затемняющие слои не возвращаем (сняты в #53). */
+    #homeView .hero-slider { background: var(--banner-bg); }
+    #homeView .hero-slide { top: 0; left: 0; right: 0; bottom: 0; background-size: contain !important; background-position: center bottom !important; background-repeat: no-repeat; background-color: var(--banner-bg); }
     /* Верхний скрим убран по решению владельца — фото баннера показываем как есть. */
     #homeView .hero-slider::before { content: none; }
     /* Текст по центру (мокап bender_mobile_home.html): блок снизу, выравнивание по центру */
@@ -1012,8 +1019,9 @@
     /* точки по центру внизу, 7px, активная — пилюля 20px; стрелки убраны (мокап: точки + свайп) */
     #homeView .slider-controls { left: 0; right: 0; bottom: 12px; justify-content: center; }
     #homeView .slider-nav { display: none; }
-    #homeView .slider-dot { width: 7px; height: 7px; background: rgba(255,255,255,0.42); }
-    #homeView .slider-dot.active { width: 20px; border-radius: 4px; }
+    /* На светлой подложке белые точки исчезали — делаем тёмные */
+    #homeView .slider-dot { width: 7px; height: 7px; background: rgba(10,10,10,0.28); }
+    #homeView .slider-dot.active { width: 20px; border-radius: 4px; background: rgba(10,10,10,0.12); }
 
     /* ── Секции главной ── */
     .home-sec { margin-top: 24px; }
@@ -1521,6 +1529,7 @@
     let heroSlides  = []
     let sliderIdx   = 0
     let sliderTimer = null
+    let sliderBound = false   // слушатели слайдера вешаются один раз
 
     // Card quick-select state: productId → {attrKey: selectedVal}
     const cardSelectedAttrs = new Map()
@@ -1850,11 +1859,26 @@
         heroSlides = await res.json()
       } catch { heroSlides = [] }
 
+      // Перерисовка «с нуля»: функцию зовут повторно (проверка версии кэша идёт
+      // каждые 30 с и после «Обновить сайт»), а раньше слайды и точки просто
+      // ДОБАВЛЯЛИСЬ — от одного баннера в БД на витрине появлялись две точки и
+      // два слайда, а таймеры автопрокрутки копились.
+      clearInterval(sliderTimer); sliderTimer = null
+      sliderIdx = 0
+      sliderEl.querySelectorAll('.hero-slide, .hero-slider-fallback').forEach(el => el.remove())
+      dotsEl.innerHTML = ''
+      navEl.classList.add('hidden')
+
       if (!heroSlides.length) {
+        dotsEl.style.display = 'none'
         sliderEl.insertAdjacentHTML('afterbegin',
           `<div class="hero-slider-fallback"><div class="hero-slider-fallback-text">BENDER <span>SHOP</span></div></div>`)
         return
       }
+
+      // Одна точка ни о чём не говорит — показываем пагинацию только когда
+      // баннеров правда несколько (как уже сделано для стрелок).
+      dotsEl.style.display = heroSlides.length > 1 ? '' : 'none'
 
       const fadeEl = sliderEl.querySelector('.slider-bottom-fade')
       heroSlides.forEach((s, i) => {
@@ -1881,15 +1905,22 @@
       })
 
       if (heroSlides.length > 1) { navEl.classList.remove('hidden'); startSliderAuto() }
-      prevBtn.addEventListener('click', () => manualGoToSlide((sliderIdx - 1 + heroSlides.length) % heroSlides.length))
-      nextBtn.addEventListener('click', () => manualGoToSlide((sliderIdx + 1) % heroSlides.length))
 
-      let touchStartX = 0
-      sliderEl.addEventListener('touchstart', e => { touchStartX = e.touches[0].clientX }, { passive: true })
-      sliderEl.addEventListener('touchend', e => {
-        const dx = e.changedTouches[0].clientX - touchStartX
-        if (Math.abs(dx) > 50) manualGoToSlide(dx < 0 ? (sliderIdx + 1) % heroSlides.length : (sliderIdx - 1 + heroSlides.length) % heroSlides.length)
-      }, { passive: true })
+      // Слушатели — один раз на страницу: они читают актуальные heroSlides,
+      // а при перерисовке раньше вешались повторно (клик листал через раз).
+      if (!sliderBound) {
+        sliderBound = true
+        prevBtn.addEventListener('click', () => manualGoToSlide((sliderIdx - 1 + heroSlides.length) % heroSlides.length))
+        nextBtn.addEventListener('click', () => manualGoToSlide((sliderIdx + 1) % heroSlides.length))
+
+        let touchStartX = 0
+        sliderEl.addEventListener('touchstart', e => { touchStartX = e.touches[0].clientX }, { passive: true })
+        sliderEl.addEventListener('touchend', e => {
+          const dx = e.changedTouches[0].clientX - touchStartX
+          if (!heroSlides.length) return
+          if (Math.abs(dx) > 50) manualGoToSlide(dx < 0 ? (sliderIdx + 1) % heroSlides.length : (sliderIdx - 1 + heroSlides.length) % heroSlides.length)
+        }, { passive: true })
+      }
     }
 
     function goToSlide(idx) {
