@@ -57,6 +57,15 @@
     .sf-item:last-of-type { border-bottom:none; }
     .sf-item-head { display:flex; align-items:center; gap:10px; min-width:0; }
     .sf-item-head > .grow { flex:1; min-width:0; }
+    /* Хаб «Ещё»: плитки-входы вместо длинной ленты карточек */
+    .hub-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+    .hub-tile { background:var(--card); border:1px solid var(--bd); border-radius:14px; padding:14px 12px; text-align:left;
+                color:var(--tx); font-family:'Onest'; cursor:pointer; display:flex; flex-direction:column; gap:4px; min-height:74px; }
+    .hub-tile:active { background:var(--card2); }
+    .hub-tile .ht-n { font-size:14px; font-weight:600; }
+    .hub-tile .ht-s { font-size:11px; color:var(--dim); line-height:1.4; }
+    .hub-back { background:none; border:none; color:var(--ac); font-family:'Onest'; font-size:13px; font-weight:600;
+                padding:0; margin-bottom:10px; cursor:pointer; }
     .sf-item-actions { display:flex; flex-wrap:wrap; gap:8px; }
     .sf-item-actions .btn.sm { margin-top:0; flex:0 1 auto; }
     /* Миниатюра: класс использовался в разметке, но стиля не было — пустой div
@@ -303,85 +312,23 @@
         <div class="hint" id="pcHint">Найдите товар, чтобы посмотреть предложения, поменять фото и описание.</div>
       </div>
 
-      <div class="cap">SIM НЕ ОПРЕДЕЛЁН — ПОДСКАЖИТЕ</div>
-      <div id="simQueue"><div class="empty">Загрузка…</div></div>
-
-      <div class="cap">SIM ПО СЛОВАРЮ</div>
-      <div class="card">
-        <h3>Словарь SIM</h3>
-        <div id="simRules" class="mt">Загрузка…</div>
-        <button class="btn b-gh" id="simAddBtn">Добавить правило SIM</button>
-        <div id="simForm" style="display:none">
-          <input class="inp" id="simCountry" placeholder="Страна — как в таблице («Гонконг/США»)" maxlength="80">
-          <input class="inp" id="simBrand" placeholder="Бренд — Apple, Redmi, Honor… (пусто = любой)" maxlength="40">
-          <div class="row" style="gap:8px">
-            <select class="inp" id="simType"><option value="SIM + eSIM">SIM + eSIM</option><option value="eSIM">eSIM</option><option value="2 SIM">2 SIM</option></select>
-            <input class="inp" id="simGen" placeholder="с поколения (напр. 17)" inputmode="numeric">
-          </div>
-          <button class="btn b-main" id="simSave">Сохранить правило</button>
-          <button class="btn b-nt" id="simCancel">Отмена</button>
-          <div class="mt" id="simErr" style="color:var(--bad)"></div>
-        </div>
-        <div class="hint">Бренд обязателен для стран: словарь стран описывает рынок Apple, у андроида SIM другой. Пустой бренд = правило накроет все бренды этой страны.<br>Правило с поколением сильнее общего: «Япония → SIM + eSIM» плюс «Япония с 17 → eSIM» = у 17-х японских будет eSIM. Явная метка в названии всегда сильнее словаря.</div>
-      </div>
-
-      <div class="card">
-        <h3>SIM по словарю <span class="chip c-ok right" id="simRecalcChip">можно применять</span></h3>
-        <div class="mt" id="simRecalc">Загрузка…</div>
-        <div id="simRecalcActions"></div>
-        <div class="hint">Значения берутся из справочника и переопределяют то, что стоит в карточке. Строки «стоит без правила» не трогаем — сначала правило, потом обновление.</div>
-      </div>
-
-      <div class="card">
-        <h3>Карточки товаров <span class="chip c-off right">следующий этап</span></h3>
-        <div class="mt">Главное фото, скрытие с витрины, описания. Цены и наличие останутся в таблице — здесь будут read-only.</div>
-      </div>
     </section>
 
     <!-- ═══ ЕЩЁ ═══ -->
     <section class="screen" id="s-more">
-      <h2>Ещё</h2>
-      <div class="sub">Журналы и системное.</div>
-      <div class="card"><h3>Журнал синка</h3><div class="mt" id="syncRuns">Загрузка…</div></div>
-      <div class="card"><h3>Кто что менял <span class="chip c-off right">скоро</span></h3><div class="mt">Каждое действие в админке уже пишется в журнал на сервере — просмотр появится после первых разделов Этапа 2.</div></div>
+      <h2 id="moreTitle">Ещё</h2>
+      <div class="sub" id="moreSub">Всё, что нужно изредка: акции, доступы, отчёты, журналы.</div>
 
-      <div class="cap">АНАЛИТИКА</div>
-      <div class="card">
-        <h3>Продажи <span class="chip c-off right" id="insRange">30 дней</span></h3>
-        <div id="insBox" class="mt">Загрузка…</div>
-        <button class="btn b-nt" id="insToggle">Показать за 7 дней</button>
+      <div id="hubGrid" class="hub-grid">
+        <button class="hub-tile" data-hub="promos"><span class="ht-n">Акции</span><span class="ht-s" id="tilePromos">—</span></button>
+        <button class="hub-tile" data-hub="team"><span class="ht-n">Доступы</span><span class="ht-s" id="tileTeam">—</span></button>
+        <button class="hub-tile" data-hub="analytics"><span class="ht-n">Аналитика</span><span class="ht-s" id="tileAnalytics">—</span></button>
+        <button class="hub-tile" data-hub="broadcasts"><span class="ht-n">Рассылки</span><span class="ht-s" id="tileBroadcasts">—</span></button>
+        <button class="hub-tile" data-hub="sync"><span class="ht-n">Журнал синка</span><span class="ht-s" id="tileSync">—</span></button>
+        <button class="hub-tile" data-hub="parser"><span class="ht-n">Парсер</span><span class="ht-s" id="tileParser">—</span></button>
       </div>
 
-      <div class="cap">КЛИЕНТЫ</div>
-      <div class="card">
-        <h3>Найти клиента</h3>
-        <div class="mt" id="clStats">—</div>
-        <input class="inp" id="clSearch" placeholder="Имя или @username" maxlength="60">
-        <div id="clResults"></div>
-        <div id="clCard"></div>
-        <div class="hint">Телефон и почта зашифрованы. Менеджер видит их скрытыми — полностью показываем только владельцу.</div>
-      </div>
-
-      <div class="cap">РАССЫЛКИ</div>
-      <div class="card">
-        <h3>Сообщение покупателям</h3>
-        <div id="bcHistory" class="mt">Загрузка…</div>
-        <button class="btn b-gh" id="bcAddBtn">Создать рассылку</button>
-        <div id="bcForm" style="display:none">
-          <textarea class="inp" id="bcText" rows="5" maxlength="3000" placeholder="Текст сообщения — придёт в бот каждому покупателю"></textarea>
-          <button class="btn b-gh" id="bcPreviewBtn">Кому уйдёт</button>
-          <div class="hint">Можно нажать до того, как напишете текст — покажем охват.</div>
-          <div id="bcPreview"></div>
-          <button class="btn b-nt" id="bcSelfBtn">Отправить себе для проверки</button>
-          <button class="btn b-dg" id="bcSendBtn">Отправить всем</button>
-          <button class="btn b-nt" id="bcCancel">Отмена</button>
-          <div class="mt" id="bcErr" style="color:var(--bad)"></div>
-          <div class="hint">Рассылка уходит через бота — всем, кто им пользовался. Выбора аудитории нет: кому бот может написать, тому и уйдёт.</div>
-          <div class="hint">Сообщение уйдёт живым людям и его нельзя отозвать. Сначала посмотрите, кому уйдёт, и отправьте себе.</div>
-        </div>
-      </div>
-
-      <div class="cap">АКЦИИ</div>
+      <div class="hub-page" id="hub-promos" style="display:none">
       <div class="card">
         <h3>Акции <span class="chip c-off right" id="promoChip">—</span></h3>
         <div id="promoList" class="mt">Загрузка…</div>
@@ -417,8 +364,6 @@
         <button class="btn b-dg" id="promoStopAll">Отменить все акции</button>
         <div class="hint">Прежние цены вернутся у всех товаров сразу. Отменённые акции останутся в списке черновиками.</div>
       </div>
-
-      <div class="cap">ПАУЗА ПРОДАЖ</div>
       <div class="card" id="maintCard">
         <h3>Приём заказов <span class="chip c-off right" id="maintChip">—</span></h3>
         <div class="mt" id="maintState">Загрузка…</div>
@@ -430,8 +375,9 @@
           <div class="hint">Каталог и цены останутся на месте — перестанет работать только оформление. Заказы, уже оформленные, никуда не денутся.</div>
         </div>
       </div>
+      </div>
 
-      <div class="cap">КОМАНДА</div>
+      <div class="hub-page" id="hub-team" style="display:none">
       <div class="card" id="teamCard" style="display:none">
         <h3>Доступ в админку</h3>
         <div id="teamList" class="mt">Загрузка…</div>
@@ -448,6 +394,85 @@
           <div class="mt" id="teamErr" style="color:var(--bad)"></div>
           <div class="hint">Менеджер ведёт товары и витрину, но не применяет цены, не удаляет и не видит выручку. Владелец может всё.</div>
         </div>
+      </div>
+      </div>
+
+      <div class="hub-page" id="hub-analytics" style="display:none">
+      <div class="card">
+        <h3>Продажи <span class="chip c-off right" id="insRange">30 дней</span></h3>
+        <div id="insBox" class="mt">Загрузка…</div>
+        <button class="btn b-nt" id="insToggle">Показать за 7 дней</button>
+      </div>
+      <div class="card">
+        <h3>Найти клиента</h3>
+        <div class="mt" id="clStats">—</div>
+        <input class="inp" id="clSearch" placeholder="Имя или @username" maxlength="60">
+        <div id="clResults"></div>
+        <div id="clCard"></div>
+        <div class="hint">Телефон и почта зашифрованы. Менеджер видит их скрытыми — полностью показываем только владельцу.</div>
+      </div>
+      </div>
+
+      <div class="hub-page" id="hub-broadcasts" style="display:none">
+      <div class="card">
+        <h3>Сообщение покупателям</h3>
+        <div id="bcHistory" class="mt">Загрузка…</div>
+        <button class="btn b-gh" id="bcAddBtn">Создать рассылку</button>
+        <div id="bcForm" style="display:none">
+          <textarea class="inp" id="bcText" rows="5" maxlength="3000" placeholder="Текст сообщения — придёт в бот каждому покупателю"></textarea>
+          <button class="btn b-gh" id="bcPreviewBtn">Кому уйдёт</button>
+          <div class="hint">Можно нажать до того, как напишете текст — покажем охват.</div>
+          <div id="bcPreview"></div>
+          <button class="btn b-nt" id="bcSelfBtn">Отправить себе для проверки</button>
+          <button class="btn b-dg" id="bcSendBtn">Отправить всем</button>
+          <button class="btn b-nt" id="bcCancel">Отмена</button>
+          <div class="mt" id="bcErr" style="color:var(--bad)"></div>
+          <div class="hint">Рассылка уходит через бота — всем, кто им пользовался. Выбора аудитории нет: кому бот может написать, тому и уйдёт.</div>
+          <div class="hint">Сообщение уйдёт живым людям и его нельзя отозвать. Сначала посмотрите, кому уйдёт, и отправьте себе.</div>
+        </div>
+      </div>
+      </div>
+
+      <div class="hub-page" id="hub-sync" style="display:none">
+      <div class="card"><h3>Журнал синка</h3><div class="mt" id="syncRuns">Загрузка…</div></div>
+      <div class="card"><h3>Кто что менял <span class="chip c-off right">скоро</span></h3><div class="mt">Каждое действие в админке уже пишется в журнал на сервере — просмотр появится после первых разделов Этапа 2.</div></div>
+      </div>
+
+      <div class="hub-page" id="hub-parser" style="display:none">
+        <div class="hint">Здесь видно, чему система научилась на разборе таблицы и прайсов. Товары правят на вкладке «Товары» — сюда ходят смотреть словарь.</div>
+      <div class="cap">SIM НЕ ОПРЕДЕЛЁН — ПОДСКАЖИТЕ</div>
+      <div id="simQueue"><div class="empty">Загрузка…</div></div>
+
+      <div class="cap">SIM ПО СЛОВАРЮ</div>
+      <div class="card">
+        <h3>Словарь SIM</h3>
+        <div id="simRules" class="mt">Загрузка…</div>
+        <button class="btn b-gh" id="simAddBtn">Добавить правило SIM</button>
+        <div id="simForm" style="display:none">
+          <input class="inp" id="simCountry" placeholder="Страна — как в таблице («Гонконг/США»)" maxlength="80">
+          <input class="inp" id="simBrand" placeholder="Бренд — Apple, Redmi, Honor… (пусто = любой)" maxlength="40">
+          <div class="row" style="gap:8px">
+            <select class="inp" id="simType"><option value="SIM + eSIM">SIM + eSIM</option><option value="eSIM">eSIM</option><option value="2 SIM">2 SIM</option></select>
+            <input class="inp" id="simGen" placeholder="с поколения (напр. 17)" inputmode="numeric">
+          </div>
+          <button class="btn b-main" id="simSave">Сохранить правило</button>
+          <button class="btn b-nt" id="simCancel">Отмена</button>
+          <div class="mt" id="simErr" style="color:var(--bad)"></div>
+        </div>
+        <div class="hint">Бренд обязателен для стран: словарь стран описывает рынок Apple, у андроида SIM другой. Пустой бренд = правило накроет все бренды этой страны.<br>Правило с поколением сильнее общего: «Япония → SIM + eSIM» плюс «Япония с 17 → eSIM» = у 17-х японских будет eSIM. Явная метка в названии всегда сильнее словаря.</div>
+      </div>
+
+      <div class="card">
+        <h3>SIM по словарю <span class="chip c-ok right" id="simRecalcChip">можно применять</span></h3>
+        <div class="mt" id="simRecalc">Загрузка…</div>
+        <div id="simRecalcActions"></div>
+        <div class="hint">Значения берутся из справочника и переопределяют то, что стоит в карточке. Строки «стоит без правила» не трогаем — сначала правило, потом обновление.</div>
+      </div>
+
+      <div class="card">
+        <h3>Карточки товаров <span class="chip c-off right">следующий этап</span></h3>
+        <div class="mt">Главное фото, скрытие с витрины, описания. Цены и наличие останутся в таблице — здесь будут read-only.</div>
+      </div>
       </div>
     </section>
   </main>
@@ -695,6 +720,7 @@
       const list = r.data.promotions || []
       const active = list.filter(p => p.isActive)
       document.getElementById('promoChip').textContent = active.length ? `${active.length} ${plural(active.length, 'идёт', 'идут', 'идут')}` : 'нет активных'
+      setTile('tilePromos', active.length ? `${active.length} ${plural(active.length, 'идёт', 'идут', 'идут')}` : (list.length ? `${list.length} в черновиках` : 'нет акций'))
       document.getElementById('promoDangerCard').style.display = isOwner && active.length ? '' : 'none'
 
       if (!list.length) {
@@ -800,6 +826,49 @@
       loadPromotions()
     })
 
+    // ── ХАБ «ЕЩЁ»: плитки → страница внутри вкладки ────────────────────────────
+    const HUB_TITLES = {
+      promos: ['Акции', 'Скидки на витрине и пауза продаж.'],
+      team: ['Доступы', 'Кто заходит в админку и с какими правами.'],
+      analytics: ['Аналитика', 'Продажи и покупатели.'],
+      broadcasts: ['Рассылки', 'Сообщения покупателям в бот.'],
+      sync: ['Журнал синка', 'Как прошли последние прогоны таблицы.'],
+      parser: ['Парсер', 'Чему система научилась на таблице и прайсах.'],
+    }
+
+    function openHub(id) {
+      const page = document.getElementById('hub-' + id)
+      if (!page) return
+      document.getElementById('hubGrid').style.display = 'none'
+      document.querySelectorAll('.hub-page').forEach(el => { el.style.display = el === page ? '' : 'none' })
+      const [title, sub] = HUB_TITLES[id] || ['Ещё', '']
+      document.getElementById('moreTitle').textContent = title
+      document.getElementById('moreSub').textContent = sub
+      if (!page.querySelector('.hub-back')) {
+        const back = document.createElement('button')
+        back.className = 'hub-back'
+        back.textContent = '← Ещё'
+        back.addEventListener('click', closeHub)
+        page.insertBefore(back, page.firstChild)
+      }
+      document.getElementById('main').scrollTo({ top: 0 })
+    }
+
+    function closeHub() {
+      document.querySelectorAll('.hub-page').forEach(el => { el.style.display = 'none' })
+      document.getElementById('hubGrid').style.display = ''
+      document.getElementById('moreTitle').textContent = 'Ещё'
+      document.getElementById('moreSub').textContent = 'Всё, что нужно изредка: акции, доступы, отчёты, журналы.'
+      document.getElementById('main').scrollTo({ top: 0 })
+    }
+
+    document.querySelectorAll('[data-hub]').forEach(b => b.addEventListener('click', () => openHub(b.dataset.hub)))
+    // Уход на другую вкладку возвращает хаб в исходное состояние
+    document.querySelectorAll('#tabbar .tb').forEach(b => b.addEventListener('click', () => { if (b.dataset.s !== 's-more') closeHub() }))
+
+    /** Подписи на плитках — состояние, а не только имя раздела. */
+    function setTile(id, text) { const e = document.getElementById(id); if (e) e.textContent = text }
+
     // ── АНАЛИТИКА ─────────────────────────────────────────────────────────────
     let insDays = 30
     async function loadInsights() {
@@ -829,6 +898,7 @@
         ${d.hiddenForRole.length ? `<div class="hint">Скрыто для роли «менеджер»: ${d.hiddenForRole.join(', ')}.</div>` : ''}`
       document.getElementById('clStats').textContent =
         `Всего ${d.clients.total} · с заказами ${d.clients.withOrders} · новых за ${d.range} дней ${d.clients.newInRange}`
+      setTile('tileAnalytics', `${d.orders.total} ${plural(d.orders.total, 'заказ', 'заказа', 'заказов')} за ${d.range} дней`)
     }
     document.getElementById('insToggle').addEventListener('click', () => { insDays = insDays === 30 ? 7 : 30; loadInsights() })
 
@@ -878,6 +948,7 @@
       const isOwner = window.adminMe && window.adminMe.role === 'owner'
       document.getElementById('bcAddBtn').style.display = isOwner ? '' : 'none'
       if (!r || !r.ok) { el.textContent = 'Не удалось загрузить'; return }
+      setTile('tileBroadcasts', r.data.length ? `${r.data.length} ${plural(r.data.length, 'отправлена', 'отправлено', 'отправлено')}` : 'ещё не было')
       if (!r.data.length) {
         el.innerHTML = '<div class="empty">Рассылок ещё не было.<br>' +
           (isOwner ? 'Отправьте первую — покупатели получат сообщение в боте.' : 'Отправить рассылку может только владелец.') + '</div>'
@@ -976,6 +1047,7 @@
       const r = await api('/team').catch(() => null)
       const el = document.getElementById('teamList')
       if (!r || !r.ok) { el.textContent = 'Не удалось загрузить'; return }
+      setTile('tileTeam', `${r.data.filter(m => m.isActive).length} с доступом`)
       el.innerHTML = r.data.map(m => `<div class="sf-item">
         <div class="sf-item-head">
           <div class="grow">
@@ -1324,6 +1396,7 @@
       if (!r || !r.ok) { box.innerHTML = '<div class="empty">Не удалось загрузить</div>'; return }
       const missing = r.data.missing || []
       const inherited = r.data.inherited || []
+      setTile('tileParser', missing.length ? `${missing.length} ${plural(missing.length, 'связка', 'связки', 'связок')} не узнал` : 'всё узнаёт')
       // На «Сегодня» выносим ТОЛЬКО то, что видит покупатель: скрытые строки
       // (андроид-дубли без правила) — это управление словарём, а не тревога.
       attn.simUnknown = r.data.visibleMissing || 0
@@ -1544,8 +1617,11 @@
       const r = await api('/sync-runs?limit=10').catch(() => null)
       if (!r || !r.ok) return
       const el = document.getElementById('syncRuns')
-      if (!r.data.length) { el.textContent = 'Прогонов ещё не было.'; return }
+      if (!r.data.length) { el.textContent = 'Прогонов ещё не было.'; setTile('tileSync', 'прогонов не было'); return }
       attn.syncErrors = Array.isArray(r.data[0].errors) ? r.data[0].errors.length : 0
+      setTile('tileSync', attn.syncErrors
+        ? `${attn.syncErrors} ${plural(attn.syncErrors, 'предупреждение', 'предупреждения', 'предупреждений')}`
+        : 'последний прогон без ошибок')
       el.innerHTML = r.data.map(x => {
         const dt = new Date(x.startedAt).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
         const st = x.ok === null ? '⏳' : (x.ok ? '✅' : '⛔')
