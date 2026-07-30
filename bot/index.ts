@@ -21,7 +21,6 @@ import {
   segmentsState,
   setupSegmentHandlers,
   handleSegmentMessage,
-  showSegments,
 } from './admin/segments'
 import {
   salesState,
@@ -167,8 +166,7 @@ bot.use(async (ctx, next) => {
 // Служебные typed-входы («🔧 Техработы» — бэкап/деструктив, «🏭 Поставщики» —
 // привязка chatId) работают вводом текста, без кнопок.
 const adminKeyboard = Markup.keyboard([
-  ['📢 Рассылки', '📂 Сегменты'],
-  ['🤖 AI Агент'],
+  ['📢 Рассылки', '🤖 AI Агент'],
 ]).resize()
 
 // Кнопки/типизируемые пункты меню — для сброса пошаговых флоу при нажатии
@@ -177,7 +175,6 @@ const MENU_BUTTONS = new Set([
   '💰 Балансы',
   '🔧 Техработы',
   '🔑 API Ключи',
-  '📂 Сегменты',
   '🤖 AI Агент',
   '🏭 Поставщики',
 ])
@@ -1608,9 +1605,9 @@ setupInventoryHandlers(bot)
 
 setupSegmentHandlers(bot)
 
-bot.hears('📂 Сегменты', async (ctx) => {
-  await showSegments(ctx)
-})
+// Кнопка «📂 Сегменты» убрана (фаза 2): CRUD сегментов — в мини-аппе
+// («Ещё → Сегменты», PR #72); инлайн-хендлеры segs:* остаются для старых
+// кнопок в чатах (рассылки по сегменту ссылаются на segs:list).
 
 // ─── 🤖 AI Агент ──────────────────────────────────────────────────────────────
 
