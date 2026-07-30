@@ -204,6 +204,50 @@ export async function learnRule(actor: string, p: PatternKey): Promise<Outcome> 
   return { ok: true, status: 201, data: { kind: 'SimRule', id: rule.id, phrase: rulePhrase(p) } }
 }
 
+// ─── «Чтение»: raw-написание → канон, для любого поля ────────────────────────
+
+/** Служебные ключи — им «чтение» не заводится: это не атрибуты значения. */
+const ALIAS_FORBIDDEN_KEYS = new Set(['fullname', 'attroverrides', 'overrides'])
+
+export function aliasPhrase(attrKey: string, rawNorm: string, canonical: string): string {
+  return `«${rawNorm}» читаем как «${canonical}» (${attrKey})`
+}
+
+/**
+ * «Чтение» — как понимать НАПИСАНИЕ значения при разборе: raw → канон,
+ * per-attrKey, безопасно для любого поля (модель, цвет, страна, формат SIM).
+ * Это НЕ «правило»: назначение значения по бренду/стране существует только
+ * для SIM (learnRule) — алиас каталога не перекрашивает, он лишь переводит
+ * слово. Вызывается ТОЛЬКО по явному нажатию владельца.
+ */
+export async function learnAlias(actor: string, attrKey: string, from: string, to: string): Promise<Outcome> {
+  const key = String(attrKey ?? '').trim()
+  const rawNorm = norm(String(from ?? ''))
+  const canonical = String(to ?? '').trim()
+  if (!key || !rawNorm || !canonical) return bad(422, 'Нужны поле, исходное написание и значение — что-то из этого пустое')
+  if (key.length > 40 || rawNorm.length > 100 || canonical.length > 100) {
+    return bad(422, 'Слишком длинно: поле до 40 символов, написание и значение — до 100')
+  }
+  if (ALIAS_FORBIDDEN_KEYS.has(norm(key))) return bad(422, `«${key}» — служебное поле, чтение для него не заводится`)
+  if (rawNorm === norm(canonical)) return bad(422, 'Написание совпадает со значением — запоминать нечего')
+
+  const existing = await prisma.attrValueAlias.findUnique({ where: { attrKey_rawNorm: { attrKey: key, rawNorm } } })
+  if (existing && existing.canonical !== canonical) {
+    return bad(409, `«${rawNorm}» уже читается как «${existing.canonical}». Сначала забудьте старое чтение`)
+  }
+  const row = existing ?? await prisma.attrValueAlias.create({
+    data: { attrKey: key, rawNorm, canonical, source: 'learned' },
+  })
+  if (!existing) {
+    void logAdminAction({
+      adminTelegramId: actor, action: 'rule_learned', entity: 'AttrValueAlias', entityId: row.id,
+      after: { attrKey: key, rawNorm, canonical, phrase: aliasPhrase(key, rawNorm, canonical) },
+    })
+    log.info('Alias learned from edit', { kind: 'AttrValueAlias', id: row.id })
+  }
+  return { ok: true, status: existing ? 200 : 201, data: { kind: 'AttrValueAlias', id: row.id, phrase: aliasPhrase(key, rawNorm, canonical) } }
+}
+
 // ─── Витрина словаря ─────────────────────────────────────────────────────────
 
 export interface LearnedRule {
@@ -213,6 +257,10 @@ export interface LearnedRule {
   source: string
   /** Правило из сида вернётся при перезапуске — «забыть» его бессмысленно */
   fromSeed: boolean
+  /** Только у «чтений» (AttrValueAlias): поле, написание и канон — для UI */
+  attrKey?: string
+  raw?: string
+  canonical?: string
 }
 
 export async function listDictionary(): Promise<LearnedRule[]> {
@@ -228,7 +276,8 @@ export async function listDictionary(): Promise<LearnedRule[]> {
     })),
     ...aliases.map(a => ({
       kind: 'AttrValueAlias' as const, id: a.id, source: a.source, fromSeed: a.source === 'seed',
-      phrase: `«${a.rawNorm}» читаем как «${a.canonical}» (${a.attrKey})`,
+      phrase: aliasPhrase(a.attrKey, a.rawNorm, a.canonical),
+      attrKey: a.attrKey, raw: a.rawNorm, canonical: a.canonical,
     })),
   ]
 }

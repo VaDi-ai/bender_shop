@@ -11,13 +11,13 @@ vi.mock('../lib/prisma', () => ({
     auditLog: { findMany: vi.fn() },
     productVariant: { findMany: vi.fn() },
     simRule: { findMany: vi.fn(), findUnique: vi.fn(), upsert: vi.fn(), delete: vi.fn() },
-    attrValueAlias: { findMany: vi.fn(), findUnique: vi.fn(), upsert: vi.fn(), delete: vi.fn() },
+    attrValueAlias: { findMany: vi.fn(), findUnique: vi.fn(), upsert: vi.fn(), create: vi.fn(), delete: vi.fn() },
   },
 }))
 vi.mock('../lib/audit', () => ({ logAdminAction: vi.fn() }))
 
 import { prisma } from '../lib/prisma'
-import { detectPatterns, ripePatterns, isRipe, patternKey, rulePhrase, learnRule, forgetRule, REPEATS_REQUIRED } from '../lib/rule-learning'
+import { detectPatterns, ripePatterns, isRipe, patternKey, rulePhrase, learnRule, learnAlias, forgetRule, REPEATS_REQUIRED } from '../lib/rule-learning'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 const audit = prisma.auditLog as any
@@ -39,6 +39,7 @@ beforeEach(() => {
   sim.findMany.mockResolvedValue([]); alias.findMany.mockResolvedValue([])
   sim.findUnique.mockResolvedValue(null); alias.findUnique.mockResolvedValue(null)
   sim.upsert.mockResolvedValue({ id: 42 }); alias.upsert.mockResolvedValue({ id: 43 })
+  alias.create.mockReset(); alias.create.mockResolvedValue({ id: 44 })
 })
 
 describe('ключ паттерна нормализованный, а не сырой текст', () => {
@@ -161,6 +162,54 @@ describe('запись правила — только явная и тольк�
     expect((await learnRule(ACTOR, { attr: 'SIM', brand: null, country: null, value: '2 SIM' })).status).toBe(422)
     expect((await learnRule(ACTOR, { attr: '', brand: 'Redmi', country: null, value: '' })).status).toBe(422)
     expect(sim.upsert).not.toHaveBeenCalled()
+  })
+})
+
+describe('«чтение» — learnAlias: raw-написание → канон, любое поле', () => {
+  it('новое чтение пишется нормализованным и как learned', async () => {
+    const r = await learnAlias(ACTOR, 'Цвет', ' Чёрный ', 'Black')
+    expect(r.ok).toBe(true)
+    expect(r.status).toBe(201)
+    expect(alias.create).toHaveBeenCalledWith({
+      data: { attrKey: 'Цвет', rawNorm: 'чёрный', canonical: 'Black', source: 'learned' },
+    })
+  })
+
+  it('это НЕ SimRule: запись «бренд+страна» не создаётся ни для какого поля', async () => {
+    await learnAlias(ACTOR, 'Цвет', 'чёрный', 'Black')
+    expect(sim.upsert).not.toHaveBeenCalled()
+    expect(sim.findUnique).not.toHaveBeenCalled()
+  })
+
+  it('анти-мусор: пустые, совпадение from/to и служебные ключи — отказ без записи', async () => {
+    expect((await learnAlias(ACTOR, 'Цвет', '', 'Black')).status).toBe(422)
+    expect((await learnAlias(ACTOR, 'Цвет', 'black', ' BLACK ')).status).toBe(422)  // одно и то же слово
+    expect((await learnAlias(ACTOR, '', 'чёрный', 'Black')).status).toBe(422)
+    expect((await learnAlias(ACTOR, 'attrOverrides', 'x', 'y')).status).toBe(422)
+    expect((await learnAlias(ACTOR, 'fullName', 'x', 'y')).status).toBe(422)
+    expect(alias.create).not.toHaveBeenCalled()
+  })
+
+  it('анти-мусор: длиннее лимитов — отказ', async () => {
+    expect((await learnAlias(ACTOR, 'К'.repeat(41), 'a', 'b')).status).toBe(422)
+    expect((await learnAlias(ACTOR, 'Цвет', 'a'.repeat(101), 'b')).status).toBe(422)
+    expect((await learnAlias(ACTOR, 'Цвет', 'a', 'b'.repeat(101))).status).toBe(422)
+    expect(alias.create).not.toHaveBeenCalled()
+  })
+
+  it('конфликт с существующим чтением — 409, сначала «забыть»', async () => {
+    alias.findUnique.mockResolvedValue({ id: 7, attrKey: 'Цвет', rawNorm: 'чёрный', canonical: 'Midnight', source: 'learned' })
+    const r = await learnAlias(ACTOR, 'Цвет', 'чёрный', 'Black')
+    expect(r.status).toBe(409)
+    expect(alias.create).not.toHaveBeenCalled()
+  })
+
+  it('повтор того же чтения — идемпотентно, без второй записи', async () => {
+    alias.findUnique.mockResolvedValue({ id: 7, attrKey: 'Цвет', rawNorm: 'чёрный', canonical: 'Black', source: 'learned' })
+    const r = await learnAlias(ACTOR, 'Цвет', 'чёрный', 'Black')
+    expect(r.ok).toBe(true)
+    expect(r.status).toBe(200)
+    expect(alias.create).not.toHaveBeenCalled()
   })
 })
 
