@@ -509,8 +509,8 @@
             <select class="inp" id="bcMediaType" style="margin-top:0;flex:0 0 110px"><option value="">Без медиа</option><option value="photo">Фото</option><option value="video">Видео</option></select>
             <input class="inp" id="bcMediaUrl" style="margin-top:0" placeholder="https://… ссылка на медиа">
           </div>
-          <input type="file" id="bcFile" accept="image/*" style="margin-top:8px;font-size:12px">
-          <div class="hint">Фото можно загрузить файлом — ссылка подставится сама. Видео — только готовой https-ссылкой. С медиа текст станет подписью (до 1024 символов).</div>
+          <input type="file" id="bcFile" accept="image/*,video/mp4,video/webm,video/quicktime" style="margin-top:8px;font-size:12px">
+          <div class="hint">Фото или видео можно загрузить файлом — ссылка подставится сама. Видео — до 20 МБ (больше Telegram по ссылке не примет). С медиа текст станет подписью (до 1024 символов).</div>
 
           <button class="btn b-gh" id="bcPreviewBtn">Кому уйдёт</button>
           <div class="hint">Можно нажать до того, как напишете текст — покажем охват выбранной аудитории.</div>
@@ -1356,13 +1356,33 @@
       if (!url) return undefined
       return { url, type: document.getElementById('bcMediaType').value || 'photo' }
     }
+    async function uploadVideo(fileInput, errEl) {
+      const f = fileInput.files && fileInput.files[0]
+      if (!f) return null
+      if (f.size > 20 * 1024 * 1024) { errEl.textContent = 'Видео больше 20 МБ — Telegram по ссылке такое не примет. Сожмите ролик.'; return null }
+      const buf = await f.arrayBuffer()
+      const res = await fetch('/admin/api/videos/upload?name=' + encodeURIComponent(f.name.replace(/\.[^.]+$/, '')), {
+        method: 'POST', cache: 'no-store',
+        headers: Object.assign({}, headers, { 'Content-Type': f.type || 'application/octet-stream' }),
+        body: buf,
+      })
+      let data = null
+      try { data = await res.json() } catch { /* пустой ответ */ }
+      if (!res.ok) { errEl.textContent = (data && data.error) || 'Не удалось загрузить видео'; return null }
+      return data.url
+    }
     document.getElementById('bcFile').addEventListener('change', async function () {
       const err = document.getElementById('bcErr'); err.textContent = ''
-      const url = await uploadPhoto(this, err)
+      const f = this.files && this.files[0]
+      if (!f) return
+      const isVideo = (f.type || '').startsWith('video/')
+      const url = isVideo ? await uploadVideo(this, err) : await uploadPhoto(this, err)
       if (url) {
-        document.getElementById('bcMediaUrl').value = url
-        document.getElementById('bcMediaType').value = 'photo'
-        toast('Фото загружено — ссылка подставлена')
+        // Относительный /photos/… превращаем в абсолютный — Telegram качает по нему
+        const abs = url.startsWith('/') ? location.origin + url : url
+        document.getElementById('bcMediaUrl').value = abs
+        document.getElementById('bcMediaType').value = isVideo ? 'video' : 'photo'
+        toast(isVideo ? 'Видео загружено — ссылка подставлена' : 'Фото загружено — ссылка подставлена')
       }
     })
 

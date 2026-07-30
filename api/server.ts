@@ -64,6 +64,11 @@ function getImageContentType(filename: string): string {
     case 'gif': return 'image/gif'
     case 'webp': return 'image/webp'
     case 'svg': return 'image/svg+xml'
+    // Видео рассылок лежит на том же томе /photos (express.static сам ставит
+    // эти типы по расширению; карта — для маршрутов, отдающих файл вручную)
+    case 'mp4': return 'video/mp4'
+    case 'webm': return 'video/webm'
+    case 'mov': return 'video/quicktime'
     default: return 'image/jpeg'
   }
 }
