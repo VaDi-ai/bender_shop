@@ -249,23 +249,7 @@ type VariantPhotoEditFlow = {
   pendingPhotos: string[]
 }
 
-type ReceiveVariantFlow = {
-  flow: 'receive_variant'
-  step: 'qty'
-  variantId: number
-  variantSku: string
-  productName: string
-  currentQty: number
-}
-
-type WriteoffVariantFlow = {
-  flow: 'writeoff_variant'
-  step: 'qty'
-  variantId: number
-  variantSku: string
-  productName: string
-  currentQty: number
-}
+// Типы receive/writeoff удалены (фаза 2): флоу приёмки/списания был мёртвым кодом.
 
 export type InventoryFlowState =
   | AddFlow
@@ -500,62 +484,8 @@ async function showCategoryEdit(ctx: Context, categoryId: number): Promise<void>
   )
 }
 
-// ─── Вспомогательные функции выбора товара (оприходование / списание) ─────────
-
-async function showPickMethod(ctx: Context, flow: 'receive' | 'writeoff'): Promise<void> {
-  const prefix = flow === 'receive' ? 'r' : 'w'
-  const label = flow === 'receive' ? '📥 Оприходование' : '📤 Списание'
-  await ctx.reply(
-    `${label}\n\nКак найти товар?`,
-    Markup.inlineKeyboard([
-      [
-        Markup.button.callback('📋 Выбрать из списка', `inv:${prefix}_from_list`),
-        Markup.button.callback('🔢 Ввести SKU', `inv:${prefix}_from_sku`),
-      ],
-      [Markup.button.callback('🔙 Назад', 'inv:back')],
-    ]),
-  )
-}
-
-async function showCategoriesForPick(ctx: Context, flow: 'receive' | 'writeoff'): Promise<void> {
-  const categories = await prisma.category.findMany({ orderBy: { name: 'asc' } })
-  const prefix = flow === 'receive' ? 'r' : 'w'
-  const label = flow === 'receive' ? '📥 Оприходование' : '📤 Списание'
-  if (categories.length === 0) {
-    await ctx.reply('❌ Категорий нет. Выберите другой способ.')
-    await showPickMethod(ctx, flow)
-    return
-  }
-  const rows: ReturnType<typeof Markup.button.callback>[][] = categories.map((c) => [
-    Markup.button.callback(c.name, `inv:${prefix}_cat:${c.id}`),
-  ])
-  rows.push([Markup.button.callback('🔙 Назад', flow === 'receive' ? 'inv:receive' : 'inv:writeoff')])
-  await ctx.reply(`${label}\n\nВыберите категорию:`, Markup.inlineKeyboard(rows))
-}
-
-async function showProductsForPick(
-  ctx: Context,
-  flow: 'receive' | 'writeoff',
-  categoryId: number,
-): Promise<void> {
-  const products = await prisma.product.findMany({
-    where: { categoryId },
-    orderBy: { name: 'asc' },
-  })
-  const prefix = flow === 'receive' ? 'r' : 'w'
-  if (products.length === 0) {
-    await ctx.reply('❌ В этой категории нет товаров.')
-    await showCategoriesForPick(ctx, flow)
-    return
-  }
-  const rows: ReturnType<typeof Markup.button.callback>[][] = products.map((p) => [
-    Markup.button.callback(`${p.name} (${p.stock} шт.)`, `inv:${prefix}_prod:${p.sku}`),
-  ])
-  rows.push([
-    Markup.button.callback('🔙 Назад к категориям', `inv:${prefix}_from_list`),
-  ])
-  await ctx.reply('Выберите товар:', Markup.inlineKeyboard(rows))
-}
+// Функции выбора товара для приёмки/списания удалены (фаза 2): кнопки
+// inv:r_*/inv:w_* не имели обработчиков — ветка была мертва целиком.
 
 // ─── Функции для редактирования товаров ───────────────────────────────────────
 
@@ -587,27 +517,6 @@ async function showProductsForEdit(ctx: Context, categoryId: number): Promise<vo
   ])
   rows.push([Markup.button.callback('🔙 Назад', 'inv:edit_product')])
   await ctx.reply('Выберите товар:', Markup.inlineKeyboard(rows))
-}
-
-async function showVariantsForPick(
-  ctx: Context,
-  flow: 'receive' | 'writeoff',
-  product: { id: number; name: string; variants: { id: number; sku: string; quantity: number; attributes: unknown }[] },
-): Promise<void> {
-  const prefix = flow === 'receive' ? 'r' : 'w'
-  const label = flow === 'receive' ? '📥 Оприходование' : '📤 Списание'
-
-  const lines: string[] = [`${label} — ${product.name}\n`]
-  product.variants.forEach((v, i) => {
-    lines.push(formatVariantLine(v, i))
-  })
-  lines.push('\nВыберите вариант:')
-
-  const rows: ReturnType<typeof Markup.button.callback>[][] = product.variants.map((v, i) => [
-    Markup.button.callback(shortVariantLabel(v, i), `inv:${prefix}_variant:${v.id}`),
-  ])
-  rows.push([Markup.button.callback('🔙 Назад', `inv:${prefix}_from_list`)])
-  await ctx.reply(lines.join('\n'), Markup.inlineKeyboard(rows))
 }
 
 async function showProductCard(ctx: Context, productId: number): Promise<void> {

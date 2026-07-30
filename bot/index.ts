@@ -2,28 +2,6 @@ import '../lib/load-env'
 import { initSentry, Sentry } from '../lib/sentry'
 initSentry()
 
-// ─── Typed temp storage with TTL (replaces globalThis hacks) ─────────────────
-interface TimedData<T> { data: T; expires: number }
-const tempStorage = new Map<string, TimedData<any>>()
-
-function setTemp<T>(key: string, data: T, ttlMs = 5 * 60 * 1000): void {
-  tempStorage.set(key, { data, expires: Date.now() + ttlMs })
-}
-
-function getTemp<T>(key: string): T | null {
-  const entry = tempStorage.get(key)
-  if (!entry) return null
-  if (Date.now() > entry.expires) {
-    tempStorage.delete(key)
-    return null
-  }
-  return entry.data as T
-}
-
-function deleteTemp(key: string): void {
-  tempStorage.delete(key)
-}
-
 import { Telegraf, Markup } from 'telegraf'
 import { message } from 'telegraf/filters'
 import { setupClientHandlers } from '../webhooks/telegram'
@@ -38,7 +16,6 @@ import {
   handleInventoryMessage,
   handleInventoryDocument,
   handleInventoryPhoto,
-  showInventory,
 } from './admin/inventory'
 import {
   segmentsState,
@@ -72,7 +49,6 @@ import {
   setupStorefrontHandlers,
   handleStorefrontMessage,
   handleStorefrontPhoto,
-  showStorefront,
 } from './admin/storefront'
 import {
   broadcastsState,
@@ -85,7 +61,6 @@ import {
 import {
   promotionsState,
   setupPromotionsHandlers,
-  showPromotionsMenu,
   handlePromotionsMessage,
 } from './admin/promotions'
 import {
@@ -93,7 +68,6 @@ import {
   setupPricingHandlers,
   showPricingMenu,
   handlePricingMessage,
-  handlePricingDocument,
   sendDailyCurrencyRates,
   lastCurrencyChanges,
 } from './admin/pricing'
@@ -139,9 +113,9 @@ initPrismaAlerts(bot, ADMIN_IDS)
 /** Маркер в логах: если не видно при старте — в контейнере всё ещё старый dist (кэш билда, другой коммит, не тот репозиторий). */
 log.info('Boot: region seed path', { implementation: 'ShopRegion-raw-sql' })
 
-// ─── Режим техработ (in-memory) ───────────────────────────────────────────────
-
-let maintenanceMode = false
+// Режим техработ (in-memory maintenanceMode) удалён в фазе 2: флаг жил только
+// в памяти процесса, к автоответу клиентам подключён не был, а рабочая «пауза
+// приёма заказов» с текстом для покупателя — в мини-аппе (/admin/api/maintenance).
 
 // ─── Request logging ─────────────────────────────────────────────────────────
 
@@ -189,28 +163,26 @@ bot.use(async (ctx, next) => {
 
 // ─── Главное меню ─────────────────────────────────────────────────────────────
 
+// Фаза 2 уборки (аудит паритета): на клавиатуре остаются только функции,
+// которых ещё нет в мини-аппе. Товароучёт/Витрина/Акции/Входящие/Техработы/
+// Поставщики — уже в аппе (или мёртвый код); «Цены» держим ради курса USD.
+// Служебные typed-входы («🔧 Техработы» — бэкап/деструктив, «🏭 Поставщики» —
+// привязка chatId) работают вводом текста, без кнопок.
 const adminKeyboard = Markup.keyboard([
-  ['📦 Товароучёт', '💰 Цены'],
-  ['📊 Аналитика', '📬 Входящие'],
-  ['🏭 Поставщики', '🤖 AI Агент'],
-  ['📢 Рассылки', '🏷️ Акции'],
-  ['🖼️ Витрина', '📂 Сегменты'],
-  ['🔧 Техработы'],
+  ['💰 Цены', '📊 Аналитика'],
+  ['📢 Рассылки', '📂 Сегменты'],
+  ['🤖 AI Агент'],
 ]).resize()
 
-// Кнопки главного меню — для сброса пошаговых флоу при нажатии
+// Кнопки/типизируемые пункты меню — для сброса пошаговых флоу при нажатии
 const MENU_BUTTONS = new Set([
   '📊 Аналитика',
-  '📬 Входящие',
   '📢 Рассылки',
   '💰 Балансы',
-  '🏷️ Акции',
   '🔧 Техработы',
-  '📦 Товароучёт',
   '🔑 API Ключи',
   '📂 Сегменты',
   '🤖 AI Агент',
-  '🖼️ Витрина',
   '💰 Цены',
   '🏭 Поставщики',
 ])
@@ -481,9 +453,6 @@ const _mapCleanup = setInterval(() => {
   for (const [k, v] of userRequestCount) {
     if (now > v.resetAt) userRequestCount.delete(k)
   }
-  for (const [k, v] of tempStorage) {
-    if (now > v.expires) tempStorage.delete(k)
-  }
   // Safety valve: clear admin state maps that grow beyond 100 entries
   const stateMaps = [
     inventoryState, broadcastsState, segmentsState, salesState,
@@ -707,11 +676,8 @@ bot.on(message('document'), async (ctx, next) => {
     }
   }
 
-  // xlsx прайс-лист для обновления цен
-  if (!doc?.mime_type?.startsWith('image/')) {
-    const handledPricing = await handlePricingDocument(ctx as Parameters<typeof handlePricingDocument>[0], userId)
-    if (handledPricing) return
-  }
+  // xlsx-прайс (pricing:file) удалён в фазе 2 — ветка была недостижима из меню;
+  // прайсы разбираются текстом в админке («Цены» → «Загрузить прайс»)
 
   const state = inventoryState.get(userId)
   if (state?.flow === 'import_file') {
@@ -774,43 +740,8 @@ bot.hears('📊 Аналитика', async (ctx) => {
   await showAnalyticsToday(ctx)
 })
 
-// ─── 📬 Входящие ──────────────────────────────────────────────────────────────
-
-bot.hears('📬 Входящие', async (ctx) => {
-  const unreadCount = await prisma.message.count({ where: { isRead: false } })
-
-  if (unreadCount === 0) {
-    await ctx.reply(
-      '📬 Нет непрочитанных сообщений.',
-      Markup.inlineKeyboard([[Markup.button.callback('🏠 Главное меню', 'back:main')]]),
-    )
-    return
-  }
-
-  const recentClients = await prisma.client.findMany({
-    where: { messages: { some: { isRead: false } } },
-    include: {
-      messages: {
-        where: { isRead: false },
-        orderBy: { createdAt: 'desc' },
-        take: 1,
-      },
-    },
-    take: 10,
-    orderBy: { updatedAt: 'desc' },
-  })
-
-  const lines = recentClients.map((c) => {
-    const last = c.messages[0]
-    const preview = last?.text.slice(0, 60) ?? ''
-    return `• ${c.name}: ${preview}`
-  })
-
-  await ctx.reply(
-    `📬 Непрочитанных: ${unreadCount}\n\n${lines.join('\n')}`,
-    Markup.inlineKeyboard([[Markup.button.callback('🏠 Главное меню', 'back:main')]]),
-  )
-})
+// «📬 Входящие» убраны (фаза 2): кнопка была лишь счётчиком непрочитанных,
+// сама работа с клиентами живёт в CRM-группе с топиками — она не тронута.
 
 // ─── /sync — ручная синхронизация Google Sheets ──────────────────────────────
 
@@ -1062,12 +993,11 @@ bot.hears('💰 Балансы', async (ctx) => {
 })
 
 // ─── 🏷️ Акции ─────────────────────────────────────────────────────────────────
+// Кнопка убрана (фаза 2): создание/предпросмотр/запуск/остановка/удаление —
+// в мини-аппе («Ещё → Акции», POST /promotions/:id/launch и т.д.). Хендлеры
+// оставлены зарегистрированными: их используют старые инлайн-кнопки в чатах.
 
 setupPromotionsHandlers(bot)
-
-bot.hears('🏷️ Акции', async (ctx) => {
-  await showPromotionsMenu(ctx)
-})
 
 // ─── /hits — управление блоком "Хит продаж" ──────────────────────────────────
 
@@ -1403,15 +1333,13 @@ bot.command('avito', async (ctx) => {
 
 // ─── 🔧 Техработы ────────────────────────────────────────────────────────────
 
+// Служебное меню без кнопки на клавиатуре (фаза 2): открывается вводом текста
+// «🔧 Техработы». Пауза приёма заказов — в мини-аппе; здесь остаются бэкап,
+// обогащение, ключи и деструктив за подтверждением (в веб сознательно не тащим).
 bot.hears('🔧 Техработы', async (ctx) => {
-  const status = maintenanceMode ? '🔴 Включён' : '🟢 Выключен'
-  const action = maintenanceMode ? 'maint:off' : 'maint:on'
-  const label = maintenanceMode ? '✅ Выключить техработы' : '🔧 Включить техработы'
-
   await ctx.reply(
-    `🔧 Режим техработ\n\nСтатус: ${status}\n\nПри включении новые клиентские сообщения получают автоответ о техработах.`,
+    '🔧 Служебные операции\n\nПауза приёма заказов — в админке (Ещё). Здесь — бэкап и деструктив.',
     Markup.inlineKeyboard([
-      [Markup.button.callback(label, action)],
       [Markup.button.callback('🗄️ Бэкап сейчас', 'maint:backup')],
       [Markup.button.callback('✨ Обогатить все карточки', 'maint:enrich_all')],
       [Markup.button.callback('🔑 API Ключи', 'maint:api_keys')],
@@ -1422,22 +1350,6 @@ bot.hears('🔧 Техработы', async (ctx) => {
       [Markup.button.callback('🏠 Главное меню', 'back:main')],
     ]),
   )
-})
-
-bot.action('maint:on', async (ctx) => {
-  try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
-  const userId = getUserId(ctx)
-  maintenanceMode = true
-  await logSecurityEvent('maintenance_mode_toggled', { enabled: true, adminId: userId }, userId)
-  await ctx.reply('🔧 Техработы включены. Клиенты получат автоответ.')
-})
-
-bot.action('maint:off', async (ctx) => {
-  try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
-  const userId = getUserId(ctx)
-  maintenanceMode = false
-  await logSecurityEvent('maintenance_mode_toggled', { enabled: false, adminId: userId }, userId)
-  await ctx.reply('✅ Техработы выключены. Бот работает в штатном режиме.')
 })
 
 bot.action('maint:backup', async (ctx) => {
@@ -1570,89 +1482,10 @@ bot.action('maint:clear_orders', async (ctx) => {
   }
 })
 
-// ─── Stale prices actions ─────────────────────────────────────────────────────
-
-bot.action('stale:hide', async (ctx) => {
-  const userId = ctx.from?.id
-  if (!userId || !ADMIN_IDS.includes(userId)) {
-    try { await ctx.answerCbQuery('⛔ Нет доступа') } catch {}
-    return
-  }
-  try { await ctx.answerCbQuery() } catch { /* ignore */ }
-  const items = getTemp<Array<{ name: string }>>('staleItems')
-  if (!items?.length) { await ctx.reply('Нет устаревших позиций.'); return }
-
-  const allVariants = await prisma.productVariant.findMany({ select: { id: true, productId: true, attributes: true } })
-  const toHide: number[] = []
-  const affectedProductIds = new Set<number>()
-
-  for (const v of allVariants) {
-    const attrs = v.attributes as Record<string, unknown> | null
-    if (!attrs?.fullName) continue
-    const fn = String(attrs.fullName).toLowerCase()
-    if (items.some(item => fn.includes(item.name.toLowerCase().slice(0, 30)))) {
-      toHide.push(v.id)
-      affectedProductIds.add(v.productId)
-    }
-  }
-
-  if (toHide.length > 0) {
-    await prisma.productVariant.updateMany({
-      where: { id: { in: toHide } },
-      data: { inStock: false, quantity: 0 },
-    })
-
-    for (const pid of [...affectedProductIds]) {
-      const totalQty = await prisma.productVariant.aggregate({ where: { productId: pid }, _sum: { quantity: true } })
-      await prisma.product.update({
-        where: { id: pid },
-        data: { isAvailable: (totalQty._sum.quantity ?? 0) > 0, stock: totalQty._sum.quantity ?? 0, quantity: totalQty._sum.quantity ?? 0 },
-      })
-    }
-  }
-
-  await ctx.reply(`🔴 Скрыто с витрины: ${toHide.length} вариантов. После обновления цен нажмите «🔄 Синхронизировать».`)
-  deleteTemp('staleItems')
-})
-
-bot.action('stale:ask_manager', async (ctx) => {
-  const userId = ctx.from?.id
-  if (!userId || !ADMIN_IDS.includes(userId)) {
-    try { await ctx.answerCbQuery('⛔ Нет доступа') } catch {}
-    return
-  }
-  try { await ctx.answerCbQuery() } catch { /* ignore */ }
-  const items = getTemp<Array<{ name: string }>>('staleItems')
-  if (!items?.length) { await ctx.reply('Нет устаревших позиций.'); return }
-
-  const allVariants = await prisma.productVariant.findMany({ select: { id: true, attributes: true } })
-  const toUpdate: number[] = []
-
-  for (const v of allVariants) {
-    const attrs = v.attributes as Record<string, unknown> | null
-    if (!attrs?.fullName) continue
-    const fn = String(attrs.fullName).toLowerCase()
-    if (items.some(item => fn.includes(item.name.toLowerCase().slice(0, 30)))) {
-      toUpdate.push(v.id)
-    }
-  }
-
-  if (toUpdate.length > 0) {
-    await prisma.productVariant.updateMany({
-      where: { id: { in: toUpdate } },
-      data: { price: 0 },
-    })
-  }
-
-  await ctx.reply(`💬 Обновлено ${toUpdate.length} вариантов — цена «уточняйте у менеджера». После обновления цен нажмите «🔄 Синхронизировать».`)
-  deleteTemp('staleItems')
-})
-
-bot.action('stale:skip', async (ctx) => {
-  try { await ctx.answerCbQuery() } catch { /* ignore */ }
-  await ctx.reply('⏭️ Позиции оставлены без изменений. Рекомендуем обновить цены как можно скорее.')
-  deleteTemp('staleItems')
-})
+// stale:* удалены (фаза 2): кнопки жили на tempStorage с TTL 5 минут при
+// часовом кроне — почти всегда отвечали «нет устаревших». Уведомление о
+// протухших ценах осталось текстом; скрыть позиции можно в «Товарах»,
+// обновить цены — прайсом в админке.
 
 bot.action('maint:restore_info', async (ctx) => {
   try { await ctx.answerCbQuery() } catch { /* ignore */ }
@@ -1720,9 +1553,6 @@ bot.action('maint:api_keys', async (ctx) => {
   await showApiKeysMenu(ctx)
 })
 
-// Экспортируем флаг для использования в webhooks/telegram.ts (если потребуется)
-export { maintenanceMode }
-
 // ─── 🏠 Назад в главное меню ──────────────────────────────────────────────────
 
 bot.action('back:main', async (ctx) => {
@@ -1776,9 +1606,10 @@ bot.command('pin', async (ctx) => {
 
 setupInventoryHandlers(bot)
 
-bot.hears('📦 Товароучёт', async (ctx) => {
-  await showInventory(ctx)
-})
+// «📦 Товароучёт» убран (фаза 2): карточка/фото/атрибуты — «Товары», хиты —
+// «Витрина», синк — «Сегодня»; мастер добавления и ручные варианты заменены
+// таблицей+синком и «Завести в каталог» из потока цен; приёмка/списание были
+// мёртвым кодом. Флоу-хендлеры инвентаря остаются для старых инлайн-кнопок.
 
 // ─── 📂 Сегменты ──────────────────────────────────────────────────────────────
 
@@ -1798,12 +1629,9 @@ bot.hears('🤖 AI Агент', async (ctx) => {
 })
 
 // ─── 🖼️ Витрина ───────────────────────────────────────────────────────────────
+// Кнопка убрана (фаза 2): маркиза/баннеры/кэш — в мини-аппе (вкладка «Витрина»).
 
 setupStorefrontHandlers(bot)
-
-bot.hears('🖼️ Витрина', async (ctx) => {
-  await showStorefront(ctx)
-})
 
 // ─── 💰 Цены ──────────────────────────────────────────────────────────────────
 
@@ -2561,25 +2389,19 @@ setInterval(async () => {
           for (const adminId of ADMIN_IDS) {
             try {
               await bot.telegram.sendMessage(adminId,
-                `📋 ${staleItems.length} позиций без обновлённых цен.\n\nИспользуйте меню «💰 Цены → Из сообщения поставщика» чтобы начать обновлять цены через бота.`,
-                Markup.inlineKeyboard([[Markup.button.callback('⏭️ Понятно', 'stale:skip')]]),
+                `📋 ${staleItems.length} позиций без обновлённых цен.\n\nРазберите прайс в админке (вкладка «Цены» → «Загрузить прайс»).`,
               )
             } catch (err) { log.error('Stale notify failed', { error: err instanceof Error ? err.message : String(err) }) }
           }
         } else {
-          setTemp('staleItems', staleItems)
+          // Кнопки stale:* удалены (фаза 2) — уведомление текстом; действия в админке
           for (const adminId of ADMIN_IDS) {
             try {
               await bot.telegram.sendMessage(adminId, [
-                `⚠️ ВНИМАНИЕ: ${staleItems.length} позиций с устаревшими ценами (>6 часов)`,
+                `⚠️ ${staleItems.length} позиций с устаревшими ценами (>6 часов)`,
                 '',
-                'Что делать с этими позициями пока цены не обновлены?',
-              ].join('\n'),
-              Markup.inlineKeyboard([
-                [Markup.button.callback('🔴 Убрать с витрины', 'stale:hide')],
-                [Markup.button.callback('💬 «Уточняйте у менеджера»', 'stale:ask_manager')],
-                [Markup.button.callback('⏭️ Оставить как есть', 'stale:skip')],
-              ]))
+                'Обновите цены прайсом в админке («Цены» → «Загрузить прайс») или скройте позиции во вкладке «Товары».',
+              ].join('\n'))
               const fullMsg = formatStaleSupplierMessage(staleItems)
               if (fullMsg.length <= 4000) {
                 await bot.telegram.sendMessage(adminId, fullMsg)
