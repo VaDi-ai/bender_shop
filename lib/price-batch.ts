@@ -196,6 +196,8 @@ export interface PreviewRow {
   matched: boolean
   variantId: number | null
   productName: string | null
+  brand: string | null      // марка продукта — для полной атрибуции на экране разбора
+  inStock: boolean | null   // наличие варианта — там же
   variantAttrs: Record<string, string> | null
   currentPrice: number | null
   currentCost: number | null
@@ -222,7 +224,7 @@ export async function getBatchPreview(batchId: number): Promise<{
   const variantIds = rows.map(r => r.variantId).filter((v): v is number => v !== null)
   const variants = await prisma.productVariant.findMany({
     where: { id: { in: variantIds } },
-    select: { id: true, price: true, costPrice: true, attributes: true, product: { select: { name: true } } },
+    select: { id: true, price: true, costPrice: true, attributes: true, inStock: true, product: { select: { name: true, brand: true } } },
   })
   const byId = new Map(variants.map(v => [v.id, v]))
   const rules: MarkupRuleData[] = await loadRules()
@@ -233,7 +235,7 @@ export async function getBatchPreview(batchId: number): Promise<{
     if (!v) {
       return {
         supplierPriceId: r.id, rawLine: r.rawMessage, matched: false,
-        variantId: null, productName: null, variantAttrs: null,
+        variantId: null, productName: null, brand: null, inStock: null, variantAttrs: null,
         currentPrice: null, currentCost: null,
         supplierPrice, proposedPrice: null, deltaPct: null, corridor: null,
       }
@@ -246,6 +248,8 @@ export async function getBatchPreview(batchId: number): Promise<{
       matched: true,
       variantId: v.id,
       productName: v.product.name,
+      brand: v.product.brand ?? null,
+      inStock: v.inStock,
       variantAttrs: (v.attributes ?? null) as Record<string, string> | null,
       currentPrice,
       currentCost: v.costPrice !== null ? Number(v.costPrice) : null,
