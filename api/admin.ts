@@ -1048,6 +1048,83 @@ export function adminApiRouter(): Router {
     res.status(r.status).json(r.ok ? { ok: true, ...(r.data as object) } : { error: r.error })
   }))
 
+  // ── AI-агент: пульт (перенос bot/admin/ai_settings.ts; логика агента не тронута) ──
+  // Чтение — owner+manager (статус видят все); смена режима/расписания/ключа —
+  // ownerOnly: это клиентское поведение ИИ.
+  router.get('/ai-agent', safe(async (_req, res) => {
+    const { getAIMode } = await import('../bot/ai/agent')
+    const { getApiKeyValue } = await import('../lib/api-key-store')
+    const [mode, schedule, dbKey] = await Promise.all([
+      getAIMode(),
+      getApiKeyValue('ai_schedule_enabled'),
+      getApiKeyValue('openrouter_key'),
+    ])
+    // Ключ НИКОГДА не отдаём — только факт наличия
+    res.json({ mode, scheduleEnabled: schedule === 'true', keySet: !!(dbKey || process.env.OPENROUTER_API_KEY) })
+  }))
+
+  router.post('/ai-agent/mode', ownerOnly, safe(async (req, res) => {
+    const mode = String((req.body ?? {}).mode ?? '')
+    if (!['off', 'manual', 'semi', 'auto'].includes(mode)) {
+      res.status(422).json({ error: 'Неизвестный режим' }); return
+    }
+    const { setAIMode } = await import('../bot/ai/agent')
+    await setAIMode(mode as 'off' | 'manual' | 'semi' | 'auto')
+    void logAdminAction({ adminTelegramId: req.admin!.telegramId, action: 'update', entity: 'AIAgent', after: { mode } })
+    await logSecurityEvent('ai_mode_changed', { mode, via: 'web' }, req.admin!.telegramId)
+    res.json({ ok: true, mode })
+  }))
+
+  router.post('/ai-agent/schedule', ownerOnly, safe(async (req, res) => {
+    const enabled = (req.body ?? {}).enabled === true
+    const { getAIMode, setAIMode } = await import('../bot/ai/agent')
+    const { setApiKeyValue } = await import('../lib/api-key-store')
+    await setApiKeyValue('ai_schedule_enabled', enabled ? 'true' : 'false')
+    let mode = await getAIMode()
+    let switched: { from: string; mskHour: number } | null = null
+    if (enabled) {
+      // Как в боте: немедленная проверка МСК-часа с сохранением прежнего режима
+      const mskHour = new Date(new Date().toLocaleString('en-US', { timeZone: 'Europe/Moscow' })).getHours()
+      const isWorkHours = mskHour >= 11 && mskHour < 20
+      if (!isWorkHours && mode !== 'auto' && mode !== 'off') {
+        await setApiKeyValue('ai_mode_before_night', mode)
+        await setAIMode('auto')
+        switched = { from: mode, mskHour }
+        mode = 'auto'
+      }
+    }
+    void logAdminAction({ adminTelegramId: req.admin!.telegramId, action: 'update', entity: 'AIAgent', after: { schedule: enabled } })
+    await logSecurityEvent('ai_mode_changed', { action: enabled ? 'schedule_on' : 'schedule_off', via: 'web' }, req.admin!.telegramId)
+    res.json({ ok: true, enabled, mode, switched })
+  }))
+
+  // Ключ OpenRouter — write-only: принимаем и проверяем, назад не отдаём никогда
+  router.post('/ai-agent/openrouter-key', ownerOnly, safe(async (req, res) => {
+    const key = String((req.body ?? {}).key ?? '').trim()
+    if (!key.startsWith('sk-or-') || key.length < 20) {
+      res.status(422).json({ error: 'Ключ OpenRouter должен начинаться с «sk-or-»' }); return
+    }
+    // Живая проверка перед сохранением — как в боте
+    try {
+      const { default: OpenAI } = await import('openai')
+      const test = new OpenAI({ baseURL: 'https://openrouter.ai/api/v1', apiKey: key })
+      await test.chat.completions.create({
+        model: 'anthropic/claude-sonnet-4',
+        messages: [{ role: 'user', content: 'test' }],
+        max_tokens: 5,
+      })
+    } catch {
+      res.status(422).json({ error: 'Ключ не прошёл проверку OpenRouter — не сохранён' }); return
+    }
+    const { setApiKeyValue } = await import('../lib/api-key-store')
+    await setApiKeyValue('openrouter_key', key)
+    process.env.OPENROUTER_API_KEY = key
+    ;(await import('../bot/ai/agent')).reinitClient(key)
+    ;(await import('../lib/ai-parser')).reinitClient(key)
+    await logSecurityEvent('ai_key_changed', { via: 'web' }, req.admin!.telegramId)
+    res.json({ ok: true })
+  }))
+
   // ── Команда магазина: кто имеет доступ (owner-only) ───────────────────────
   router.get('/team', ownerOnly, safe(async (req, res) => {
     const { listTeam } = await import('../lib/admin-team')
