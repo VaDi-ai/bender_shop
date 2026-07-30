@@ -394,6 +394,7 @@
         <button class="hub-tile" data-hub="analytics"><span class="ht-n">Аналитика</span><span class="ht-s" id="tileAnalytics">—</span></button>
         <button class="hub-tile" data-hub="broadcasts"><span class="ht-n">Рассылки</span><span class="ht-s" id="tileBroadcasts">—</span></button>
         <button class="hub-tile" data-hub="segments"><span class="ht-n">Сегменты</span><span class="ht-s" id="tileSegments">—</span></button>
+        <button class="hub-tile" data-hub="aiagent"><span class="ht-n">AI Агент</span><span class="ht-s" id="tileAiAgent">—</span></button>
         <button class="hub-tile" data-hub="sync"><span class="ht-n">Журнал синка</span><span class="ht-s" id="tileSync">—</span></button>
         <button class="hub-tile" data-hub="parser"><span class="ht-n">Парсер</span><span class="ht-s" id="tileParser">—</span></button>
       </div>
@@ -525,6 +526,28 @@
       </div>
       </div>
 
+      <div class="hub-page" id="hub-aiagent" style="display:none">
+      <div class="card">
+        <h3>AI Sales Agent <span class="chip c-off right" id="aiModeChip">—</span></h3>
+        <div class="mt" id="aiModeDesc">Загрузка…</div>
+        <div class="cap" id="aiModesCap" style="display:none">РЕЖИМ — ВЫБЕРИТЕ, КАК ОТВЕЧАЕТ ИИ</div>
+        <div id="aiModes"></div>
+        <div class="mt" id="aiErr" style="color:var(--bad)"></div>
+      </div>
+      <div class="card" id="aiScheduleCard" style="display:none">
+        <h3>Ночное расписание <span class="chip c-off right" id="aiSchedChip">—</span></h3>
+        <div class="mt">Ночью (20:00–11:00 МСК) включает «Авто», утром возвращает прежний режим.</div>
+        <button class="btn b-nt" id="aiSchedBtn">—</button>
+      </div>
+      <div class="card" id="aiKeyCard" style="display:none">
+        <h3>Ключ OpenRouter <span class="chip c-off right" id="aiKeyChip">—</span></h3>
+        <input class="inp" id="aiKeyInput" placeholder="sk-or-… (новый ключ — заменит текущий)" autocomplete="off">
+        <button class="btn b-gh" id="aiKeySave">Проверить и заменить ключ</button>
+        <div class="mt" id="aiKeyErr" style="color:var(--bad)"></div>
+        <div class="hint">Ключ проверяется живым запросом и хранится шифрованным. Обратно он не показывается никогда — только «задан / не задан».</div>
+      </div>
+      </div>
+
       <div class="hub-page" id="hub-segments" style="display:none">
       <div class="card">
         <h3>Сегменты клиентов</h3>
@@ -651,7 +674,7 @@
       window.adminMe = me
       gate.classList.add('hidden')
       loadDashboard(); loadSyncRuns(); loadSuppliers(); loadBatches(); loadUnmatched(); loadMarkupRules()
-      loadSimQueue(); loadSimRules(); loadSimRecalc(); loadDictionary(); loadStorefront(); loadTeam(); loadIssues(); loadPromotions(); loadInsights(); loadBroadcasts(); loadSegments(); loadMaintenance()
+      loadSimQueue(); loadSimRules(); loadSimRecalc(); loadDictionary(); loadStorefront(); loadTeam(); loadIssues(); loadPromotions(); loadInsights(); loadBroadcasts(); loadSegments(); loadAiAgent(); loadMaintenance()
     }
 
     // ── ОШИБКИ В ТОВАРАХ: идём от проблемы к карточке ─────────────────────────
@@ -1157,6 +1180,7 @@
       analytics: ['Аналитика', 'Продажи и покупатели.'],
       broadcasts: ['Рассылки', 'Сообщения покупателям в бот.'],
       segments: ['Сегменты', 'Группы клиентов для рассылок и аналитики.'],
+      aiagent: ['AI Агент', 'Как Бендер отвечает покупателям: режим и ночное расписание.'],
       sync: ['Журнал синка', 'Как прошли последние прогоны таблицы.'],
       parser: ['Парсер', 'Чему система научилась на таблице и прайсах.'],
     }
@@ -1441,6 +1465,74 @@
         document.getElementById('bcCancel').click()
         loadBroadcasts()
       } finally { btn.disabled = false; btn.textContent = 'Отправить аудитории' }
+    })
+
+    // ── AI-АГЕНТ (перенос bot/admin/ai_settings.ts — только пульт) ────────────
+    const AI_MODES = {
+      off:    { label: '🔴 Выключен',   desc: 'ИИ молчит — покупателям отвечают только люди.' },
+      manual: { label: '🟡 Подсказки',  desc: 'ИИ пишет подсказки менеджеру — покупатель их не видит.' },
+      semi:   { label: '🟠 Полу-авто',  desc: 'ИИ предлагает ответ — менеджер одобряет или правит.' },
+      auto:   { label: '🟢 Авто',       desc: '⚠️ ИИ отвечает покупателям сам, без проверки.' },
+    }
+    async function loadAiAgent() {
+      const r = await api('/ai-agent').catch(() => null)
+      const isOwner = window.adminMe && window.adminMe.role === 'owner'
+      if (!r || !r.ok) { document.getElementById('aiModeDesc').textContent = 'Не удалось загрузить'; return }
+      const d = r.data
+      const m = AI_MODES[d.mode] || { label: d.mode, desc: '' }
+      document.getElementById('aiModeChip').textContent = m.label
+      document.getElementById('aiModeChip').className = 'chip right ' + (d.mode === 'auto' ? 'c-warn' : d.mode === 'off' ? 'c-off' : 'c-ok')
+      document.getElementById('aiModeDesc').textContent = m.desc + (isOwner ? '' : ' Менять режим может только владелец.')
+      setTile('tileAiAgent', m.label)
+      document.getElementById('aiModesCap').style.display = isOwner ? '' : 'none'
+      document.getElementById('aiModes').innerHTML = isOwner ? Object.entries(AI_MODES).map(([k, v]) => `
+        <div class="list-i"><div class="grow">
+          <div class="nm">${esc(v.label)}</div><div class="mt">${esc(v.desc)}</div>
+        </div>${k === d.mode ? '<span class="chip c-ok">включён</span>' : `<button class="btn b-nt sm" data-ai-mode="${k}">Включить</button>`}</div>`).join('') : ''
+      document.getElementById('aiModes').querySelectorAll('[data-ai-mode]').forEach(b => b.addEventListener('click', async () => {
+        const mode = b.dataset.aiMode
+        const warn = mode === 'auto'
+          ? 'Включить «Авто»?\n\n⚠️ ИИ будет отвечать покупателям сам, без проверки менеджером.'
+          : `Переключить режим на «${AI_MODES[mode].label}»?`
+        if (!confirm(warn)) return
+        const r2 = await api('/ai-agent/mode', { method: 'POST', body: JSON.stringify({ mode }) }).catch(() => null)
+        if (!r2 || !r2.ok) { document.getElementById('aiErr').textContent = (r2 && r2.data && r2.data.error) || 'Не получилось'; return }
+        document.getElementById('aiErr').textContent = ''
+        toast('Режим: ' + AI_MODES[mode].label)
+        loadAiAgent()
+      }))
+      // Расписание и ключ — owner-only
+      document.getElementById('aiScheduleCard').style.display = isOwner ? '' : 'none'
+      document.getElementById('aiKeyCard').style.display = isOwner ? '' : 'none'
+      if (isOwner) {
+        document.getElementById('aiSchedChip').textContent = d.scheduleEnabled ? 'включено' : 'выключено'
+        document.getElementById('aiSchedChip').className = 'chip right ' + (d.scheduleEnabled ? 'c-ok' : 'c-off')
+        const sb = document.getElementById('aiSchedBtn')
+        sb.textContent = d.scheduleEnabled ? 'Выключить расписание' : 'Включить расписание'
+        sb.onclick = async () => {
+          const r2 = await api('/ai-agent/schedule', { method: 'POST', body: JSON.stringify({ enabled: !d.scheduleEnabled }) }).catch(() => null)
+          if (!r2 || !r2.ok) { document.getElementById('aiErr').textContent = (r2 && r2.data && r2.data.error) || 'Не получилось'; return }
+          toast(r2.data.switched
+            ? `Расписание включено · сейчас ночь (${r2.data.switched.mskHour}:00 МСК) — включён «Авто», был «${(AI_MODES[r2.data.switched.from] || {}).label || r2.data.switched.from}»`
+            : (r2.data.enabled ? 'Расписание включено' : 'Расписание выключено'))
+          loadAiAgent()
+        }
+        document.getElementById('aiKeyChip').textContent = d.keySet ? 'задан' : 'не задан'
+        document.getElementById('aiKeyChip').className = 'chip right ' + (d.keySet ? 'c-ok' : 'c-bad')
+      }
+    }
+    document.getElementById('aiKeySave').addEventListener('click', async function () {
+      const err = document.getElementById('aiKeyErr'); err.textContent = ''
+      const key = document.getElementById('aiKeyInput').value.trim()
+      if (!key) { err.textContent = 'Вставьте новый ключ'; return }
+      this.disabled = true; this.textContent = 'Проверяем живым запросом…'
+      try {
+        const r = await api('/ai-agent/openrouter-key', { method: 'POST', body: JSON.stringify({ key }) }).catch(() => null)
+        if (!r || !r.ok) { err.textContent = (r && r.data && r.data.error) || 'Не получилось'; return }
+        document.getElementById('aiKeyInput').value = ''
+        toast('Ключ проверен и сохранён')
+        loadAiAgent()
+      } finally { this.disabled = false; this.textContent = 'Проверить и заменить ключ' }
     })
 
     // ── СЕГМЕНТЫ (перенос bot/admin/segments.ts) ──────────────────────────────
