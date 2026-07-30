@@ -152,20 +152,15 @@
 
     <!-- ═══ ЦЕНЫ ═══ -->
     <section class="screen" id="s-prices">
+      <div id="pricesMain">
       <h2>Цены и поставщики</h2>
       <div class="sub">Разбираем прайсы, берём лучшую цену, ставим наценку.</div>
 
+      <button class="btn b-main" id="puOpen" style="margin-top:0">Загрузить прайс</button>
+      <div class="hint">Вставьте текст от поставщика — система разберёт строки и покажет, какие цены изменятся. Ничего не применится, пока вы не подтвердите.</div>
+
       <div class="cap">НОВЫЕ ПРАЙСЫ — ПРОВЕРЬТЕ И ПРИМЕНИТЕ</div>
       <div id="pbList"><div class="empty">Загрузка…</div></div>
-
-      <div class="card">
-        <h3>Разобрать прайс из текста</h3>
-        <select class="inp" id="pbSupplier"><option value="">Поставщик не указан (TTL 3 дня)</option></select>
-        <textarea class="inp" id="pbText" rows="4" placeholder="Вставьте текст прайса — как прислал поставщик"></textarea>
-        <button class="btn b-main" id="pbParse">Разобрать прайс</button>
-        <div class="mt" id="pbErr" style="color:var(--bad)"></div>
-        <div class="hint">Система прочитает текст и покажет, какие цены изменятся. Ничего не применится, пока вы не подтвердите.</div>
-      </div>
 
       <div id="pbPreview"></div>
 
@@ -214,6 +209,29 @@
           <div class="mt" id="supErr" style="color:var(--bad)"></div>
         </div>
         <div class="hint">Привязка к Telegram-чату — из бота: прайсы из чата попадают сюда сами. Поставщик без чата работает через вставку текста.</div>
+      </div>
+      </div><!-- /pricesMain -->
+
+      <!-- Экран «Загрузить прайс» (мокап bender-prices-flow-2, шаг 1) -->
+      <div id="pricesUpload" style="display:none">
+        <button class="hub-back" id="puBack">← Цены</button>
+        <h2>Загрузить прайс</h2>
+        <div class="sub">Вставьте прайс поставщика. Система разберёт строки и подготовит обновление цен.</div>
+
+        <div class="lbl">Поставщик</div>
+        <select class="inp" id="puSupplier" style="margin-top:5px"><option value="">Поставщик не указан (цены свежи 3 дня)</option></select>
+
+        <div class="card" id="puNewSup" style="border-style:dashed;display:none;margin-top:10px">
+          <div class="lbl" style="margin-bottom:8px">Новый поставщик</div>
+          <input class="inp" id="puSupName" placeholder="Название (напр. «Дубай-опт»)" maxlength="100" style="margin-top:0">
+          <input class="inp" id="puSupTtl" placeholder="Цена свежа, дней (обычно 3)" inputmode="numeric">
+          <div class="hint">Наценка считается отдельно — по вашим интервалам. Поставщик из чата с ботом добавляется сам.</div>
+        </div>
+
+        <div class="lbl" style="margin-top:12px">Прайс</div>
+        <textarea class="inp" id="puText" rows="8" placeholder="iPhone 17 Pro 256 Silver 🇭🇰 1 Sim + eSim - 122.000₽" style="margin-top:5px;font-family:'JetBrains Mono',monospace;font-size:11.5px;line-height:1.7;resize:none"></textarea>
+        <button class="btn b-main" id="puParse">Разобрать прайс</button>
+        <div class="mt" id="puErr" style="color:var(--bad)"></div>
       </div>
     </section>
 
@@ -1875,7 +1893,7 @@
       attn.batchFrom = 'от ' + [...new Set(previews.map(b => b.supplier ? b.supplier.name : 'без поставщика'))].slice(0, 3).join(', ')
       renderAttention()
       if (!r.data.length) {
-        box.innerHTML = '<div class="empty">Новых прайсов нет.<br>Перешлите прайс боту из чата поставщика —<br>или вставьте текст в форму ниже.</div>'
+        box.innerHTML = '<div class="empty">Новых прайсов нет.<br>Перешлите прайс боту из чата поставщика —<br>или нажмите «Загрузить прайс» выше.</div>'
         return
       }
       box.innerHTML = r.data.map(bt => {
@@ -1897,25 +1915,59 @@
     }
 
     function fillSupplierSelect() {
-      const sel = document.getElementById('pbSupplier')
+      const sel = document.getElementById('puSupplier')
       const cur = sel.value
-      sel.innerHTML = '<option value="">Поставщик не указан (TTL 3 дня)</option>' +
-        (window._suppliers || []).filter(s => s.isActive).map(s => `<option value="${s.id}">${esc(s.name)} (TTL ${s.priceTtlDays} дн.)</option>`).join('')
+      sel.innerHTML = '<option value="">Поставщик не указан (цены свежи 3 дня)</option>' +
+        (window._suppliers || []).filter(s => s.isActive).map(s => `<option value="${s.id}">${esc(s.name)}</option>`).join('') +
+        '<option value="__new">＋ Добавить нового…</option>'
       sel.value = cur
     }
 
-    document.getElementById('pbParse').addEventListener('click', async function () {
-      const err = document.getElementById('pbErr'); err.textContent = ''
+    // ── Экран «Загрузить прайс» внутри вкладки «Цены» ─────────────────────────
+    function openPriceUpload() {
+      document.getElementById('pricesMain').style.display = 'none'
+      document.getElementById('pricesUpload').style.display = ''
+      document.getElementById('main').scrollTo({ top: 0 })
+    }
+    function closePriceUpload() {
+      document.getElementById('pricesUpload').style.display = 'none'
+      document.getElementById('pricesMain').style.display = ''
+    }
+    document.getElementById('puOpen').addEventListener('click', openPriceUpload)
+    document.getElementById('puBack').addEventListener('click', () => { closePriceUpload(); document.getElementById('main').scrollTo({ top: 0 }) })
+    // Уход с вкладки возвращает «Цены» в исходное состояние — как хаб «Ещё»
+    document.querySelectorAll('#tabbar .tb').forEach(b => b.addEventListener('click', closePriceUpload))
+    document.getElementById('puSupplier').addEventListener('change', function () {
+      document.getElementById('puNewSup').style.display = this.value === '__new' ? '' : 'none'
+    })
+
+    document.getElementById('puParse').addEventListener('click', async function () {
+      const err = document.getElementById('puErr'); err.textContent = ''
+      const supVal = document.getElementById('puSupplier').value
+      const payload = { source: 'paste', text: document.getElementById('puText').value }
+      if (supVal === '__new') {
+        payload.newSupplier = { name: document.getElementById('puSupName').value.trim() }
+        const ttl = document.getElementById('puSupTtl').value.trim()
+        if (ttl) payload.newSupplier.priceTtlDays = Number(ttl)
+      } else {
+        payload.supplierId = supVal || null
+      }
       this.disabled = true; this.textContent = 'Разбираем… (10–30 сек)'
       try {
-        const r = await api('/price-batches', { method: 'POST', body: JSON.stringify({
-          source: 'paste',
-          text: document.getElementById('pbText').value,
-          supplierId: document.getElementById('pbSupplier').value || null,
-        }) })
+        const r = await api('/price-batches', { method: 'POST', body: JSON.stringify(payload) })
         if (!r.ok) { err.textContent = r.data && r.data.error === 'validation' ? r.data.fields.map(f => f.message).join(' · ') : (r.data && r.data.error || 'Не удалось разобрать'); return }
-        if (r.data.reused) err.textContent = 'Этот прайс уже разбирали — открываю существующий разбор.'
-        document.getElementById('pbText').value = ''
+        const st = r.data.stats || {}
+        toast(r.data.reused ? 'Этот прайс уже разбирали — открываю разбор' : `Разобрано: ${st.matchedRows ?? 0} · на уточнение: ${st.unmatchedRows ?? 0}`)
+        document.getElementById('puText').value = ''
+        if (r.data.supplier) {
+          document.getElementById('puSupName').value = ''
+          document.getElementById('puSupTtl').value = ''
+          document.getElementById('puNewSup').style.display = 'none'
+          document.getElementById('puSupplier').value = ''
+          await loadSuppliers()
+          document.getElementById('puSupplier').value = String(r.data.supplier.id)
+        }
+        closePriceUpload()
         await showBatchPreview(r.data.batchId)
         loadBatches(); loadUnmatched()
       } catch { err.textContent = 'Нет связи с сервером' }

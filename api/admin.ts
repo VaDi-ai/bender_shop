@@ -182,6 +182,31 @@ export async function createSupplier(req: AdminRequest, res: Response): Promise<
   }
 }
 
+// ── Новый поставщик из формы «Загрузить прайс» ───────────────────────────────
+// Форма сознательно узкая: только name + «цена свежа, дней» (priceTtlDays).
+// Наценки у поставщика в этом флоу нет — розница считается по интервалам
+// MarkupRule; markup/notes и прочие ключи → 422, не молчаливый игнор.
+export function validateBatchNewSupplier(raw: unknown): {
+  errors: Array<{ field: string; message: string }>
+  data: { name: string; priceTtlDays: number | null }
+} {
+  const empty = { name: '', priceTtlDays: null }
+  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
+    return { errors: [{ field: 'newSupplier', message: 'Заполните нового поставщика' }], data: empty }
+  }
+  const body = raw as Record<string, unknown>
+  const errors: Array<{ field: string; message: string }> = []
+  for (const key of Object.keys(body)) {
+    if (key !== 'name' && key !== 'priceTtlDays') errors.push({ field: key, message: 'Поле не задаётся при загрузке прайса' })
+  }
+  const input: Record<string, unknown> = { name: body.name }
+  if (body.priceTtlDays !== undefined && body.priceTtlDays !== null && body.priceTtlDays !== '') input.priceTtlDays = body.priceTtlDays
+  const base = validateSupplierInput(input, { partial: false })
+  errors.push(...base.errors)
+  if (errors.length) return { errors, data: empty }
+  return { errors: [], data: { name: base.data.name as string, priceTtlDays: (base.data.priceTtlDays as number | undefined) ?? null } }
+}
+
 export async function updateSupplier(req: AdminRequest, res: Response): Promise<void> {
   const id = parseInt(String(req.params.id), 10)
   if (!Number.isInteger(id)) { res.status(422).json({ error: 'validation', fields: [{ field: 'id', message: 'Неверный ID' }] }); return }
@@ -359,7 +384,34 @@ export function adminApiRouter(): Router {
     if (text.length < 15) { res.status(422).json({ error: 'validation', fields: [{ field: 'text', message: 'Вставьте текст прайса (от 15 символов)' }] }); return }
     if (text.length > 64_000) { res.status(422).json({ error: 'validation', fields: [{ field: 'text', message: 'Текст длиннее 64 КБ — разбейте на части' }] }); return }
     let supplierId: number | null = null
-    if (body.supplierId !== undefined && body.supplierId !== null && body.supplierId !== '') {
+    let createdSupplier: { id: number; name: string; priceTtlDays: number } | null = null
+    if (body.newSupplier !== undefined) {
+      // Экран «Загрузить прайс»: поставщика можно завести не выходя из формы.
+      // Права те же, что у POST /suppliers (owner+manager, requireAdmin выше).
+      const { errors, data } = validateBatchNewSupplier(body.newSupplier)
+      if (errors.length) { res.status(422).json({ error: 'validation', fields: errors }); return }
+      try {
+        const sup = await prisma.supplier.create({
+          data: {
+            name: data.name,
+            priceTtlDays: data.priceTtlDays ?? 3,
+            // Placeholder до привязки чата из бота — как в createSupplier.
+            // Наценку не задаём: розница считается по интервалам MarkupRule.
+            chatId: 'web:' + crypto.randomUUID(),
+            chatType: 'private',
+          },
+          select: { id: true, name: true, priceTtlDays: true },
+        })
+        createdSupplier = sup
+        supplierId = sup.id
+        const admin = req.admin!
+        void logAdminAction({ adminTelegramId: admin.telegramId, action: 'create', entity: 'Supplier', entityId: sup.id, after: { name: sup.name, priceTtlDays: sup.priceTtlDays } })
+        void logSecurityEvent('supplier_created', { name: sup.name, via: 'web-price-upload' }, admin.telegramId)
+      } catch (e) {
+        if (isUniqueConflict(e)) { res.status(409).json({ error: 'Поставщик с таким именем уже есть — выберите его в списке', field: 'name' }); return }
+        throw e
+      }
+    } else if (body.supplierId !== undefined && body.supplierId !== null && body.supplierId !== '') {
       supplierId = parseInt(String(body.supplierId), 10)
       if (!Number.isInteger(supplierId)) { res.status(422).json({ error: 'validation', fields: [{ field: 'supplierId', message: 'Неверный поставщик' }] }); return }
       const sup = await prisma.supplier.findUnique({ where: { id: supplierId }, select: { isActive: true } })
@@ -367,7 +419,7 @@ export function adminApiRouter(): Router {
     }
     const { createPriceBatch } = await import('../lib/price-batch')
     const result = await createPriceBatch({ source, text, supplierId, createdBy: req.admin!.telegramId })
-    res.status(result.reused ? 200 : 201).json(result)
+    res.status(result.reused ? 200 : 201).json(createdSupplier ? { ...result, supplier: createdSupplier } : result)
   }))
 
   router.get('/price-batches', safe(async (req, res) => {
