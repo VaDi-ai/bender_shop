@@ -2010,6 +2010,7 @@
         box.innerHTML = '<div class="empty">Все позиции из прайсов узнаны 🎉<br>Когда система встретит незнакомое название —<br>оно появится здесь.</div>'
         return
       }
+      const isOwner = window.adminMe && window.adminMe.role === 'owner'
       box.innerHTML = `<div class="card">
         <h3>${r.data.length} ${plural(r.data.length, 'позиция', 'позиции', 'позиций')} <span class="chip c-bad right">нужна помощь</span></h3>
         ${r.data.map(u => `
@@ -2023,9 +2024,10 @@
           </div>
           <div style="display:flex;flex-direction:column;gap:6px">
             <button class="btn b-gh sm" data-um-link="${u.supplierPriceId}">Связать</button>
+            ${isOwner ? `<button class="btn b-gh sm" data-um-create="${u.supplierPriceId}" data-um-model="${esc(u.model)}">Завести</button>` : ''}
             <button class="btn b-dg sm" data-um-ignore="${u.supplierPriceId}">Не наш</button>
           </div></div>`).join('')}
-        <div class="hint">Свяжете один раз — дальше система узнает это название сама, подсказывать больше не придётся.</div>
+        <div class="hint">Свяжете один раз — дальше система узнает это название сама.${isOwner ? ' «Завести» создаёт новый товар СКРЫТЫМ — на витрину он попадёт, только когда включите его в «Товарах».' : ''}</div>
       </div>`
       box.querySelectorAll('[data-um-link]').forEach(btn => btn.addEventListener('click', async () => {
         const id = btn.dataset.umLink
@@ -2049,6 +2051,15 @@
           }, 250)
         })
         input.focus()
+      }))
+      box.querySelectorAll('[data-um-create]').forEach(btn => btn.addEventListener('click', async () => {
+        const model = btn.dataset.umModel || 'товар'
+        if (!confirm(`Завести новый товар «${model}» скрытым?\n\nОн НЕ появится на витрине — включите его в «Товарах», когда проверите карточку. Строка привяжется, система выучит название.`)) return
+        const r2 = await api(`/unmatched/${btn.dataset.umCreate}/create-product`, { method: 'POST', body: '{}' })
+        alert(r2.ok
+          ? `Создан скрытый товар «${r2.data.productName}». Строка привязана${r2.data.rematched > 1 ? `, довязано строк: ${r2.data.rematched}` : ''}. Цена придёт обычным применением разбора.`
+          : (r2.data && r2.data.error || 'Не получилось'))
+        loadUnmatched(); loadBatches()
       }))
       box.querySelectorAll('[data-um-ignore]').forEach(btn => btn.addEventListener('click', async () => {
         if (!confirm('Пометить «это не наш товар»? Такие строки система будет пропускать во всех будущих прайсах.')) return

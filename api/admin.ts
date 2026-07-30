@@ -476,6 +476,16 @@ export function adminApiRouter(): Router {
     res.status(result.status).json(result)
   }))
 
+  // Заведение нового товара из строки «не узнал» — owner-only; товар создаётся
+  // ВСЕГДА СКРЫТЫМ (isAvailable=false), цена на витрину не пишется.
+  router.post('/unmatched/:id/create-product', ownerOnly, safe(async (req, res) => {
+    const id = parseInt(String(req.params.id), 10)
+    if (!Number.isInteger(id)) { res.status(422).json({ error: 'validation', fields: [{ field: 'id', message: 'Неверный ID' }] }); return }
+    const { createProductFromPriceRow } = await import('../lib/product-from-price')
+    const result = await createProductFromPriceRow({ supplierPriceId: id, actor: { telegramId: req.admin!.telegramId } })
+    res.status(result.status).json(result)
+  }))
+
   // ── Правила наценки (PR-9) ────────────────────────────────────────────────
   router.get('/markup-rules', safe(listMarkupRules))
   router.post('/markup-rules', safe(createMarkupRule))
