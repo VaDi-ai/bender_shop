@@ -393,6 +393,7 @@
         <button class="hub-tile" data-hub="team"><span class="ht-n">Доступы</span><span class="ht-s" id="tileTeam">—</span></button>
         <button class="hub-tile" data-hub="analytics"><span class="ht-n">Аналитика</span><span class="ht-s" id="tileAnalytics">—</span></button>
         <button class="hub-tile" data-hub="broadcasts"><span class="ht-n">Рассылки</span><span class="ht-s" id="tileBroadcasts">—</span></button>
+        <button class="hub-tile" data-hub="segments"><span class="ht-n">Сегменты</span><span class="ht-s" id="tileSegments">—</span></button>
         <button class="hub-tile" data-hub="sync"><span class="ht-n">Журнал синка</span><span class="ht-s" id="tileSync">—</span></button>
         <button class="hub-tile" data-hub="parser"><span class="ht-n">Парсер</span><span class="ht-s" id="tileParser">—</span></button>
       </div>
@@ -492,17 +493,51 @@
         <div id="bcHistory" class="mt">Загрузка…</div>
         <button class="btn b-gh" id="bcAddBtn">Создать рассылку</button>
         <div id="bcForm" style="display:none">
+          <div class="cap">КОМУ</div>
+          <div class="sf-item-actions" id="bcTargetKind">
+            <button class="btn b-main sm" data-bc-kind="all">Всем</button>
+            <button class="btn b-nt sm" data-bc-kind="tag">По тегу</button>
+            <button class="btn b-nt sm" data-bc-kind="segment">По сегменту</button>
+          </div>
+          <select class="inp" id="bcTag" style="display:none"></select>
+          <select class="inp" id="bcSegment" style="display:none"></select>
+          <select class="inp" id="bcSegTag" style="display:none"></select>
+
+          <div class="cap" style="margin-top:12px">СООБЩЕНИЕ</div>
           <textarea class="inp" id="bcText" rows="5" maxlength="3000" placeholder="Текст сообщения — придёт в бот каждому покупателю"></textarea>
+          <div class="row" style="gap:8px;margin-top:8px">
+            <select class="inp" id="bcMediaType" style="margin-top:0;flex:0 0 110px"><option value="">Без медиа</option><option value="photo">Фото</option><option value="video">Видео</option></select>
+            <input class="inp" id="bcMediaUrl" style="margin-top:0" placeholder="https://… ссылка на медиа">
+          </div>
+          <input type="file" id="bcFile" accept="image/*" style="margin-top:8px;font-size:12px">
+          <div class="hint">Фото можно загрузить файлом — ссылка подставится сама. Видео — только готовой https-ссылкой. С медиа текст станет подписью (до 1024 символов).</div>
+
           <button class="btn b-gh" id="bcPreviewBtn">Кому уйдёт</button>
-          <div class="hint">Можно нажать до того, как напишете текст — покажем охват.</div>
+          <div class="hint">Можно нажать до того, как напишете текст — покажем охват выбранной аудитории.</div>
           <div id="bcPreview"></div>
           <button class="btn b-nt" id="bcSelfBtn">Отправить себе для проверки</button>
-          <button class="btn b-dg" id="bcSendBtn">Отправить всем</button>
+          <button class="btn b-dg" id="bcSendBtn">Отправить аудитории</button>
           <button class="btn b-nt" id="bcCancel">Отмена</button>
           <div class="mt" id="bcErr" style="color:var(--bad)"></div>
-          <div class="hint">Рассылка уходит через бота — всем, кто им пользовался. Выбора аудитории нет: кому бот может написать, тому и уйдёт.</div>
+          <div class="hint">Рассылка уходит через бота — только тем из аудитории, кто им пользовался (клиенты с Avito недостижимы).</div>
           <div class="hint">Сообщение уйдёт живым людям и его нельзя отозвать. Сначала посмотрите, кому уйдёт, и отправьте себе.</div>
         </div>
+      </div>
+      </div>
+
+      <div class="hub-page" id="hub-segments" style="display:none">
+      <div class="card">
+        <h3>Сегменты клиентов</h3>
+        <div id="segList" class="mt">Загрузка…</div>
+        <button class="btn b-gh" id="segAddBtn">Добавить сегмент</button>
+        <div id="segForm" style="display:none">
+          <input class="inp" id="segName" placeholder="Название сегмента" maxlength="50">
+          <div class="sf-item-actions" id="segColors" style="margin-top:8px"></div>
+          <button class="btn b-main" id="segSave">Создать сегмент</button>
+          <button class="btn b-nt" id="segCancel">Отмена</button>
+        </div>
+        <div class="mt" id="segErr" style="color:var(--bad)"></div>
+        <div class="hint">При удалении сегмента клиенты переходят в дефолтный — никто не теряется. Дефолтный сегмент удалить нельзя. Удаление — только владелец.</div>
       </div>
       </div>
 
@@ -616,7 +651,7 @@
       window.adminMe = me
       gate.classList.add('hidden')
       loadDashboard(); loadSyncRuns(); loadSuppliers(); loadBatches(); loadUnmatched(); loadMarkupRules()
-      loadSimQueue(); loadSimRules(); loadSimRecalc(); loadDictionary(); loadStorefront(); loadTeam(); loadIssues(); loadPromotions(); loadInsights(); loadBroadcasts(); loadMaintenance()
+      loadSimQueue(); loadSimRules(); loadSimRecalc(); loadDictionary(); loadStorefront(); loadTeam(); loadIssues(); loadPromotions(); loadInsights(); loadBroadcasts(); loadSegments(); loadMaintenance()
     }
 
     // ── ОШИБКИ В ТОВАРАХ: идём от проблемы к карточке ─────────────────────────
@@ -1121,6 +1156,7 @@
       team: ['Доступы', 'Кто заходит в админку и с какими правами.'],
       analytics: ['Аналитика', 'Продажи и покупатели.'],
       broadcasts: ['Рассылки', 'Сообщения покупателям в бот.'],
+      segments: ['Сегменты', 'Группы клиентов для рассылок и аналитики.'],
       sync: ['Журнал синка', 'Как прошли последние прогоны таблицы.'],
       parser: ['Парсер', 'Чему система научилась на таблице и прайсах.'],
     }
@@ -1253,11 +1289,82 @@
           (isOwner ? 'Отправьте первую — покупатели получат сообщение в боте.' : 'Отправить рассылку может только владелец.') + '</div>'
         return
       }
-      el.innerHTML = r.data.map(b => `<div class="list-i"><div style="flex:1">
-          <div class="nm">${esc((b.messageText || '').slice(0, 60) || 'без текста')}</div>
-          <div class="mt">${new Date(b.createdAt).toLocaleString('ru-RU')} · ${b.target === 'self-test' ? 'проверка себе' : 'всем'} · доставлено ${b.totalSent}${b.totalFailed ? ', не дошло ' + b.totalFailed : ''}</div>
-        </div></div>`).join('')
+      el.innerHTML = r.data.map(b => {
+        const aud = b.target === 'self-test' ? 'проверка себе'
+          : b.type === 'tag' ? `тег «${esc(b.target)}»`
+          : b.type === 'segment' ? `сегмент «${esc(b.target)}»`
+          : 'всем'
+        return `<div class="list-i"><div style="flex:1">
+          <div class="nm">${esc((b.messageText || '').slice(0, 60) || (b.mediaType ? '[медиа]' : 'без текста'))}${b.mediaType ? ' 📎' : ''}</div>
+          <div class="mt">${new Date(b.createdAt).toLocaleString('ru-RU')} · ${aud} · доставлено ${b.totalSent}${b.totalFailed ? ', не дошло ' + b.totalFailed : ''}</div>
+        </div></div>`
+      }).join('')
     }
+
+    // ── Таргетинг рассылки: всем / тег / сегмент (+доп-тег) ───────────────────
+    let bcKind = 'all'
+    function bcTarget() {
+      if (bcKind === 'tag') return { type: 'tag', tag: document.getElementById('bcTag').value }
+      if (bcKind === 'segment') {
+        return {
+          type: 'segment',
+          segmentId: Number(document.getElementById('bcSegment').value),
+          tagFilter: document.getElementById('bcSegTag').value || undefined,
+        }
+      }
+      return { type: 'all' }
+    }
+    async function bcFillTargets() {
+      if (bcKind === 'tag') {
+        const r = await api('/broadcast-tags').catch(() => null)
+        const sel = document.getElementById('bcTag')
+        sel.innerHTML = (r && r.ok && r.data.length)
+          ? r.data.map(t => `<option value="${esc(t.name)}">${esc(t.name)} (${t.clients})</option>`).join('')
+          : '<option value="">— тегов нет —</option>'
+      }
+      if (bcKind === 'segment') {
+        const r = await api('/segments').catch(() => null)
+        const sel = document.getElementById('bcSegment')
+        sel.innerHTML = (r && r.ok && r.data.length)
+          ? r.data.map(s => `<option value="${s.id}">${esc(s.color)} ${esc(s.name)} (${s.clients})</option>`).join('')
+          : '<option value="">— сегментов нет —</option>'
+        await bcFillSegTags()
+      }
+    }
+    async function bcFillSegTags() {
+      const segId = document.getElementById('bcSegment').value
+      const sel = document.getElementById('bcSegTag')
+      if (!segId) { sel.innerHTML = '<option value="">— без фильтра по тегу —</option>'; return }
+      const r = await api('/broadcast-tags?segmentId=' + segId).catch(() => null)
+      sel.innerHTML = '<option value="">— без фильтра по тегу —</option>' +
+        ((r && r.ok) ? r.data.map(t => `<option value="${esc(t.name)}">${esc(t.name)} (${t.clients})</option>`).join('') : '')
+    }
+    document.querySelectorAll('#bcTargetKind [data-bc-kind]').forEach(b => b.addEventListener('click', async () => {
+      bcKind = b.dataset.bcKind
+      document.querySelectorAll('#bcTargetKind [data-bc-kind]').forEach(x =>
+        x.className = 'btn ' + (x.dataset.bcKind === bcKind ? 'b-main' : 'b-nt') + ' sm')
+      document.getElementById('bcTag').style.display = bcKind === 'tag' ? '' : 'none'
+      document.getElementById('bcSegment').style.display = bcKind === 'segment' ? '' : 'none'
+      document.getElementById('bcSegTag').style.display = bcKind === 'segment' ? '' : 'none'
+      document.getElementById('bcPreview').innerHTML = ''
+      await bcFillTargets()
+    }))
+    document.getElementById('bcSegment').addEventListener('change', bcFillSegTags)
+
+    function bcMedia() {
+      const url = document.getElementById('bcMediaUrl').value.trim()
+      if (!url) return undefined
+      return { url, type: document.getElementById('bcMediaType').value || 'photo' }
+    }
+    document.getElementById('bcFile').addEventListener('change', async function () {
+      const err = document.getElementById('bcErr'); err.textContent = ''
+      const url = await uploadPhoto(this, err)
+      if (url) {
+        document.getElementById('bcMediaUrl').value = url
+        document.getElementById('bcMediaType').value = 'photo'
+        toast('Фото загружено — ссылка подставлена')
+      }
+    })
 
     document.getElementById('bcAddBtn').addEventListener('click', () => {
       const f = document.getElementById('bcForm')
@@ -1272,37 +1379,107 @@
       const err = document.getElementById('bcErr'); err.textContent = ''
       const box = document.getElementById('bcPreview'); box.innerHTML = 'Считаем…'
       // Текст для подсчёта охвата не нужен — он проверяется только на отправке
-      const r = await api('/broadcasts/preview', { method: 'POST', body: JSON.stringify({ text: document.getElementById('bcText').value }) }).catch(() => null)
+      const r = await api('/broadcasts/preview', { method: 'POST', body: JSON.stringify({ text: document.getElementById('bcText').value, target: bcTarget() }) }).catch(() => null)
       if (!r || !r.ok) { box.innerHTML = ''; err.textContent = (r && r.data && r.data.error) || 'Не получилось'; return }
       const d = r.data
       const unreachable = Math.max(0, (d.totalClients || 0) - d.recipients)
       box.innerHTML = `<div class="${d.recipients ? 'okbox' : 'warnbox'}" style="margin-top:10px">
+        Аудитория: <b>${esc(d.audience || 'всем клиентам')}</b><br>
         Получат <b>${d.recipients}</b> из ${fmt(d.totalClients || 0)} ${plural(d.totalClients || 0, 'клиента', 'клиентов', 'клиентов')}${
-          unreachable ? ` — остальные ${fmt(unreachable)} пришли не из Telegram, бот им написать не может` : ''}
+          bcKind === 'all' && unreachable ? ` — остальные ${fmt(unreachable)} пришли не из Telegram, бот им написать не может` : ''}
         ${d.sample.length ? '<br>Например: ' + d.sample.map(esc).join(', ') + '…' : ''}
-        ${d.recipients ? '' : '<br>Отправлять некому: в базе нет клиентов, которые писали боту.'}
+        ${d.recipients ? '' : '<br>Отправлять некому: в этой аудитории нет клиентов, которые писали боту.'}
         ${d.lastBroadcast ? `<br>Прошлая рассылка: ${new Date(d.lastBroadcast.createdAt).toLocaleDateString('ru-RU')}, доставлено ${d.lastBroadcast.totalSent}` : ''}
       </div>`
     })
     document.getElementById('bcSelfBtn').addEventListener('click', async () => {
       const err = document.getElementById('bcErr'); err.textContent = ''
-      const r = await api('/broadcasts/send', { method: 'POST', body: JSON.stringify({ text: document.getElementById('bcText').value, mode: 'self' }) }).catch(() => null)
+      const r = await api('/broadcasts/send', { method: 'POST', body: JSON.stringify({ text: document.getElementById('bcText').value, mode: 'self', target: bcTarget(), media: bcMedia() }) }).catch(() => null)
       if (!r || !r.ok) { err.textContent = (r && r.data && r.data.error) || 'Не получилось'; return }
-      alert('Отправили вам в бот — посмотрите, как выглядит, прежде чем слать всем.')
+      alert('Отправили вам в бот — посмотрите, как выглядит, прежде чем слать аудитории.')
       loadBroadcasts()
     })
     document.getElementById('bcSendBtn').addEventListener('click', async () => {
       const err = document.getElementById('bcErr'); err.textContent = ''
       const text = document.getElementById('bcText').value
-      if (!confirm('Отправить сообщение ВСЕМ покупателям?\n\nОтозвать его нельзя. Убедитесь, что отправляли себе и текст верный.')) return
-      const btn = document.getElementById('bcSendBtn'); btn.disabled = true; btn.textContent = 'Отправляем…'
+      const target = bcTarget()
+      const btn = document.getElementById('bcSendBtn'); btn.disabled = true; btn.textContent = 'Считаем аудиторию…'
       try {
-        const r = await api('/broadcasts/send', { method: 'POST', body: JSON.stringify({ text }) }).catch(() => null)
+        // Ограда: счётчик получателей ВСЕГДА свежий и всегда в подтверждении
+        const p = await api('/broadcasts/preview', { method: 'POST', body: JSON.stringify({ target }) }).catch(() => null)
+        if (!p || !p.ok) { err.textContent = (p && p.data && p.data.error) || 'Не удалось посчитать получателей'; return }
+        if (!p.data.recipients) { err.textContent = 'Отправлять некому: в этой аудитории нет клиентов из Telegram.'; return }
+        if (!confirm(`Отправить сообщение: ${p.data.audience}?\n\nПолучателей: ${p.data.recipients}.\nОтозвать нельзя. Убедитесь, что отправляли себе и текст верный.`)) return
+        btn.textContent = 'Отправляем…'
+        const r = await api('/broadcasts/send', { method: 'POST', body: JSON.stringify({ text, target, media: bcMedia() }) }).catch(() => null)
         if (!r || !r.ok) { err.textContent = (r && r.data && r.data.error) || 'Не получилось'; return }
         alert(`Готово: доставлено ${r.data.sent}${r.data.failed ? `, не дошло ${r.data.failed} (заблокировали бота)` : ''}.`)
         document.getElementById('bcCancel').click()
         loadBroadcasts()
-      } finally { btn.disabled = false; btn.textContent = 'Отправить всем' }
+      } finally { btn.disabled = false; btn.textContent = 'Отправить аудитории' }
+    })
+
+    // ── СЕГМЕНТЫ (перенос bot/admin/segments.ts) ──────────────────────────────
+    const SEG_COLORS = ['🔵', '🟡', '🟢', '🔴', '🟣', '⚪']
+    let segColor = SEG_COLORS[0]
+    async function loadSegments() {
+      const r = await api('/segments').catch(() => null)
+      const el = document.getElementById('segList')
+      const isOwner = window.adminMe && window.adminMe.role === 'owner'
+      if (!r || !r.ok) { el.textContent = 'Не удалось загрузить'; return }
+      setTile('tileSegments', `${r.data.length} ${plural(r.data.length, 'сегмент', 'сегмента', 'сегментов')}`)
+      el.innerHTML = r.data.length ? r.data.map(s => `
+        <div class="sf-item">
+          <div class="sf-item-head"><div class="grow">
+            <div class="nm">${esc(s.color)} ${esc(s.name)}${s.isDefault ? ' <span class="chip c-off">дефолт</span>' : ''}</div>
+            <div class="mt">${s.clients} ${plural(s.clients, 'клиент', 'клиента', 'клиентов')}</div>
+          </div></div>
+          <div class="sf-item-actions">
+            <button class="btn b-nt sm" data-seg-rename="${s.id}" data-seg-name="${esc(s.name)}">Переименовать</button>
+            ${isOwner && !s.isDefault ? `<button class="btn b-dg sm" data-seg-del="${s.id}" data-seg-name="${esc(s.name)}" data-seg-clients="${s.clients}">Удалить</button>` : ''}
+          </div>
+        </div>`).join('') : '<div class="empty">Сегментов нет — добавьте первый.</div>'
+
+      el.querySelectorAll('[data-seg-rename]').forEach(b => b.addEventListener('click', async () => {
+        const name = prompt('Новое название сегмента:', b.dataset.segName)
+        if (name === null) return
+        const r2 = await api('/segments/' + b.dataset.segRename, { method: 'PUT', body: JSON.stringify({ name }) }).catch(() => null)
+        if (!r2 || !r2.ok) { document.getElementById('segErr').textContent = (r2 && r2.data && r2.data.error) || 'Не получилось'; return }
+        document.getElementById('segErr').textContent = ''
+        toast('Переименовано'); loadSegments()
+      }))
+      el.querySelectorAll('[data-seg-del]').forEach(b => b.addEventListener('click', async () => {
+        const n = Number(b.dataset.segClients)
+        const warn = n > 0 ? `${n} ${plural(n, 'клиент перейдёт', 'клиента перейдут', 'клиентов перейдут')} в дефолтный сегмент.` : 'Клиентов в сегменте нет.'
+        if (!confirm(`Удалить сегмент «${b.dataset.segName}»?\n${warn}`)) return
+        const r2 = await api('/segments/' + b.dataset.segDel, { method: 'DELETE' }).catch(() => null)
+        if (!r2 || !r2.ok) { document.getElementById('segErr').textContent = (r2 && r2.data && r2.data.error) || 'Не получилось'; return }
+        document.getElementById('segErr').textContent = ''
+        toast(`Удалено · клиентов мигрировало: ${r2.data.migrated ?? 0}`); loadSegments()
+      }))
+    }
+    document.getElementById('segAddBtn').addEventListener('click', () => {
+      const f = document.getElementById('segForm')
+      f.style.display = f.style.display === 'none' ? '' : 'none'
+      document.getElementById('segColors').innerHTML = SEG_COLORS.map(c =>
+        `<button class="btn ${c === segColor ? 'b-main' : 'b-nt'} sm" data-seg-color="${c}">${c}</button>`).join('')
+      document.querySelectorAll('[data-seg-color]').forEach(b => b.addEventListener('click', () => {
+        segColor = b.dataset.segColor
+        document.querySelectorAll('[data-seg-color]').forEach(x =>
+          x.className = 'btn ' + (x.dataset.segColor === segColor ? 'b-main' : 'b-nt') + ' sm')
+      }))
+    })
+    document.getElementById('segCancel').addEventListener('click', () => {
+      document.getElementById('segForm').style.display = 'none'
+      document.getElementById('segName').value = ''
+      document.getElementById('segErr').textContent = ''
+    })
+    document.getElementById('segSave').addEventListener('click', async () => {
+      const err = document.getElementById('segErr'); err.textContent = ''
+      const r = await api('/segments', { method: 'POST', body: JSON.stringify({ name: document.getElementById('segName').value, color: segColor }) }).catch(() => null)
+      if (!r || !r.ok) { err.textContent = (r && r.data && r.data.error) || 'Не получилось'; return }
+      document.getElementById('segCancel').click()
+      toast('Сегмент создан'); loadSegments()
     })
 
     // ── ПАУЗА ПРОДАЖ ──────────────────────────────────────────────────────────
