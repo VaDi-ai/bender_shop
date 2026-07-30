@@ -41,9 +41,9 @@ describe('computeExpiresAt (TTL прайса)', () => {
 })
 
 describe('toParsedLine (AIParsedProduct → матчер)', () => {
-  it('null-поля становятся undefined, цена и raw сохраняются', () => {
+  it('null-поля становятся undefined; страна и SIM доезжают до матчера', () => {
     expect(toParsedLine({ model: 'iPhone 17 Pro', storage: '256GB', ram: null, color: null, country: 'Индия', simType: null, price: 122000, rawLine: 'iPhone 17 Pro 256GB - 122.000' }))
-      .toEqual({ model: 'iPhone 17 Pro', storage: '256GB', color: undefined, price: 122000, rawLine: 'iPhone 17 Pro 256GB - 122.000' })
+      .toEqual({ model: 'iPhone 17 Pro', storage: '256GB', color: undefined, country: 'Индия', simType: undefined, price: 122000, rawLine: 'iPhone 17 Pro 256GB - 122.000' })
   })
 })
 

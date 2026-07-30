@@ -29,6 +29,7 @@ import { WRITEBACK_COLS } from '../../lib/sheets-sync'
 // (PR-6): нужны и боту, и веб-батчам разбора прайсов. Логика не менялась.
 
 import { matchVariants, ParsedLine, MatchedVariant } from '../../lib/price-matching'
+import { toParsedLine } from '../../lib/price-batch'
 
 export type PendingVariant = {
   variantId: number
@@ -1969,13 +1970,8 @@ export async function handlePricingMessage(
         )
         return true
       }
-      parsed = aiResults.map((r) => ({
-        model: r.model,
-        storage: r.storage ?? undefined,
-        color: r.color ?? undefined,
-        price: r.price,
-        rawLine: r.rawLine,
-      }))
+      // Общий маппинг с веб-батчами: страна/SIM тоже доезжают до матчера
+      parsed = aiResults.map(toParsedLine)
     } catch {
       await ctx.reply(
         '❌ Ошибка AI парсинга. Попробуйте ещё раз.',
