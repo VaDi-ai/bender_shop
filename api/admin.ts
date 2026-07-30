@@ -682,6 +682,23 @@ export function adminApiRouter(): Router {
       res.status(201).json(r.photo)
     }))
 
+  // Загрузка видео для рассылок: тело — сам файл, БЕЗ перекодирования (sharp
+  // ломает видео). Лимит 20 МБ — больше Telegram по ссылке не скачает.
+  router.post('/videos/upload',
+    express.raw({ type: ['video/*', 'application/octet-stream'], limit: '21mb' }),
+    safe(async (req, res) => {
+      const { storeVideo } = await import('../lib/photo-store')
+      const body = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0)
+      const hint = String((req.query.name ?? 'video')).slice(0, 60)
+      const r = await storeVideo(body, hint)
+      if (!r.ok) { res.status(r.status).json({ error: r.error }); return }
+      void logAdminAction({
+        adminTelegramId: req.admin!.telegramId, action: 'create', entity: 'Video',
+        entityId: r.photo!.fileName, after: { url: r.photo!.url, bytes: r.photo!.bytes },
+      })
+      res.status(201).json(r.photo)
+    }))
+
   router.post('/banners', safe(async (req, res) => {
     const { createBanner } = await import('../lib/storefront-admin')
     const r = await createBanner(req.admin!.telegramId, (req.body ?? {}) as Record<string, unknown>)

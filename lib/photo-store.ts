@@ -97,6 +97,58 @@ export async function storePhoto(buf: Buffer, hint = 'photo'): Promise<StoreResu
   return { ok: true, status: 201, photo: { url: `/photos/${fileName}`, fileName, bytes: out.length } }
 }
 
+// ─── Видео для рассылок ───────────────────────────────────────────────────────
+//
+// В отличие от картинок видео НЕ перекодируем: sharp работает только с
+// изображениями, а пережатие видео ломает файл. Кладём сырым на тот же том
+// PHOTOS_DIR. Лимит 20 МБ — столько Telegram готов скачать сам, когда медиа
+// отправляется по URL (sendVideo с https-ссылкой).
+
+export const MAX_VIDEO_BYTES = 20 * 1024 * 1024
+
+/** Тип видео по сигнатуре: mp4/mov — ftyp-бокс, webm — EBML-заголовок. */
+export function sniffVideoType(buf: Buffer): 'mp4' | 'webm' | 'mov' | null {
+  if (buf.length < 12) return null
+  if (buf[0] === 0x1a && buf[1] === 0x45 && buf[2] === 0xdf && buf[3] === 0xa3) return 'webm'
+  if (buf.toString('ascii', 4, 8) === 'ftyp') {
+    const brand = buf.toString('ascii', 8, 12)
+    return brand.startsWith('qt') ? 'mov' : 'mp4'
+  }
+  return null
+}
+
+/**
+ * Сохраняет видео сырым (без перекодирования) и возвращает публичную ссылку.
+ * Фото-путь (storePhoto/webp) не затрагивается.
+ */
+export async function storeVideo(buf: Buffer, hint = 'video'): Promise<StoreResult> {
+  if (!buf?.length) return { ok: false, status: 422, error: 'Файл пустой — выберите видео' }
+  if (buf.length > MAX_VIDEO_BYTES) {
+    return { ok: false, status: 413, error: 'Видео больше 20 МБ — Telegram по ссылке такое не примет. Сожмите ролик или пришлите короче' }
+  }
+  const kind = sniffVideoType(buf)
+  if (!kind) return { ok: false, status: 422, error: 'Это не видео. Подойдут MP4, WebM или MOV' }
+
+  const dir = photosDir()
+  try {
+    fs.mkdirSync(dir, { recursive: true })
+  } catch {
+    return { ok: false, status: 503, error: 'Хранилище недоступно — попробуйте позже' }
+  }
+
+  const slug = hint.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'video'
+  const hash = crypto.createHash('sha256').update(buf).digest('hex').slice(0, 16)
+  const fileName = `${slug}-${hash}.${kind === 'mov' ? 'mov' : kind}`
+  try {
+    fs.writeFileSync(path.join(dir, fileName), buf)
+  } catch (e) {
+    log.error('Video write failed', { err: e instanceof Error ? e.message : String(e) })
+    return { ok: false, status: 503, error: 'Не удалось сохранить файл — попробуйте позже' }
+  }
+
+  return { ok: true, status: 201, photo: { url: `/photos/${fileName}`, fileName, bytes: buf.length } }
+}
+
 /**
  * Ссылка на картинку, пригодная для витрины.
  *

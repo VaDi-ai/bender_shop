@@ -77,3 +77,62 @@ describe('ссылка витрины на картинку баннера/ка�
     expect(publicImageUrl(null)).toBeNull()
   })
 })
+
+// ─── Видео для рассылок: сырым, без перекодирования ──────────────────────────
+import { sniffVideoType, storeVideo, MAX_VIDEO_BYTES } from '../lib/photo-store'
+import * as fsMod from 'fs'
+import * as os from 'os'
+import * as pathMod from 'path'
+
+const mp4 = Buffer.concat([Buffer.from([0, 0, 0, 0x18]), Buffer.from('ftypisom'), Buffer.alloc(24)])
+const mov = Buffer.concat([Buffer.from([0, 0, 0, 0x14]), Buffer.from('ftypqt  '), Buffer.alloc(24)])
+const webm = Buffer.concat([Buffer.from([0x1a, 0x45, 0xdf, 0xa3]), Buffer.alloc(24)])
+
+describe('тип видео по содержимому', () => {
+  it('узнаёт mp4/mov/webm', () => {
+    expect(sniffVideoType(mp4)).toBe('mp4')
+    expect(sniffVideoType(mov)).toBe('mov')
+    expect(sniffVideoType(webm)).toBe('webm')
+  })
+  it('не верит расширению: мусор и картинки — не видео', () => {
+    expect(sniffVideoType(Buffer.from('<html>x</html>xxxxx'))).toBeNull()
+    expect(sniffVideoType(jpeg)).toBeNull()
+    expect(sniffVideoType(Buffer.alloc(4))).toBeNull()
+  })
+  it('лимит — 20 МБ Telegram-скачивания по URL', () => {
+    expect(MAX_VIDEO_BYTES).toBe(20 * 1024 * 1024)
+  })
+})
+
+describe('storeVideo — сырое хранение', () => {
+  it('пишет байт-в-байт (без sharp), имя из хеша, ссылка /photos/*.mp4', async () => {
+    const dir = fsMod.mkdtempSync(pathMod.join(os.tmpdir(), 'qa-videos-'))
+    const prev = process.env.PHOTOS_DIR
+    process.env.PHOTOS_DIR = dir
+    try {
+      const r = await storeVideo(mp4, 'Тест Видео.mp4')
+      expect(r.ok).toBe(true)
+      expect(r.photo!.url).toMatch(/^\/photos\/.+\.mp4$/)
+      const onDisk = fsMod.readFileSync(pathMod.join(dir, r.photo!.fileName))
+      expect(onDisk.equals(mp4)).toBe(true)          // ни один байт не перекодирован
+      const again = await storeVideo(mp4, 'другое-имя')
+      expect(again.photo!.fileName.split('-').pop()).toBe(r.photo!.fileName.split('-').pop())
+    } finally {
+      process.env.PHOTOS_DIR = prev
+      fsMod.rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('больше 20 МБ — человеческий отказ, не молчаливый обрыв', async () => {
+    const big = Buffer.concat([mp4, Buffer.alloc(MAX_VIDEO_BYTES)])
+    const r = await storeVideo(big)
+    expect(r).toMatchObject({ ok: false, status: 413 })
+    expect(r.error).toContain('20 МБ')
+    expect(r.error).toContain('Telegram')
+  })
+
+  it('не-видео — 422', async () => {
+    expect((await storeVideo(Buffer.from('мусор-не-видео-совсем'))).status).toBe(422)
+    expect((await storeVideo(Buffer.alloc(0))).status).toBe(422)
+  })
+})
