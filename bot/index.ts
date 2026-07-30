@@ -51,7 +51,6 @@ import {
 import {
   broadcastsState,
   setupBroadcastHandlers,
-  showBroadcastMenu,
   handleBroadcastMessage,
   handleBroadcastPhoto,
   handleBroadcastVideo,
@@ -166,12 +165,11 @@ bot.use(async (ctx, next) => {
 // Служебные typed-входы («🔧 Техработы» — бэкап/деструктив, «🏭 Поставщики» —
 // привязка chatId) работают вводом текста, без кнопок.
 const adminKeyboard = Markup.keyboard([
-  ['📢 Рассылки', '🤖 AI Агент'],
+  ['🤖 AI Агент'],
 ]).resize()
 
 // Кнопки/типизируемые пункты меню — для сброса пошаговых флоу при нажатии
 const MENU_BUTTONS = new Set([
-  '📢 Рассылки',
   '💰 Балансы',
   '🔧 Техработы',
   '🔑 API Ключи',
@@ -930,9 +928,10 @@ bot.command('alias', async (ctx) => {
 
 setupBroadcastHandlers(bot)
 
-bot.hears('📢 Рассылки', async (ctx) => {
-  await showBroadcastMenu(ctx)
-})
+// Кнопка «📢 Рассылки» убрана (фаза 2, финал): таргетинг всем/тег/сегмент,
+// медиа (фото файлом, видео файлом до 20 МБ) и мультиканальность
+// Telegram+Avito — в мини-аппе («Ещё → Рассылки»). Инлайн-хендлеры bcast:*
+// остаются для старых кнопок в чатах.
 
 // ─── 💰 Балансы ───────────────────────────────────────────────────────────────
 
