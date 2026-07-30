@@ -834,8 +834,18 @@ export function adminApiRouter(): Router {
   // ── ПАРСЕР: что выучено, что предлагается, журнал обучения ────────────────
   router.get('/parser/dictionary', safe(async (_req, res) => {
     const { listDictionary, ripePatterns, learningLog } = await import('../lib/rule-learning')
-    const [rules, patterns, journal] = await Promise.all([listDictionary(), ripePatterns(), learningLog()])
-    res.json({ rules, patterns, journal })
+    const { detectBrandFromName } = await import('../lib/product-from-price')
+    const [rules, patterns, journal, lastRow] = await Promise.all([
+      listDictionary(), ripePatterns(), learningLog(),
+      prisma.supplierPrice.findFirst({
+        orderBy: { id: 'desc' },
+        select: { rawMessage: true, model: true, storage: true, color: true, country: true, simType: true, price: true, parsedAt: true, supplierName: true },
+      }),
+    ])
+    const lastParse = lastRow
+      ? { ...lastRow, price: Number(lastRow.price), brand: detectBrandFromName(lastRow.model) || null }
+      : null
+    res.json({ rules, patterns, journal, lastParse })
   }))
 
   // Запись правила — owner: меняет поведение системы на весь каталог
@@ -846,6 +856,15 @@ export function adminApiRouter(): Router {
       attr: String(b.attr ?? ''), value: String(b.value ?? ''),
       brand: b.brand ? String(b.brand) : null, country: b.country ? String(b.country) : null,
     })
+    res.status(r.status).json(r.ok ? { ok: true, ...(r.data as object) } : { error: r.error })
+  }))
+
+  // «Чтение» (написание → канон, любое поле) — owner: влияет на все будущие
+  // разборы. Это НЕ правило «бренд+страна→значение» — такое есть только у SIM.
+  router.post('/parser/learn-alias', ownerOnly, safe(async (req, res) => {
+    const b = (req.body ?? {}) as Record<string, unknown>
+    const { learnAlias } = await import('../lib/rule-learning')
+    const r = await learnAlias(req.admin!.telegramId, String(b.attrKey ?? ''), String(b.from ?? ''), String(b.to ?? ''))
     res.status(r.status).json(r.ok ? { ok: true, ...(r.data as object) } : { error: r.error })
   }))
 

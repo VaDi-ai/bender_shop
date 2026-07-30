@@ -107,6 +107,12 @@
     .rawline { font-family:'JetBrains Mono',monospace; font-size:12px; color:#cfe6a8; background:#12140d; border:1px solid #2a301a; border-radius:9px; padding:9px 11px; margin-bottom:12px; overflow-wrap:anywhere; }
     .two { display:flex; gap:10px; }
     .two > * { flex:1; min-width:0; }
+    /* «Парсер» (мокап bender-parser-reframe): чипы разбора и теги словаря */
+    .chips { display:flex; flex-wrap:wrap; gap:6px; }
+    .chip2 { font-size:12px; padding:5px 10px; border-radius:9px; background:#232326; border:1px solid var(--bd); }
+    .chip2 .k { color:var(--dim); font-size:10px; display:block; margin-bottom:1px; }
+    .tag { font-size:9px; padding:2px 6px; border-radius:6px; background:#232326; color:var(--dim); margin-left:6px; vertical-align:middle; white-space:nowrap; }
+    .tag.rule { background:rgba(168,255,62,.14); color:var(--ac); }
     .toggle { display:inline-flex; border:1px solid var(--bd); border-radius:10px; overflow:hidden; }
     .toggle button { background:#0f0f10; color:var(--dim); border:none; padding:9px 18px; font-family:'Onest'; font-size:12.5px; cursor:pointer; }
     .toggle button.on { background:var(--ac); color:var(--acf); font-weight:600; }
@@ -569,50 +575,49 @@
       </div>
 
       <div class="hub-page" id="hub-parser" style="display:none">
-        <div class="hint">Здесь видно, чему система научилась на разборе таблицы и прайсов. Товары правят на вкладке «Товары» — сюда ходят смотреть словарь.</div>
+        <div class="hint">Как система разбирает прайсы: что распознаёт, что вы поправили и что запомнила. Всё едино — SIM здесь такой же атрибут, как остальные.</div>
 
-        <div class="cap">ЧЕМУ НАУЧИЛСЯ</div>
+        <div class="cap">КАК РАЗОБРАЛ СТРОКУ</div>
+        <div class="card">
+          <div id="parseLast">Загрузка…</div>
+          <div class="hint">Любое поле — тапом поправить прямо при разборе прайса («Цены → Загрузить прайс»). SIM среди них, отдельного места ему нет.</div>
+        </div>
+
+        <div class="cap">ЧЕМУ НАУЧИЛСЯ · ЕДИНЫЙ СЛОВАРЬ</div>
         <div class="card">
           <h3>Словарь <span class="chip c-off right" id="dictChip">—</span></h3>
           <div id="dictSuggest"></div>
           <div id="dictList" class="mt">Загрузка…</div>
-          <div class="hint">«Забыть» останавливает будущий вывод по правилу. Значения, которые оно уже проставило товарам, не откатываются — их двигает только «Обновить по словарю».</div>
+          <div class="hint">Одним списком: «правило» назначает значение по стране/бренду — пока это только SIM, «чтение» — как понимать слово в любом поле. «Забыть» останавливает будущий вывод; уже проставленное на товарах не откатывается.</div>
           <div class="cap" style="margin:14px 0 6px">ПРАВКА → ПРАВИЛО</div>
           <div id="dictLog" class="mt">—</div>
         </div>
-      <div class="cap">SIM НЕ ОПРЕДЕЛЁН — ПОДСКАЖИТЕ</div>
-      <div id="simQueue"><div class="empty">Загрузка…</div></div>
 
-      <div class="cap">SIM ПО СЛОВАРЮ</div>
-      <div class="card">
-        <h3>Словарь SIM</h3>
-        <div id="simRules" class="mt">Загрузка…</div>
-        <button class="btn b-gh" id="simAddBtn">Добавить правило SIM</button>
-        <div id="simForm" style="display:none">
-          <input class="inp" id="simCountry" placeholder="Страна — как в таблице («Гонконг/США»)" maxlength="80">
-          <input class="inp" id="simBrand" placeholder="Бренд — Apple, Redmi, Honor… (пусто = любой)" maxlength="40">
-          <div class="row" style="gap:8px">
-            <select class="inp" id="simType"><option value="SIM + eSIM">SIM + eSIM</option><option value="eSIM">eSIM</option><option value="2 SIM">2 SIM</option></select>
-            <input class="inp" id="simGen" placeholder="с поколения (напр. 17)" inputmode="numeric">
-          </div>
-          <button class="btn b-main" id="simSave">Сохранить правило</button>
-          <button class="btn b-nt" id="simCancel">Отмена</button>
-          <div class="mt" id="simErr" style="color:var(--bad)"></div>
+        <div class="cap">ПРИМЕНИТЬ ВЫУЧЕННОЕ К КАТАЛОГУ</div>
+        <div class="card">
+          <h3>SIM по словарю <span class="chip c-ok right" id="simRecalcChip">можно применять</span></h3>
+          <div class="mt" id="simRecalc">Загрузка…</div>
+          <div id="simRecalcActions"></div>
+          <div class="hint">Проставит выученное там, где текущее значение расходится со словарём. Прежние значения сохраним — откат одной кнопкой. К каталогу применяются правила SIM; «чтения» работают сами на каждом новом разборе.</div>
         </div>
-        <div class="hint">Бренд обязателен для стран: словарь стран описывает рынок Apple, у андроида SIM другой. Пустой бренд = правило накроет все бренды этой страны.<br>Правило с поколением сильнее общего: «Япония → SIM + eSIM» плюс «Япония с 17 → eSIM» = у 17-х японских будет eSIM. Явная метка в названии всегда сильнее словаря.</div>
-      </div>
 
-      <div class="card">
-        <h3>SIM по словарю <span class="chip c-ok right" id="simRecalcChip">можно применять</span></h3>
-        <div class="mt" id="simRecalc">Загрузка…</div>
-        <div id="simRecalcActions"></div>
-        <div class="hint">Значения берутся из справочника и переопределяют то, что стоит в карточке. Строки «стоит без правила» не трогаем — сначала правило, потом обновление.</div>
-      </div>
-
-      <div class="card">
-        <h3>Карточки товаров <span class="chip c-off right">следующий этап</span></h3>
-        <div class="mt">Главное фото, скрытие с витрины, описания. Цены и наличие останутся в таблице — здесь будут read-only.</div>
-      </div>
+        <div class="cap">НЕ ХВАТИЛО ДАННЫХ — ПОДСКАЖИТЕ</div>
+        <div id="simQueue"><div class="empty">Загрузка…</div></div>
+        <div class="card">
+          <button class="btn b-gh" id="simAddBtn">Задать правило SIM вручную</button>
+          <div id="simForm" style="display:none">
+            <input class="inp" id="simCountry" placeholder="Страна — как в таблице («Гонконг/США»)" maxlength="80">
+            <input class="inp" id="simBrand" placeholder="Бренд — Apple, Redmi, Honor… (пусто = любой)" maxlength="40">
+            <div class="row" style="gap:8px">
+              <select class="inp" id="simType"><option value="SIM + eSIM">SIM + eSIM</option><option value="eSIM">eSIM</option><option value="2 SIM">2 SIM</option></select>
+              <input class="inp" id="simGen" placeholder="с поколения (напр. 17)" inputmode="numeric">
+            </div>
+            <button class="btn b-main" id="simSave">Сохранить правило</button>
+            <button class="btn b-nt" id="simCancel">Отмена</button>
+            <div class="mt" id="simErr" style="color:var(--bad)"></div>
+          </div>
+          <div class="hint">Правило SIM — единственное назначение «бренд + страна → значение»; для остальных полей такого нет, они только читаются из строки. Правило с поколением сильнее общего; явная метка в названии всегда сильнее словаря. Само правило появится в едином словаре выше.</div>
+        </div>
       </div>
     </section>
   </main>
@@ -673,7 +678,7 @@
       window.adminMe = me
       gate.classList.add('hidden')
       loadDashboard(); loadSyncRuns(); loadSuppliers(); loadBatches(); loadUnmatched(); loadMarkupRules()
-      loadSimQueue(); loadSimRules(); loadSimRecalc(); loadDictionary(); loadStorefront(); loadTeam(); loadIssues(); loadPromotions(); loadInsights(); loadBroadcasts(); loadSegments(); loadAiAgent(); loadMaintenance()
+      loadSimQueue(); loadSimRecalc(); loadDictionary(); loadStorefront(); loadTeam(); loadIssues(); loadPromotions(); loadInsights(); loadBroadcasts(); loadSegments(); loadAiAgent(); loadMaintenance()
     }
 
     // ── ОШИБКИ В ТОВАРАХ: идём от проблемы к карточке ─────────────────────────
@@ -882,17 +887,54 @@
              </div></div>`
 
       box.querySelectorAll('[data-attr-set]').forEach(b =>
-        b.addEventListener('click', () => saveAttr(variantId, key, b.dataset.attrSet)))
+        b.addEventListener('click', () => saveAttr(variantId, key, b.dataset.attrSet, current)))
       const saveBtn = box.querySelector('[data-attr-save]')
       if (saveBtn) saveBtn.addEventListener('click', () =>
-        saveAttr(variantId, key, document.getElementById('attrInput-' + variantId).value))
+        saveAttr(variantId, key, document.getElementById('attrInput-' + variantId).value, current))
       const closeBtn = box.querySelector('[data-attr-close]')
       if (closeBtn) closeBtn.addEventListener('click', () => { box.innerHTML = '' })
       box.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
     }
 
-    async function saveAttr(variantId, key, value) {
-      const box = document.getElementById('attrEdit-' + variantId)
+    /**
+     * Предложения после правки поля — два вида памяти, НЕ путать:
+     *   • «чтение» (learn-alias): raw-написание → канон, безопасно для ЛЮБОГО
+     *     поля — предлагаем всегда, когда старое значение ≠ новому;
+     *   • «правило» (learn): назначение «бренд·страна → значение» — существует
+     *     ТОЛЬКО для SIM, приходит готовым с сервера (suggestion). Для других
+     *     полей такого правила нет и предлагать его нельзя.
+     * Оба — только владельцу и только по явному нажатию.
+     */
+    function renderLearnOffers(box, key, oldVal, newVal, sug) {
+      const isOwner = window.adminMe && window.adminMe.role === 'owner'
+      if (!isOwner || !box) return
+      const from = String(oldVal ?? '').trim(), to = String(newVal ?? '').trim()
+      const alias = from && to && from.toLowerCase() !== to.toLowerCase() ? { attrKey: key, from, to } : null
+      if (!sug && !alias) return
+      box.innerHTML = `<div class="okbox" style="margin-top:10px">
+        ${sug ? `Вы поправили это ${sug.count} раз${sug.count > 4 ? '' : 'а'}. Запомнить как правило?<br><b>${esc(sug.phrase)}</b>
+          <div class="sf-item-actions" style="margin-top:10px"><button class="btn b-main sm" data-offer-rule="1">Запомнить правило</button></div>` : ''}
+        ${alias ? `${sug ? '<div style="margin-top:12px"></div>' : ''}Запомнить чтение: «${esc(from)}» → «${esc(to)}»?<br>Дальше «${esc(from)}» в поле «${esc(key)}» система прочитает сама.
+          <div class="sf-item-actions" style="margin-top:10px"><button class="btn b-main sm" data-offer-alias="1">Запомнить чтение</button></div>` : ''}
+        <div class="sf-item-actions" style="margin-top:10px"><button class="btn b-nt sm" data-offer-close="1">Не надо</button></div>
+      </div>`
+      const done = html => { box.innerHTML = `<div class="okbox">${html} Видно в «Ещё → Парсер», там же можно забыть.</div>`; loadDictionary() }
+      box.querySelector('[data-offer-close]').addEventListener('click', () => { box.innerHTML = '' })
+      const rb = box.querySelector('[data-offer-rule]')
+      if (rb) rb.addEventListener('click', async () => {
+        const r = await api('/parser/learn', { method: 'POST', body: JSON.stringify({ attr: sug.attr, value: sug.value, brand: sug.brand, country: sug.country }) }).catch(() => null)
+        if (!r || !r.ok) { toast((r && r.data && r.data.error) || 'Не получилось'); return }
+        done(`Запомнил правило: ${esc(sug.phrase)}.`)
+      })
+      const ab = box.querySelector('[data-offer-alias]')
+      if (ab) ab.addEventListener('click', async () => {
+        const r = await api('/parser/learn-alias', { method: 'POST', body: JSON.stringify(alias) }).catch(() => null)
+        if (!r || !r.ok) { toast((r && r.data && r.data.error) || 'Не получилось'); return }
+        done(`Запомнил чтение: «${esc(from)}» → «${esc(to)}» (${esc(key)}).`)
+      })
+    }
+
+    async function saveAttr(variantId, key, value, oldVal) {
       const body = {}; body[key] = value
       const r = await api(`/variants/${variantId}/attributes`, { method: 'PUT', body: JSON.stringify(body) }).catch(() => null)
       if (!r || !r.ok) { toast((r && r.data && r.data.error) || 'Не получилось'); return }
@@ -907,28 +949,8 @@
       toast(value ? 'Готово' : 'Ручная правка снята')
       renderProductCard()
 
-      // Подсказка обучения — как была: только SIM, только по нажатию владельца
-      const sug = r.data.suggestion
-      const isOwner = window.adminMe && window.adminMe.role === 'owner'
-      if (sug && isOwner) {
-        const again = document.getElementById('attrEdit-' + variantId)
-        if (!again) return
-        again.innerHTML = `<div class="okbox" style="margin-top:10px">
-          Вы поправили это ${sug.count} раз${sug.count > 4 ? '' : 'а'}. Запомнить как правило?<br><b>${esc(sug.phrase)}</b>
-          <div class="sf-item-actions" style="margin-top:10px">
-            <button class="btn b-main sm" id="attrLearnBtn">Запомнить для всех таких</button>
-            <button class="btn b-nt sm" data-attr-close="1">Не надо</button>
-          </div></div>`
-        again.querySelector('[data-attr-close]').addEventListener('click', () => { again.innerHTML = '' })
-        document.getElementById('attrLearnBtn').addEventListener('click', async () => {
-          const r2 = await api('/parser/learn', { method: 'POST', body: JSON.stringify({
-            attr: sug.attr, value: sug.value, brand: sug.brand, country: sug.country,
-          }) }).catch(() => null)
-          if (!r2 || !r2.ok) { toast((r2 && r2.data && r2.data.error) || 'Не получилось'); return }
-          again.innerHTML = `<div class="okbox">Запомнил: ${esc(sug.phrase)}. Правило видно в «Ещё → Парсер», там же его можно забыть.</div>`
-          loadDictionary()
-        })
-      }
+      // Предложения памяти: «чтение» по любому полю, «правило» — только SIM
+      renderLearnOffers(document.getElementById('attrEdit-' + variantId), key, oldVal, value, r.data.suggestion)
     }
 
     function bindAttrEdit(box) {
@@ -1110,13 +1132,27 @@
       loadPromotions()
     })
 
-    // ── ПАРСЕР: витрина словаря, предложения, журнал обучения ─────────────────
+    // ── ПАРСЕР: разобрал → поправили → запомнил ──────────────────────────────
     let dictShowSeed = false
+
+    /** «Как разобрал строку»: последняя строка свежего прайса чипами. */
+    function renderLastParse(lp) {
+      const el = document.getElementById('parseLast')
+      if (!lp) { el.innerHTML = '<div class="empty">Прайсы ещё не разбирали.<br>Загрузите первый на вкладке «Цены» — последняя строка появится здесь.</div>'; return }
+      const chips = [
+        ['Бренд', lp.brand], ['Модель', lp.model], ['Память', lp.storage], ['Цвет', lp.color],
+        ['Страна', lp.country], ['SIM', lp.simType], ['Цена', lp.price ? fmt(lp.price) + ' ₽' : null],
+      ]
+      el.innerHTML = `<div class="rawline">${esc(lp.rawMessage)}</div>
+        <div class="chips">${chips.map(([k, v]) =>
+          `<span class="chip2"><span class="k">${k}</span>${v ? esc(String(v)) : '<span style="color:var(--dim)">—</span>'}</span>`).join('')}</div>`
+    }
 
     async function loadDictionary() {
       const r = await api('/parser/dictionary').catch(() => null)
       const el = document.getElementById('dictList')
-      if (!r || !r.ok) { el.textContent = 'Не удалось загрузить'; return }
+      if (!r || !r.ok) { el.textContent = 'Не удалось загрузить'; document.getElementById('parseLast').innerHTML = '<div class="empty">Не удалось загрузить</div>'; return }
+      renderLastParse(r.data.lastParse)
       const isOwner = window.adminMe && window.adminMe.role === 'owner'
       const learned = r.data.rules.filter(x => !x.fromSeed)
       const seed = r.data.rules.filter(x => x.fromSeed)
@@ -1132,15 +1168,17 @@
 
       const row = x => `<div class="sf-item">
         <div class="sf-item-head"><div class="grow">
-          <div class="nm">${esc(x.phrase)}</div>
-          <div class="mt">${x.fromSeed ? 'базовое правило' : 'выучено из ваших правок'}</div>
-        </div><span class="chip ${x.fromSeed ? 'c-off' : 'c-ok'}">${x.fromSeed ? 'сид' : 'выучено'}</span></div>
+          <div class="nm">${x.kind === 'AttrValueAlias'
+            ? `«${esc(x.raw)}» → ${esc(x.canonical)}`
+            : esc(x.phrase)} <span class="tag ${x.kind === 'SimRule' ? 'rule' : ''}">${x.kind === 'SimRule' ? 'правило SIM' : 'чтение'}</span></div>
+          <div class="mt">${x.kind === 'AttrValueAlias' && x.attrKey ? esc(x.attrKey) + ' · ' : ''}${x.fromSeed ? 'базовое' : 'выучено из ваших правок'}</div>
+        </div></div>
         ${isOwner ? `<div class="sf-item-actions"><button class="btn b-nt sm" data-forget="${x.kind}:${x.id}">Забыть</button></div>` : ''}
       </div>`
 
       el.innerHTML = (learned.length
           ? learned.map(row).join('')
-          : '<div class="empty">Пока ничего не выучено.<br>Поправьте атрибут в карточке товара трижды — система предложит запомнить правило.</div>')
+          : '<div class="empty">Пока ничего не выучено.<br>Поправьте поле при разборе прайса или в карточке — система предложит запомнить.</div>')
         + (seed.length ? `<div class="hint" style="cursor:pointer" id="dictSeedToggle">${dictShowSeed ? 'Скрыть базовые правила' : `Показать ${seed.length} базовых правил`}</div>` : '')
         + (dictShowSeed ? seed.map(row).join('') : '')
 
@@ -1162,6 +1200,7 @@
         if (!r2 || !r2.ok) { alert(r2 && r2.data && r2.data.error || 'Не получилось'); return }
         if (r2.data && r2.data.note) alert(r2.data.note)
         loadDictionary()
+        if (kind === 'SimRule') { loadSimQueue(); loadSimRecalc() }   // страна вернётся в очередь
       }))
 
       const jr = r.data.journal || []
@@ -1181,7 +1220,7 @@
       segments: ['Сегменты', 'Группы клиентов для рассылок и аналитики.'],
       aiagent: ['AI Агент', 'Как Бендер отвечает покупателям: режим и ночное расписание.'],
       sync: ['Журнал синка', 'Как прошли последние прогоны таблицы.'],
-      parser: ['Парсер', 'Чему система научилась на таблице и прайсах.'],
+      parser: ['Парсер', 'Разобрал строку → вы поправили → запомнил. SIM — такой же атрибут.'],
     }
 
     function openHub(id) {
@@ -2034,42 +2073,8 @@
       }))
     }
 
-    const SIM_CHIP = { '2 SIM': 'c-ok', 'eSIM': 'c-warn', 'SIM + eSIM': 'c-ok' }
-    async function loadSimRules() {
-      const r = await api('/sim-rules').catch(() => null)
-      const el = document.getElementById('simRules')
-      if (!r || !r.ok) { el.textContent = 'Не удалось загрузить'; return }
-      if (!r.data.length) { el.innerHTML = '<div class="empty">Словарь пуст — правила приедут с ближайшим перезапуском.</div>'; return }
-      const isOwner = window.adminMe && window.adminMe.role === 'owner'
-      // группируем: сначала модельные оверрайды, потом страны по алфавиту
-      const model = r.data.filter(x => x.modelMatch)
-      const byCountry = {}
-      r.data.filter(x => !x.modelMatch && x.country).forEach(x => { (byCountry[x.country] = byCountry[x.country] || []).push(x) })
-      const brandOnly = r.data.filter(x => !x.modelMatch && !x.country && x.brand)
-
-      el.innerHTML = (model.length ? `<div class="mt" style="margin-top:6px"><b style="color:#ccc">Правила по модели (сильнее страны)</b></div>` +
-        model.map(x => `<div class="list-i"><div style="flex:1"><div class="nm">модель «${esc(x.modelMatch)}»${x.modelGenFrom ? `, с ${x.modelGenFrom}-го поколения` : ''} → ${esc(x.simType)}</div></div>
-          ${isOwner ? `<button class="btn b-nt sm" data-sim-del="${x.id}">Удалить</button>` : ''}</div>`).join('') : '')
-        + Object.keys(byCountry).sort((a, b) => a.localeCompare(b, 'ru')).map(c => {
-          const rules = byCountry[c].sort((a, b) => (a.modelGenFrom ?? 0) - (b.modelGenFrom ?? 0))
-          const parts = rules.map(x => x.modelGenFrom ? `с ${x.modelGenFrom}-го — ${x.simType}` : x.simType)
-          const main = rules[rules.length - 1]
-          return `<div class="list-i"><div style="flex:1">
-            <div class="nm">${esc(c)}${main.brand ? ' · ' + esc(main.brand) : ' · любой бренд'} → ${esc(parts.join(', '))}</div>
-          </div><span class="chip ${SIM_CHIP[main.simType] || 'c-off'}">${esc(main.simType)}</span>
-          ${isOwner ? `<button class="btn b-nt sm" data-sim-del="${main.id}">Удалить</button>` : ''}</div>`
-        }).join('')
-        + brandOnly.map(x => `<div class="list-i"><div style="flex:1"><div class="nm">бренд ${esc(x.brand)} → ${esc(x.simType)}</div></div>
-          ${isOwner ? `<button class="btn b-nt sm" data-sim-del="${x.id}">Удалить</button>` : ''}</div>`).join('')
-
-      el.querySelectorAll('[data-sim-del]').forEach(b => b.addEventListener('click', async () => {
-        if (!confirm('Удалить правило? Страна вернётся в очередь «не определён».')) return
-        const r2 = await api('/sim-rules/' + b.dataset.simDel, { method: 'DELETE' })
-        if (!r2.ok) alert(r2.data && r2.data.error || 'Не получилось')
-        loadSimRules(); loadSimQueue()
-      }))
-    }
-
+    // Список правил SIM живёт в едином словаре («Ещё → Парсер»); отдельной
+    // витрины /sim-rules больше нет — осталась только форма «задать правило».
     document.getElementById('simAddBtn').addEventListener('click', () => {
       const f = document.getElementById('simForm')
       f.style.display = f.style.display === 'none' ? '' : 'none'
@@ -2089,7 +2094,7 @@
       document.getElementById('simForm').style.display = 'none'
       document.getElementById('simCountry').value = ''; document.getElementById('simGen').value = ''
       document.getElementById('simBrand').value = ''
-      loadSimRules(); loadSimQueue(); loadSimRecalc()
+      loadDictionary(); loadSimQueue(); loadSimRecalc()
     })
 
     async function loadSimRecalc() {
@@ -2123,8 +2128,7 @@
         ${willChange === 0
           ? ''
           : isOwner
-            ? `<button class="btn b-main" id="simApplyBtn">Обновить по словарю у ${willChange} ${plural(willChange, 'товара', 'товаров', 'товаров')}</button>
-               <div class="hint">Значения переопределятся сразу и на витрине. Прежние сохраним — обновление можно откатить одной кнопкой.</div>`
+            ? `<button class="btn b-main" id="simApplyBtn">Обновить по словарю у ${willChange} ${plural(willChange, 'товара', 'товаров', 'товаров')}</button>`
             : '<button class="btn b-main" disabled title="Обновление по словарю запускает только владелец">Обновить по словарю (только владелец)</button>'}
         ${isOwner && last && !last.rolledBack ? `<button class="btn b-dg" id="simRollbackBtn">Откатить обновление #${last.recalcId}</button>` : ''}`
 
@@ -2241,7 +2245,7 @@
       attn.batchFrom = 'от ' + [...new Set(previews.map(b => b.supplier ? b.supplier.name : 'без поставщика'))].slice(0, 3).join(', ')
       renderAttention()
       if (!r.data.length) {
-        box.innerHTML = '<div class="empty">Новых прайсов нет.<br>Перешлите прайс боту из чата поставщика —<br>или нажмите «Загрузить прайс» выше.</div>'
+        box.innerHTML = '<div class="empty">Новых прайсов нет.<br>Добавьте вставкой текста — «Загрузить прайс» выше.<br>Чат-подтяжки от поставщиков пока нет.</div>'
         return
       }
       box.innerHTML = r.data.map(bt => {
@@ -2624,24 +2628,9 @@
           toast(value ? 'Готово' : 'Ручная правка снята')
           const attrs = r.data.attributes || {}
           x.variantAttrs = attrs
-          const sug = r.data.suggestion
-          const isOwner = window.adminMe && window.adminMe.role === 'owner'
           showRowEdit(x.supplierPriceId)
-          if (sug && isOwner) {
-            const again = document.getElementById('peAttrEdit')
-            again.innerHTML = `<div class="okbox" style="margin-top:10px">
-              Вы поправили это ${sug.count} раз${sug.count > 4 ? '' : 'а'}. Запомнить как правило?<br><b>${esc(sug.phrase)}</b>
-              <div class="sf-item-actions" style="margin-top:10px">
-                <button class="btn b-main sm" id="peLearnBtn">Запомнить для всех таких</button>
-                <button class="btn b-nt sm" data-pe-close="1">Не надо</button>
-              </div></div>`
-            again.querySelector('[data-pe-close]').addEventListener('click', () => { again.innerHTML = '' })
-            document.getElementById('peLearnBtn').addEventListener('click', async () => {
-              const r2 = await api('/parser/learn', { method: 'POST', body: JSON.stringify({ attr: sug.attr, value: sug.value, brand: sug.brand, country: sug.country }) }).catch(() => null)
-              if (!r2 || !r2.ok) { toast((r2 && r2.data && r2.data.error) || 'Не получилось'); return }
-              again.innerHTML = `<div class="okbox">Запомнил: ${esc(sug.phrase)}. Правило видно в «Ещё → Парсер».</div>`
-            })
-          }
+          // Предложения памяти: «чтение» по любому полю, «правило» — только SIM
+          renderLearnOffers(document.getElementById('peAttrEdit'), key, current, value, r.data.suggestion)
         }
         ed.querySelectorAll('[data-pe-set]').forEach(b => b.addEventListener('click', () => save(b.dataset.peSet)))
         const sv = ed.querySelector('[data-pe-save]')
