@@ -519,7 +519,7 @@
           <button class="btn b-dg" id="bcSendBtn">Отправить аудитории</button>
           <button class="btn b-nt" id="bcCancel">Отмена</button>
           <div class="mt" id="bcErr" style="color:var(--bad)"></div>
-          <div class="hint">Рассылка уходит через бота — только тем из аудитории, кто им пользовался (клиенты с Avito недостижимы).</div>
+          <div class="hint">Каналы: Telegram-клиентам пишет бот, Avito-клиентам — Avito-мессенджер (видео туда не уходит — только текст и фото). Кто без адреса — в «недоступно».</div>
           <div class="hint">Сообщение уйдёт живым людям и его нельзя отозвать. Сначала посмотрите, кому уйдёт, и отправьте себе.</div>
         </div>
       </div>
@@ -1402,13 +1402,13 @@
       const r = await api('/broadcasts/preview', { method: 'POST', body: JSON.stringify({ text: document.getElementById('bcText').value, target: bcTarget() }) }).catch(() => null)
       if (!r || !r.ok) { box.innerHTML = ''; err.textContent = (r && r.data && r.data.error) || 'Не получилось'; return }
       const d = r.data
-      const unreachable = Math.max(0, (d.totalClients || 0) - d.recipients)
+      const bc = d.byChannel || { telegram: d.recipients, avito: 0 }
       box.innerHTML = `<div class="${d.recipients ? 'okbox' : 'warnbox'}" style="margin-top:10px">
         Аудитория: <b>${esc(d.audience || 'всем клиентам')}</b><br>
-        Получат <b>${d.recipients}</b> из ${fmt(d.totalClients || 0)} ${plural(d.totalClients || 0, 'клиента', 'клиентов', 'клиентов')}${
-          bcKind === 'all' && unreachable ? ` — остальные ${fmt(unreachable)} пришли не из Telegram, бот им написать не может` : ''}
+        Получат <b>${d.recipients}</b>: Telegram ${bc.telegram} · Avito ${bc.avito}${d.unreachable ? ` · недоступно ${d.unreachable} (нет адреса ни в одном канале)` : ''}
         ${d.sample.length ? '<br>Например: ' + d.sample.map(esc).join(', ') + '…' : ''}
-        ${d.recipients ? '' : '<br>Отправлять некому: в этой аудитории нет клиентов, которые писали боту.'}
+        ${d.recipients ? '' : '<br>Отправлять некому: в этой аудитории нет клиентов с доступным адресом.'}
+        ${bc.avito ? '<br>⚠️ Avito: массовые сообщения — риск ограничений аккаунта. Шлём размеренно, под лимит.' : ''}
         ${d.lastBroadcast ? `<br>Прошлая рассылка: ${new Date(d.lastBroadcast.createdAt).toLocaleDateString('ru-RU')}, доставлено ${d.lastBroadcast.totalSent}` : ''}
       </div>`
     })
@@ -1428,12 +1428,16 @@
         // Ограда: счётчик получателей ВСЕГДА свежий и всегда в подтверждении
         const p = await api('/broadcasts/preview', { method: 'POST', body: JSON.stringify({ target }) }).catch(() => null)
         if (!p || !p.ok) { err.textContent = (p && p.data && p.data.error) || 'Не удалось посчитать получателей'; return }
-        if (!p.data.recipients) { err.textContent = 'Отправлять некому: в этой аудитории нет клиентов из Telegram.'; return }
-        if (!confirm(`Отправить сообщение: ${p.data.audience}?\n\nПолучателей: ${p.data.recipients}.\nОтозвать нельзя. Убедитесь, что отправляли себе и текст верный.`)) return
+        if (!p.data.recipients) { err.textContent = 'Отправлять некому: в этой аудитории нет клиентов с доступным адресом.'; return }
+        const pb = p.data.byChannel || { telegram: p.data.recipients, avito: 0 }
+        const avitoWarn = pb.avito ? `\n⚠️ Avito-сообщения (${pb.avito} чел.) — риск ограничений аккаунта; уходят размеренно, под лимит.` : ''
+        if (!confirm(`Отправить сообщение: ${p.data.audience}?\n\nПолучателей: ${p.data.recipients} (Telegram: ${pb.telegram} · Avito: ${pb.avito}).${avitoWarn}\nОтозвать нельзя. Убедитесь, что отправляли себе и текст верный.`)) return
         btn.textContent = 'Отправляем…'
         const r = await api('/broadcasts/send', { method: 'POST', body: JSON.stringify({ text, target, media: bcMedia() }) }).catch(() => null)
         if (!r || !r.ok) { err.textContent = (r && r.data && r.data.error) || 'Не получилось'; return }
-        alert(`Готово: доставлено ${r.data.sent}${r.data.failed ? `, не дошло ${r.data.failed} (заблокировали бота)` : ''}.`)
+        const rb = r.data.byChannel || {}
+        const chLine = rb.telegram ? `\nTelegram: ${rb.telegram.sent}/${rb.telegram.sent + rb.telegram.failed} · Avito: ${rb.avito.sent}/${rb.avito.sent + rb.avito.failed}${rb.avito.skipped ? ` (пропущено ${rb.avito.skipped} — только видео)` : ''}` : ''
+        alert(`Готово: доставлено ${r.data.sent}${r.data.failed ? `, не дошло ${r.data.failed}` : ''}${r.data.skipped ? `, пропущено ${r.data.skipped}` : ''}.${chLine}`)
         document.getElementById('bcCancel').click()
         loadBroadcasts()
       } finally { btn.disabled = false; btn.textContent = 'Отправить аудитории' }

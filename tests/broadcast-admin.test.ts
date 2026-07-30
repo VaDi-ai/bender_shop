@@ -25,7 +25,10 @@ const ACTOR = '900'
 
 beforeEach(() => {
   ;[client.findMany, client.count, blog.findFirst, blog.create, blog.findMany].forEach(f => f.mockReset())
-  client.findMany.mockResolvedValue([{ externalId: '111', name: 'Иван', telegramUsername: 'ivan' }, { externalId: '222', name: 'Пётр', telegramUsername: null }])
+  client.findMany.mockResolvedValue([
+    { source: 'telegram', externalId: '111', name: 'Иван', telegramUsername: 'ivan' },
+    { source: 'telegram', externalId: '222', name: 'Пётр', telegramUsername: null },
+  ])
   client.count.mockResolvedValue(2943)
   blog.findFirst.mockResolvedValue(null)
   blog.create.mockResolvedValue({})
@@ -55,9 +58,9 @@ describe('предпросмотр', () => {
     expect(r.data!.recipients).toBe(2)
   })
 
-  it('получатели — только клиенты из Telegram', async () => {
+  it('получатели — клиенты Telegram и Avito с адресом', async () => {
     await previewBroadcast('текст')
-    expect(client.findMany.mock.calls[0][0].where).toEqual({ source: 'telegram', externalId: { not: null } })
+    expect(client.findMany.mock.calls[0][0].where).toEqual({ source: { in: ['telegram', 'avito'] }, externalId: { not: null } })
   })
 })
 
@@ -123,8 +126,8 @@ describe('parseTarget / targetWhere — как в боте', () => {
       .toEqual({ type: 'segment', segmentId: 3, tagFilter: 'top' })
   })
 
-  it('where — те же условия, что countRecipients в боте', () => {
-    const base = { source: 'telegram', externalId: { not: null } }
+  it('where — фильтры бота поверх мультиканальной базы', () => {
+    const base = { source: { in: ['telegram', 'avito'] }, externalId: { not: null } }
     expect(targetWhere({ type: 'all' })).toEqual(base)
     expect(targetWhere({ type: 'tag', tag: 'vip' })).toEqual({ ...base, tags: { some: { name: 'vip' } } })
     expect(targetWhere({ type: 'segment', segmentId: 3 })).toEqual({ ...base, segmentId: 3 })
@@ -168,5 +171,85 @@ describe('отправка с таргетом и медиа', () => {
     expect(parseMedia({ url: '' }).data).toBeNull()
     expect(parseMedia({ url: 'http://x' }).ok).toBe(false)
     expect(parseMedia({ url: 'https://x/v.mp4', type: 'video' }).data).toEqual({ url: 'https://x/v.mp4', type: 'video' })
+  })
+})
+
+// ─── Мультиканальность: Telegram + Avito ─────────────────────────────────────
+import { resolveRecipient, AVITO_MIN_INTERVAL_MS } from '../lib/broadcast-admin'
+
+describe('резолв адреса по каналу', () => {
+  it('telegram → chatId бота; avito → chatId из "buyerId:chatId"', () => {
+    expect(resolveRecipient('telegram', '111')).toEqual({ channel: 'telegram', address: '111' })
+    expect(resolveRecipient('avito', '9001:u2i-abc')).toEqual({ channel: 'avito', address: 'u2i-abc' })
+  })
+  it('нерезолвимое — null, не падаем: avito без chatId, instagram, пустота', () => {
+    expect(resolveRecipient('avito', '9001')).toBeNull()          // старый формат без чата
+    expect(resolveRecipient('instagram', 'x')).toBeNull()
+    expect(resolveRecipient('telegram', null)).toBeNull()
+  })
+})
+
+describe('мультиканальная отправка', () => {
+  const rows = [
+    { source: 'telegram', externalId: '111', name: 'Иван', telegramUsername: 'ivan' },
+    { source: 'avito', externalId: '9001:chatA', name: 'Авито Клиент', telegramUsername: null },
+    { source: 'avito', externalId: '9002', name: 'Старый Авито', telegramUsername: null }, // нерезолвим
+  ]
+
+  it('превью считает поканально и «недоступно»', async () => {
+    client.findMany.mockResolvedValue(rows)
+    client.count.mockImplementation(({ where }: any = {}) =>
+      Promise.resolve(where && where.tags === undefined && where.segmentId === undefined && where.source === undefined ? 3 : 2943))
+    const r = await previewBroadcast('x')
+    expect(r.data).toMatchObject({ recipients: 2, byChannel: { telegram: 1, avito: 1 } })
+    expect(r.data!.unreachable).toBe(1)
+  })
+
+  it('каждый получатель — своим каналом; сбой одного не роняет пачку', async () => {
+    client.findMany.mockResolvedValue(rows)
+    const sender = vi.fn().mockResolvedValue(undefined)
+    const avitoSender = { message: vi.fn().mockRejectedValue(new Error('avito down')), image: vi.fn() }
+    const r = await sendBroadcast(ACTOR, 'Привет', { sender, avitoSender, avitoIntervalMs: 1 })
+    expect(r.ok).toBe(true)
+    expect(r.data!.byChannel.telegram).toEqual({ sent: 1, failed: 0, skipped: 0 })
+    expect(r.data!.byChannel.avito).toEqual({ sent: 0, failed: 1, skipped: 0 })
+    expect(sender).toHaveBeenCalledWith('111', 'Привет', null)
+    expect(avitoSender.message).toHaveBeenCalledWith('chatA', 'Привет')
+  })
+
+  it('фото уходит в Avito картинкой + текст отдельным сообщением', async () => {
+    client.findMany.mockResolvedValue(rows)
+    const avitoSender = { message: vi.fn().mockResolvedValue(undefined), image: vi.fn().mockResolvedValue(undefined) }
+    const media = { url: 'https://x/p.webp', type: 'photo' as const }
+    const r = await sendBroadcast(ACTOR, 'Подпись', { sender: vi.fn().mockResolvedValue(undefined), avitoSender, media, avitoIntervalMs: 1 })
+    expect(avitoSender.image).toHaveBeenCalledWith('chatA', media.url)
+    expect(avitoSender.message).toHaveBeenCalledWith('chatA', 'Подпись')
+    expect(r.data!.byChannel.avito.sent).toBe(1)
+  })
+
+  it('видео на Avito деградирует до текста; только-видео без текста — пропуск', async () => {
+    client.findMany.mockResolvedValue(rows)
+    const avitoSender = { message: vi.fn().mockResolvedValue(undefined), image: vi.fn() }
+    const media = { url: 'https://x/v.mp4', type: 'video' as const }
+    const r1 = await sendBroadcast(ACTOR, 'Текст при видео', { sender: vi.fn().mockResolvedValue(undefined), avitoSender, media, avitoIntervalMs: 1 })
+    expect(avitoSender.image).not.toHaveBeenCalled()
+    expect(avitoSender.message).toHaveBeenCalledWith('chatA', 'Текст при видео')
+    expect(r1.data!.byChannel.avito.sent).toBe(1)
+
+    avitoSender.message.mockClear()
+    const r2 = await sendBroadcast(ACTOR, '', { sender: vi.fn().mockResolvedValue(undefined), avitoSender, media, avitoIntervalMs: 1 })
+    expect(avitoSender.message).not.toHaveBeenCalled()
+    expect(r2.data!.byChannel.avito).toMatchObject({ sent: 0, skipped: 1 })
+  })
+
+  it('троттлинг Avito объявлен под лимит (~150 req/мин, с запасом на фолбэки)', () => {
+    expect(AVITO_MIN_INTERVAL_MS).toBeGreaterThanOrEqual(1000)
+  })
+
+  it('сводка в лог/аудит — поканальная', async () => {
+    client.findMany.mockResolvedValue(rows)
+    const avitoSender = { message: vi.fn().mockResolvedValue(undefined), image: vi.fn() }
+    await sendBroadcast(ACTOR, 'Привет', { sender: vi.fn().mockResolvedValue(undefined), avitoSender, avitoIntervalMs: 1 })
+    expect(blog.create.mock.calls[0][0].data).toMatchObject({ totalSent: 2, totalFailed: 0 })
   })
 })
