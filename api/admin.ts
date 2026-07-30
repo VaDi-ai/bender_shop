@@ -94,7 +94,7 @@ export async function dashboard(req: AdminRequest, res: Response): Promise<void>
   const today = mskDayStart(now)
   const yesterday = mskDayStart(now, 1)
 
-  const [ordersToday, ordersYesterday, lastSync] = await Promise.all([
+  const [ordersToday, ordersYesterday, lastSync, rates] = await Promise.all([
     prisma.order.aggregate({
       where: { createdAt: { gte: today } },
       _count: true, _sum: { totalAmount: true },
@@ -104,7 +104,11 @@ export async function dashboard(req: AdminRequest, res: Response): Promise<void>
       _count: true, _sum: { totalAmount: true },
     }),
     prisma.syncRun.findFirst({ orderBy: { startedAt: 'desc' } }),
+    // Информер курса USD (read-only): данные уже посчитаны getSavedRates,
+    // обновляются существующим ежедневным кроном 10:00 МСК (bot/index.ts)
+    import('../lib/currency').then(m => m.getSavedRates()).catch(() => []),
   ])
+  const usd = rates.find(r => r.currency === 'USD') ?? null
 
   // Решение владельца (hardening №2): выручка — только owner; счётчики
   // заказов и статус синка — всем активным админам. Manager получает null.
@@ -122,6 +126,13 @@ export async function dashboard(req: AdminRequest, res: Response): Promise<void>
       ok: lastSync.ok,
       trigger: lastSync.trigger,
       errors: lastSync.errors,
+    },
+    // Курс ЦБ — публичная величина, показываем обеим ролям
+    usd: usd && {
+      rate: usd.newRate,
+      previousRate: usd.previousRate,
+      changePercent: usd.changePercent,
+      direction: usd.direction,
     },
   })
 }

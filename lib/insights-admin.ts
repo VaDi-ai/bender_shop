@@ -24,6 +24,17 @@ export interface Insights {
   byDay: SalesPoint[]
   topProducts: Array<{ name: string; qty: number; revenue: number | null }>
   clients: { total: number; withOrders: number; newInRange: number }
+  /** Воронка — расчёт один в один с ботом (bot/admin/analytics.ts buildFunnelReport) */
+  funnel: {
+    newClients: number
+    reservations: number
+    orders: number
+    conversionPct: string
+    repeatClients: number
+    revenue: number | null
+  }
+  /** Топ клиентов — ранжирование как в боте (buildTopClients): по выручке за период */
+  topClients: Array<{ name: string; orders: number; revenue: number | null }>
   /** Что именно скрыто из-за роли — честно, а не молча пусто */
   hiddenForRole: string[]
 }
@@ -33,7 +44,7 @@ export async function getInsights(role: Role, days = 30): Promise<Insights> {
   const since = new Date(Date.now() - range * DAY)
   const showMoney = role === 'owner'
 
-  const [orders, items, clientsTotal, clientsWithOrders, clientsNew] = await Promise.all([
+  const [orders, items, clientsTotal, clientsWithOrders, clientsNew, reservations, repeatClients, clientOrders] = await Promise.all([
     prisma.order.findMany({
       where: { createdAt: { gte: since } },
       select: { id: true, createdAt: true, totalAmount: true, status: true },
@@ -46,6 +57,17 @@ export async function getInsights(role: Role, days = 30): Promise<Insights> {
     prisma.client.count(),
     prisma.client.count({ where: { orders: { some: {} } } }),
     prisma.client.count({ where: { createdAt: { gte: since } } }),
+    // Воронка (как в боте): резервы за период
+    prisma.reservation.count({ where: { createdAt: { gte: since } } }),
+    // Повторные (как в боте): заказ в периоде + totalPurchases >= 2
+    prisma.client.count({
+      where: { orders: { some: { createdAt: { gte: since } } }, totalPurchases: { gte: 2 } },
+    }),
+    // Топ клиентов (как в боте): заказы периода с привязкой к клиенту
+    prisma.order.findMany({
+      where: { clientId: { not: null }, createdAt: { gte: since } },
+      select: { clientId: true, totalAmount: true, client: { select: { name: true } } },
+    }),
   ])
 
   const paid = orders.filter(o => o.status !== 'cancelled').length
@@ -72,6 +94,23 @@ export async function getInsights(role: Role, days = 30): Promise<Insights> {
     byProduct.set(it.productName, cur)
   }
 
+  // Воронка — формулы из бота: конверсия = заказы/новые клиенты
+  const conversionPct = clientsNew > 0 ? ((orders.length / clientsNew) * 100).toFixed(1) : '0'
+
+  // Топ клиентов — группировка и сортировка как в боте
+  const clientMap = new Map<number, { name: string; count: number; revenue: number }>()
+  for (const o of clientOrders) {
+    if (!o.clientId) continue
+    const cur = clientMap.get(o.clientId) ?? { name: o.client?.name ?? 'Неизвестный', count: 0, revenue: 0 }
+    cur.count++
+    cur.revenue += Number(o.totalAmount)
+    clientMap.set(o.clientId, cur)
+  }
+  const topClients = [...clientMap.values()]
+    .sort((a, b) => b.revenue - a.revenue)
+    .slice(0, 10)
+    .map(c => ({ name: c.name, orders: c.count, revenue: showMoney ? c.revenue : null }))
+
   return {
     range,
     orders: {
@@ -86,7 +125,16 @@ export async function getInsights(role: Role, days = 30): Promise<Insights> {
       .slice(0, 10)
       .map(([name, v]) => ({ name, qty: v.qty, revenue: showMoney ? v.revenue : null })),
     clients: { total: clientsTotal, withOrders: clientsWithOrders, newInRange: clientsNew },
-    hiddenForRole: showMoney ? [] : ['выручка', 'средний чек'],
+    funnel: {
+      newClients: clientsNew,
+      reservations,
+      orders: orders.length,
+      conversionPct,
+      repeatClients,
+      revenue: showMoney ? revenue : null,
+    },
+    topClients,
+    hiddenForRole: showMoney ? [] : ['выручка', 'средний чек', 'суммы топ-клиентов'],
   }
 }
 

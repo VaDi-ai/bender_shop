@@ -154,6 +154,12 @@
         <div><div class="n">—</div><div class="l">заходы · скоро</div></div>
       </div>
 
+      <!-- Информер курса USD — read-only, обновляется ежедневным кроном -->
+      <div class="card" id="usdCard" style="display:none">
+        <div class="row"><span class="lbl">Доллар 🇺🇸</span><span class="spacer mono" id="usdRate">—</span></div>
+        <div class="mt" id="usdDelta"></div>
+      </div>
+
       <div class="card" id="attentionCard" style="display:none">
         <h3>⚠️ Требует внимания <span class="chip c-warn right" id="attnCount">0</span></h3>
         <div id="attnList"></div>
@@ -464,7 +470,11 @@
       <div class="card">
         <h3>Продажи <span class="chip c-off right" id="insRange">30 дней</span></h3>
         <div id="insBox" class="mt">Загрузка…</div>
-        <button class="btn b-nt" id="insToggle">Показать за 7 дней</button>
+        <div class="sf-item-actions" id="insPeriods" style="margin-top:10px">
+          <button class="btn b-nt sm" data-ins-days="7">7 дней</button>
+          <button class="btn b-main sm" data-ins-days="30">30 дней</button>
+          <button class="btn b-nt sm" data-ins-days="90">90 дней</button>
+        </div>
       </div>
       <div class="card">
         <h3>Найти клиента</h3>
@@ -1156,7 +1166,8 @@
       if (!r || !r.ok) { el.textContent = 'Не удалось загрузить'; return }
       const d = r.data
       document.getElementById('insRange').textContent = d.range + ' дней'
-      document.getElementById('insToggle').textContent = insDays === 30 ? 'Показать за 7 дней' : 'Показать за 30 дней'
+      document.querySelectorAll('#insPeriods [data-ins-days]').forEach(b =>
+        b.className = 'btn ' + (Number(b.dataset.insDays) === insDays ? 'b-main' : 'b-nt') + ' sm')
       const peak = Math.max(1, ...d.byDay.map(x => x.orders))
       el.innerHTML = `
         <div class="kpi" style="margin-bottom:10px">
@@ -1174,12 +1185,21 @@
         ${d.topProducts.length ? '<div class="cap" style="margin:14px 0 6px">ЧТО ПОКУПАЮТ</div>' + d.topProducts.slice(0, 5).map(t => `
           <div class="list-i"><div style="flex:1"><div class="nm">${esc(t.name)}</div>
             <div class="mt">${t.qty} ${plural(t.qty, 'штука', 'штуки', 'штук')}${t.revenue == null ? '' : ' · ' + fmt(t.revenue) + ' ₽'}</div></div></div>`).join('') : ''}
+        ${d.funnel ? `<div class="cap" style="margin:14px 0 6px">ВОРОНКА</div>
+          <div class="list-i"><div style="flex:1">
+            <div class="mt">👥 Новых клиентов: <b>${d.funnel.newClients}</b> · 🔖 Резервов: <b>${d.funnel.reservations}</b> · 💰 Заказов: <b>${d.funnel.orders}</b></div>
+            <div class="mt">📊 Конверсия: <b>${d.funnel.conversionPct}%</b> · 🔄 Повторных: <b>${d.funnel.repeatClients}</b>${d.funnel.revenue == null ? '' : ` · 💵 Выручка: <b>${fmt(d.funnel.revenue)} ₽</b>`}</div>
+          </div></div>` : ''}
+        ${d.topClients && d.topClients.length ? '<div class="cap" style="margin:14px 0 6px">ТОП КЛИЕНТОВ</div>' + d.topClients.map((c, i) => `
+          <div class="list-i"><div style="flex:1"><div class="nm">${i + 1}. ${esc(c.name)}</div>
+            <div class="mt">${c.orders} ${plural(c.orders, 'покупка', 'покупки', 'покупок')}${c.revenue == null ? '' : ' · ' + fmt(c.revenue) + ' ₽'}</div></div></div>`).join('') : ''}
         ${d.hiddenForRole.length ? `<div class="hint">Скрыто для роли «менеджер»: ${d.hiddenForRole.join(', ')}.</div>` : ''}`
       document.getElementById('clStats').textContent =
         `Всего ${d.clients.total} · с заказами ${d.clients.withOrders} · новых за ${d.range} дней ${d.clients.newInRange}`
       setTile('tileAnalytics', `${d.orders.total} ${plural(d.orders.total, 'заказ', 'заказа', 'заказов')} за ${d.range} дней`)
     }
-    document.getElementById('insToggle').addEventListener('click', () => { insDays = insDays === 30 ? 7 : 30; loadInsights() })
+    document.querySelectorAll('#insPeriods [data-ins-days]').forEach(b =>
+      b.addEventListener('click', () => { insDays = Number(b.dataset.insDays); loadInsights() }))
 
     // ── КЛИЕНТЫ ───────────────────────────────────────────────────────────────
     let clTimer = null
@@ -1861,6 +1881,15 @@
         chip.textContent = d.lastSync.ok === false ? 'ошибка' : (errs ? errs + ' предупр.' : 'в порядке')
         chip.className = 'chip right ' + (d.lastSync.ok === false ? 'c-bad' : (errs ? 'c-warn' : 'c-ok'))
         info.textContent = 'Последний прогон: ' + new Date(d.lastSync.startedAt).toLocaleString('ru-RU') + (d.lastSync.trigger === 'cron' ? ' (авто)' : '')
+      }
+      if (d.usd) {
+        const ru = n => n.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+        const diff = d.usd.rate - d.usd.previousRate
+        document.getElementById('usdCard').style.display = ''
+        document.getElementById('usdRate').textContent = ru(d.usd.rate) + ' ₽'
+        document.getElementById('usdDelta').textContent = d.usd.direction === 'same'
+          ? 'Без изменений к прошлому обновлению'
+          : `${diff > 0 ? '+' : '−'}${ru(Math.abs(diff))} (${diff > 0 ? '+' : '−'}${Math.abs(Number(d.usd.changePercent)).toLocaleString('ru-RU')}%) к прошлому обновлению`
       }
       renderAttention()
     }
