@@ -135,3 +135,80 @@ describe('категория по имени', () => {
     expect(detectCategoryFromName('Штука непонятная')).toBeNull()
   })
 })
+
+// ── Кусок 3: правки владельца перед заведением ────────────────────────────────
+import { validateCreateEdits } from '../lib/product-from-price'
+
+describe('validateCreateEdits — только разрешённые поля', () => {
+  it('валидные правки нормализуются', () => {
+    const r = validateCreateEdits({ model: ' iPhone 17 Pro Max ', country: 'Европа', inStock: true })
+    expect(r.errors).toEqual([])
+    expect(r.edits).toEqual({ model: 'iPhone 17 Pro Max', country: 'Европа', inStock: true })
+  })
+
+  it('пусто/не задано → без правок', () => {
+    expect(validateCreateEdits(undefined)).toEqual({ errors: [], edits: {} })
+    expect(validateCreateEdits({})).toEqual({ errors: [], edits: {} })
+  })
+
+  it('чужие поля → 422 (price, isAvailable, мусор)', () => {
+    const r = validateCreateEdits({ price: 100, isAvailable: true, foo: 'x', model: 'A' })
+    expect(r.errors.map(e => e.field).sort()).toEqual(['foo', 'isAvailable', 'price'])
+    expect(r.edits).toEqual({})
+  })
+
+  it('inStock не boolean и строка >100 — ошибки', () => {
+    expect(validateCreateEdits({ inStock: 'yes' }).errors[0].field).toBe('inStock')
+    expect(validateCreateEdits({ color: 'x'.repeat(101) }).errors[0].field).toBe('color')
+  })
+})
+
+describe('заведение с правками владельца', () => {
+  it('правки перекрывают разбор; страна из правки тоже канонизируется', async () => {
+    p.supplierPrice.findUnique.mockResolvedValue(row())
+    const r = await createProductFromPriceRow({
+      supplierPriceId: 501, actor: { telegramId: '1' },
+      edits: { model: 'iPhone 17 Pro Max', color: 'Deep Blue', country: 'Гонконг', simType: '2 SIM' },
+    })
+    expect(r.ok).toBe(true)
+    const prod = p.product.create.mock.calls[0][0].data
+    expect(prod.name).toBe('iPhone 17 Pro Max')
+    expect(prod.isAvailable).toBe(false) // ограда не снимается правками
+    const varnt = p.productVariant.create.mock.calls[0][0].data
+    expect(varnt.attributes).toMatchObject({ 'Память': '256GB', 'Цвет': 'Deep Blue', 'Страна': 'Гонконг', 'SIM': '2 SIM' })
+    expect(varnt.attributes.fullName).toBe('iPhone 17 Pro Max 256GB Deep Blue (Гонконг)')
+  })
+
+  it('пустая правка поля = «атрибут не ставить»', async () => {
+    p.supplierPrice.findUnique.mockResolvedValue(row())
+    await createProductFromPriceRow({ supplierPriceId: 501, actor: { telegramId: '1' }, edits: { color: '' } })
+    const varnt = p.productVariant.create.mock.calls[0][0].data
+    expect(varnt.attributes['Цвет']).toBeUndefined()
+  })
+
+  it('нераспознанная страна в правке → атрибут не ставится (не наугад)', async () => {
+    p.supplierPrice.findUnique.mockResolvedValue(row())
+    await createProductFromPriceRow({ supplierPriceId: 501, actor: { telegramId: '1' }, edits: { country: 'Нарния' } })
+    const varnt = p.productVariant.create.mock.calls[0][0].data
+    expect(varnt.attributes['Страна']).toBeUndefined()
+  })
+
+  it('тумблер «Есть»: вариант inStock=true, quantity=1, товар всё равно скрыт', async () => {
+    p.supplierPrice.findUnique.mockResolvedValue(row())
+    await createProductFromPriceRow({ supplierPriceId: 501, actor: { telegramId: '1' }, edits: { inStock: true } })
+    const prod = p.product.create.mock.calls[0][0].data
+    const varnt = p.productVariant.create.mock.calls[0][0].data
+    expect(prod.isAvailable).toBe(false)
+    expect(varnt.inStock).toBe(true)
+    expect(varnt.quantity).toBe(1)
+    expect(varnt.price).toBe(0)
+  })
+
+  it('без правок — поведение прежнее (inStock=false, quantity=0)', async () => {
+    p.supplierPrice.findUnique.mockResolvedValue(row())
+    await createProductFromPriceRow({ supplierPriceId: 501, actor: { telegramId: '1' } })
+    const varnt = p.productVariant.create.mock.calls[0][0].data
+    expect(varnt.inStock).toBe(false)
+    expect(varnt.quantity).toBe(0)
+  })
+})

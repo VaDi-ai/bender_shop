@@ -103,6 +103,13 @@
     .pl .price { font-family:'JetBrains Mono',monospace; font-size:12px; text-align:right; white-space:nowrap; flex:none; }
     .pl .price .old { font-size:10.5px; }
     .pl[data-edit-row] { cursor:pointer; }
+    /* Экран «Проверьте товар» (мокап bender-prices-flow-2, шаг 3) */
+    .rawline { font-family:'JetBrains Mono',monospace; font-size:12px; color:#cfe6a8; background:#12140d; border:1px solid #2a301a; border-radius:9px; padding:9px 11px; margin-bottom:12px; overflow-wrap:anywhere; }
+    .two { display:flex; gap:10px; }
+    .two > * { flex:1; min-width:0; }
+    .toggle { display:inline-flex; border:1px solid var(--bd); border-radius:10px; overflow:hidden; }
+    .toggle button { background:#0f0f10; color:var(--dim); border:none; padding:9px 18px; font-family:'Onest'; font-size:12.5px; cursor:pointer; }
+    .toggle button.on { background:var(--ac); color:var(--acf); font-weight:600; }
     .okbox { background:rgba(168,255,62,.07); border:1px solid rgba(168,255,62,.3); border-radius:12px; padding:12px; font-size:12px; line-height:1.6; color:#d6f8a8; margin-top:10px; }
     .diff { font-family:'JetBrains Mono',monospace; font-size:12px; }
     .old { color:var(--dim); text-decoration:line-through; }
@@ -246,6 +253,12 @@
       <div id="pricesPreview" style="display:none">
         <button class="hub-back" id="ppBack">← Цены</button>
         <div id="pbPreview"></div>
+      </div>
+
+      <!-- Экран «Проверьте товар» (мокап bender-prices-flow-2, шаг 3) -->
+      <div id="pricesEdit" style="display:none">
+        <button class="hub-back" id="peBack">← К разбору</button>
+        <div id="peBody"></div>
       </div>
     </section>
 
@@ -1939,7 +1952,7 @@
 
     // ── Страницы вкладки «Цены»: список / «Загрузить прайс» / «Проверьте разбор» ──
     function showPricesPage(id) {
-      ;['pricesMain', 'pricesUpload', 'pricesPreview'].forEach(p => {
+      ;['pricesMain', 'pricesUpload', 'pricesPreview', 'pricesEdit'].forEach(p => {
         document.getElementById(p).style.display = p === id ? '' : 'none'
       })
       document.getElementById('main').scrollTo({ top: 0 })
@@ -1949,6 +1962,9 @@
     document.getElementById('puOpen').addEventListener('click', openPriceUpload)
     document.getElementById('puBack').addEventListener('click', closePriceUpload)
     document.getElementById('ppBack').addEventListener('click', closePriceUpload)
+    document.getElementById('peBack').addEventListener('click', () => {
+      if (lastPreview) showBatchPreview(lastPreview.batchId); else closePriceUpload()
+    })
     // Уход с вкладки возвращает «Цены» в исходное состояние — как хаб «Ещё»
     document.querySelectorAll('#tabbar .tb').forEach(b => b.addEventListener('click', closePriceUpload))
     document.getElementById('puSupplier').addEventListener('change', function () {
@@ -2001,6 +2017,8 @@
       return `Цена ${x.deltaPct > 0 ? 'выросла' : 'снизилась'} на ${Math.abs(x.deltaPct)}%`
     }
 
+    let lastPreview = null // последний загруженный разбор — источник данных экрана правки
+
     async function showBatchPreview(batchId) {
       showPricesPage('pricesPreview')
       const box = document.getElementById('pbPreview')
@@ -2008,6 +2026,7 @@
       const r = await api('/price-batches/' + batchId).catch(() => null)
       if (!r || !r.ok) { box.innerHTML = '<div class="empty">Не удалось загрузить</div>'; return }
       const { batch, rows, applyMode, canApply } = r.data
+      lastPreview = { batchId, batch, rows, applyMode, canApply }
       const st = batch.stats || {}
       const isOwner = window.adminMe && window.adminMe.role === 'owner'
       const applied = batch.status === 'applied'
@@ -2071,16 +2090,16 @@
         <div id="pbApplyResult"></div>
         ${tail}`
 
-      // Правка строки и «Проверить» — кусок 3; пока заглушка
       box.querySelectorAll('[data-edit-row], [data-check-row]').forEach(el =>
-        el.addEventListener('click', () => toast('Правка разбора появится в следующем обновлении')))
+        el.addEventListener('click', () => showRowEdit(Number(el.dataset.editRow || el.dataset.checkRow))))
     }
 
     async function pbApply(batchId, dryRun) {
       const out = document.getElementById('pbApplyResult')
       out.innerHTML = '<div class="mt">' + (dryRun ? 'Считаем проверку…' : 'Применяем…') + '</div>'
       try {
-        const r = await api(`/price-batches/${batchId}/apply`, { method: 'POST', body: JSON.stringify({ dryRun, includeOutOfCorridor: !!document.getElementById('pbIncludeOut')?.checked }) })
+        // Вне-коридорное применение — только с экрана правки строки (peApplyOut)
+        const r = await api(`/price-batches/${batchId}/apply`, { method: 'POST', body: JSON.stringify({ dryRun, includeOutOfCorridor: false }) })
         if (!r.ok) { out.innerHTML = `<div class="warnbox">${esc(r.data && r.data.error || 'Не получилось')}</div>`; return }
         const d = r.data
         if (d.alreadyApplied) { out.innerHTML = '<div class="okbox">Батч уже применён.</div>'; return }
@@ -2100,6 +2119,230 @@
       const r = await api(`/price-batches/${batchId}/retry-writeback`, { method: 'POST', body: '{}' }).catch(() => null)
       alert(r && r.ok ? 'Запись в таблицу проехала' : (r && r.data && r.data.error || 'Снова не удалось'))
       showBatchPreview(batchId)
+    }
+
+    // ── Экран «Проверьте товар»: правка строки разбора (шаг 3 мокапа) ─────────
+    function showRowEdit(spId) {
+      if (!lastPreview) return
+      const x = lastPreview.rows.find(r => r.supplierPriceId === spId)
+      if (!x) return
+      showPricesPage('pricesEdit')
+      const box = document.getElementById('peBody')
+      const isOwner = window.adminMe && window.adminMe.role === 'owner'
+      const p = x.parsed || {}
+      const inPreview = lastPreview.batch.status === 'preview'
+
+      const priceCard = `
+        <div class="cap">ЦЕНА${!x.matched ? ' И ОСТАТОК' : ''}</div>
+        <div class="card">
+          <div class="row" style="padding:4px 0"><span class="grow lbl">Закупка</span><span class="mono">${fmt(x.supplierPrice)} ₽</span></div>
+          <div class="row" style="padding:4px 0"><span class="grow lbl">Розница · по интервалам наценки</span><span class="mono" style="color:var(--ac)">${x.proposedPrice != null ? fmt(x.proposedPrice) + ' ₽' : '—'}</span></div>
+          ${x.matched && x.currentPrice != null ? `<div class="row" style="padding:4px 0"><span class="grow lbl">Сейчас на сайте</span><span class="mono">${fmt(x.currentPrice)} ₽${x.deltaPct != null ? ` (${x.deltaPct > 0 ? '+' : ''}${x.deltaPct}%)` : ''}</span></div>` : ''}
+          ${!x.matched ? `
+          <div style="margin-top:12px"><span class="lbl">Остаток</span><br>
+            <div class="toggle" id="peStock" style="margin-top:6px"><button data-stock="1">Есть</button><button class="on" data-stock="0">Нет</button></div>
+          </div>` : ''}
+        </div>`
+
+      if (!x.matched) {
+        box.innerHTML = `
+          <h2 style="font-size:15px">Проверьте товар</h2>
+          <div class="rawline">${esc(x.rawLine)}</div>
+          <div class="cap">РАЗБОР — ПОПРАВЬТЕ, ЕСЛИ НЕ ТАК</div>
+          <div class="card">
+            <div class="two">
+              <div><span class="lbl">Марка</span><input class="inp" id="peBrand" maxlength="100" value="${esc(p.brandGuess || '')}"></div>
+              <div><span class="lbl">Модель</span><input class="inp" id="peModel" maxlength="100" value="${esc(p.model || '')}"></div>
+            </div>
+            <div class="two">
+              <div><span class="lbl">Память</span><input class="inp" id="peStorage" maxlength="100" value="${esc(p.storage || '')}"></div>
+              <div><span class="lbl">Цвет</span><input class="inp" id="peColor" maxlength="100" value="${esc(p.color || '')}"></div>
+            </div>
+            <div class="two">
+              <div><span class="lbl">Страна</span><input class="inp" id="peCountry" maxlength="100" value="${esc(p.country || '')}"></div>
+              <div><span class="lbl">SIM</span><select class="inp" id="peSim"><option value="">— как в строке</option>${SIM_VALUES.map(v => `<option>${esc(v)}</option>`).join('')}</select></div>
+            </div>
+            <div class="hint">Страна ставится только по словарю (Гонконг, Индия, Европа…) — нераспознанную не выдумываем.</div>
+          </div>
+          ${priceCard}
+          ${isOwner && inPreview ? '<button class="btn b-main" id="peCreate">Завести в каталог</button>' : '<div class="hint">Заведение товара — только владелец.</div>'}
+          <button class="btn b-gh" id="peLink">Указать товар из каталога</button>
+          <div id="peLinkPanel" style="display:none">
+            <input class="inp" id="peSearch" placeholder="Поиск: название или SKU (от 2 букв)">
+            <div id="peResults"></div>
+          </div>
+          <button class="btn b-nt" id="peIgnore">Не наше — пропустить</button>
+          <div class="hint">Заводим скрытым — проверьте на витрине, затем откройте продажу. Разбор запоминаем.</div>
+          <div class="mt" id="peErr" style="color:var(--bad)"></div>`
+        bindRowCreate(x)
+      } else {
+        const attrs = Object.entries(x.variantAttrs || {}).filter(([k]) => k !== 'fullName' && k !== 'attrOverrides')
+        const chips = attrs.map(([k, v]) => FROM_SHEET.includes(k)
+          ? `<span class="attr-chip fixed" title="из таблицы">${esc(k)}: ${esc(v)}</span>`
+          : `<span class="attr-chip" data-pe-key="${esc(k)}" data-pe-val="${esc(v)}">${esc(k)}: ${esc(v)}</span>`).join('')
+        const outCount = lastPreview.rows.filter(r => r.matched && r.corridor === 'out').length
+        const outBlock = x.corridor !== 'out' || !inPreview ? ''
+          : isOwner && lastPreview.canApply ? `
+            <div class="warnbox">Цена вне коридора ±15% — применяет только владелец. Затронет все вне-коридорные строки этого разбора: ${outCount}.</div>
+            <button class="btn b-dg" id="peApplyOut">Применить вне коридора · ${outCount}</button>`
+          : `<div class="warnbox">Цена вне коридора ±15% — применяет только владелец${!lastPreview.canApply ? ' (применение сейчас выключено)' : ''}.</div>`
+        box.innerHTML = `
+          <h2 style="font-size:15px">Проверьте товар</h2>
+          <div class="rawline">${esc(x.rawLine)}</div>
+          <div class="cap">СИСТЕМА УЗНАЛА</div>
+          <div class="card">
+            <div class="pnm">${esc(x.productName)}</div>
+            <div class="pmeta" style="margin:3px 0 10px">${esc(previewAttrLine(x))}</div>
+            <div class="lbl" style="display:block;margin-bottom:6px">Атрибуты — тапните, чтобы поправить:</div>
+            <div>${chips}</div>
+            <div id="peAttrEdit"></div>
+            <div class="hint">Правка меняет карточку товара. SIM-правку система предложит запомнить правилом; цвет и память остаются на этой строке.</div>
+          </div>
+          ${priceCard}
+          ${outBlock}
+          <div class="mt" id="peErr" style="color:var(--bad)"></div>`
+        bindRowVariant(x)
+      }
+    }
+
+    /** «Не узнал»: завести с правками / указать товар / пропустить. */
+    function bindRowCreate(x) {
+      const err = document.getElementById('peErr')
+      const init = { brand: x.parsed.brandGuess || '', model: x.parsed.model || '', storage: x.parsed.storage || '', color: x.parsed.color || '', country: x.parsed.country || '' }
+      document.querySelectorAll('#peStock button').forEach(b => b.addEventListener('click', function () {
+        document.querySelectorAll('#peStock button').forEach(o => o.classList.remove('on'))
+        this.classList.add('on')
+      }))
+
+      const createBtn = document.getElementById('peCreate')
+      if (createBtn) createBtn.addEventListener('click', async function () {
+        err.textContent = ''
+        // Отправляем только то, что владелец реально поменял: нетронутые поля
+        // сервер берёт из строки разбора (в т.ч. сырые страну и SIM)
+        const edits = {}
+        const cur = {
+          brand: document.getElementById('peBrand').value.trim(),
+          model: document.getElementById('peModel').value.trim(),
+          storage: document.getElementById('peStorage').value.trim(),
+          color: document.getElementById('peColor').value.trim(),
+          country: document.getElementById('peCountry').value.trim(),
+        }
+        for (const k of Object.keys(cur)) if (cur[k] !== init[k]) edits[k] = cur[k]
+        const sim = document.getElementById('peSim').value
+        if (sim) edits.simType = sim
+        if (document.querySelector('#peStock button.on')?.dataset.stock === '1') edits.inStock = true
+        if (!confirm('Завести товар скрытым? Цена придёт обычным применением прайса.')) return
+        this.disabled = true
+        try {
+          const r = await api('/unmatched/' + x.supplierPriceId + '/create-product', { method: 'POST', body: JSON.stringify(edits) })
+          if (!r.ok) { err.textContent = r.data && r.data.error === 'validation' ? r.data.fields.map(f => f.message).join(' · ') : (r.data && r.data.error || 'Не получилось'); return }
+          toast(`Товар создан скрытым${r.data.rematched ? ' · довязано строк: ' + r.data.rematched : ''}`)
+          loadUnmatched(); loadBatches()
+          showBatchPreview(lastPreview.batchId)
+        } catch { err.textContent = 'Нет связи с сервером' }
+        finally { this.disabled = false }
+      })
+
+      document.getElementById('peLink').addEventListener('click', () => {
+        const panel = document.getElementById('peLinkPanel')
+        panel.style.display = panel.style.display === 'none' ? '' : 'none'
+        if (panel.style.display === '') document.getElementById('peSearch').focus()
+      })
+      let t = null
+      document.getElementById('peSearch').addEventListener('input', function () {
+        clearTimeout(t)
+        const q = this.value.trim()
+        t = setTimeout(async () => {
+          const list = q.length >= 2 ? await searchVariants(q) : []
+          document.getElementById('peResults').innerHTML = list.map(v => `
+            <div class="list-i" data-pe-pick="${v.variantId}" style="cursor:pointer">
+              <div class="grow"><div class="nm">${esc(v.productName)}</div><div class="mt">${esc(v.attrs)}${v.inStock ? '' : ' · нет в наличии'}</div></div>
+              <span class="mono" style="font-size:12px">${fmt(v.price)} ₽</span>
+            </div>`).join('') || (q.length >= 2 ? '<div class="empty">Не нашлось</div>' : '')
+          document.querySelectorAll('[data-pe-pick]').forEach(el => el.addEventListener('click', async () => {
+            const r = await api('/aliases', { method: 'POST', body: JSON.stringify({ supplierPriceId: x.supplierPriceId, variantId: Number(el.dataset.pePick) }) }).catch(() => null)
+            if (!r || !r.ok) { err.textContent = (r && r.data && r.data.error) || 'Не получилось'; return }
+            toast(`Привязано · строк по алиасу: ${r.data.rematched ?? 0}`)
+            loadUnmatched(); loadBatches()
+            showBatchPreview(lastPreview.batchId)
+          }))
+        }, 250)
+      })
+
+      document.getElementById('peIgnore').addEventListener('click', async () => {
+        if (!confirm('Пометить «не наше»? Такие строки система будет пропускать в следующих прайсах.')) return
+        const r = await api('/aliases', { method: 'POST', body: JSON.stringify({ supplierPriceId: x.supplierPriceId, ignore: true }) }).catch(() => null)
+        if (!r || !r.ok) { err.textContent = (r && r.data && r.data.error) || 'Не получилось'; return }
+        toast('Запомнил: не наше')
+        loadUnmatched()
+        showBatchPreview(lastPreview.batchId)
+      })
+    }
+
+    /** Узнанная строка: правка атрибутов варианта + вне-коридорное применение. */
+    function bindRowVariant(x) {
+      const err = document.getElementById('peErr')
+      document.querySelectorAll('[data-pe-key]').forEach(c => c.addEventListener('click', () => {
+        const key = c.dataset.peKey, current = c.dataset.peVal
+        const ed = document.getElementById('peAttrEdit')
+        ed.innerHTML = key === 'SIM'
+          ? `<div class="attr-edit"><div class="lbl">SIM — тапните значение</div>
+               <div class="sf-item-actions">
+                 ${SIM_VALUES.map(v => `<button class="btn ${v === current ? 'b-main' : 'b-nt'} sm" data-pe-set="${esc(v)}">${esc(v)}</button>`).join('')}
+                 <button class="btn b-gh sm" data-pe-set="">Очистить</button>
+               </div></div>`
+          : `<div class="attr-edit"><div class="lbl">${esc(key)}</div>
+               <input class="inp" id="peAttrInput" maxlength="100" value="${esc(current)}">
+               <div class="sf-item-actions" style="margin-top:8px">
+                 <button class="btn b-main sm" data-pe-save="1">Сохранить</button>
+                 <button class="btn b-nt sm" data-pe-close="1">Отмена</button>
+               </div></div>`
+        const save = async (value) => {
+          const r = await api(`/variants/${x.variantId}/attributes`, { method: 'PUT', body: JSON.stringify({ [key]: value }) }).catch(() => null)
+          if (!r || !r.ok) { toast((r && r.data && r.data.error) || 'Не получилось'); return }
+          toast(value ? 'Готово' : 'Ручная правка снята')
+          const attrs = r.data.attributes || {}
+          x.variantAttrs = attrs
+          const sug = r.data.suggestion
+          const isOwner = window.adminMe && window.adminMe.role === 'owner'
+          showRowEdit(x.supplierPriceId)
+          if (sug && isOwner) {
+            const again = document.getElementById('peAttrEdit')
+            again.innerHTML = `<div class="okbox" style="margin-top:10px">
+              Вы поправили это ${sug.count} раз${sug.count > 4 ? '' : 'а'}. Запомнить как правило?<br><b>${esc(sug.phrase)}</b>
+              <div class="sf-item-actions" style="margin-top:10px">
+                <button class="btn b-main sm" id="peLearnBtn">Запомнить для всех таких</button>
+                <button class="btn b-nt sm" data-pe-close="1">Не надо</button>
+              </div></div>`
+            again.querySelector('[data-pe-close]').addEventListener('click', () => { again.innerHTML = '' })
+            document.getElementById('peLearnBtn').addEventListener('click', async () => {
+              const r2 = await api('/parser/learn', { method: 'POST', body: JSON.stringify({ attr: sug.attr, value: sug.value, brand: sug.brand, country: sug.country }) }).catch(() => null)
+              if (!r2 || !r2.ok) { toast((r2 && r2.data && r2.data.error) || 'Не получилось'); return }
+              again.innerHTML = `<div class="okbox">Запомнил: ${esc(sug.phrase)}. Правило видно в «Ещё → Парсер».</div>`
+            })
+          }
+        }
+        ed.querySelectorAll('[data-pe-set]').forEach(b => b.addEventListener('click', () => save(b.dataset.peSet)))
+        const sv = ed.querySelector('[data-pe-save]')
+        if (sv) sv.addEventListener('click', () => save(document.getElementById('peAttrInput').value))
+        const cl = ed.querySelector('[data-pe-close]')
+        if (cl) cl.addEventListener('click', () => { ed.innerHTML = '' })
+      }))
+
+      const applyOut = document.getElementById('peApplyOut')
+      if (applyOut) applyOut.addEventListener('click', async function () {
+        const outCount = lastPreview.rows.filter(r => r.matched && r.corridor === 'out').length
+        if (!confirm(`Применить ${outCount} ${plural(outCount, 'строку', 'строки', 'строк')} вне коридора ±15%? Цены обновятся и уедут в таблицу; можно откатить.`)) return
+        this.disabled = true
+        try {
+          const r = await api(`/price-batches/${lastPreview.batchId}/apply`, { method: 'POST', body: JSON.stringify({ dryRun: false, includeOutOfCorridor: true }) })
+          if (!r.ok) { err.textContent = (r.data && r.data.error) || 'Не получилось'; return }
+          toast(`Применено: ${r.data.applied}`)
+          loadBatches()
+          showBatchPreview(lastPreview.batchId)
+        } catch { err.textContent = 'Нет связи с сервером' }
+        finally { this.disabled = false }
+      })
     }
 
     // ── Цены: очередь «не узнал» + связывание ────────────────────────────────
