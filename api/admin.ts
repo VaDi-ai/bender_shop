@@ -968,23 +968,66 @@ export function adminApiRouter(): Router {
 
   router.get('/broadcasts', safe(async (_req, res) => {
     const { broadcastHistory } = await import('../lib/broadcast-admin')
-    res.json(await broadcastHistory())
+    res.json(await broadcastHistory(20))
+  }))
+
+  // Теги для таргетинга рассылки (?segmentId= — теги внутри сегмента)
+  router.get('/broadcast-tags', safe(async (req, res) => {
+    const { listBroadcastTags } = await import('../lib/broadcast-admin')
+    const segmentId = parseInt(String(req.query.segmentId ?? ''), 10)
+    res.json(await listBroadcastTags(Number.isInteger(segmentId) ? segmentId : undefined))
   }))
 
   router.post('/broadcasts/preview', safe(async (req, res) => {
-    const { previewBroadcast } = await import('../lib/broadcast-admin')
-    const r = await previewBroadcast((req.body as { text?: unknown })?.text)
+    const b = (req.body ?? {}) as { text?: unknown; target?: unknown }
+    const { previewBroadcast, parseTarget } = await import('../lib/broadcast-admin')
+    const t = parseTarget(b.target)
+    if (!t.ok) { res.status(t.status).json({ error: t.error }); return }
+    const r = await previewBroadcast(b.text, t.data)
     res.status(r.status).json(r.ok ? r.data : { error: r.error })
   }))
 
   router.post('/broadcasts/send', ownerOnly, safe(async (req, res) => {
-    const b = (req.body ?? {}) as { text?: unknown; mode?: unknown }
-    const { sendBroadcast } = await import('../lib/broadcast-admin')
-    // mode: 'self' — репетиция себе, 'dry' — только счёт получателей, иначе всем
+    const b = (req.body ?? {}) as { text?: unknown; mode?: unknown; target?: unknown; media?: unknown }
+    const { sendBroadcast, parseTarget, parseMedia } = await import('../lib/broadcast-admin')
+    const t = parseTarget(b.target)
+    if (!t.ok) { res.status(t.status).json({ error: t.error }); return }
+    const m = parseMedia(b.media)
+    if (!m.ok) { res.status(m.status).json({ error: m.error }); return }
+    // mode: 'self' — репетиция себе, 'dry' — только счёт получателей, иначе всей аудитории
     const opts = b.mode === 'self'
-      ? { onlyTo: req.admin!.telegramId }
-      : b.mode === 'dry' ? { dryRun: true } : {}
+      ? { onlyTo: req.admin!.telegramId, target: t.data, media: m.data }
+      : b.mode === 'dry' ? { dryRun: true, target: t.data, media: m.data } : { target: t.data, media: m.data }
     const r = await sendBroadcast(req.admin!.telegramId, b.text, opts)
+    res.status(r.status).json(r.ok ? { ok: true, ...(r.data as object) } : { error: r.error })
+  }))
+
+  // ── Сегменты клиентов (перенос bot/admin/segments.ts) ─────────────────────
+  router.get('/segments', safe(async (_req, res) => {
+    const { listSegments } = await import('../lib/segments-admin')
+    res.json(await listSegments())
+  }))
+
+  router.post('/segments', safe(async (req, res) => {
+    const { createSegment } = await import('../lib/segments-admin')
+    const r = await createSegment(req.admin!.telegramId, (req.body ?? {}) as Record<string, unknown>)
+    res.status(r.status).json(r.ok ? { ok: true, ...(r.data as object) } : { error: r.error })
+  }))
+
+  router.put('/segments/:id', safe(async (req, res) => {
+    const id = parseInt(String(req.params.id), 10)
+    if (!Number.isInteger(id)) { res.status(422).json({ error: 'Неверный ID' }); return }
+    const { renameSegment } = await import('../lib/segments-admin')
+    const r = await renameSegment(req.admin!.telegramId, id, (req.body ?? {}) as Record<string, unknown>)
+    res.status(r.status).json(r.ok ? { ok: true } : { error: r.error })
+  }))
+
+  // Удаление двигает клиентов между сегментами — только владелец
+  router.delete('/segments/:id', ownerOnly, safe(async (req, res) => {
+    const id = parseInt(String(req.params.id), 10)
+    if (!Number.isInteger(id)) { res.status(422).json({ error: 'Неверный ID' }); return }
+    const { deleteSegment } = await import('../lib/segments-admin')
+    const r = await deleteSegment(req.admin!.telegramId, id)
     res.status(r.status).json(r.ok ? { ok: true, ...(r.data as object) } : { error: r.error })
   }))
 
