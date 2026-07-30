@@ -11,17 +11,23 @@ vi.mock('../lib/prisma', () => ({
     priceAlias: { findFirst: vi.fn() },
     product: { findMany: vi.fn(), findUnique: vi.fn() },
     productVariant: { findUnique: vi.fn() },
+    attrValueAlias: { findMany: vi.fn() },
   },
 }))
 
 import { prisma } from '../lib/prisma'
 import { matchVariants, normalizeModelName, normalizeStorage, ParsedLine } from '../lib/price-matching'
+import { ALIAS_SEED } from '../lib/sim-rules'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 const alias = prisma.priceAlias.findFirst as any
 const findMany = prisma.product.findMany as any
 const findProduct = prisma.product.findUnique as any
 const findVariant = prisma.productVariant.findUnique as any
+const attrAliases = prisma.attrValueAlias.findMany as any
+
+// Матчер работает с реальным сидом словаря — тесты заодно проверяют его состав
+const SEED_ALIASES = ALIAS_SEED.map(a => ({ attrKey: a.attrKey, rawNorm: a.raw.trim().toLowerCase(), canonical: a.canonical }))
 
 const line = (over: Partial<ParsedLine> = {}): ParsedLine => ({
   model: 'iPhone 17 Pro', storage: '256GB', color: 'Silver', price: 122000,
@@ -48,6 +54,7 @@ beforeEach(() => {
   findMany.mockReset(); findMany.mockResolvedValue([])
   findProduct.mockReset(); findProduct.mockResolvedValue(null)
   findVariant.mockReset(); findVariant.mockResolvedValue(null)
+  attrAliases.mockReset(); attrAliases.mockResolvedValue(SEED_ALIASES)
 })
 
 describe('точное имя модели вместо contains', () => {
@@ -181,6 +188,114 @@ describe('алиасы', () => {
     const { matched, unmatched } = await matchVariants([line()])
     expect(matched).toEqual([])
     expect(unmatched).toHaveLength(1)
+  })
+})
+
+describe('страна разруливает неоднозначность', () => {
+  const twoCountries = () => catalog([product('Iphone 17 Pro', [
+    variant({ Память: '256GB', Цвет: 'Silver', Страна: 'Япония', SIM: 'eSIM' }),
+    variant({ Память: '256GB', Цвет: 'Silver', Страна: 'Гонконг', SIM: '2 SIM' }),
+  ], { id: 444 })])
+
+  it.each(['HK', 'hk', '🇭🇰', 'Hong Kong', 'Гонконг'])('флаг/код/имя «%s» → один канон, уникальный Гонконг-вариант', async (raw) => {
+    twoCountries()
+    const { matched, unmatched } = await matchVariants([line({ country: raw })])
+    expect(unmatched).toEqual([])
+    expect(matched).toHaveLength(1)
+    expect(matched[0].variantId).toBe(2) // Гонконг
+  })
+
+  it('страны нет в каталоге (EU → Европа) — очередь, не ближайшая', async () => {
+    twoCountries()
+    const { matched, unmatched } = await matchVariants([line({ country: 'EU' })])
+    expect(matched).toEqual([])
+    expect(unmatched).toHaveLength(1)
+  })
+
+  it('нераспознанная страна — не фильтр: неоднозначность остаётся, очередь', async () => {
+    twoCountries()
+    const { matched, unmatched } = await matchVariants([line({ country: 'KR' })])
+    expect(matched).toEqual([])
+    expect(unmatched).toHaveLength(1)
+  })
+
+  it('нераспознанная страна при единственном кандидате — матч как раньше', async () => {
+    catalog([product('Iphone 17 Pro', [variant({ Память: '256GB', Цвет: 'Silver', Страна: 'Япония' })], { id: 444 })])
+    const { matched } = await matchVariants([line({ country: 'KR' })])
+    expect(matched).toHaveLength(1)
+  })
+
+  it('страна противоречит единственному кандидату — очередь (жёсткий фильтр)', async () => {
+    catalog([product('Iphone 17 Pro', [variant({ Память: '256GB', Цвет: 'Silver', Страна: 'Япония' })], { id: 444 })])
+    const { matched, unmatched } = await matchVariants([line({ country: 'HK' })])
+    expect(matched).toEqual([])
+    expect(unmatched).toHaveLength(1)
+  })
+
+  it('составная страна каталога («Япония/Индия») совпадает по части', async () => {
+    catalog([product('Iphone 15', [variant({ Память: '128GB', Цвет: 'Blue', Страна: 'Япония/Индия' })], { id: 446 })])
+    const { matched } = await matchVariants([
+      line({ model: 'iPhone 15', storage: '128GB', color: 'Blue', country: 'IN', rawLine: 'iPhone 15 128 Blue 🇮🇳' }),
+    ])
+    expect(matched).toHaveLength(1)
+  })
+
+  it('alias.productId: страна разруливает варианты внутри товара', async () => {
+    alias.mockResolvedValue({ id: 1, productId: 444, variantId: null, isIgnored: false })
+    findProduct.mockResolvedValue(product('Iphone 17 Pro', [
+      variant({ Память: '256GB', Цвет: 'Silver', Страна: 'Япония' }),
+      variant({ Память: '256GB', Цвет: 'Silver', Страна: 'Гонконг' }),
+    ], { id: 444 }))
+    const { matched } = await matchVariants([line({ country: '🇭🇰' })])
+    expect(matched).toHaveLength(1)
+    expect(matched[0].variantId).toBe(2)
+  })
+})
+
+describe('SIM — вторичный дизамбигуатор', () => {
+  it('страна не задана, SIM сужает двух кандидатов до одного', async () => {
+    catalog([product('Iphone 16 Pro', [
+      variant({ Память: '128GB', Цвет: 'Desert', Страна: 'Китай', SIM: '2 SIM' }),
+      variant({ Память: '128GB', Цвет: 'Desert', Страна: 'Индия', SIM: 'eSIM' }),
+    ], { id: 440 })])
+    const { matched } = await matchVariants([
+      line({ model: 'iPhone 16 Pro', storage: '128GB', color: 'Desert', simType: '2sim', rawLine: 'iPhone 16 Pro 128 Desert 2sim' }),
+    ])
+    expect(matched).toHaveLength(1)
+    expect(matched[0].variantId).toBe(1) // 2 SIM
+  })
+
+  it('SIM не ветирует единственного кандидата после страны («1 Sim + eSim» у Гонконга)', async () => {
+    catalog([product('Iphone 17 Pro', [
+      variant({ Память: '256GB', Цвет: 'Silver', Страна: 'Япония', SIM: 'eSIM' }),
+      variant({ Память: '256GB', Цвет: 'Silver', Страна: 'Гонконг', SIM: '2 SIM' }),
+    ], { id: 444 })])
+    // канон «SIM + eSIM» противоречит гонконгскому «2 SIM» — но страна уже дала ровно одного
+    const { matched } = await matchVariants([line({ country: 'HK', simType: '1 Sim + eSim' })])
+    expect(matched).toHaveLength(1)
+    expect(matched[0].variantId).toBe(2)
+  })
+
+  it('SIM ни с кем не совпал — выбор не обнуляется, остаётся очередь', async () => {
+    catalog([product('Iphone 17 Pro', [
+      variant({ Память: '256GB', Цвет: 'Silver', Страна: 'Япония', SIM: 'eSIM' }),
+      variant({ Память: '256GB', Цвет: 'Silver', Страна: 'Гонконг', SIM: '2 SIM' }),
+    ], { id: 444 })])
+    const { matched, unmatched } = await matchVariants([line({ simType: '1 Sim + eSim' })])
+    expect(matched).toEqual([])
+    expect(unmatched).toHaveLength(1)
+  })
+
+  it('канонизация SIM каталога: «2Sim» в атрибутах == «2 sim» из прайса', async () => {
+    catalog([product('Iphone 16 Pro Max', [
+      variant({ Память: '1TB', Цвет: 'White', Страна: 'Гонконг', SIM: '2Sim' }),
+      variant({ Память: '1TB', Цвет: 'White', Страна: 'Индия', SIM: 'eSIM' }),
+    ], { id: 441 })])
+    const { matched } = await matchVariants([
+      line({ model: 'iPhone 16 Pro Max', storage: '1TB', color: 'White', simType: '2 Sim', rawLine: 'iPhone 16 Pro Max 1TB White 2 Sim' }),
+    ])
+    expect(matched).toHaveLength(1)
+    expect(matched[0].variantId).toBe(1)
   })
 })
 

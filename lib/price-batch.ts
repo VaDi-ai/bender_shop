@@ -57,6 +57,8 @@ export function toParsedLine(p: AIParsedProduct): ParsedLine {
     model: p.model,
     storage: p.storage ?? undefined,
     color: p.color ?? undefined,
+    country: p.country ?? undefined,
+    simType: p.simType ?? undefined,
     price: p.price,
     rawLine: p.rawLine,
   }

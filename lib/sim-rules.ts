@@ -251,6 +251,26 @@ export const SIM_SEED: SeedRule[] = [
   { brand: 'Samsung', simType: 'SIM + eSIM', note: 'перенесено из хардкода sheets-sync' },
 ]
 
+/**
+ * Страны для матчера прайса: AI-парсер возвращает код (HK), флаг (🇭🇰) или
+ * имя — канон каталога по-русски. Набор кодов = то, что умеет отдавать
+ * парсер (lib/ai-parser.ts) + русские/английские имена на всякий случай.
+ * Нераспознанная страна алиасом не становится — матчер её просто не использует
+ * и логирует, владелец добавляет алиас через обучение.
+ */
+const COUNTRY_ALIAS_SEED: Array<[canonical: string, raws: string[]]> = [
+  ['Гонконг', ['🇭🇰', 'hk', 'hong kong', 'гонконг']],
+  ['Индия', ['🇮🇳', 'in', 'india', 'индия']],
+  ['Япония', ['🇯🇵', 'jp', 'japan', 'япония']],
+  ['Европа', ['🇪🇺', 'eu', 'europe', 'европа']],
+  ['США', ['🇺🇸', 'us', 'usa', 'сша']],
+  ['Китай', ['🇨🇳', 'cn', 'china', 'китай']],
+  ['ОАЭ', ['🇦🇪', 'ae', 'uae', 'оаэ']],
+  ['Таиланд', ['🇹🇭', 'th', 'thailand', 'таиланд']],
+  ['Казахстан', ['🇰🇿', 'kz', 'kazakhstan', 'казахстан']],
+  ['Индонезия', ['🇮🇩', 'id', 'indonesia', 'индонезия']],
+]
+
 /** Канон меток: то, что раньше приходило сырьём из листа. */
 export const ALIAS_SEED: Array<{ attrKey: string; raw: string; canonical: string }> = [
   { attrKey: 'SIM', raw: '2sim', canonical: '2 SIM' },
@@ -263,6 +283,12 @@ export const ALIAS_SEED: Array<{ attrKey: string; raw: string; canonical: string
   { attrKey: 'SIM', raw: '1sim+esim', canonical: 'SIM + eSIM' },
   { attrKey: 'SIM', raw: 'sim+esim', canonical: 'SIM + eSIM' },
   { attrKey: 'SIM', raw: 'sim + esim', canonical: 'SIM + eSIM' },
+  // Форма из прайсов поставщиков («1 Sim + eSim»)
+  { attrKey: 'SIM', raw: '1 sim + esim', canonical: 'SIM + eSIM' },
+  { attrKey: 'SIM', raw: '1 sim+esim', canonical: 'SIM + eSIM' },
+  { attrKey: 'SIM', raw: '1sim + esim', canonical: 'SIM + eSIM' },
+  ...COUNTRY_ALIAS_SEED.flatMap(([canonical, raws]) =>
+    raws.map(raw => ({ attrKey: 'Страна', raw, canonical }))),
 ]
 
 export async function seedSimDictionary(): Promise<{ rules: number; aliases: number }> {
