@@ -34,7 +34,7 @@ import {
   handleAnalyticsMessage,
 } from './admin/analytics'
 import {
-  showAISettings, setupAISettingsHandlers, setupAIScheduleHandlers,
+  setupAISettingsHandlers, setupAIScheduleHandlers,
   showApiKeysMenu, setupApiKeysHandlers, handleApiKeysMessage, apiKeysState,
   securityState, handleSecurityMessage,
 } from './admin/ai_settings'
@@ -159,21 +159,18 @@ bot.use(async (ctx, next) => {
 
 // ─── Главное меню ─────────────────────────────────────────────────────────────
 
-// Фаза 2 уборки (аудит паритета): на клавиатуре остаются только функции,
-// которых ещё нет в мини-аппе. Товароучёт/Витрина/Акции/Входящие/Техработы/
-// Поставщики — уже в аппе (или мёртвый код); «Цены» держим ради курса USD.
-// Служебные typed-входы («🔧 Техработы» — бэкап/деструктив, «🏭 Поставщики» —
-// привязка chatId) работают вводом текста, без кнопок.
-const adminKeyboard = Markup.keyboard([
-  ['🤖 AI Агент'],
-]).resize()
+// Фаза 2 завершена: весь функционал перенесён в мини-апп, reply-клавиатуры
+// больше нет — /start убирает старую и оставляет чистый «Быстрый вход»
+// (инлайн «🛍 Открыть магазин» + «🛠 Админка» ниже + menu-button).
+// Служебные typed-входы (🔧 Техработы, 🏭 Поставщики, 💰 Балансы,
+// 🔑 API Ключи) работают вводом текста.
+const adminKeyboard = Markup.removeKeyboard()
 
 // Кнопки/типизируемые пункты меню — для сброса пошаговых флоу при нажатии
 const MENU_BUTTONS = new Set([
   '💰 Балансы',
   '🔧 Техработы',
   '🔑 API Ключи',
-  '🤖 AI Агент',
   '🏭 Поставщики',
 ])
 
@@ -1613,9 +1610,8 @@ setupSegmentHandlers(bot)
 setupAISettingsHandlers(bot)
 setupAIScheduleHandlers(bot)
 
-bot.hears('🤖 AI Агент', async (ctx) => {
-  await showAISettings(ctx)
-})
+// Кнопка «🤖 AI Агент» убрана (фаза 2, финал): пульт — в мини-аппе
+// («Ещё → AI Агент», PR #77). Инлайн-хендлеры ai:*/sec:* остаются.
 
 // ─── 🖼️ Витрина ───────────────────────────────────────────────────────────────
 // Кнопка убрана (фаза 2): маркиза/баннеры/кэш — в мини-аппе (вкладка «Витрина»).
