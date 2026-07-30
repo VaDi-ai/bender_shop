@@ -53,7 +53,6 @@ type PricingFlow =
   | { flow: 'awaiting_supplier_name'; parsed: ParsedLine[] }
   | { flow: 'awaiting_markup'; matches: MatchedVariant[]; unmatched: ParsedLine[]; rate?: number }
   | { flow: 'awaiting_markup_or_rules'; supplierName: string; matches: MatchedVariant[]; unmatched: ParsedLine[] }
-  | { flow: 'bulk_pct'; filterType: 'all' | 'category'; filterValue: string; filterLabel: string }
   | {
       flow: 'preview'
       source: PricingSource
@@ -70,18 +69,9 @@ type PricingFlow =
   | { flow: 'rules_edit_value'; ruleId: number }
   | { flow: 'rules_delete_pick' }
   | { flow: 'rules_test' }
-  | { flow: 'awaiting_file' }
-  | { flow: 'manual_product_pick'; page: number }
-  | { flow: 'manual_variant_pick'; productId: number; productName: string }
-  | {
-      flow: 'manual_price_input'
-      variantId: number
-      variantSku: string
-      productName: string
-      attrs: string
-      currentPrice: number
-    }
-  | { flow: 'manual_all_price'; productId: number; productName: string }
+  // Ветки awaiting_file / manual_* / bulk_pct удалены (фаза 2 уборки):
+  // ручная и массовая правка цен и xlsx-прайс были недостижимы из меню,
+  // цены обновляются потоком прайса в админке.
   // ── Корректировка цен по курсу USD ──────────────────────────────────────────
   | { flow: 'usd_adjust_preview'; pending: PendingVariant[]; changePct: number }
   // ── Мастер создания товара из прайса ──────────────────────────────────────
@@ -387,74 +377,7 @@ async function showHistory(ctx: Context): Promise<void> {
   )
 }
 
-// ─── Список товаров для ручного редактирования ────────────────────────────────
-
-const MANUAL_PAGE_SIZE = 12
-
-async function showManualProductList(ctx: Context, userId: number, page: number): Promise<void> {
-  const products = await prisma.product.findMany({
-    orderBy: { name: 'asc' },
-    skip: page * MANUAL_PAGE_SIZE,
-    take: MANUAL_PAGE_SIZE + 1,
-    include: { _count: { select: { variants: true } } },
-  })
-
-  const hasNext = products.length > MANUAL_PAGE_SIZE
-  const items = products.slice(0, MANUAL_PAGE_SIZE)
-
-  pricingState.set(userId, { flow: 'manual_product_pick', page })
-
-  const rows = items.map((p) => [
-    Markup.button.callback(
-      `${p.name.slice(0, 32)} (${p._count.variants})`,
-      `pricing:man_prod:${p.id}`,
-    ),
-  ])
-
-  const nav: ReturnType<typeof Markup.button.callback>[] = []
-  if (page > 0) nav.push(Markup.button.callback('◀️ Назад', `pricing:man_page:${page - 1}`))
-  if (hasNext) nav.push(Markup.button.callback('▶️ Далее', `pricing:man_page:${page + 1}`))
-  if (nav.length) rows.push(nav)
-  rows.push([Markup.button.callback('❌ Отмена', 'pricing:cancel')])
-
-  await ctx.reply('✏️ Выберите товар:', Markup.inlineKeyboard(rows))
-}
-
-async function showManualVariantList(ctx: Context, userId: number, productId: number): Promise<void> {
-  const product = await prisma.product.findUnique({
-    where: { id: productId },
-    include: { variants: { orderBy: { id: 'asc' } } },
-  })
-  if (!product) { await ctx.reply('Товар не найден.'); return }
-  if (!product.variants.length) { await ctx.reply('У товара нет вариантов.'); return }
-
-  pricingState.set(userId, {
-    flow: 'manual_variant_pick',
-    productId: product.id,
-    productName: product.name,
-  })
-
-  const lines = [`✏️ ${product.name}:\n`]
-  const varBtns: ReturnType<typeof Markup.button.callback>[] = []
-
-  product.variants.forEach((v, i) => {
-    const attrs = Object.values(v.attributes as Record<string, string>).join(', ')
-    lines.push(`${i + 1}. ${attrs} — ${fmtPrice(Number(v.price))}`)
-    varBtns.push(Markup.button.callback(`✏️ №${i + 1}`, `pricing:man_v:${v.id}`))
-  })
-
-  const varRows: ReturnType<typeof Markup.button.callback>[][] = []
-  for (let i = 0; i < varBtns.length; i += 3) varRows.push(varBtns.slice(i, i + 3))
-
-  await ctx.reply(
-    lines.join('\n'),
-    Markup.inlineKeyboard([
-      ...varRows,
-      [Markup.button.callback('✏️ Все сразу', `pricing:man_all:${product.id}`)],
-      [Markup.button.callback('🔙 К списку', 'pricing:manual')],
-    ]),
-  )
-}
+// Хелперы ручного редактирования цен удалены (фаза 2 уборки).
 
 // ─── Генерация xlsx прайс-листа ───────────────────────────────────────────────
 
@@ -1473,158 +1396,8 @@ export function setupPricingHandlers(bot: Telegraf): void {
     )
   })
 
-  // ── Из файла Excel ─────────────────────────────────────────────────────────
-
-  bot.action('pricing:file', async (ctx) => {
-    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
-    await ctx.reply(
-      '📊 Обновление цен из файла Excel',
-      Markup.inlineKeyboard([
-        [Markup.button.callback('📥 Скачать прайс-лист', 'pricing:file_dl')],
-        [Markup.button.callback('📤 Загрузить обновлённый', 'pricing:file_ul')],
-        [Markup.button.callback('🔙 Назад', 'pricing:menu')],
-      ]),
-    )
-  })
-
-  bot.action('pricing:file_dl', async (ctx) => {
-    try { await ctx.answerCbQuery('⏳ Генерирую...') } catch { /* ignore: answerCbQuery may fail if query expired */ }
-    await ctx.reply('⏳ Формирую прайс-лист…')
-    try {
-      const port = process.env.API_PORT ?? '3000'
-      const response = await fetch(`http://localhost:${port}/api/download/price-list`)
-      if (!response.ok) throw new Error(`HTTP ${response.status}`)
-      const buffer = Buffer.from(await response.arrayBuffer())
-      const today = new Date().toLocaleDateString('ru-RU').replace(/\./g, '-')
-      await ctx.replyWithDocument(
-        { source: buffer, filename: `price-list-${today}.xlsx` },
-        { caption: '📊 Прайс-лист с текущими ценами\n\nЗаполни колонку «Новая цена» и загрузи обратно.' },
-      )
-    } catch {
-      await ctx.reply('❌ Ошибка при генерации файла.')
-    }
-  })
-
-  bot.action('pricing:file_ul', async (ctx) => {
-    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
-    pricingState.set(getUserId(ctx), { flow: 'awaiting_file' })
-    await ctx.reply(
-      'Загрузите заполненный файл прайс-листа (xlsx).\nЗаполните только колонку «Новая цена».',
-      Markup.inlineKeyboard([[Markup.button.callback('❌ Отмена', 'pricing:cancel')]]),
-    )
-  })
-
-  // ── Точечное редактирование ────────────────────────────────────────────────
-
-  bot.action('pricing:manual', async (ctx) => {
-    try { await ctx.answerCbQuery('⏳ Загрузка...') } catch { /* ignore: answerCbQuery may fail if query expired */ }
-    await showManualProductList(ctx, getUserId(ctx), 0)
-  })
-
-  bot.action(/^pricing:man_page:(\d+)$/, async (ctx) => {
-    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
-    const page = parseInt(ctx.match[1]!, 10)
-    await showManualProductList(ctx, getUserId(ctx), page)
-  })
-
-  bot.action(/^pricing:man_prod:(\d+)$/, async (ctx) => {
-    try { await ctx.answerCbQuery('⏳ Загрузка...') } catch { /* ignore: answerCbQuery may fail if query expired */ }
-    await showManualVariantList(ctx, getUserId(ctx), parseInt(ctx.match[1]!, 10))
-  })
-
-  bot.action(/^pricing:man_v:(\d+)$/, async (ctx) => {
-    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
-    const userId = getUserId(ctx)
-    const variantId = parseInt(ctx.match[1]!, 10)
-    const variant = await prisma.productVariant.findUnique({
-      where: { id: variantId },
-      include: { product: true },
-    })
-    if (!variant) return await ctx.reply('Вариант не найден.')
-    const attrs = Object.values(variant.attributes as Record<string, string>).join(', ')
-    pricingState.set(userId, {
-      flow: 'manual_price_input',
-      variantId: variant.id,
-      variantSku: variant.sku,
-      productName: variant.product.name,
-      attrs,
-      currentPrice: Number(variant.price),
-    })
-    return await ctx.reply(
-      `Введите новую цену для ${variant.product.name} (${attrs})\nТекущая цена: ${fmtPrice(Number(variant.price))}:`,
-      Markup.inlineKeyboard([[Markup.button.callback('❌ Отмена', 'pricing:cancel')]]),
-    )
-  })
-
-  bot.action(/^pricing:man_all:(\d+)$/, async (ctx) => {
-    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
-    const userId = getUserId(ctx)
-    const productId = parseInt(ctx.match[1]!, 10)
-    const product = await prisma.product.findUnique({ where: { id: productId } })
-    if (!product) return await ctx.reply('Товар не найден.')
-    pricingState.set(userId, {
-      flow: 'manual_all_price',
-      productId: product.id,
-      productName: product.name,
-    })
-    return await ctx.reply(
-      `Введите новую цену — применится ко всем вариантам «${product.name}»:`,
-      Markup.inlineKeyboard([[Markup.button.callback('❌ Отмена', 'pricing:cancel')]]),
-    )
-  })
-
-  // ── Массовая наценка (bulk) ────────────────────────────────────────────────
-
-  bot.action('pricing:bulk', async (ctx) => {
-    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
-    await ctx.reply(
-      '📈 Массовая наценка — применить к:',
-      Markup.inlineKeyboard([
-        [Markup.button.callback('📦 Всем вариантам', 'pricing:bulk_all')],
-        [Markup.button.callback('🗂️ По категории', 'pricing:bulk_cats')],
-        [Markup.button.callback('❌ Отмена', 'pricing:menu')],
-      ]),
-    )
-  })
-
-  bot.action('pricing:bulk_all', async (ctx) => {
-    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
-    pricingState.set(getUserId(ctx), { flow: 'bulk_pct', filterType: 'all', filterValue: '', filterLabel: 'все варианты' })
-    await ctx.reply(
-      'Введите процент наценки (например: 5 или 10):',
-      Markup.inlineKeyboard([[Markup.button.callback('❌ Отмена', 'pricing:cancel')]]),
-    )
-  })
-
-  bot.action('pricing:bulk_cats', async (ctx) => {
-    try { await ctx.answerCbQuery('⏳ Загрузка...') } catch { /* ignore: answerCbQuery may fail if query expired */ }
-    const cats = await prisma.category.findMany({
-      orderBy: { name: 'asc' },
-      include: { _count: { select: { products: true } } },
-    })
-    if (!cats.length) return await ctx.reply('Категории не найдены.')
-    const rows = cats.map((c) => [
-      Markup.button.callback(`${c.name} (${c._count.products})`, `pricing:bulk_cat:${c.id}`),
-    ])
-    rows.push([Markup.button.callback('❌ Отмена', 'pricing:menu')])
-    return await ctx.reply('Выберите категорию:', Markup.inlineKeyboard(rows))
-  })
-
-  bot.action(/^pricing:bulk_cat:(\d+)$/, async (ctx) => {
-    try { await ctx.answerCbQuery() } catch { /* ignore: answerCbQuery may fail if query expired */ }
-    const cat = await prisma.category.findUnique({ where: { id: parseInt(ctx.match[1]!, 10) } })
-    if (!cat) return await ctx.reply('Категория не найдена.')
-    pricingState.set(getUserId(ctx), {
-      flow: 'bulk_pct',
-      filterType: 'category',
-      filterValue: cat.name,
-      filterLabel: `категория «${cat.name}»`,
-    })
-    return await ctx.reply(
-      `Категория «${cat.name}». Введите процент наценки:`,
-      Markup.inlineKeyboard([[Markup.button.callback('❌ Отмена', 'pricing:cancel')]]),
-    )
-  })
+  // Ветки «Из файла Excel», «Точечное редактирование» и «Массовая наценка»
+  // удалены (фаза 2 уборки): недостижимы из меню, заменены потоком прайса в админке.
 
   // ── Универсальный предпросмотр ─────────────────────────────────────────────
 
@@ -2021,112 +1794,7 @@ export async function handlePricingMessage(
     return true
   }
 
-  // Ввод % для массовой наценки
-  if (state.flow === 'bulk_pct') {
-    const val = parseFloat(text.replace(',', '.'))
-    if (isNaN(val) || val <= 0 || val > 300) {
-      await ctx.reply('Введите процент от 0.1 до 300:')
-      return true
-    }
-    await ctx.reply('⏳ Считаю…')
-
-    const where =
-      state.filterType === 'all'
-        ? {}
-        : { product: { category: { name: state.filterValue } } }
-    const variants = await prisma.productVariant.findMany({
-      where,
-      include: { product: true },
-    })
-
-    const pending: PendingVariant[] = variants.map((v) => {
-      const attrs = v.attributes as Record<string, string>
-      const attrsStr = Object.entries(attrs).map(([k, val]) => `${k}: ${val}`).join(', ')
-      const oldPrice = Number(v.price)
-      return {
-        variantId: v.id,
-        productId: v.productId,
-        productName: v.product.name,
-        brand: v.product.brand ?? undefined,
-        categoryId: v.product.categoryId ?? undefined,
-        variantSku: v.sku,
-        attrs: attrsStr,
-        currentPrice: oldPrice,
-        newPrice: roundPrice(oldPrice * (1 + val / 100)),
-      }
-    }).filter((v) => v.newPrice !== v.currentPrice)
-
-    pricingState.set(userId, {
-      flow: 'preview',
-      source: 'markup',
-      markup: val,
-      label: `${state.filterLabel}, наценка ${val}%`,
-      pendingVariants: pending,
-      excludedVariantIds: [],
-    })
-    await showPreview(ctx, userId)
-    return true
-  }
-
-  // Ввод цены для одного варианта (точечно)
-  if (state.flow === 'manual_price_input') {
-    const val = parseFloat(text.replace(/\s/g, '').replace(',', '.'))
-    if (isNaN(val) || val <= 0) {
-      await ctx.reply('Введите положительное число:')
-      return true
-    }
-    const newPrice = roundPrice(val)
-    const pending: PendingVariant[] = [{
-      variantId: state.variantId,
-      productId: 0,
-      productName: state.productName,
-      variantSku: state.variantSku,
-      attrs: state.attrs,
-      currentPrice: state.currentPrice,
-      newPrice,
-    }]
-    pricingState.set(userId, {
-      flow: 'preview',
-      source: 'manual',
-      markup: null,
-      label: 'точечное изменение',
-      pendingVariants: pending,
-      excludedVariantIds: [],
-    })
-    await showPreview(ctx, userId)
-    return true
-  }
-
-  // Ввод цены для всех вариантов товара (точечно)
-  if (state.flow === 'manual_all_price') {
-    const val = parseFloat(text.replace(/\s/g, '').replace(',', '.'))
-    if (isNaN(val) || val <= 0) {
-      await ctx.reply('Введите положительное число:')
-      return true
-    }
-    const newPrice = roundPrice(val)
-    const variants = await prisma.productVariant.findMany({
-      where: { productId: state.productId },
-      include: { product: true },
-    })
-    const pending: PendingVariant[] = variants.map((v) => {
-      const attrs = Object.values(v.attributes as Record<string, string>).join(', ')
-      return {
-        variantId: v.id, productId: v.productId, productName: v.product.name,
-        variantSku: v.sku, attrs, currentPrice: Number(v.price), newPrice,
-      }
-    })
-    pricingState.set(userId, {
-      flow: 'preview',
-      source: 'manual',
-      markup: null,
-      label: `${state.productName} — все варианты`,
-      pendingVariants: pending,
-      excludedVariantIds: [],
-    })
-    await showPreview(ctx, userId)
-    return true
-  }
+  // Кейсы bulk_pct / manual_price_input / manual_all_price удалены (фаза 2).
 
   // ── Правила наценки: ввод данных ────────────────────────────────────────
 
@@ -2337,105 +2005,7 @@ export async function handlePricingMessage(
   return false
 }
 
-// ─── Обработчик документов (xlsx прайс-лист) ─────────────────────────────────
-
-export async function handlePricingDocument(ctx: Context, userId: number): Promise<boolean> {
-  const state = pricingState.get(userId)
-  if (!state || state.flow !== 'awaiting_file') return false
-
-  const doc = (ctx.message as { document?: { file_id: string; mime_type?: string; file_name?: string; file_size?: number } })?.document
-  if (!doc) return false
-
-  const mime = doc.mime_type ?? ''
-  const fname = doc.file_name ?? ''
-  const allowedMimes = [
-    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    'application/vnd.ms-excel',
-    'application/octet-stream',
-  ]
-  const isExcel = allowedMimes.includes(mime) || mime.includes('spreadsheet') || /\.xlsx?$/i.test(fname)
-
-  if (!isExcel) {
-    await ctx.reply('❌ Неподдерживаемый формат файла. Загрузите файл .xlsx (Excel).')
-    return true
-  }
-
-  if (doc.file_size && doc.file_size > 10 * 1024 * 1024) {
-    await ctx.reply('❌ Файл слишком большой (макс. 10 МБ).')
-    return true
-  }
-
-  await ctx.reply('⏳ Обрабатываю файл…')
-
-  try {
-    const buffer = await downloadTelegramFile(ctx, doc.file_id)
-    const updates = await parsePriceListXlsx(buffer)
-
-    if (!updates.length) {
-      await ctx.reply('❌ В файле нет строк с заполненной колонкой «Новая цена» (E).',
-        Markup.inlineKeyboard([[Markup.button.callback('🔙 Назад', 'pricing:file')]]))
-      return true
-    }
-
-    const pending: PendingVariant[] = []
-    const notFound: string[] = []
-
-    for (const { sku, newPrice, comment } of updates) {
-      const variant = await prisma.productVariant.findUnique({
-        where: { sku },
-        include: { product: true },
-      })
-      if (!variant) {
-        notFound.push(sku)
-        continue
-      }
-      const attrs = variant.attributes as Record<string, string>
-      pending.push({
-        variantId: variant.id,
-        productId: variant.productId,
-        productName: variant.product.name,
-        brand: variant.product.brand ?? undefined,
-        categoryId: variant.product.categoryId ?? undefined,
-        variantSku: variant.sku,
-        attrs: Object.entries(attrs).map(([k, v]) => `${k}: ${v}`).join(', '),
-        currentPrice: Number(variant.price),
-        newPrice,
-        comment: comment || undefined,
-      })
-    }
-
-    if (!pending.length) {
-      await ctx.reply('❌ Ни один SKU из файла не найден в каталоге.',
-        Markup.inlineKeyboard([[Markup.button.callback('🔙 Назад', 'pricing:file')]]))
-      return true
-    }
-
-    // Формируем сообщение предпросмотра
-    const previewLines = ['📊 Предпросмотр изменений из файла:\n']
-    for (const v of pending.slice(0, 12)) {
-      const attrsStr = v.attrs ? ` (${v.attrs})` : ''
-      previewLines.push(
-        `${v.productName}${attrsStr}: ${fmtPrice(v.currentPrice)} → ${fmtPrice(v.newPrice)}`,
-      )
-    }
-    if (pending.length > 12) previewLines.push(`… и ещё ${pending.length - 12}`)
-    previewLines.push(`\nВсего: ${pending.length} вариантов`)
-    if (notFound.length) previewLines.push(`❌ Не найдено SKU: ${notFound.slice(0, 5).join(', ')}${notFound.length > 5 ? ` и ещё ${notFound.length - 5}` : ''}`)
-
-    pricingState.set(userId, {
-      flow: 'preview', source: 'file', markup: null,
-      label: 'из файла Excel',
-      pendingVariants: pending, excludedVariantIds: [],
-    })
-    await ctx.reply(previewLines.join('\n'))
-    await showPreview(ctx, userId)
-  } catch (err) {
-    log.error('Pricing document handler error', { error: err instanceof Error ? err.message : String(err) })
-    await ctx.reply('❌ Ошибка при обработке файла. Убедитесь, что загружаете xlsx прайс-лист.')
-  }
-
-  return true
-}
+// Обработчик xlsx-прайса удалён (фаза 2): ветка была недостижима из меню.
 
 // ─── Ежедневное уведомление о курсе USD ────────────────────────────────────
 
