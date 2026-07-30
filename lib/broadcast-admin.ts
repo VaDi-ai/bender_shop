@@ -61,9 +61,12 @@ export function parseTarget(raw: unknown): Outcome<BroadcastTarget> {
   return bad(422, 'Неизвестная аудитория') as Outcome<BroadcastTarget>
 }
 
-/** Where-условие аудитории — как countRecipients/getRecipients в боте. */
+/**
+ * Where-условие аудитории. С мультиканальностью база — клиенты Telegram И
+ * Avito с заполненным адресом; фильтры тег/сегмент — как в боте.
+ */
 export function targetWhere(t: BroadcastTarget): Record<string, unknown> {
-  const base = { source: 'telegram' as const, externalId: { not: null } }
+  const base = { source: { in: ['telegram', 'avito'] }, externalId: { not: null } }
   if (t.type === 'tag') return { ...base, tags: { some: { name: t.tag } } }
   if (t.type === 'segment') {
     return t.tagFilter
@@ -71,6 +74,35 @@ export function targetWhere(t: BroadcastTarget): Record<string, unknown> {
       : { ...base, segmentId: t.segmentId }
   }
   return base
+}
+
+/** Та же аудитория БЕЗ ограничения по каналу — для честного счёта «недоступно». */
+export function targetWhereAnySource(t: BroadcastTarget): Record<string, unknown> {
+  const w = { ...targetWhere(t) } as Record<string, unknown>
+  delete w.source
+  delete w.externalId
+  return w
+}
+
+// ─── Мультиканальные получатели ──────────────────────────────────────────────
+
+export type Channel = 'telegram' | 'avito'
+
+export interface Recipient { channel: Channel; address: string }
+
+/**
+ * Адрес по каналу: telegram → chatId бота (externalId), avito → Avito chatId
+ * из установленной конвенции externalId = "buyerId:chatId" (bot/scheduler.ts,
+ * CRM-ответы). Клиент без резолвимого адреса — в «недоступные», не падаем.
+ */
+export function resolveRecipient(source: string, externalId: string | null): Recipient | null {
+  if (!externalId) return null
+  if (source === 'telegram') return { channel: 'telegram', address: externalId }
+  if (source === 'avito') {
+    const chatId = externalId.split(':')[1]
+    return chatId ? { channel: 'avito', address: chatId } : null
+  }
+  return null
 }
 
 /** Человекочитаемая аудитория + строка для BroadcastLog.target (как в боте). */
@@ -88,9 +120,13 @@ export async function describeTarget(t: BroadcastTarget): Promise<{ label: strin
 }
 
 export interface BroadcastPreview {
-  /** Кому бот физически может написать */
+  /** Кому реально можем написать (сумма каналов) */
   recipients: number
-  /** Всего клиентов в базе — чтобы разрыв «14 из 2943» был объяснён, а не пугал */
+  /** Разбивка по каналам */
+  byChannel: { telegram: number; avito: number }
+  /** В аудитории, но без резолвимого адреса ни в одном канале */
+  unreachable: number
+  /** Всего клиентов в базе — чтобы разрыв был объяснён, а не пугал */
   totalClients: number
   /** Примеры получателей — чтобы владелец видел, что это живые люди, а не «all» */
   sample: string[]
@@ -99,12 +135,27 @@ export interface BroadcastPreview {
   lastBroadcast: { createdAt: Date; target: string; totalSent: number; totalFailed: number } | null
 }
 
-async function telegramRecipients(target: BroadcastTarget = { type: 'all' }): Promise<string[]> {
-  const rows = await prisma.client.findMany({
-    where: targetWhere(target),
-    select: { externalId: true },
-  })
-  return rows.map(r => r.externalId!).filter(Boolean)
+async function resolveRecipients(target: BroadcastTarget = { type: 'all' }): Promise<{
+  recipients: Recipient[]
+  byChannel: { telegram: number; avito: number }
+  inAudience: number
+}> {
+  const [rows, inAudience] = await Promise.all([
+    prisma.client.findMany({
+      where: targetWhere(target),
+      select: { source: true, externalId: true },
+    }),
+    prisma.client.count({ where: targetWhereAnySource(target) }),
+  ])
+  const recipients: Recipient[] = []
+  const byChannel = { telegram: 0, avito: 0 }
+  for (const r of rows) {
+    const rec = resolveRecipient(r.source, r.externalId)
+    if (!rec) continue
+    recipients.push(rec)
+    byChannel[rec.channel]++
+  }
+  return { recipients, byChannel, inAudience }
 }
 
 function cleanText(raw: unknown): string {
@@ -118,8 +169,8 @@ function cleanText(raw: unknown): string {
 export async function previewBroadcast(raw?: unknown, target: BroadcastTarget = { type: 'all' }): Promise<Outcome<BroadcastPreview>> {
   const text = cleanText(raw)
 
-  const [ids, sampleRows, last, totalClients, audience] = await Promise.all([
-    telegramRecipients(target),
+  const [resolved, sampleRows, last, totalClients, audience] = await Promise.all([
+    resolveRecipients(target),
     prisma.client.findMany({
       where: targetWhere(target),
       select: { name: true, telegramUsername: true }, take: 5, orderBy: { lastPurchaseDate: 'desc' },
@@ -132,7 +183,9 @@ export async function previewBroadcast(raw?: unknown, target: BroadcastTarget = 
   return {
     ok: true, status: 200,
     data: {
-      recipients: ids.length,
+      recipients: resolved.recipients.length,
+      byChannel: resolved.byChannel,
+      unreachable: Math.max(0, resolved.inAudience - resolved.recipients.length),
       totalClients,
       // username в базе иногда уже с «@» — не плодим «@@»
       sample: sampleRows.map(r => r.telegramUsername ? '@' + r.telegramUsername.replace(/^@+/, '') : r.name),
@@ -143,7 +196,17 @@ export async function previewBroadcast(raw?: unknown, target: BroadcastTarget = 
   }
 }
 
-export interface SendResult { sent: number; failed: number; recipients: number; dryRun: boolean }
+export interface ChannelReport { sent: number; failed: number; skipped: number }
+
+export interface SendResult {
+  sent: number
+  failed: number
+  /** Пропущено (Avito без пригодного контента: только-видео без текста) */
+  skipped: number
+  recipients: number
+  dryRun: boolean
+  byChannel: { telegram: ChannelReport; avito: ChannelReport }
+}
 
 export interface BroadcastMedia { url: string; type: 'photo' | 'video' }
 
@@ -178,13 +241,38 @@ function defaultSender(): Sender {
   }
 }
 
+/** Avito-отправщик — абстракция для тестов; боевой лениво импортирует lib/avito. */
+export interface AvitoSender {
+  message(chatId: string, text: string): Promise<void>
+  image(chatId: string, imageUrl: string): Promise<void>
+}
+
+async function defaultAvitoSender(): Promise<AvitoSender> {
+  const avito = await import('./avito')
+  return {
+    message: (chatId, text) => avito.sendAvitoMessage(chatId, text),
+    image: (chatId, url) => avito.sendAvitoImage(chatId, url),
+  }
+}
+
+/**
+ * Троттлинг Avito: владелец принял риск спам-бана, наша часть — не дать
+ * превысить лимит (~150 req/мин). Один верхнеуровневый вызов может дать до
+ * 2–3 запросов внутри (fallback-цепочка sendAvitoImage), поэтому держим
+ * ≥1 сек между вызовами — ≤60 вызовов/мин, с запасом.
+ */
+export const AVITO_MIN_INTERVAL_MS = 1000
+
 interface SendOpts {
   dryRun?: boolean
-  /** Отправить только себе — репетиция перед массовой рассылкой */
+  /** Отправить только себе — репетиция перед массовой рассылкой (telegram-чат владельца) */
   onlyTo?: string
   sender?: Sender
+  avitoSender?: AvitoSender
   target?: BroadcastTarget
   media?: BroadcastMedia | null
+  /** Пауза между Avito-вызовами (в тестах укорачивается) */
+  avitoIntervalMs?: number
 }
 
 export async function sendBroadcast(actor: string, raw: unknown, opts: SendOpts = {}): Promise<Outcome<SendResult>> {
@@ -196,27 +284,63 @@ export async function sendBroadcast(actor: string, raw: unknown, opts: SendOpts 
   if (!media && text.length > BROADCAST_MAX) return bad(422, `Текст длиннее ${BROADCAST_MAX} символов`) as Outcome<SendResult>
 
   const target = opts.target ?? { type: 'all' as const }
-  const recipients = opts.onlyTo ? [opts.onlyTo] : await telegramRecipients(target)
+  const recipients: Recipient[] = opts.onlyTo
+    ? [{ channel: 'telegram', address: opts.onlyTo }]
+    : (await resolveRecipients(target)).recipients
   if (!recipients.length) {
-    return bad(422, 'Некому отправлять: в выбранной аудитории нет клиентов из Telegram') as Outcome<SendResult>
+    return bad(422, 'Некому отправлять: в выбранной аудитории нет клиентов с доступным адресом') as Outcome<SendResult>
   }
+  const empty = (): ChannelReport => ({ sent: 0, failed: 0, skipped: 0 })
+  const byChannel = { telegram: empty(), avito: empty() }
   if (opts.dryRun) {
-    return { ok: true, status: 200, data: { sent: 0, failed: 0, recipients: recipients.length, dryRun: true } }
+    return { ok: true, status: 200, data: { sent: 0, failed: 0, skipped: 0, recipients: recipients.length, dryRun: true, byChannel } }
   }
 
   const send = opts.sender ?? defaultSender()
-  let sent = 0, failed = 0
-  for (const chatId of recipients) {
-    try {
-      await send(chatId, text, media)
-      sent++
-    } catch (e) {
-      failed++
-      log.warn('Broadcast delivery failed', { chatId, error: e instanceof Error ? e.message : String(e) })
-    }
-    // Telegram душит быстрее ~30 сообщений в секунду; идём мягче
-    if (recipients.length > 1) await new Promise(r => setTimeout(r, 40))
+  const needsAvito = recipients.some(r => r.channel === 'avito')
+  const avito = needsAvito ? (opts.avitoSender ?? await defaultAvitoSender()) : null
+  const avitoInterval = opts.avitoIntervalMs ?? AVITO_MIN_INTERVAL_MS
+  let lastAvitoCall = 0
+  const avitoPace = async () => {
+    const wait = lastAvitoCall + avitoInterval - Date.now()
+    if (wait > 0) await new Promise(r => setTimeout(r, wait))
+    lastAvitoCall = Date.now()
   }
+
+  for (const r of recipients) {
+    const ch = byChannel[r.channel]
+    try {
+      if (r.channel === 'telegram') {
+        await send(r.address, text, media)
+        ch.sent++
+        // Telegram душит быстрее ~30 сообщений в секунду; идём мягче
+        if (recipients.length > 1) await new Promise(res => setTimeout(res, 40))
+      } else {
+        // Avito: видео мессенджер по URL не принимает — деградируем до
+        // текста (и фото, если фото); совсем без контента — пропускаем.
+        const photoUrl = media?.type === 'photo' ? media.url : null
+        if (!photoUrl && !text) { ch.skipped++; continue }
+        if (photoUrl) {
+          await avitoPace()
+          await avito!.image(r.address, photoUrl)
+        }
+        if (text) {
+          await avitoPace()
+          await avito!.message(r.address, text)
+        }
+        ch.sent++
+        // Каждый Avito-отправленный — в лог (принятый риск, но с полным следом)
+        log.info('Avito broadcast message sent', { chatId: r.address, media: photoUrl ? 'photo' : null })
+      }
+    } catch (e) {
+      ch.failed++
+      log.warn('Broadcast delivery failed', { channel: r.channel, chatId: r.address, error: e instanceof Error ? e.message : String(e) })
+    }
+  }
+
+  const sent = byChannel.telegram.sent + byChannel.avito.sent
+  const failed = byChannel.telegram.failed + byChannel.avito.failed
+  const skipped = byChannel.telegram.skipped + byChannel.avito.skipped
 
   const desc = await describeTarget(target)
   const logTarget = opts.onlyTo ? 'self-test' : desc.logTarget
@@ -230,10 +354,10 @@ export async function sendBroadcast(actor: string, raw: unknown, opts: SendOpts 
 
   void logAdminAction({
     adminTelegramId: actor, action: 'broadcast_send', entity: 'BroadcastLog',
-    after: { target: logTarget, sent, failed, media: media?.type ?? null, preview: text.slice(0, 120) },
+    after: { target: logTarget, byChannel, media: media?.type ?? null, preview: text.slice(0, 120) },
   })
-  void logSecurityEvent('broadcast_sent', { target: logTarget, type: target.type, sent, failed, media: media?.type ?? null, via: 'web' }, actor)
-  return { ok: true, status: 200, data: { sent, failed, recipients: recipients.length, dryRun: false } }
+  void logSecurityEvent('broadcast_sent', { target: logTarget, type: target.type, sent, failed, skipped, byChannel, media: media?.type ?? null, via: 'web' }, actor)
+  return { ok: true, status: 200, data: { sent, failed, skipped, recipients: recipients.length, dryRun: false, byChannel } }
 }
 
 export async function broadcastHistory(limit = 10): Promise<Array<{
