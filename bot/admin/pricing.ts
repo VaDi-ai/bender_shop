@@ -30,6 +30,7 @@ import { WRITEBACK_COLS } from '../../lib/sheets-sync'
 
 import { matchVariants, ParsedLine, MatchedVariant } from '../../lib/price-matching'
 import { toParsedLine } from '../../lib/price-batch'
+import { detectBrandFromName, detectCategoryFromName } from '../../lib/product-from-price'
 
 export type PendingVariant = {
   variantId: number
@@ -690,24 +691,8 @@ async function processSupplierPrice(
 }
 
 // ─── Мастер создания товара из прайса: helpers ──────────────────────────────
-
-function detectBrandFromName(name: string): string {
-  const brands = ['Apple', 'Samsung', 'Xiaomi', 'Huawei', 'Honor', 'Google', 'Sony', 'Lenovo', 'ASUS', 'OnePlus', 'Oppo', 'Vivo', 'Realme', 'Nothing', 'Motorola', 'Nokia', 'LG', 'Garmin', 'JBL', 'Marshall', 'Dyson', 'DJI']
-  const lower = name.toLowerCase()
-  return brands.find(b => lower.includes(b.toLowerCase())) || ''
-}
-
-function detectCategoryFromName(name: string): string | null {
-  const lower = name.toLowerCase()
-  if (/iphone|galaxy\s*s|galaxy\s*a|pixel|redmi|poco|oneplus/i.test(lower)) return 'Телефоны'
-  if (/ipad|tab\s|matepad|galaxy\s*tab/i.test(lower)) return 'Планшеты'
-  if (/macbook|laptop|thinkpad|zenbook|vivobook/i.test(lower)) return 'Ноутбуки'
-  if (/watch|часы|band|fenix|venu/i.test(lower)) return 'Часы'
-  if (/airpods|buds|headphone|наушник|pods|jbl|marshall/i.test(lower)) return 'Аудио'
-  if (/playstation|ps5|xbox|switch|nintendo/i.test(lower)) return 'Игры приставки'
-  if (/imac|mac\s*mini|mac\s*pro|mac\s*studio/i.test(lower)) return 'Настольные компьютеры'
-  return null
-}
+// detectBrandFromName/detectCategoryFromName переехали в lib/product-from-price
+// (нужны и веб-заведению из очереди «не узнал») — импорт в шапке файла.
 
 async function showCreateCard(ctx: Context, userId: number, items: ParsedLine[], index: number, supplierName: string): Promise<void> {
   if (index >= items.length) {
