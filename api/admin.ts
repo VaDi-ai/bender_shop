@@ -530,11 +530,16 @@ export function adminApiRouter(): Router {
 
   // Заведение нового товара из строки «не узнал» — owner-only; товар создаётся
   // ВСЕГДА СКРЫТЫМ (isAvailable=false), цена на витрину не пишется.
+  // Тело (опционально, экран «Проверьте товар»): правки разбора
+  // {model, brand, storage, color, country, simType} + тумблер {inStock}.
   router.post('/unmatched/:id/create-product', ownerOnly, safe(async (req, res) => {
     const id = parseInt(String(req.params.id), 10)
     if (!Number.isInteger(id)) { res.status(422).json({ error: 'validation', fields: [{ field: 'id', message: 'Неверный ID' }] }); return }
-    const { createProductFromPriceRow } = await import('../lib/product-from-price')
-    const result = await createProductFromPriceRow({ supplierPriceId: id, actor: { telegramId: req.admin!.telegramId } })
+    const { createProductFromPriceRow, validateCreateEdits } = await import('../lib/product-from-price')
+    const body = (req.body ?? {}) as Record<string, unknown>
+    const { errors, edits } = validateCreateEdits(Object.keys(body).length ? body : undefined)
+    if (errors.length) { res.status(422).json({ error: 'validation', fields: errors }); return }
+    const result = await createProductFromPriceRow({ supplierPriceId: id, actor: { telegramId: req.admin!.telegramId }, edits })
     res.status(result.status).json(result)
   }))
 

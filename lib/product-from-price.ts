@@ -65,28 +65,82 @@ export interface CreateFromRowResult {
   rematched?: number
 }
 
+/**
+ * Правки владельца с экрана «Проверьте товар» (шаг 3): чинят РАЗБОР перед
+ * заведением. Пустая строка в правке = «атрибут не ставить». inStock — тумблер
+ * «Остаток: Есть/Нет»; на скрытость товара не влияет (isAvailable всегда false).
+ */
+export interface CreateFromRowEdits {
+  model?: string
+  brand?: string
+  storage?: string
+  color?: string
+  country?: string
+  simType?: string
+  inStock?: boolean
+}
+
+const EDIT_STRING_FIELDS = ['model', 'brand', 'storage', 'color', 'country', 'simType'] as const
+
+/** Валидация правок: только разрешённые поля, строки ≤100 — чистая функция для юнитов. */
+export function validateCreateEdits(raw: unknown): {
+  errors: Array<{ field: string; message: string }>
+  edits: CreateFromRowEdits
+} {
+  if (raw === undefined || raw === null) return { errors: [], edits: {} }
+  if (typeof raw !== 'object' || Array.isArray(raw)) {
+    return { errors: [{ field: 'body', message: 'Неверный формат правок' }], edits: {} }
+  }
+  const body = raw as Record<string, unknown>
+  const errors: Array<{ field: string; message: string }> = []
+  const edits: CreateFromRowEdits = {}
+  for (const key of Object.keys(body)) {
+    if (key === 'inStock') {
+      if (typeof body.inStock !== 'boolean') errors.push({ field: 'inStock', message: 'Остаток — только Есть/Нет' })
+      else edits.inStock = body.inStock
+      continue
+    }
+    const f = EDIT_STRING_FIELDS.find(x => x === key)
+    if (!f) { errors.push({ field: key, message: 'Поле не редактируется при заведении' }); continue }
+    const v = body[key]
+    if (typeof v !== 'string') { errors.push({ field: key, message: 'Ожидается строка' }); continue }
+    if (v.length > 100) { errors.push({ field: key, message: 'Длиннее 100 символов' }); continue }
+    edits[f] = v.trim()
+  }
+  return { errors, edits: errors.length ? {} : edits }
+}
+
 export async function createProductFromPriceRow(opts: {
   supplierPriceId: number
   actor: { telegramId: string }
+  edits?: CreateFromRowEdits
 }): Promise<CreateFromRowResult> {
   const row = await prisma.supplierPrice.findUnique({ where: { id: opts.supplierPriceId } })
   if (!row) return { ok: false, status: 404, error: 'Строка прайса не найдена' }
   if (row.variantId !== null) return { ok: false, status: 409, error: 'Строка уже привязана к варианту' }
 
-  const model = row.model.trim()
+  // Правка владельца перекрывает разбор; пустая строка = «не ставить»
+  const e = opts.edits ?? {}
+  const pick = (edited: string | undefined, parsed: string | null | undefined): string =>
+    (edited !== undefined ? edited : parsed ?? '').trim()
+
+  const model = pick(e.model, row.model)
   if (!model) return { ok: false, status: 422, error: 'В строке нет названия модели' }
 
   const aliases = await loadAttrAliases()
   const attrs: Record<string, string> = {}
-  if (row.storage?.trim()) attrs['Память'] = row.storage.trim()
-  if (row.color?.trim()) attrs['Цвет'] = row.color.trim()
+  const storage = pick(e.storage, row.storage)
+  if (storage) attrs['Память'] = storage
+  const color = pick(e.color, row.color)
+  if (color) attrs['Цвет'] = color
 
-  const country = canonCountry(row.country, aliases)
+  // Страна — по-прежнему только канон словаря, в т.ч. для правок: не наугад
+  const country = canonCountry(pick(e.country, row.country), aliases)
   if (country) attrs['Страна'] = country
 
-  const brand = detectBrandFromName(model)
+  const brand = pick(e.brand, null) || detectBrandFromName(model)
   const sim = resolveSimType(
-    { explicit: row.simType, country, brand: brand || null, names: [model] },
+    { explicit: pick(e.simType, row.simType) || null, country, brand: brand || null, names: [model] },
     await loadSimRules(),
     aliases,
   )
@@ -126,8 +180,10 @@ export async function createProductFromPriceRow(opts: {
         productId: product.id,
         sku: variantSku,
         price: 0,
-        quantity: 0,
-        inStock: false,
+        // Тумблер «Остаток»: Есть → inStock + 1 шт. Товар при этом остаётся
+        // скрытым (isAvailable=false выше) — до покупателя не доходит.
+        quantity: e.inStock === true ? 1 : 0,
+        inStock: e.inStock === true,
         attributes: { ...attrs, fullName },
         photos: [],
       },

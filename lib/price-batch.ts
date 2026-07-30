@@ -21,6 +21,7 @@ import type { AIParsedProduct } from './ai-parser'
 import { matchVariants, ParsedLine, MatchedVariant } from './price-matching'
 import { applyMarkupRules, loadRules, MarkupRuleData } from './markup-rules'
 import { logAdminAction } from './audit'
+import { detectBrandFromName } from './product-from-price'
 
 /** Коридор автоприменения (утверждено §9.1): |Δ розничной| ≤ 15% — «в коридоре». */
 export const CORRIDOR_PCT = 15
@@ -199,10 +200,12 @@ export interface PreviewRow {
   brand: string | null      // марка продукта — для полной атрибуции на экране разбора
   inStock: boolean | null   // наличие варианта — там же
   variantAttrs: Record<string, string> | null
+  /** что распарсил ИИ — предзаполнение экрана «Проверьте товар» (шаг 3) */
+  parsed: { model: string; storage: string | null; ram: string | null; color: string | null; country: string | null; simType: string | null; brandGuess: string }
   currentPrice: number | null
   currentCost: number | null
   supplierPrice: number     // новая закупка из прайса
-  proposedPrice: number | null // розничная после цепочки наценки
+  proposedPrice: number | null // розничная после цепочки наценки; у «не узнал» — справочно для заведения
   deltaPct: number | null
   corridor: CorridorClass | null
 }
@@ -232,12 +235,18 @@ export async function getBatchPreview(batchId: number): Promise<{
   const preview: PreviewRow[] = rows.map(r => {
     const v = r.variantId !== null ? byId.get(r.variantId) : undefined
     const supplierPrice = Number(r.price)
+    const parsed = {
+      model: r.model, storage: r.storage, ram: r.ram, color: r.color,
+      country: r.country, simType: r.simType, brandGuess: detectBrandFromName(r.model),
+    }
     if (!v) {
       return {
         supplierPriceId: r.id, rawLine: r.rawMessage, matched: false,
-        variantId: null, productName: null, brand: null, inStock: null, variantAttrs: null,
+        variantId: null, productName: null, brand: null, inStock: null, variantAttrs: null, parsed,
         currentPrice: null, currentCost: null,
-        supplierPrice, proposedPrice: null, deltaPct: null, corridor: null,
+        // розница справочно — экран заведения показывает «закупка → розница»;
+        // применять нечего (варианта нет), corridor/delta остаются null
+        supplierPrice, proposedPrice: applyMarkupRules(supplierPrice, rules), deltaPct: null, corridor: null,
       }
     }
     const currentPrice = Number(v.price)
@@ -251,6 +260,7 @@ export async function getBatchPreview(batchId: number): Promise<{
       brand: v.product.brand ?? null,
       inStock: v.inStock,
       variantAttrs: (v.attributes ?? null) as Record<string, string> | null,
+      parsed,
       currentPrice,
       currentCost: v.costPrice !== null ? Number(v.costPrice) : null,
       supplierPrice,

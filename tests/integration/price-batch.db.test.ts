@@ -117,7 +117,11 @@ describe.skipIf(!RUN)('createPriceBatch / getBatchPreview (read-only)', () => {
     expect(white.deltaPct).toBeLessThan(-15)
     const unknown = preview.rows.find((x: any) => !x.matched)
     expect(unknown.rawLine).toContain('неизвестный девайс')
-    expect(unknown.proposedPrice).toBeNull()
+    // Розница у «не узнал» — справочно для экрана заведения (кусок 3);
+    // применять нечего: corridor/deltaPct остаются null
+    expect(unknown.proposedPrice).toBeGreaterThan(unknown.supplierPrice)
+    expect(unknown.corridor).toBeNull()
+    expect(unknown.deltaPct).toBeNull()
   })
 
   it('идемпотентность: тот же текст + поставщик → реюз батча, дубли не плодятся', async () => {
