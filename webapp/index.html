@@ -1893,6 +1893,9 @@
         if (!res.ok) throw new Error('HTTP ' + res.status)
         categories = await res.json()
         renderCatFilterBar()
+        // Категории и товары грузятся параллельно: если сетка линеек уже
+        // нарисована без кастомных обложек — перерисовать с ними.
+        if (allProducts.length) renderGrid()
       } catch (err) {
         console.error('[Categories] Load failed:', err)
         const bar = document.getElementById('catFilterBar')
@@ -1980,6 +1983,14 @@
       return ''
     }
 
+    // Кастомное фото категории из админки (Category.imageFile → imageUrl в
+    // /api/categories). Категория сайта = линейка (Phase 2), матчим по имени.
+    // Пусто → '' и обложка берётся авто-логикой lineCover.
+    function customCategoryPhoto(line) {
+      const c = categories.find(c => c.name === line)
+      return (c && c.imageUrl) ? c.imageUrl : ''
+    }
+
     // Обложка линейки = фото самой новой модели в наличии (min sortOrder) с реальным
     // фото → любой товар линейки с реальным фото → плейсхолдер. allProducts уже
     // in-stock-only, поэтому обложка всегда «живая».
@@ -2041,7 +2052,7 @@
       }
       grid.innerHTML = groups.map(g => `
         <div class="dd-card" onclick="selectLine('${esc(g.line).replace(/'/g, "\\'")}')">
-          ${ddPhotoHtml(lineCover(g.items))}
+          ${ddPhotoHtml(customCategoryPhoto(g.line) || lineCover(g.items))}
           <div class="dd-meta">
             <div class="dd-nm">${esc(g.line)}</div>
             <div class="dd-sub">${g.items.length} ${pluralize(g.items.length, 'модель', 'модели', 'моделей')}</div>
