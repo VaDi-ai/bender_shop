@@ -301,6 +301,7 @@
       <div class="cap">КАТЕГОРИИ</div>
       <div class="card">
         <h3>Фото категорий</h3>
+        <div class="mt">Картинка плитки категории на витрине — не фото товара.</div>
         <div id="catList" class="mt">Загрузка…</div>
         <div id="catForm" style="display:none">
           <div class="cap" id="catFormTitle" style="margin:10px 0 6px">ФОТО КАТЕГОРИИ</div>
@@ -310,7 +311,7 @@
           <button class="btn b-nt" id="catCancel">Отмена</button>
           <div class="mt" id="catErr" style="color:var(--bad)"></div>
         </div>
-        <div class="hint">По умолчанию берётся фото самой новой модели в наличии. Своё фото главнее — и держится, пока вы его не снимете.</div>
+        <div class="hint">По умолчанию берётся фото самой новой модели в наличии. Своё фото главнее — и держится, пока вы его не снимете. Фото конкретного товара ставится в его карточке — <b style="color:var(--ac);cursor:pointer" onclick="go('s-goods')">раздел «Товары» →</b></div>
       </div>
 
       <div class="cap">БЕГУЩАЯ СТРОКА</div>
@@ -693,7 +694,10 @@
               <div class="nm">${esc(rw.name)}</div>
               <div class="mt">${esc(rw.category || 'без категории')} · ${esc(rw.detail)}</div>
             </div></div>
-            <div class="sf-item-actions"><button class="btn b-nt sm" data-issue-open="${rw.productId}">Открыть карточку</button></div>
+            <div class="sf-item-actions">
+              ${g.kind === 'no_photo' || g.kind === 'bad_photo' ? `<button class="btn b-gh sm" data-issue-photo="${rw.productId}">${g.kind === 'no_photo' ? 'Поставить фото' : 'Заменить фото'}</button>` : ''}
+              <button class="btn b-nt sm" data-issue-open="${rw.productId}">Открыть карточку</button>
+            </div>
           </div>`).join('') + (g.count > g.rows.length ? `<div class="hint">Показаны первые ${g.rows.length} из ${g.count}</div>` : '') : ''}
         </div>`).join('')
 
@@ -705,6 +709,14 @@
         openProductCard(b.dataset.issueOpen)
         document.getElementById('pcCard').scrollIntoView({ behavior: 'smooth', block: 'start' })
       }))
+      el.querySelectorAll('[data-issue-photo]').forEach(b => b.addEventListener('click', () => openProductPhoto(b.dataset.issuePhoto)))
+    }
+
+    /** Из строки «без фото» сразу в форму главного фото — карточка откроется сама. */
+    async function openProductPhoto(productId) {
+      await openProductCard(productId)
+      const btn = document.querySelector('#pcCard [data-pc-photo="product"]')
+      if (btn) btn.click()
     }
 
     // ── ТОВАРЫ: карточка, фото (с записью в таблицу), описание, скрытие ───────
@@ -751,6 +763,9 @@
       box.style.display = ''
       box.innerHTML = `
         <div class="cap" style="margin:12px 0 6px">${esc(p.name.toUpperCase())}</div>
+        ${p.mainPhoto ? '' : `<div class="warnbox">У товара нет фото — покупатель видит в каталоге серую заглушку.
+          <div class="sf-item-actions" style="margin-top:8px"><button class="btn b-main sm" data-pc-photo="product">Поставить фото</button></div>
+        </div>`}
         <div class="sf-item">
           <div class="sf-item-head">
             ${sfThumb(p.mainPhoto)}
@@ -947,6 +962,7 @@
       const r = await api(path, { method: 'PUT', body: JSON.stringify({ imageUrl: url }) }).catch(() => null)
       if (!r || !r.ok) { return { error: (r && r.data && r.data.error) || 'Не получилось' } }
       if (pcProduct) openProductCard(pcProduct.id)
+      loadIssues()
       return {}
     }
 
