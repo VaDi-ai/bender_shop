@@ -8,12 +8,15 @@ vi.mock('../lib/prisma', () => ({
   prisma: { product: { findUnique: vi.fn(), update: vi.fn() } },
 }))
 vi.mock('../lib/audit', () => ({ logAdminAction: vi.fn() }))
+vi.mock('../lib/api-key-store', () => ({ getApiKeyValue: vi.fn(), setApiKeyValue: vi.fn() }))
 
 import { prisma } from '../lib/prisma'
+import { setApiKeyValue } from '../lib/api-key-store'
 import { getProductCard, setProductVisible, setProductDescription } from '../lib/product-admin'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 const pp = prisma.product as any
+const bump = setApiKeyValue as any
 const ACTOR = '900'
 
 const productRow = {
@@ -29,7 +32,7 @@ const productRow = {
 }
 
 beforeEach(() => {
-  pp.findUnique.mockReset(); pp.update.mockReset()
+  pp.findUnique.mockReset(); pp.update.mockReset(); bump.mockReset()
   pp.update.mockResolvedValue({})
 })
 
@@ -61,12 +64,14 @@ describe('скрыть с витрины', () => {
     pp.findUnique.mockResolvedValue({ id: 3, name: 'X', isAvailable: true })
     expect(await setProductVisible(ACTOR, 3, false)).toMatchObject({ ok: true })
     expect(pp.update).toHaveBeenCalledWith({ where: { id: 3 }, data: { isAvailable: false } })
+    expect(bump).toHaveBeenCalledWith('cache_version', expect.any(String))
   })
 
   it('повтор — no-op без записи', async () => {
     pp.findUnique.mockResolvedValue({ id: 3, name: 'X', isAvailable: false })
     expect(await setProductVisible(ACTOR, 3, false)).toMatchObject({ ok: true, data: { unchanged: true } })
     expect(pp.update).not.toHaveBeenCalled()
+    expect(bump).not.toHaveBeenCalled()
   })
 
   it('чужой id — 404', async () => {
@@ -88,6 +93,7 @@ describe('описание', () => {
     expect(r.ok).toBe(true)
     expect(wb.mock.calls[0][0]).toHaveLength(2)
     expect(pp.update).toHaveBeenCalledWith({ where: { id: 3 }, data: { description: 'Новый текст' } })
+    expect(bump).toHaveBeenCalledWith('cache_version', expect.any(String))
   })
 
   it('лист недоступен → 503, БД не тронута', async () => {
@@ -95,6 +101,7 @@ describe('описание', () => {
     const r = await setProductDescription(ACTOR, 3, 'Текст', vi.fn(async () => { throw new Error('down') }))
     expect(r.status).toBe(503)
     expect(pp.update).not.toHaveBeenCalled()
+    expect(bump).not.toHaveBeenCalled()
   })
 
   it('ни одной строки в листе → 409, БД не тронута', async () => {

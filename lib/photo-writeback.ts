@@ -20,6 +20,7 @@ import { log } from './logger'
 import { logAdminAction } from './audit'
 import { WRITEBACK_COLS, mergeVariantPhotoUrls } from './sheets-sync'
 import { normalizePhotoLink } from './photo-store'
+import { touchStorefrontCache } from './storefront-admin'
 
 export interface PhotoWritebackRow { fullName: string; photo: string }
 
@@ -122,6 +123,7 @@ export async function setVariantPhoto(
     data: { photoUrls: value ? [value] : [] },
   })
   const productPhotos = await recomputeProductPhotos(variant.productId)
+  await touchStorefrontCache('variant_photo')
 
   void logAdminAction({
     adminTelegramId: actor, action: 'update', entity: 'ProductVariant', entityId: variantId,
