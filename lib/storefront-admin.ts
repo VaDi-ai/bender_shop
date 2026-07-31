@@ -293,6 +293,7 @@ export async function setHit(actor: string, productId: number, featured: boolean
     adminTelegramId: actor, action: 'update', entity: 'Product', entityId: productId,
     before: { isFeatured: p.isFeatured }, after: { isFeatured: featured },
   })
+  await touchStorefrontCache('hit')
   return { ok: true, status: 200 }
 }
 
@@ -328,6 +329,25 @@ export async function setMaintenance(actor: string, enabled: boolean, rawNote: u
 }
 
 // ─── Обновить сайт (сброс кэша витрины) ──────────────────────────────────────
+
+/**
+ * Тихий бамп версии после админ-правки, которая меняет видимое покупателю
+ * (фото, описание, скрытие, хиты, атрибуты). Открытая витрина опрашивает
+ * /api/cache-version раз в 30 секунд и перезагружает данные при смене версии —
+ * без бампа владелец вынужден жать «Обновить сайт» руками.
+ *
+ * Никогда не кидает: к этому моменту правка уже записана в лист и БД, и
+ * падение бампа не должно превращать успех в ошибку — витрина догонит по
+ * следующему бампу или ручному сбросу.
+ */
+export async function touchStorefrontCache(reason: string): Promise<void> {
+  try {
+    await setApiKeyValue('cache_version', String(Date.now()))
+    log.info('Storefront cache version bumped', { reason })
+  } catch (e) {
+    log.warn('Storefront cache bump failed', { reason, error: e instanceof Error ? e.message : String(e) })
+  }
+}
 
 export async function bumpCacheVersion(actor: string): Promise<Outcome> {
   const version = String(Date.now())

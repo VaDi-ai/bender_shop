@@ -12,6 +12,7 @@ import { prisma } from './prisma'
 import { log } from './logger'
 import { logAdminAction } from './audit'
 import { WRITEBACK_COLS } from './sheets-sync'
+import { touchStorefrontCache } from './storefront-admin'
 import type { PhotoWritebackFn } from './photo-writeback'
 
 export interface OfferView {
@@ -127,6 +128,7 @@ export async function setProductVisible(actor: string, productId: number, visibl
     before: { isAvailable: p.isAvailable }, after: { isAvailable: visible },
   })
   log.info('Product visibility changed from web admin', { productId, visible })
+  await touchStorefrontCache('product_visibility')
   return { ok: true, status: 200 }
 }
 
@@ -175,6 +177,7 @@ export async function setProductDescription(
     adminTelegramId: actor, action: 'update', entity: 'Product', entityId: productId,
     before: { description: p.description }, after: { description: text, sheetCell: WRITEBACK_COLS.description },
   })
+  await touchStorefrontCache('product_description')
   return { ok: true, status: 200, data: { missing } }
 }
 
@@ -353,6 +356,7 @@ export async function setVariantAttributes(
     before, after: { ...Object.fromEntries(entries.map(([k]) => [k, attrs[k] ?? null])), overrides: Object.keys(overrides) },
   })
   log.info('Variant attributes edited', { variantId, keys: entries.map(([k]) => k) })
+  await touchStorefrontCache('variant_attributes')
   return { ok: true, status: 200, data: { attributes: attrs, overrides: Object.keys(overrides) } }
 }
 

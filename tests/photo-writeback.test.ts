@@ -11,20 +11,23 @@ vi.mock('../lib/prisma', () => ({
   },
 }))
 vi.mock('../lib/audit', () => ({ logAdminAction: vi.fn() }))
+vi.mock('../lib/api-key-store', () => ({ getApiKeyValue: vi.fn(), setApiKeyValue: vi.fn() }))
 
 import { prisma } from '../lib/prisma'
+import { setApiKeyValue } from '../lib/api-key-store'
 import { buildPhotoUpdates, setVariantPhoto, setProductMainPhoto } from '../lib/photo-writeback'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 const pv = prisma.productVariant as any
 const pp = prisma.product as any
+const bump = setApiKeyValue as any
 const ACTOR = '900'
 const PHOTO = '/photos/iphone-17-pro.webp'
 
 const sheet = (rows: string[][]) => [{ name: 'iPhone', data: [['A', 'B', 'C', 'D', 'Название'], ...rows] }]
 
 beforeEach(() => {
-  ;[pv.findUnique, pv.update, pv.findMany, pp.findUnique, pp.update].forEach(f => f.mockReset())
+  ;[pv.findUnique, pv.update, pv.findMany, pp.findUnique, pp.update, bump].forEach(f => f.mockReset())
   pv.update.mockResolvedValue({})
   pv.findMany.mockResolvedValue([{ photoUrls: [PHOTO] }])
   pp.update.mockResolvedValue({})
@@ -83,6 +86,13 @@ describe('фото предложения', () => {
     expect(pv.update).toHaveBeenCalledWith({ where: { id: 7 }, data: { photoUrls: [PHOTO] } })
   })
 
+  it('после успеха бампает версию кэша — витрина подхватит фото без «Обновить сайт»', async () => {
+    pv.findUnique.mockResolvedValue(variant)
+    const r = await setVariantPhoto(ACTOR, 7, PHOTO, vi.fn(async () => ({ missing: [] })))
+    expect(r.ok).toBe(true)
+    expect(bump).toHaveBeenCalledWith('cache_version', expect.any(String))
+  })
+
   it('лист недоступен → 503 и в БД НИЧЕГО не записано', async () => {
     pv.findUnique.mockResolvedValue(variant)
     const wb = vi.fn(async () => { throw new Error('google down') })
@@ -90,6 +100,7 @@ describe('фото предложения', () => {
     expect(r).toMatchObject({ ok: false, status: 503 })
     expect(r.error).toContain('таблицу')
     expect(pv.update).not.toHaveBeenCalled()          // фото-призрака не завели
+    expect(bump).not.toHaveBeenCalled()               // и кэш зря не сбросили
   })
 
   it('строки нет в листе → 409 и в БД НИЧЕГО не записано (синк бы всё равно стёр)', async () => {

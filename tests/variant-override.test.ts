@@ -6,8 +6,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 vi.mock('../lib/prisma', () => ({ prisma: { productVariant: { findUnique: vi.fn(), update: vi.fn() } } }))
 vi.mock('../lib/audit', () => ({ logAdminAction: vi.fn() }))
+vi.mock('../lib/api-key-store', () => ({ getApiKeyValue: vi.fn(), setApiKeyValue: vi.fn() }))
 
 import { prisma } from '../lib/prisma'
+import { setApiKeyValue } from '../lib/api-key-store'
 import { setVariantAttributes, overriddenKeys } from '../lib/product-admin'
 import { attributesForExistingVariant } from '../lib/sim-rules'
 import { buildPreview } from '../lib/sim-recalc'
@@ -32,6 +34,7 @@ describe('правка атрибута', () => {
     expect(saved.SIM).toBe('2 SIM')
     expect(saved.attrOverrides.SIM).toMatchObject({ value: '2 SIM', by: ACTOR })
     expect(overriddenKeys(saved)).toEqual(['SIM'])
+    expect(setApiKeyValue).toHaveBeenCalledWith('cache_version', expect.any(String))
   })
 
   it('пустая строка снимает ручную правку, значение остаётся разбору', async () => {
