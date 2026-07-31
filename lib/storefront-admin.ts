@@ -230,6 +230,7 @@ export async function setCategoryPhoto(actor: string, id: number, imageUrl: unkn
     adminTelegramId: actor, action: value ? 'update' : 'delete', entity: 'Category', entityId: id,
     before: { imageFile: existing.imageFile }, after: { imageFile: value },
   })
+  await touchStorefrontCache('category_photo')
   return { ok: true, status: 200 }
 }
 
