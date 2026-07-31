@@ -828,10 +828,17 @@ export function startApiServer(bot?: Telegraf): Server {
   // ── GET /api/brands ────────────────────────────────────────────────────────
   app.get('/api/brands', async (_req, res, next) => {
     try {
-      const products = await prisma.product.findMany({
-        where: { isAvailable: true },
-        select: { name: true, brand: true },
-      })
+      const [products, brandImages] = await Promise.all([
+        prisma.product.findMany({
+          where: { isAvailable: true },
+          select: { name: true, brand: true },
+        }),
+        prisma.brandImage.findMany({
+          where: { imageFile: { not: null } },
+          select: { brandNorm: true, imageFile: true },
+        }),
+      ])
+      const logoByNorm = new Map(brandImages.map((i) => [i.brandNorm, i.imageFile]))
       const map = new Map<string, number>()
       for (const p of products) {
         const b = p.brand?.trim() || p.name.split(' ')[0]
@@ -847,7 +854,11 @@ export function startApiServer(bot?: Telegraf): Server {
         'Medicube', 'Plaud', 'Whoop', 'Microsoft', 'Valve', 'Asus',
       ]
       const payload = [...map.entries()]
-        .map(([name, count]) => ({ name, count }))
+        .map(([name, count]) => ({
+          name,
+          count,
+          imageUrl: publicImageFileUrl(logoByNorm.get(name.trim().toLowerCase()) ?? null),
+        }))
         .sort((a, b) => {
           const ai = BRAND_POPULARITY.indexOf(a.name)
           const bi = BRAND_POPULARITY.indexOf(b.name)

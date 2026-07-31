@@ -314,6 +314,22 @@
         <div class="hint">По умолчанию берётся фото самой новой модели в наличии. Своё фото главнее — и держится, пока вы его не снимете. Фото конкретного товара ставится в его карточке — <b style="color:var(--ac);cursor:pointer" onclick="go('s-goods')">раздел «Товары» →</b></div>
       </div>
 
+      <div class="cap">БРЕНДЫ</div>
+      <div class="card">
+        <h3>Логотипы брендов</h3>
+        <div class="mt">Картинка в карточке бренда на главной. Пока логотипа нет — покупатель видит название текстом.</div>
+        <div id="brList" class="mt">Загрузка…</div>
+        <div id="brForm" style="display:none">
+          <div class="cap" id="brFormTitle" style="margin:10px 0 6px">ЛОГОТИП БРЕНДА</div>
+          <input class="inp" type="file" id="brFile" accept="image/jpeg,image/png,image/webp">
+          <input class="inp" id="brUrl" placeholder="или путь /photos/файл.webp" maxlength="500">
+          <button class="btn b-main" id="brSave">Поставить логотип</button>
+          <button class="btn b-nt" id="brCancel">Отмена</button>
+          <div class="mt" id="brErr" style="color:var(--bad)"></div>
+        </div>
+        <div class="hint">Лучше всего квадратная картинка на светлом фоне — карточка бренда впишет её сама. «Вернуть текст» снимает логотип без следа.</div>
+      </div>
+
       <div class="cap">БЕГУЩАЯ СТРОКА</div>
       <div class="card">
         <h3>Строка над каталогом</h3>
@@ -1735,7 +1751,7 @@
     })
 
     // ── ВИТРИНА: баннеры, категории, бегущая строка, хиты ─────────────────────
-    let sfData = { banners: [], categories: [], marquee: '', hits: { manual: [] } }
+    let sfData = { banners: [], categories: [], brands: [], marquee: '', hits: { manual: [] } }
 
     async function loadStorefront() {
       const r = await api('/storefront').catch(() => null)
@@ -1744,7 +1760,7 @@
         return
       }
       sfData = r.data
-      renderBanners(); renderCategories(); renderMarquee(); renderHits()
+      renderBanners(); renderCategories(); renderBrands(); renderMarquee(); renderHits()
     }
 
     /** Картинку показываем как есть: ссылка уже проверена сервером. */
@@ -1917,6 +1933,68 @@
         document.getElementById('catCancel').click()
         loadStorefront()
       } finally { btn.disabled = false; btn.textContent = 'Поставить фото' }
+    })
+
+    // ── Логотипы брендов: зеркало фото категорий, но сущность вычисляемая ────
+    let brEditName = null
+    let brShowAll = false
+    function renderBrands() {
+      const el = document.getElementById('brList')
+      const all = sfData.brands || []
+      if (!all.length) { el.innerHTML = '<div class="empty">Брендов пока нет — они появятся после синка с таблицей.</div>'; return }
+      const TOP = 12 // брендов бывает много; хвост — за «показать все»
+      const list = brShowAll ? all : all.slice(0, TOP)
+      const rest = all.length - TOP
+      el.innerHTML = list.map(b => `<div class="sf-item">
+        <div class="sf-item-head">
+          ${sfThumb(b.imageUrl)}
+          <div class="grow"><div class="nm">${esc(b.brand)}</div>
+            <div class="mt">${b.imageUrl ? 'свой логотип' : 'название текстом'} · ${b.productCount} ${plural(b.productCount, 'товар', 'товара', 'товаров')}</div></div>
+        </div>
+        <div class="sf-item-actions">
+          <button class="btn b-gh sm" data-br-set="${esc(b.brand)}">${b.imageUrl ? 'Заменить логотип' : 'Поставить логотип'}</button>
+          ${b.imageUrl ? `<button class="btn b-nt sm" data-br-reset="${esc(b.brand)}">Вернуть текст</button>` : ''}
+        </div>
+      </div>`).join('') + (rest > 0 ? `<div class="hint" style="cursor:pointer" id="brToggleAll">${
+        brShowAll ? 'Свернуть список брендов' : `Ещё ${rest} ${plural(rest, 'бренд', 'бренда', 'брендов')}. Показать`
+      }</div>` : '')
+
+      const toggle = document.getElementById('brToggleAll')
+      if (toggle) toggle.addEventListener('click', () => { brShowAll = !brShowAll; renderBrands() })
+
+      el.querySelectorAll('[data-br-set]').forEach(b => b.addEventListener('click', () => {
+        brEditName = b.dataset.brSet
+        document.getElementById('brFormTitle').textContent = 'ЛОГОТИП БРЕНДА ' + brEditName.toUpperCase()
+        document.getElementById('brErr').textContent = ''
+        document.getElementById('brForm').style.display = ''
+        document.getElementById('brForm').scrollIntoView({ behavior: 'smooth', block: 'center' })
+      }))
+      el.querySelectorAll('[data-br-reset]').forEach(b => b.addEventListener('click', async () => {
+        if (!confirm('Вернуть текст? Покупатель снова увидит название бренда вместо логотипа.')) return
+        const r = await api('/brands/photo', { method: 'PUT', body: JSON.stringify({ brand: b.dataset.brReset, imageUrl: null }) }).catch(() => null)
+        if (!r || !r.ok) alert(r && r.data && r.data.error || 'Не получилось')
+        loadStorefront()
+      }))
+    }
+    document.getElementById('brCancel').addEventListener('click', () => {
+      document.getElementById('brForm').style.display = 'none'
+      brEditName = null
+      document.getElementById('brUrl').value = ''; document.getElementById('brFile').value = ''
+      document.getElementById('brErr').textContent = ''
+    })
+    document.getElementById('brSave').addEventListener('click', async () => {
+      const err = document.getElementById('brErr'); err.textContent = ''
+      if (!brEditName) { err.textContent = 'Выберите бренд'; return }
+      const btn = document.getElementById('brSave'); btn.disabled = true; btn.textContent = 'Сохраняем…'
+      try {
+        let url = document.getElementById('brUrl').value.trim()
+        if (!url) url = await uploadPhoto(document.getElementById('brFile'), err)
+        if (!url) { if (!err.textContent) err.textContent = 'Выберите файл или вставьте ссылку'; return }
+        const r = await api('/brands/photo', { method: 'PUT', body: JSON.stringify({ brand: brEditName, imageUrl: url }) }).catch(() => null)
+        if (!r || !r.ok) { err.textContent = (r && r.data && r.data.error) || 'Не получилось'; return }
+        document.getElementById('brCancel').click()
+        loadStorefront()
+      } finally { btn.disabled = false; btn.textContent = 'Поставить логотип' }
     })
 
     function renderMarquee() {

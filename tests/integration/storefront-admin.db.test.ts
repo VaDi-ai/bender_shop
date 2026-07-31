@@ -31,14 +31,16 @@ describe.skipIf(!RUN)('витрина из веб-админки', () => {
   })
 
   beforeEach(async () => {
-    await prisma.auditLog.deleteMany({ where: { entity: { in: ['HeroBanner', 'Category', 'Setting', 'Product'] } } })
+    await prisma.auditLog.deleteMany({ where: { entity: { in: ['HeroBanner', 'Category', 'Setting', 'Product', 'Brand'] } } })
     await prisma.heroBanner.deleteMany()
+    await prisma.brandImage.deleteMany()
   })
 
   afterAll(async () => {
     if (!prisma) return
     await prisma.heroBanner.deleteMany()
-    await prisma.auditLog.deleteMany({ where: { entity: { in: ['HeroBanner', 'Category', 'Setting', 'Product'] } } })
+    await prisma.brandImage.deleteMany()
+    await prisma.auditLog.deleteMany({ where: { entity: { in: ['HeroBanner', 'Category', 'Setting', 'Product', 'Brand'] } } })
     await prisma.$disconnect()
   })
 
@@ -120,6 +122,55 @@ describe.skipIf(!RUN)('витрина из веб-админки', () => {
     expect(view.source).toBe('auto')
 
     await prisma.productVariant.deleteMany({ where: { productId: p.id } })
+    await prisma.product.delete({ where: { id: p.id } })
+  })
+
+  it('логотип бренда: ставится по имени, «вернуть текст» снимает, всё в аудите', async () => {
+    const cat = await prisma.category.upsert({ where: { name: 'iPhone' }, update: {}, create: { name: 'iPhone' } })
+    const p = await prisma.product.create({
+      data: { sku: 'sf-br', name: 'Тестофон X', brand: 'Тестобренд', price: 1000, categoryId: cat.id, attributes: {} },
+    })
+
+    // до логотипа — бренд в списке, но текстом
+    let view = (await sf.listBrandPhotos()).find((b: any) => b.brand === 'Тестобренд')
+    expect(view).toMatchObject({ imageUrl: null, productCount: 1 })
+
+    // регистр и пробелы не мешают попасть в тот же бренд
+    expect(await sf.setBrandPhoto(OWNER, '  тестобренд ', '/photos/logo.webp')).toMatchObject({ ok: true })
+    view = (await sf.listBrandPhotos()).find((b: any) => b.brand === 'Тестобренд')
+    expect(view).toMatchObject({ imageUrl: '/photos/logo.webp' })
+    expect(await prisma.brandImage.count()).toBe(1)
+
+    // замена логотипа не плодит вторую запись
+    expect(await sf.setBrandPhoto(OWNER, 'Тестобренд', '/photos/logo2.webp')).toMatchObject({ ok: true })
+    expect(await prisma.brandImage.count()).toBe(1)
+
+    // «вернуть текст»
+    expect(await sf.setBrandPhoto(OWNER, 'Тестобренд', null)).toMatchObject({ ok: true })
+    view = (await sf.listBrandPhotos()).find((b: any) => b.brand === 'Тестобренд')
+    expect(view.imageUrl).toBeNull()
+
+    const audits = await prisma.auditLog.findMany({ where: { entity: 'Brand' }, orderBy: { id: 'asc' } })
+    expect(audits.map((a: any) => a.action)).toEqual(['update', 'update', 'delete'])
+    expect(audits[2].before).toMatchObject({ imageFile: '/photos/logo2.webp' })
+
+    await prisma.product.delete({ where: { id: p.id } })
+  })
+
+  it('логотип не пишется ни несуществующему бренду, ни по битой ссылке', async () => {
+    expect(await sf.setBrandPhoto(OWNER, 'НетТакогоБренда', '/photos/logo.webp')).toMatchObject({ ok: false, status: 404 })
+    expect(await sf.setBrandPhoto(OWNER, '', '/photos/logo.webp')).toMatchObject({ ok: false, status: 422 })
+
+    const cat = await prisma.category.upsert({ where: { name: 'iPhone' }, update: {}, create: { name: 'iPhone' } })
+    const p = await prisma.product.create({
+      data: { sku: 'sf-br-2', name: 'Тестофон Y', brand: 'Тестобренд', price: 1000, categoryId: cat.id, attributes: {} },
+    })
+    for (const bad of ['javascript:alert(1)', 'https://evil.example.com/a.png', '/photos/../../.env']) {
+      const r = await sf.setBrandPhoto(OWNER, 'Тестобренд', bad)
+      expect(r.ok, bad).toBe(false)
+      expect(r.status).toBe(422)
+    }
+    expect(await prisma.brandImage.count()).toBe(0)
     await prisma.product.delete({ where: { id: p.id } })
   })
 
