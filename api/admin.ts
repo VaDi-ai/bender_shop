@@ -659,10 +659,10 @@ export function adminApiRouter(): Router {
   // содержимому, а не по имени файла.
   router.get('/storefront', safe(async (_req, res) => {
     const sf = await import('../lib/storefront-admin')
-    const [banners, categories, marquee, hits] = await Promise.all([
-      sf.listBanners(), sf.listCategories(), sf.getMarquee(), sf.listHits(),
+    const [banners, categories, brands, marquee, hits] = await Promise.all([
+      sf.listBanners(), sf.listCategories(), sf.listBrandPhotos(), sf.getMarquee(), sf.listHits(),
     ])
-    res.json({ banners, categories, marquee, hits })
+    res.json({ banners, categories, brands, marquee, hits })
   }))
 
   // Загрузка картинки: тело — сам файл (image/*), не base64. Ответ — публичная
@@ -736,6 +736,15 @@ export function adminApiRouter(): Router {
     const { setCategoryPhoto } = await import('../lib/storefront-admin')
     const body = (req.body ?? {}) as { imageUrl?: unknown }
     const r = await setCategoryPhoto(req.admin!.telegramId, id, body.imageUrl ?? null)
+    res.status(r.status).json(r.ok ? { ok: true } : { error: r.error })
+  }))
+
+  // Лого бренда: бренд — не сущность БД, поэтому адресуем по имени в теле,
+  // а не по id в пути. Права те же, что у фото категории (owner+manager).
+  router.put('/brands/photo', safe(async (req, res) => {
+    const { setBrandPhoto } = await import('../lib/storefront-admin')
+    const body = (req.body ?? {}) as { brand?: unknown; imageUrl?: unknown }
+    const r = await setBrandPhoto(req.admin!.telegramId, body.brand, body.imageUrl ?? null)
     res.status(r.status).json(r.ok ? { ok: true } : { error: r.error })
   }))
 

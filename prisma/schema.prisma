@@ -406,6 +406,18 @@ model HeroBanner {
   @@index([isActive, order]) // A7
 }
 
+/// Логотип бренда на витрине. Бренд — не сущность БД (вычисляется из
+/// product.brand), поэтому картинка живёт отдельно, с нормализованным ключом.
+/// imageFile пустой = покупатель видит название текстом.
+model BrandImage {
+  id        Int      @id @default(autoincrement())
+  brandNorm String   @unique // lower/trim от brand — ключ для upsert
+  brand     String // как показывать владельцу
+  imageFile String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
 model BroadcastLog {
   id              Int           @id @default(autoincrement())
   type            BroadcastType

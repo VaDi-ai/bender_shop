@@ -234,6 +234,81 @@ export async function setCategoryPhoto(actor: string, id: number, imageUrl: unkn
   return { ok: true, status: 200 }
 }
 
+// ─── Бренды: логотипы ────────────────────────────────────────────────────────
+
+export interface BrandView {
+  brand: string
+  productCount: number
+  /** Свой логотип; null = покупатель видит название текстом */
+  imageUrl: string | null
+}
+
+/** Ключ бренда для BrandImage: регистр и пробелы не должны плодить дубли. */
+export function normalizeBrandKey(raw: string): string {
+  return raw.trim().toLowerCase()
+}
+
+/** Бренды из товаров в наличии — та же логика, что публичный /api/brands. */
+async function availableBrands(): Promise<Map<string, number>> {
+  const products = await prisma.product.findMany({
+    where: { isAvailable: true },
+    select: { name: true, brand: true },
+  })
+  const map = new Map<string, number>()
+  for (const p of products) {
+    const b = p.brand?.trim() || p.name.split(' ')[0]
+    if (!b) continue
+    map.set(b, (map.get(b) ?? 0) + 1)
+  }
+  return map
+}
+
+export async function listBrandPhotos(): Promise<BrandView[]> {
+  const [brands, images] = await Promise.all([
+    availableBrands(),
+    prisma.brandImage.findMany(),
+  ])
+  const byNorm = new Map(images.map(i => [i.brandNorm, i.imageFile]))
+  return [...brands.entries()]
+    .map(([brand, count]) => ({
+      brand,
+      productCount: count,
+      imageUrl: publicImageUrl(byNorm.get(normalizeBrandKey(brand)) ?? null),
+    }))
+    .sort((a, b) => b.productCount - a.productCount || a.brand.localeCompare(b.brand, 'ru'))
+}
+
+/** imageUrl=null снимает логотип — бренд снова показывается текстом. */
+export async function setBrandPhoto(actor: string, brandRaw: unknown, imageUrl: unknown): Promise<Outcome> {
+  const brand = String(brandRaw ?? '').trim()
+  if (!brand) return bad(422, 'Не указан бренд')
+  const brandNorm = normalizeBrandKey(brand)
+
+  // Бренд не сущность: чтобы не копить логотипы опечаток, пишем только для
+  // брендов, которые реально видны покупателю (есть товар в наличии).
+  const known = [...(await availableBrands()).keys()].find(b => normalizeBrandKey(b) === brandNorm)
+  if (!known) return bad(404, 'Такого бренда нет среди товаров в наличии')
+
+  let value: string | null = null
+  if (imageUrl !== null && imageUrl !== '') {
+    const link = normalizePhotoLink(imageUrl)
+    if (!link.ok) return bad(422, link.error)
+    value = link.url
+  }
+  const existing = await prisma.brandImage.findUnique({ where: { brandNorm } })
+  await prisma.brandImage.upsert({
+    where: { brandNorm },
+    update: { imageFile: value, brand: known },
+    create: { brandNorm, brand: known, imageFile: value },
+  })
+  void logAdminAction({
+    adminTelegramId: actor, action: value ? 'update' : 'delete', entity: 'Brand', entityId: brandNorm,
+    before: { imageFile: existing?.imageFile ?? null }, after: { imageFile: value },
+  })
+  await touchStorefrontCache('brand_photo')
+  return { ok: true, status: 200 }
+}
+
 // ─── Бегущая строка ──────────────────────────────────────────────────────────
 
 export async function getMarquee(): Promise<string> {

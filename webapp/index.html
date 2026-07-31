@@ -1912,6 +1912,19 @@
       'Medicube', 'Plaud', 'Whoop', 'Microsoft', 'Valve', 'Asus'
     ]
 
+    // Логотипы брендов из админки: имя (lower/trim) → /photos/…. Пусто — не беда,
+    // карточка бренда показывает название текстом.
+    let brandLogos = {}
+    async function loadBrandLogos() {
+      try {
+        const res = await fetch('/api/brands', { cache: 'no-store' })
+        if (!res.ok) return
+        const list = await res.json()
+        brandLogos = {}
+        list.forEach(b => { if (b.imageUrl) brandLogos[b.name.trim().toLowerCase()] = b.imageUrl })
+      } catch { /* логотип не критичен — останется текст */ }
+    }
+
     function computeBrands() {
       const map = {}
       allProducts.forEach(p => {
@@ -1920,7 +1933,7 @@
         map[b] = (map[b] || 0) + 1
       })
       brands = Object.entries(map)
-        .map(([name, count]) => ({ name, count }))
+        .map(([name, count]) => ({ name, count, imageUrl: brandLogos[name.trim().toLowerCase()] || null }))
         .sort((a, b) => {
           const ai = BRAND_POPULARITY.indexOf(a.name)
           const bi = BRAND_POPULARITY.indexOf(b.name)
@@ -2246,7 +2259,11 @@
       grid.innerHTML = '<div class="state-msg">Загрузка…</div>'
       activeBrand = ''
       try {
-        const res  = await fetch('/api/products', { cache: 'no-store' })
+        // Логотипы тянем параллельно: loadBrandLogos не кидает, товары главнее
+        const [res] = await Promise.all([
+          fetch('/api/products', { cache: 'no-store' }),
+          loadBrandLogos(),
+        ])
         if (!res.ok) throw new Error('HTTP ' + res.status)
         allProducts = await res.json()
         normalizeAttrCase(allProducts)
