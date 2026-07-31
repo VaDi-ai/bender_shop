@@ -595,29 +595,13 @@
 
         <div class="cap">ПРИМЕНИТЬ ВЫУЧЕННОЕ К КАТАЛОГУ</div>
         <div class="card">
-          <h3>SIM по словарю <span class="chip c-ok right" id="simRecalcChip">можно применять</span></h3>
-          <div class="mt" id="simRecalc">Загрузка…</div>
+          <div id="simRecalc">Загрузка…</div>
           <div id="simRecalcActions"></div>
           <div class="hint">Проставит выученное там, где текущее значение расходится со словарём. Прежние значения сохраним — откат одной кнопкой. К каталогу применяются правила SIM; «чтения» работают сами на каждом новом разборе.</div>
         </div>
 
         <div class="cap">НЕ ХВАТИЛО ДАННЫХ — ПОДСКАЖИТЕ</div>
         <div id="simQueue"><div class="empty">Загрузка…</div></div>
-        <div class="card">
-          <button class="btn b-gh" id="simAddBtn">Задать правило SIM вручную</button>
-          <div id="simForm" style="display:none">
-            <input class="inp" id="simCountry" placeholder="Страна — как в таблице («Гонконг/США»)" maxlength="80">
-            <input class="inp" id="simBrand" placeholder="Бренд — Apple, Redmi, Honor… (пусто = любой)" maxlength="40">
-            <div class="row" style="gap:8px">
-              <select class="inp" id="simType"><option value="SIM + eSIM">SIM + eSIM</option><option value="eSIM">eSIM</option><option value="2 SIM">2 SIM</option></select>
-              <input class="inp" id="simGen" placeholder="с поколения (напр. 17)" inputmode="numeric">
-            </div>
-            <button class="btn b-main" id="simSave">Сохранить правило</button>
-            <button class="btn b-nt" id="simCancel">Отмена</button>
-            <div class="mt" id="simErr" style="color:var(--bad)"></div>
-          </div>
-          <div class="hint">Правило SIM — единственное назначение «бренд + страна → значение»; для остальных полей такого нет, они только читаются из строки. Правило с поколением сильнее общего; явная метка в названии всегда сильнее словаря. Само правило появится в едином словаре выше.</div>
-        </div>
       </div>
     </section>
   </main>
@@ -2033,6 +2017,11 @@
       attn.simCountries = missing.length
       renderAttention()
 
+      // Задать значение — прямо в строке; правило заводит только владелец.
+      const isOwner = window.adminMe && window.adminMe.role === 'owner'
+      const pick = (country, brand) => isOwner ? `<div class="sf-item-actions">${['2 SIM', 'eSIM', 'SIM + eSIM'].map(t =>
+        `<button class="btn b-gh sm" data-sim-set="${t}" data-sim-country="${esc(country || '')}" data-sim-brand="${esc(brand || '')}">${t}</button>`).join('')}</div>` : ''
+
       // Второй раздел: значение стоит с прежних времён, а правила под него нет
       const inheritedHtml = inherited.length ? `<div class="card">
         <h3>SIM стоит, но правила нет <span class="chip c-warn right">${inherited.length}</span></h3>
@@ -2041,10 +2030,8 @@
             <div class="nm">${esc(x.fullName)}</div>
             <div class="mt">${esc(x.country || 'страна не указана')} · сейчас «${esc(x.current)}»</div>
           </div></div>
-          <div class="sf-item-actions">
-            <button class="btn b-gh sm" data-sim-learn="${esc(x.country || '')}" data-sim-brand="${esc(x.brand || '')}">Задать правило</button>
-          </div></div>`).join('')}
-        <div class="hint">Обновление по словарю эти строки не трогает — значение оставили как есть. Заведите правило, и они попадут в общий список.</div>
+          ${pick(x.country, x.brand)}</div>`).join('')}
+        <div class="hint">Обновление по словарю эти строки не трогает — значение оставили как есть. ${isOwner ? 'Тапните формат — правило появится в едином словаре, и строки попадут в общий список.' : 'Правило заводит владелец.'}</div>
       </div>` : ''
 
       const missingHtml = missing.length ? `<div class="card">
@@ -2054,48 +2041,31 @@
             <div class="nm">${x.brand ? esc(x.brand) + ' · ' : ''}${esc(x.country)}</div>
             <div class="mt">${x.count} ${plural(x.count, 'товар', 'товара', 'товаров')}${x.visible ? `, из них ${x.visible} на витрине` : ', на витрине нет'}${x.generations.length ? ' · поколения ' + x.generations.sort((a,b)=>a-b).join(', ') : ''} · напр. ${esc(String(x.example).slice(0, 40))}</div>
           </div></div>
-          <div class="sf-item-actions">
-            <button class="btn b-gh sm" data-sim-learn="${esc(x.country)}" data-sim-brand="${esc(x.brand || '')}">Задать SIM</button>
-          </div></div>`).join('')}
-        <div class="hint">Скажете один раз — дальше система проставит сама во всех новых разборах.</div>
+          ${pick(x.country, x.brand)}</div>`).join('')}
+        <div class="hint">${isOwner ? 'Тапните формат — скажете один раз, дальше система проставит сама во всех новых разборах. Правило появится в едином словаре выше; явная метка в названии всегда сильнее словаря.' : 'Правило заводит владелец: один тап — и система проставит сама во всех новых разборах.'}</div>
       </div>` : '<div class="empty">Для всех стран каталога правило есть 🎉<br>Новая страна появится здесь автоматически.</div>'
 
       box.innerHTML = missingHtml + inheritedHtml
-      bindSimLearn(box)
+      bindSimPick(box)
     }
 
-    function bindSimLearn(box) {
-      box.querySelectorAll('[data-sim-learn]').forEach(b => b.addEventListener('click', () => {
-        document.getElementById('simForm').style.display = ''
-        document.getElementById('simCountry').value = b.dataset.simLearn
-        document.getElementById('simBrand').value = b.dataset.simBrand || ''
-        document.getElementById('simForm').scrollIntoView({ behavior: 'smooth', block: 'center' })
+    // Инлайн-точка входа правила SIM (та же, что «запомнить правило» после
+    // правки строки) — POST /sim-rules, ничего нового на сервере.
+    function bindSimPick(box) {
+      box.querySelectorAll('[data-sim-set]').forEach(b => b.addEventListener('click', async () => {
+        b.disabled = true
+        const r = await api('/sim-rules', { method: 'POST', body: JSON.stringify({
+          country: b.dataset.simCountry, brand: b.dataset.simBrand, simType: b.dataset.simSet,
+        }) }).catch(() => null)
+        if (!r || !r.ok) {
+          b.disabled = false
+          toast(r && r.data ? (r.data.error === 'validation' ? r.data.fields.map(f => f.message).join(' · ') : r.data.error) : 'Не получилось')
+          return
+        }
+        toast('Запомнил правило — оно в едином словаре')
+        loadDictionary(); loadSimQueue(); loadSimRecalc()
       }))
     }
-
-    // Список правил SIM живёт в едином словаре («Ещё → Парсер»); отдельной
-    // витрины /sim-rules больше нет — осталась только форма «задать правило».
-    document.getElementById('simAddBtn').addEventListener('click', () => {
-      const f = document.getElementById('simForm')
-      f.style.display = f.style.display === 'none' ? '' : 'none'
-    })
-    document.getElementById('simCancel').addEventListener('click', () => { document.getElementById('simForm').style.display = 'none' })
-    document.getElementById('simSave').addEventListener('click', async () => {
-      const err = document.getElementById('simErr'); err.textContent = ''
-      const gen = document.getElementById('simGen').value.trim()
-      const r = await api('/sim-rules', { method: 'POST', body: JSON.stringify({
-        country: document.getElementById('simCountry').value,
-        brand: document.getElementById('simBrand').value,
-        simType: document.getElementById('simType').value,
-        modelGenFrom: gen === '' ? null : Number(gen),
-      }) }).catch(() => null)
-      if (!r) { err.textContent = 'Нет связи с сервером'; return }
-      if (!r.ok) { err.textContent = r.data && r.data.error === 'validation' ? r.data.fields.map(f => f.message).join(' · ') : (r.data && r.data.error || 'Не получилось'); return }
-      document.getElementById('simForm').style.display = 'none'
-      document.getElementById('simCountry').value = ''; document.getElementById('simGen').value = ''
-      document.getElementById('simBrand').value = ''
-      loadDictionary(); loadSimQueue(); loadSimRecalc()
-    })
 
     async function loadSimRecalc() {
       const r = await api('/sim-recalc/preview').catch(() => null)
@@ -2140,7 +2110,7 @@
           c.canonical ? `${c.canonical} — только метка («2Sim» → «2 SIM»)` : null,
           c.inherited ? `${c.inherited} не тронем: SIM стоит, правила нет` : null,
         ].filter(Boolean).join('\n')
-        if (!confirm(`Обновить SIM по словарю?\n\n${lines}\n\nСтарые значения сохранятся — можно откатить.`)) return
+        if (!confirm(`Применить выученное к каталогу?\n\n${lines}\n\nСтарые значения сохранятся — можно откатить.`)) return
         ab.disabled = true; ab.textContent = 'Обновляем…'
         const r2 = await api('/sim-recalc/apply', { method: 'POST', body: '{}' }).catch(() => null)
         if (r2 && r2.ok) {
@@ -2155,7 +2125,7 @@
 
       const rb = document.getElementById('simRollbackBtn')
       if (rb) rb.addEventListener('click', async () => {
-        if (!confirm('Откатить последнее обновление SIM по словарю? Значения вернутся к тем, что были до него.')) return
+        if (!confirm('Откатить последнее обновление по словарю? Значения вернутся к тем, что были до него.')) return
         const r2 = await api('/sim-recalc/rollback', { method: 'POST', body: '{}' }).catch(() => null)
         alert(r2 && r2.ok ? `Откачено: ${r2.data.restored}${r2.data.conflicts && r2.data.conflicts.length ? `, пропущено изменённых: ${r2.data.conflicts.length}` : ''}` : (r2 && r2.data && r2.data.error || 'Не получилось'))
         loadSimRecalc(); loadSimQueue()
