@@ -674,13 +674,14 @@
       const el = document.getElementById('issuesBox')
       if (!r || !r.ok) { el.textContent = 'Не удалось посчитать'; return }
       const d = r.data
-      const total = d.groups.reduce((s, g) => s + g.count, 0)
+      // «Без остатка» — не ошибка перед покупателем: витрина такие товары
+      // скрывает сама. Поэтому в счётчик тревог не попадает и рисуется ниже
+      // нейтральным блоком «На заметку», а не в списке ошибок.
+      const errors = d.groups.filter(g => g.kind !== 'no_stock')
+      const notes = d.groups.filter(g => g.kind === 'no_stock')
+      const total = errors.reduce((s, g) => s + g.count, 0)
       document.getElementById('issuesChip').textContent = total ? `${total} ${plural(total, 'товар', 'товара', 'товаров')}` : 'всё в порядке'
-      if (!total) {
-        el.innerHTML = `<div class="empty">У всех ${d.visibleProducts} видимых товаров есть фото, описание и остатки 🎉</div>`
-        return
-      }
-      el.innerHTML = d.groups.map(g => `
+      const groupHtml = g => `
         <div class="sf-item">
           <div class="sf-item-head"><div class="grow">
             <div class="nm">${esc(g.title)}: <b>${g.count}</b></div>
@@ -699,7 +700,10 @@
               <button class="btn b-nt sm" data-issue-open="${rw.productId}">Открыть карточку</button>
             </div>
           </div>`).join('') + (g.count > g.rows.length ? `<div class="hint">Показаны первые ${g.rows.length} из ${g.count}</div>` : '') : ''}
-        </div>`).join('')
+        </div>`
+      el.innerHTML =
+        (total ? errors.map(groupHtml).join('') : `<div class="empty">У всех ${d.visibleProducts} видимых товаров есть фото, описание и тип SIM 🎉</div>`)
+        + (notes.length ? `<div class="cap" style="margin-top:14px">НА ЗАМЕТКУ</div>` + notes.map(groupHtml).join('') : '')
 
       el.querySelectorAll('[data-issue]').forEach(b => b.addEventListener('click', () => {
         issuesOpen = issuesOpen === b.dataset.issue ? null : b.dataset.issue
