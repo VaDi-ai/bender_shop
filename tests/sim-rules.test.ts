@@ -30,46 +30,66 @@ describe('detectGeneration', () => {
 })
 
 describe('канонизация меток', () => {
-  it('сырьё приводится к трём каноническим', () => {
+  it('сырьё приводится к каноническим', () => {
     expect(canonicalizeSim('2Sim', ALIASES)).toBe('2 SIM')
     expect(canonicalizeSim('eSim', ALIASES)).toBe('eSIM')
     expect(canonicalizeSim('e-SIM', ALIASES)).toBe('eSIM')
     expect(canonicalizeSim('1Sim+eSim', ALIASES)).toBe('SIM + eSIM')
     expect(canonicalizeSim('Dual SIM', ALIASES)).toBe('2 SIM')
   })
+  it('новое значение «eSIM + eSIM» узнаётся во всех написаниях', () => {
+    expect(canonicalizeSim('eSim+eSim', ALIASES)).toBe('eSIM + eSIM')
+    expect(canonicalizeSim('esim + esim', ALIASES)).toBe('eSIM + eSIM')
+    expect(canonicalizeSim('2 eSim', ALIASES)).toBe('eSIM + eSIM')
+    expect(canonicalizeSim('Две виртуальные', ALIASES)).toBe('eSIM + eSIM')
+    expect(canonicalizeSim('two eSIM', ALIASES)).toBe('eSIM + eSIM')
+  })
   it('незнакомое значение канона не получает (пойдёт в обучение)', () => {
     expect(canonicalizeSim('триSIM', ALIASES)).toBeNull()
   })
 })
 
-describe('лукап по странам сида', () => {
-  it('две физические — Китай, Гонконг, Макао (любое поколение)', () => {
+describe('лукап по матрице владельца (база)', () => {
+  it('две физические — Китай, Гонконг, Макао (любое поколение до оверрайдов)', () => {
     for (const c of ['Китай', 'Гонконг', 'Макао']) {
-      expect(sim(c, `iPhone 17 Pro 256 (${c})`).simType).toBe('2 SIM')
       expect(sim(c, `iPhone 15 128 (${c})`).simType).toBe('2 SIM')
+      expect(sim(c, `iPhone 16 Pro (${c})`).simType).toBe('2 SIM')
     }
   })
-  it('США — eSIM во всех поколениях каталога', () => {
-    expect(sim('США', 'iPhone 15 128 (США)').simType).toBe('eSIM')
-    expect(sim('США', 'iPhone 17 Pro (США)').simType).toBe('eSIM')
+  it('США — две виртуальные (eSIM + eSIM) во всех поколениях', () => {
+    expect(sim('США', 'iPhone 15 128 (США)').simType).toBe('eSIM + eSIM')
+    expect(sim('США', 'iPhone 17 Pro (США)').simType).toBe('eSIM + eSIM')
   })
-  it('гибридные рынки — SIM + eSIM в любом поколении', () => {
-    for (const c of ['Европа', 'Индия', 'Таиланд', 'Казахстан', 'Индонезия', 'Россия', 'Панама', 'Малайзия', 'Сингапур', 'ЮАР']) {
-      expect(sim(c, `iPhone 17 Pro (${c})`).simType).toBe('SIM + eSIM')
+  it('гибридные рынки — SIM + eSIM в базе', () => {
+    for (const c of ['ОАЭ', 'Япония', 'Катар', 'Европа', 'Южная Корея', 'Бразилия', 'Индия', 'Сингапур']) {
+      expect(sim(c, `iPhone 16 Pro (${c})`).simType).toBe('SIM + eSIM')
+    }
+  })
+  it('страны, выпавшие из матрицы, честно уходят в очередь', () => {
+    for (const c of ['Таиланд', 'Россия', 'Канада', 'Мексика']) {
+      const r = sim(c, `iPhone 16 (${c})`)
+      expect(r.simType).toBeNull()
+      expect(r.reason).toBe('unknown')
     }
   })
 })
 
-describe('generation-переезд (17+ → eSIM-only)', () => {
-  it('Япония: 16 → SIM + eSIM, 17 → eSIM', () => {
-    expect(sim('Япония', 'iPhone 16 Pro 256 (Япония)').simType).toBe('SIM + eSIM')
-    expect(sim('Япония', 'iPhone 17 Pro 256 (Япония)').simType).toBe('eSIM')
+describe('оверрайды с 17-го поколения (правило с поколением сильнее базы)', () => {
+  it('Гонконг: до 17 → 2 SIM, с 17 → SIM + eSIM', () => {
+    expect(sim('Гонконг', 'iPhone 16 Pro 256 (Гонконг)').simType).toBe('2 SIM')
+    expect(sim('Гонконг', 'iPhone 17 Pro 256 (Гонконг)').simType).toBe('SIM + eSIM')
   })
-  it('ОАЭ и остальные рынки Залива/Америк — так же', () => {
-    for (const c of ['ОАЭ', 'Канада', 'Мексика', 'Саудовская Аравия', 'Бахрейн', 'Кувейт', 'Оман', 'Катар', 'Гуам']) {
-      expect(sim(c, `iPhone 16 (${c})`).simType).toBe('SIM + eSIM')
-      expect(sim(c, `iPhone 17 (${c})`).simType).toBe('eSIM')
-    }
+  it('ОАЭ: до 17 → SIM + eSIM, с 17 → eSIM + eSIM', () => {
+    expect(sim('ОАЭ', 'iPhone 16 (ОАЭ)').simType).toBe('SIM + eSIM')
+    expect(sim('ОАЭ', 'iPhone 17 (ОАЭ)').simType).toBe('eSIM + eSIM')
+  })
+  it('Япония: до 17 → SIM + eSIM, с 17 → eSIM + eSIM', () => {
+    expect(sim('Япония', 'iPhone 16 Pro 256 (Япония)').simType).toBe('SIM + eSIM')
+    expect(sim('Япония', 'iPhone 17 Pro 256 (Япония)').simType).toBe('eSIM + eSIM')
+  })
+  it('Катар и Китай оверрайдов не имеют — база работает и на 17-м', () => {
+    expect(sim('Катар', 'iPhone 17 (Катар)').simType).toBe('SIM + eSIM')
+    expect(sim('Китай', 'iPhone 17 Pro Max (Китай)').simType).toBe('2 SIM')
   })
 })
 
@@ -161,8 +181,8 @@ describe('страновые правила принадлежат Apple, а н�
 })
 
 describe('целостность сида', () => {
-  it('все simType — из трёх канонических', () => {
-    for (const r of SIM_SEED) expect(['2 SIM', 'eSIM', 'SIM + eSIM']).toContain(r.simType)
+  it('все simType — из четырёх канонических', () => {
+    for (const r of SIM_SEED) expect(['2 SIM', 'eSIM', 'SIM + eSIM', 'eSIM + eSIM']).toContain(r.simType)
   })
   it('у всех страновых правил проставлен бренд — иначе они накроют андроид', () => {
     for (const r of SIM_SEED) {

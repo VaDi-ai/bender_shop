@@ -15,7 +15,8 @@
 import { prisma } from './prisma'
 import { log } from './logger'
 
-export const SIM_CANON = ['2 SIM', 'eSIM', 'SIM + eSIM'] as const
+/** Канон значений SIM. «eSIM + eSIM» — две виртуальные (напр. США/Япония с 17-го). */
+export const SIM_CANON = ['2 SIM', 'eSIM', 'SIM + eSIM', 'eSIM + eSIM'] as const
 export type SimType = typeof SIM_CANON[number]
 
 export interface SimRuleData {
@@ -218,31 +219,34 @@ type SeedRule = { country?: string; brand?: string; modelMatch?: string; modelGe
 const APPLE = 'Apple'
 
 /**
- * Полный сид от архитектора (актуально на iPhone 17).
+ * Сид — матрица владельца (2026-08, актуально на iPhone 17).
  *
  * ВСЕ страновые правила привязаны к бренду Apple: словарь описывает поведение
- * рынка именно Apple («в США eSIM-only с 14-го», «в ОАЭ с 17-го»). К Redmi,
- * Poco, Honor, Xiaomi, OnePlus, Huawei, Google это неприменимо — у большинства
- * две физические SIM без eSIM, и страновой дефолт был бы угадыванием. Не-Apple
- * без своего правила уходит в очередь обучения, SIM не проставляется.
+ * рынка именно Apple. К Redmi, Poco, Honor, Xiaomi, OnePlus, Huawei, Google
+ * это неприменимо — у большинства две физические SIM без eSIM, и страновой
+ * дефолт был бы угадыванием. Не-Apple без своего правила уходит в очередь
+ * обучения, SIM не проставляется.
+ *
+ * База (modelGenFrom=0) + точечные оверрайды с 17-го поколения: правило с
+ * бОльшим modelGenFrom выигрывает (движок resolveSimType). Страны, выпавшие
+ * из матрицы, отзываются в seedSimDictionary — их связки вернутся в очередь
+ * «не узнал», а не будут молча жить по устаревшему правилу.
  */
 export const SIM_SEED: SeedRule[] = [
   // Две физические SIM — все поколения
   ...['Китай', 'Гонконг', 'Макао'].map(country => ({ country, brand: APPLE, simType: '2 SIM' as SimType })),
 
-  // eSIM-only: США (с iPhone 14; в каталоге ≥15, поэтому база)
-  { country: 'США', brand: APPLE, simType: 'eSIM' },
+  // США: две виртуальные (eSIM-only рынок; каталог ≥15 — база, оверрайд не нужен)
+  { country: 'США', brand: APPLE, simType: 'eSIM + eSIM' },
 
-  // Гибрид, но с iPhone 17 — eSIM-only (переезд рынка)
-  ...['Япония', 'ОАЭ', 'Канада', 'Мексика', 'Саудовская Аравия', 'Бахрейн', 'Кувейт', 'Оман', 'Катар', 'Гуам']
-    .flatMap(country => ([
-      { country, brand: APPLE, simType: 'SIM + eSIM' as SimType },
-      { country, brand: APPLE, modelGenFrom: 17, simType: 'eSIM' as SimType, note: 'рынок перешёл на eSIM-only с iPhone 17' },
-    ])),
-
-  // Гибрид во всех поколениях
-  ...['Европа', 'Индия', 'Таиланд', 'Казахстан', 'Индонезия', 'Россия', 'Панама', 'Малайзия', 'Сингапур', 'Корея', 'Южная Корея', 'ЮАР']
+  // Гибрид (база всех поколений)
+  ...['ОАЭ', 'Япония', 'Катар', 'Европа', 'Южная Корея', 'Бразилия', 'Индия', 'Сингапур']
     .map(country => ({ country, brand: APPLE, simType: 'SIM + eSIM' as SimType })),
+
+  // Оверрайды с iPhone 17 — переезд рынков
+  { country: 'Гонконг', brand: APPLE, modelGenFrom: 17, simType: 'SIM + eSIM', note: 'с 17-го Гонконг — SIM + eSIM' },
+  { country: 'ОАЭ', brand: APPLE, modelGenFrom: 17, simType: 'eSIM + eSIM', note: 'с 17-го ОАЭ — две eSIM' },
+  { country: 'Япония', brand: APPLE, modelGenFrom: 17, simType: 'eSIM + eSIM', note: 'с 17-го Япония — две eSIM' },
 
   // Модельный оверрайд: iPhone Air — eSIM во всём мире, страна не важна
   { modelMatch: 'air', modelGenFrom: 17, simType: 'eSIM', note: 'iPhone 17 Air — eSIM-only глобально' },
@@ -287,6 +291,12 @@ export const ALIAS_SEED: Array<{ attrKey: string; raw: string; canonical: string
   { attrKey: 'SIM', raw: '1 sim + esim', canonical: 'SIM + eSIM' },
   { attrKey: 'SIM', raw: '1 sim+esim', canonical: 'SIM + eSIM' },
   { attrKey: 'SIM', raw: '1sim + esim', canonical: 'SIM + eSIM' },
+  // Две виртуальные (США/Япония с 17-го)
+  { attrKey: 'SIM', raw: 'esim+esim', canonical: 'eSIM + eSIM' },
+  { attrKey: 'SIM', raw: 'esim + esim', canonical: 'eSIM + eSIM' },
+  { attrKey: 'SIM', raw: '2 esim', canonical: 'eSIM + eSIM' },
+  { attrKey: 'SIM', raw: 'две виртуальные', canonical: 'eSIM + eSIM' },
+  { attrKey: 'SIM', raw: 'two esim', canonical: 'eSIM + eSIM' },
   ...COUNTRY_ALIAS_SEED.flatMap(([canonical, raws]) =>
     raws.map(raw => ({ attrKey: 'Страна', raw, canonical }))),
 ]
@@ -312,14 +322,22 @@ export async function seedSimDictionary(): Promise<{ rules: number; aliases: num
     })
     rules++
   }
-  // Миграция сида: прежние страновые правила заводились без бренда
-  // (brandNorm=''), из-за чего Apple-словарь накрывал и андроид. Новые ключи
-  // созданы выше; старые seed-строки убираем. learned не трогаем — владелец
-  // мог завести бесбрендовое правило осознанно.
-  const retired = await prisma.simRule.deleteMany({
-    where: { source: 'seed', brandNorm: '', countryNorm: { not: '' } },
-  })
-  if (retired.count) log.info('SIM dictionary: retired brand-less country rules', { count: retired.count })
+  // Отзыв устаревшего сида: правило со source='seed', которого больше нет в
+  // SIM_SEED, удаляем (страна выпала из матрицы владельца или ключ сменился —
+  // включая исторические бесбрендовые правила). Его связки честно вернутся в
+  // очередь «не узнал». learned не трогаем — владелец заводил его осознанно.
+  const seedKeys = new Set(SIM_SEED.map(r =>
+    [norm(r.country), norm(r.brand), norm(r.modelMatch), r.modelGenFrom ?? 0].join('|')))
+  const seedRows = await prisma.simRule.findMany({ where: { source: 'seed' } })
+  const stale = seedRows.filter(row =>
+    !seedKeys.has([row.countryNorm, row.brandNorm, row.modelMatch, row.modelGenFrom].join('|')))
+  if (stale.length) {
+    await prisma.simRule.deleteMany({ where: { id: { in: stale.map(s => s.id) } } })
+    log.info('SIM dictionary: retired stale seed rules', {
+      count: stale.length,
+      keys: stale.map(s => `${s.country ?? s.countryNorm}${s.modelGenFrom ? `≥${s.modelGenFrom}` : ''}`).slice(0, 30),
+    })
+  }
 
   let aliases = 0
   for (const a of ALIAS_SEED) {

@@ -605,6 +605,20 @@
           <h3>Словарь <span class="chip c-off right" id="dictChip">—</span></h3>
           <div id="dictSuggest"></div>
           <div id="dictList" class="mt">Загрузка…</div>
+          <div id="srAddWrap" style="display:none">
+            <button class="btn b-gh" id="srAddBtn">＋ Добавить правило SIM</button>
+            <div id="srForm" style="display:none">
+              <div class="cap" style="margin:10px 0 6px">ПРАВИЛО SIM: БРЕНД · СТРАНА → ЗНАЧЕНИЕ</div>
+              <input class="inp" id="srBrand" placeholder="Бренд" value="Apple" maxlength="40">
+              <input class="inp" id="srCountry" placeholder="Страна — как в каталоге, напр. Япония" maxlength="40">
+              <input class="inp" id="srGen" type="number" min="5" max="30" placeholder="С поколения N — необязательно (напр. 17)">
+              <div class="sf-item-actions" id="srTypeBtns" style="margin-top:8px"></div>
+              <button class="btn b-main" id="srSave">Записать правило</button>
+              <button class="btn b-nt" id="srCancel">Отмена</button>
+              <div class="mt" id="srErr" style="color:var(--bad)"></div>
+              <div class="hint">Правило с поколения сильнее общего — например «Япония → SIM + eSIM» плюс «Япония с 17 → eSIM + eSIM»: айфоны до 17-го получат первое, с 17-го — второе. Применяется к новым разборам; каталог обновляет кнопка «Обновить по словарю» ниже.</div>
+            </div>
+          </div>
           <div class="hint">Одним списком: «правило» назначает значение по стране/бренду — пока это только SIM, «чтение» — как понимать слово в любом поле. «Забыть» останавливает будущий вывод; уже проставленное на товарах не откатывается.</div>
           <div class="cap" style="margin:14px 0 6px">ПРАВКА → ПРАВИЛО</div>
           <div id="dictLog" class="mt">—</div>
@@ -865,7 +879,7 @@
 
     // ── Правка атрибута прямо в строке предложения (два касания) ──────────────
     // Названия атрибута владелец не вводит: правит то, что видит в карточке.
-    const SIM_VALUES = ['2 SIM', 'eSIM', 'SIM + eSIM']
+    const SIM_VALUES = ['2 SIM', 'eSIM', 'SIM + eSIM', 'eSIM + eSIM']
     const FROM_SHEET = ['Страна']              // приезжает из таблицы — здесь не правим
 
     function attrChips(o) {
@@ -1177,6 +1191,8 @@
       const learned = r.data.rules.filter(x => !x.fromSeed)
       const seed = r.data.rules.filter(x => x.fromSeed)
       document.getElementById('dictChip').textContent = `${learned.length} выучено · ${seed.length} базовых`
+      // Ручное правило SIM — только владелец (как learnRule)
+      document.getElementById('srAddWrap').style.display = isOwner ? '' : 'none'
 
       const sug = r.data.patterns || []
       document.getElementById('dictSuggest').innerHTML = sug.length
@@ -2117,7 +2133,7 @@
 
       // Задать значение — прямо в строке; правило заводит только владелец.
       const isOwner = window.adminMe && window.adminMe.role === 'owner'
-      const pick = (country, brand) => isOwner ? `<div class="sf-item-actions">${['2 SIM', 'eSIM', 'SIM + eSIM'].map(t =>
+      const pick = (country, brand) => isOwner ? `<div class="sf-item-actions">${SIM_VALUES.map(t =>
         `<button class="btn b-gh sm" data-sim-set="${t}" data-sim-country="${esc(country || '')}" data-sim-brand="${esc(brand || '')}">${t}</button>`).join('')}</div>` : ''
 
       // Второй раздел: значение стоит с прежних времён, а правила под него нет
@@ -2146,6 +2162,55 @@
       box.innerHTML = missingHtml + inheritedHtml
       bindSimPick(box)
     }
+
+    // ── Форма «Добавить правило SIM» (для Стаса: видимая точка входа) ─────────
+    // Тот же POST /sim-rules, что у инлайн-пикера, но с полем «с поколения N»,
+    // которого инлайн не умеет. Владелец-only (гейт в loadDictionary).
+    let srType = ''
+    function renderSrTypeBtns() {
+      const box = document.getElementById('srTypeBtns')
+      box.innerHTML = SIM_VALUES.map(v =>
+        `<button class="btn ${v === srType ? 'b-main' : 'b-nt'} sm" data-sr-type="${esc(v)}">${esc(v)}</button>`).join('')
+      box.querySelectorAll('[data-sr-type]').forEach(b => b.addEventListener('click', () => {
+        srType = b.dataset.srType; renderSrTypeBtns()
+      }))
+    }
+    document.getElementById('srAddBtn').addEventListener('click', () => {
+      const f = document.getElementById('srForm')
+      f.style.display = f.style.display === 'none' ? '' : 'none'
+      if (f.style.display === '') { renderSrTypeBtns(); f.scrollIntoView({ behavior: 'smooth', block: 'center' }) }
+    })
+    document.getElementById('srCancel').addEventListener('click', () => {
+      document.getElementById('srForm').style.display = 'none'
+      document.getElementById('srBrand').value = 'Apple'
+      document.getElementById('srCountry').value = ''
+      document.getElementById('srGen').value = ''
+      document.getElementById('srErr').textContent = ''
+      srType = ''
+    })
+    document.getElementById('srSave').addEventListener('click', async () => {
+      const err = document.getElementById('srErr'); err.textContent = ''
+      const brand = document.getElementById('srBrand').value.trim()
+      const country = document.getElementById('srCountry').value.trim()
+      const gen = document.getElementById('srGen').value.trim()
+      if (!brand && !country) { err.textContent = 'Нужен бренд или страна — иначе правило не к чему привязать'; return }
+      if (!srType) { err.textContent = 'Тапните значение SIM'; return }
+      const btn = document.getElementById('srSave'); btn.disabled = true; btn.textContent = 'Записываем…'
+      try {
+        const r = await api('/sim-rules', { method: 'POST', body: JSON.stringify({
+          brand, country, simType: srType, modelGenFrom: gen || null,
+        }) }).catch(() => null)
+        if (!r || !r.ok) {
+          err.textContent = r && r.data
+            ? (r.data.error === 'validation' ? r.data.fields.map(f => f.message).join(' · ') : r.data.error)
+            : 'Не получилось'
+          return
+        }
+        toast('Правило в едином словаре' + (gen ? ` — действует с ${gen}-го поколения` : ''))
+        document.getElementById('srCancel').click()
+        loadDictionary(); loadSimQueue(); loadSimRecalc()
+      } finally { btn.disabled = false; btn.textContent = 'Записать правило' }
+    })
 
     // Инлайн-точка входа правила SIM (та же, что «запомнить правило» после
     // правки строки) — POST /sim-rules, ничего нового на сервере.

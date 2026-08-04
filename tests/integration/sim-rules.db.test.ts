@@ -57,7 +57,7 @@ describe.skipIf(!RUN)('SIM dictionary (реальная БД)', () => {
 
   it('сид идемпотентен и не перетирает learned', async () => {
     const first = await seedSimDictionary()
-    expect(first.rules).toBeGreaterThan(20)
+    expect(first.rules).toBeGreaterThan(15)   // матрица владельца: 17 правил
     const countAfterFirst = await prisma.simRule.count()
     await seedSimDictionary()
     expect(await prisma.simRule.count()).toBe(countAfterFirst)   // дублей нет
@@ -69,15 +69,19 @@ describe.skipIf(!RUN)('SIM dictionary (реальная БД)', () => {
     expect((await prisma.simRule.findUnique({ where: { id: india.id } })).simType).toBe('eSIM')
   })
 
-  it('миграция сида: прежние бесбрендовые страновые правила уходят, learned остаются', async () => {
+  it('миграция сида: устаревшие seed-правила уходят (бесбрендовые и выпавшие из матрицы), learned остаются', async () => {
     // как выглядел словарь до привязки к бренду
     await prisma.simRule.create({ data: { country: 'Индия', countryNorm: 'индия', brandNorm: '', modelMatch: '', modelGenFrom: 0, simType: 'SIM + eSIM', source: 'seed' } })
     await prisma.simRule.create({ data: { country: 'Зимбабве', countryNorm: 'зимбабве', brandNorm: '', modelMatch: '', modelGenFrom: 0, simType: '2 SIM', source: 'learned' } })
+    // seed-правило страны, выпавшей из матрицы владельца (Канада была в старом сиде)
+    await prisma.simRule.create({ data: { country: 'Канада', countryNorm: 'канада', brandNorm: 'apple', modelMatch: '', modelGenFrom: 0, simType: 'SIM + eSIM', source: 'seed' } })
 
     await seedSimDictionary()
 
     expect(await prisma.simRule.findFirst({ where: { countryNorm: 'индия', brandNorm: '' } })).toBeNull()
     expect((await prisma.simRule.findFirst({ where: { countryNorm: 'индия', brandNorm: 'apple', modelGenFrom: 0 } })).simType).toBe('SIM + eSIM')
+    // выпавшая из матрицы страна отозвана — её связки вернутся в очередь
+    expect(await prisma.simRule.findFirst({ where: { countryNorm: 'канада' } })).toBeNull()
     // правило владельца не тронуто
     expect((await prisma.simRule.findFirst({ where: { countryNorm: 'зимбабве' } })).source).toBe('learned')
 
