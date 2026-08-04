@@ -57,7 +57,7 @@ describe.skipIf(!RUN)('SIM dictionary (реальная БД)', () => {
 
   it('сид идемпотентен и не перетирает learned', async () => {
     const first = await seedSimDictionary()
-    expect(first.rules).toBeGreaterThan(20)
+    expect(first.rules).toBeGreaterThan(15)   // матрица владельца: 17 правил
     const countAfterFirst = await prisma.simRule.count()
     await seedSimDictionary()
     expect(await prisma.simRule.count()).toBe(countAfterFirst)   // дублей нет
@@ -69,15 +69,19 @@ describe.skipIf(!RUN)('SIM dictionary (реальная БД)', () => {
     expect((await prisma.simRule.findUnique({ where: { id: india.id } })).simType).toBe('eSIM')
   })
 
-  it('миграция сида: прежние бесбрендовые страновые правила уходят, learned остаются', async () => {
+  it('миграция сида: устаревшие seed-правила уходят (бесбрендовые и выпавшие из матрицы), learned остаются', async () => {
     // как выглядел словарь до привязки к бренду
     await prisma.simRule.create({ data: { country: 'Индия', countryNorm: 'индия', brandNorm: '', modelMatch: '', modelGenFrom: 0, simType: 'SIM + eSIM', source: 'seed' } })
     await prisma.simRule.create({ data: { country: 'Зимбабве', countryNorm: 'зимбабве', brandNorm: '', modelMatch: '', modelGenFrom: 0, simType: '2 SIM', source: 'learned' } })
+    // seed-правило страны, выпавшей из матрицы владельца (Канада была в старом сиде)
+    await prisma.simRule.create({ data: { country: 'Канада', countryNorm: 'канада', brandNorm: 'apple', modelMatch: '', modelGenFrom: 0, simType: 'SIM + eSIM', source: 'seed' } })
 
     await seedSimDictionary()
 
     expect(await prisma.simRule.findFirst({ where: { countryNorm: 'индия', brandNorm: '' } })).toBeNull()
     expect((await prisma.simRule.findFirst({ where: { countryNorm: 'индия', brandNorm: 'apple', modelGenFrom: 0 } })).simType).toBe('SIM + eSIM')
+    // выпавшая из матрицы страна отозвана — её связки вернутся в очередь
+    expect(await prisma.simRule.findFirst({ where: { countryNorm: 'канада' } })).toBeNull()
     // правило владельца не тронуто
     expect((await prisma.simRule.findFirst({ where: { countryNorm: 'зимбабве' } })).source).toBe('learned')
 
@@ -110,7 +114,7 @@ describe.skipIf(!RUN)('SIM dictionary (реальная БД)', () => {
     expect(canonicalizeSim('Две Симки', aliases)).toBe('2 SIM')
   })
 
-  it('ассерт влияния на снимке каталога: 12 канонизаций, 64 смены, Индия 60', async () => {
+  it('ассерт влияния на снимке каталога: 12 канонизаций, 147 смен по матрице владельца', async () => {
     await seedSimDictionary()
     const rules = await loadSimRules()
     const aliases = await loadAttrAliases('SIM')
@@ -128,10 +132,15 @@ describe.skipIf(!RUN)('SIM dictionary (реальная БД)', () => {
       }
     }
     expect(canon).toBe(12)                 // 2Sim ×11 + eSim ×1
-    expect(byCountry['Индия']).toBe(60)    // главное изменение витрины
-    expect(changed).toBe(65)               // Индия 60 + ОАЭ 2 + Европа 1 + Япония 1 + Корея 1
-    // ОАЭ 16-го поколения (23 шт) НЕ меняются: правило «с 17-го → eSIM» их не задевает
-    expect(byCountry['ОАЭ']).toBe(2)
+    expect(byCountry['Индия']).toBe(60)    // Индия: eSIM → SIM + eSIM
+    expect(byCountry['Япония']).toBe(50)   // 17-е → eSIM + eSIM (48+1 «eSim»), 16-е → SIM + eSIM (1)
+    expect(byCountry['Гонконг']).toBe(24)  // с 17-го 2 SIM → SIM + eSIM (21 + 3 «2Sim»)
+    expect(byCountry['США']).toBe(9)       // eSIM → eSIM + eSIM
+    expect(byCountry['ОАЭ']).toBe(2)       // только eSIM-строки 16-го; 23 SIM+eSIM не задеты
+    expect(changed).toBe(147)              // 60+50+24+9+2+Европа 1+Южная Корея 1
+    // Россия/Казахстан/Таиланд и пр. выпали из матрицы: want.simType null → не меняются
+    expect(byCountry['Россия']).toBeUndefined()
+    expect(byCountry['Казахстан']).toBeUndefined()
   })
 
   it('путь синка: существующие варианты каталога не меняют смысл SIM, только метку', async () => {

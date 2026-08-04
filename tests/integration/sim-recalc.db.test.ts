@@ -53,12 +53,12 @@ describe.skipIf(!RUN)('SIM recalc (PR-B)', () => {
     await mk('india', { fullName: 'iPhone 17 Pro 256 (Индия)', 'Страна': 'Индия', SIM: 'eSIM' })
     // косметика: 2Sim → 2 SIM
     await mk('china', { fullName: 'iPhone 17 Pro 256 (Китай)', 'Страна': 'Китай', SIM: '2Sim' })
-    // впервые: SIM не было вовсе, словарь его проставит
-    await mk('nosim', { fullName: 'iPhone 17 Pro 256 (Казахстан)', 'Страна': 'Казахстан' })
+    // впервые: SIM не было вовсе, словарь его проставит (Сингапур — в матрице)
+    await mk('nosim', { fullName: 'iPhone 17 Pro 256 (Сингапур)', 'Страна': 'Сингапур' })
     // наследие: правила нет, значение стоит
     await mk('mixed', { fullName: 'iPhone 15 128 (Индия/Япония)', 'Страна': 'Индия/Япония', SIM: 'eSIM' })
-    // уже верное — не должно попасть никуда
-    await mk('hk', { fullName: 'iPhone 17 Pro 256 (Гонконг)', 'Страна': 'Гонконг', SIM: '2 SIM' })
+    // уже верное — не должно попасть никуда (Гонконг до 17-го — 2 SIM)
+    await mk('hk', { fullName: 'iPhone 16 Pro 256 (Гонконг)', 'Страна': 'Гонконг', SIM: '2 SIM' })
   })
 
   afterAll(async () => {
@@ -78,11 +78,11 @@ describe.skipIf(!RUN)('SIM recalc (PR-B)', () => {
     const p = await previewRecalc()
     expect(p.counts).toEqual({ semantic: 1, added: 1, canonical: 1, inherited: 1, manual: 0 })
     expect(p.semantic[0]).toMatchObject({ variantId: ids.india, from: 'eSIM', to: 'SIM + eSIM', country: 'Индия' })
-    expect(p.added[0]).toMatchObject({ variantId: ids.nosim, from: '—', to: 'SIM + eSIM', country: 'Казахстан' })
+    expect(p.added[0]).toMatchObject({ variantId: ids.nosim, from: '—', to: 'SIM + eSIM', country: 'Сингапур' })
     expect(p.canonical[0]).toMatchObject({ variantId: ids.china, from: '2Sim', to: '2 SIM' })
     expect(p.inherited[0]).toMatchObject({ variantId: ids.mixed, current: 'eSIM', country: 'Индия/Япония' })
     expect(p.byCountry).toEqual({ 'Индия': 1 })            // смены — отдельно
-    expect(p.addedByCountry).toEqual({ 'Казахстан': 1 })   // проставления — отдельно
+    expect(p.addedByCountry).toEqual({ 'Сингапур': 1 })    // проставления — отдельно
     // уже верный вариант не попал ни в один раздел
     const all = [...p.semantic, ...p.added, ...p.canonical, ...p.inherited].map(r => r.variantId)
     expect(all).not.toContain(ids.hk)
