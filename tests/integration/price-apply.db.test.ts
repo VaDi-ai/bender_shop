@@ -112,7 +112,7 @@ describe.skipIf(!RUN)('applyPriceBatch / rollbackPriceBatch', () => {
     expect(r.skippedOutOfCorridor).toBe(1)
 
     const black = await prisma.productVariant.findUnique({ where: { id: vBlackId } })
-    expect(Number(black.price)).toBe(103490)
+    expect(Number(black.price)).toBe(103500)
     expect(Number(black.costPrice)).toBe(88500)
     expect(Number(black.lastSyncedCostPrice)).toBe(88500) // согласованно — синк-инвариант
     const white = await prisma.productVariant.findUnique({ where: { id: vWhiteId } })
@@ -122,9 +122,9 @@ describe.skipIf(!RUN)('applyPriceBatch / rollbackPriceBatch', () => {
     expect(pc).toHaveLength(1)
     expect(pc[0].variantId).toBe(vBlackId)
     expect(Number(pc[0].oldPrice)).toBe(100000)
-    expect(Number(pc[0].newPrice)).toBe(103490)
+    expect(Number(pc[0].newPrice)).toBe(103500)
 
-    expect(wb.calls[0]).toEqual([{ fullName: 'PA7 iPhone 17 Pro 256 Black', cost: 88500, price: 103490 }])
+    expect(wb.calls[0]).toEqual([{ fullName: 'PA7 iPhone 17 Pro 256 Black', cost: 88500, price: 103500 }])
     const rows = await prisma.supplierPrice.findMany({ where: { batchId }, orderBy: { id: 'asc' } })
     expect(rows.find((x: any) => x.variantId === vBlackId).isActive).toBe(true)
     expect(rows.find((x: any) => x.variantId === vWhiteId).isActive).toBe(false)
@@ -141,7 +141,7 @@ describe.skipIf(!RUN)('applyPriceBatch / rollbackPriceBatch', () => {
     const wb = recordingWriteback()
     const r = await applyPriceBatch({ batchId, actor: OWNER, dryRun: false, mode: 'on', includeOutOfCorridor: true, writebackFn: wb.fn })
     expect(r.applied).toBe(2)
-    expect(Number((await prisma.productVariant.findUnique({ where: { id: vWhiteId } })).price)).toBe(103990)
+    expect(Number((await prisma.productVariant.findUnique({ where: { id: vWhiteId } })).price)).toBe(104000)
     await new Promise(res => setTimeout(res, 300))
     expect(await prisma.securityLog.count({ where: { event: 'price_out_of_corridor_applied' } })).toBe(1)
     expect(await prisma.securityLog.count({ where: { event: 'price_batch_applied' } })).toBe(1)
@@ -160,7 +160,7 @@ describe.skipIf(!RUN)('applyPriceBatch / rollbackPriceBatch', () => {
   it('фейл writeback: БД-транзакция НЕ откатывается, батч помечен, синк замораживает, retry снимает', async () => {
     const r = await applyPriceBatch({ batchId, actor: OWNER, dryRun: false, mode: 'on', writebackFn: failingWriteback })
     expect(r.writebackFailed).toBe(true)
-    expect(Number((await prisma.productVariant.findUnique({ where: { id: vBlackId } })).price)).toBe(103490) // применено
+    expect(Number((await prisma.productVariant.findUnique({ where: { id: vBlackId } })).price)).toBe(103500) // применено
     const b = await prisma.priceApplyBatch.findUnique({ where: { id: batchId } })
     expect(b.status).toBe('applied')
     expect(b.stats.writebackFailed).toBe(true)

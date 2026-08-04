@@ -40,6 +40,7 @@ import {
 } from './admin/ai_settings'
 import { initAdminNotifications } from '../lib/notify-admins'
 import { getApiKeyValue, setApiKeyValue } from '../lib/api-key-store'
+import { roundPrice } from '../lib/currency'
 import { reinitClient as reinitAgentClient, getAIMode, setAIMode } from './ai/agent'
 import { reinitClient as reinitParserClient } from '../lib/ai-parser'
 import {
@@ -2106,7 +2107,7 @@ setInterval(async () => {
       if (count >= 30) { lines.push(`\n...и ещё ${byModel.size - 30} моделей`); break }
       const best = modelPrices[0]!
       const markup = best.supplier ? (Number(best.supplier.markup) || defaultMarkup) : defaultMarkup
-      const finalPrice = Math.ceil(Number(best.price) * (1 + markup / 100))
+      const finalPrice = roundPrice(Number(best.price) * (1 + markup / 100))
       const supplierLabel = best.supplier?.name ?? best.supplierName ?? 'неизвестный'
 
       lines.push(`${model}${best.color ? ' ' + best.color : ''}${best.country ? ' ' + best.country : ''}`)
@@ -2288,7 +2289,7 @@ bot.action('morning:update_prices', async (ctx) => {
           (!bestPrice.storage || storage.toLowerCase().includes(bestPrice.storage.toLowerCase().replace(/\s/g, '')))) {
 
         const markup = bestPrice.supplier ? (Number(bestPrice.supplier.markup) || defaultMarkup) : defaultMarkup
-        const newPrice = Math.ceil(Number(bestPrice.price) * (1 + markup / 100))
+        const newPrice = roundPrice(Number(bestPrice.price) * (1 + markup / 100))
         const oldPrice = Number(variant.price)
 
         if (Math.abs(newPrice - oldPrice) > 100) {

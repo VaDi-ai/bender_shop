@@ -110,10 +110,10 @@ describe.skipIf(!RUN)('createPriceBatch / getBatchPreview (read-only)', () => {
     const preview = await getBatchPreview(r.batchId)
     const black = preview.rows.find((x: any) => x.variantId === vBlackId)
     expect(black.supplierPrice).toBe(88500)
-    expect(black.proposedPrice).toBe(103490) // 88500+15000 → roundPrice90
-    expect(black.corridor).toBe('in')        // 100 000 → 103 490 = +3.5%
+    expect(black.proposedPrice).toBe(103500) // 88500+15000 → вверх до 100
+    expect(black.corridor).toBe('in')        // 100 000 → 103 500 = +3.5%
     const white = preview.rows.find((x: any) => x.variantId === vWhiteId)
-    expect(white.corridor).toBe('out')       // 140 000 → 104 090 = −25.7%
+    expect(white.corridor).toBe('out')       // 140 000 → 104 100 = −25.6%
     expect(white.deltaPct).toBeLessThan(-15)
     const unknown = preview.rows.find((x: any) => !x.matched)
     expect(unknown.rawLine).toContain('неизвестный девайс')

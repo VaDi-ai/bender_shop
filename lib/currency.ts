@@ -36,11 +36,14 @@ export async function fetchCurrencyRates(): Promise<Record<string, number>> {
   }
 }
 
-/** Округление цены вверх до ближайшего круглого числа */
+/**
+ * Округление цены: ВВЕРХ до 100 — единое для всех цен (решение владельца,
+ * 2026-08). Ступени 500/1000 и стиль «…90» убраны: 122 550 → 122 600,
+ * 9 990 → 10 000. Вверх — чтобы не занижать розницу.
+ */
 export function roundPrice(price: number): number {
-  if (price < 10000) return Math.ceil(price / 100) * 100
-  if (price < 50000) return Math.ceil(price / 500) * 500
-  return Math.ceil(price / 1000) * 1000
+  if (price <= 0) return 0
+  return Math.ceil(price / 100) * 100
 }
 
 export type CurrencyChange = {
