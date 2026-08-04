@@ -4,11 +4,13 @@
  * Интервалы: [minCost, maxCost). maxCost=null = бесконечность.
  * mode='fixed' → retail = cost + value
  * mode='percent' → retail = cost * (1 + value/100)
- * Результат всегда округляется через roundPrice90 (вверх к NN_90).
+ * Результат всегда округляется через roundPrice (вверх до 100 — единое
+ * округление всех розничных цен; прежний стиль «…90» отменён владельцем).
  */
 
 import { prisma } from './prisma'
 import log from './logger'
+import { roundPrice } from './currency'
 
 export interface MarkupRuleData {
   id: number
@@ -20,21 +22,9 @@ export interface MarkupRuleData {
 }
 
 /**
- * Округление вверх к _90.
- * 9250 → 9290, 10000 → 10090, 85000 → 85090.
- * Шаг: ceil до сотен, затем -10.
- */
-export function roundPrice90(price: number): number {
-  if (price <= 0) return 0
-  const ceiled = Math.ceil(price / 100) * 100
-  // Если уже оканчивается на 00, поднимаем на 90 (т.е. 10000 → 10090)
-  return ceiled - 10
-}
-
-/**
  * Применить правила наценки к закупочной цене.
  * Возвращает рекомендованную розничную цену.
- * Если правил нет или ни одно не подходит — возвращает roundPrice90(cost) без наценки.
+ * Если правил нет или ни одно не подходит — возвращает roundPrice(cost) без наценки.
  */
 export function applyMarkupRules(cost: number, rules: MarkupRuleData[]): number {
   if (cost <= 0) return 0
@@ -49,14 +39,14 @@ export function applyMarkupRules(cost: number, rules: MarkupRuleData[]): number 
 
   if (!rule) {
     log.warn('No markup rule found for cost', { cost })
-    return roundPrice90(cost)
+    return roundPrice(cost)
   }
 
   const raw = rule.mode === 'percent'
     ? cost * (1 + rule.value / 100)
     : cost + rule.value
 
-  return roundPrice90(raw)
+  return roundPrice(raw)
 }
 
 /**
