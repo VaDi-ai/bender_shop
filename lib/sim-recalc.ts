@@ -90,6 +90,11 @@ export function isStorefrontVisible(v: VariantRow): boolean {
 export function isPhone(v: VariantRow, attrs: Record<string, string> = (v.attributes ?? {}) as Record<string, string>): boolean {
   const cat = v.product.category?.name ?? ''
   if (/телефон|iphone|смартфон/i.test(cat)) return true
+  // Samsung: категория сайта — линейка («Galaxy S», «Galaxy Z»), слова «телефон»
+  // в ней нет, а SIM у Galaxy живёт с бренд-правила. Телефонные модели узнаём по
+  // имени; Galaxy Watch/Buds/Tab под паттерн не попадают.
+  const name = `${attrs.fullName ?? ''} ${v.product.name}`
+  if (/galaxy\s+(?:[sam]\d|note|z?\s*(?:flip|fold))/i.test(name)) return true
   return detectGeneration(attrs.fullName, v.product.name) !== null
 }
 
