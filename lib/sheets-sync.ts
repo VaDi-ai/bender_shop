@@ -733,7 +733,10 @@ export async function syncProductsFromSheets(
       const productAttributes = aggregateProductAttributes(
         group.variants.map(v => finalAttrsByFullName.get(v.fullName)!))
 
-      const minPrice = Math.min(...group.variants.map(v => v.price))
+      // Product.price — витринное «от…» без вариантов; округление вверх до 100
+      // здесь тоже обязательно (варианты округляются в buildPrismaOp ниже —
+      // иначе продуктовая цена отставала бы от округлённого минимума)
+      const minPrice = roundPrice(Math.min(...group.variants.map(v => v.price)))
       const totalQty = group.variants.reduce((s, v) => s + v.quantity, 0)
 
       const productKey = group.productName + '|' + category.id
