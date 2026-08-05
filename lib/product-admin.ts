@@ -40,7 +40,10 @@ export interface ProductCard {
   description: string
   isAvailable: boolean
   isFeatured: boolean
+  /** Что покупатель видит в каталоге: coverPhoto, а без неё — авто (первый вариант) */
   mainPhoto: string | null
+  /** Ручная обложка (DB-only, переживает синк); null = превью авто */
+  coverPhoto: string | null
   photos: string[]
   offers: OfferView[]
   /** Сводка «4 предложения: США, ОАЭ, Гонконг» — как в мокапе */
@@ -63,7 +66,7 @@ export async function getProductCard(productId: number): Promise<ProductCard | n
     where: { id: productId },
     select: {
       id: true, name: true, sku: true, brand: true, description: true,
-      isAvailable: true, isFeatured: true, photoUrl: true, photos: true,
+      isAvailable: true, isFeatured: true, photoUrl: true, coverPhoto: true, photos: true,
       category: { select: { name: true } },
       variants: {
         orderBy: { id: 'asc' },
@@ -101,7 +104,8 @@ export async function getProductCard(productId: number): Promise<ProductCard | n
     description: p.description ?? '',
     isAvailable: p.isAvailable,
     isFeatured: p.isFeatured,
-    mainPhoto: p.photoUrl || null,
+    mainPhoto: p.coverPhoto || p.photoUrl || null,
+    coverPhoto: p.coverPhoto || null,
     photos: p.photos ?? [],
     offers,
     countries: [...new Set(offers.map(o => o.country).filter((c): c is string => !!c))],

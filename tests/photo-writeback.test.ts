@@ -147,27 +147,37 @@ describe('фото предложения', () => {
   })
 })
 
-describe('главное фото товара', () => {
-  it('ставится первому предложению — как его и берёт витрина', async () => {
-    pp.findUnique.mockResolvedValue({ id: 3, variants: [{ id: 11 }] })
-    pv.findUnique.mockResolvedValue({
-      id: 11, productId: 3, photoUrls: [],
-      attributes: { fullName: 'iPhone 17 Pro 256 (Индия)' },
-    })
-    const wb = vi.fn(async () => ({ missing: [] }))
-    const r = await setProductMainPhoto(ACTOR, 3, PHOTO, wb)
-    expect(r.ok).toBe(true)
-    expect(pv.update).toHaveBeenCalledWith({ where: { id: 11 }, data: { photoUrls: [PHOTO] } })
-    expect(pp.update).toHaveBeenCalledWith({ where: { id: 3 }, data: { photos: [PHOTO], photoUrl: PHOTO } })
+describe('главное фото товара — обложка, DB-only', () => {
+  const AUTO = '/photos/auto-first-variant.webp'
+  const product = { id: 3, coverPhoto: null, photoUrl: AUTO, photos: [AUTO] }
+
+  it('пишет coverPhoto в БД: без писбэка в таблицу и без фото предложений', async () => {
+    pp.findUnique.mockResolvedValue(product)
+    const r = await setProductMainPhoto(ACTOR, 3, PHOTO)
+    expect(r).toMatchObject({ ok: true, photoUrl: PHOTO })
+    expect(pp.update).toHaveBeenCalledWith({ where: { id: 3 }, data: { coverPhoto: PHOTO } })
+    expect(pv.update).not.toHaveBeenCalled()          // офферные фото не тронуты
+    expect(bump).toHaveBeenCalledWith('cache_version', expect.any(String))
   })
 
-  it('у товара нет предложений — некуда ставить, 422', async () => {
-    pp.findUnique.mockResolvedValue({ id: 3, variants: [] })
-    expect((await setProductMainPhoto(ACTOR, 3, PHOTO, vi.fn())).status).toBe(422)
+  it('снятие обложки → coverPhoto=null, покупателю снова авто-превью', async () => {
+    pp.findUnique.mockResolvedValue({ ...product, coverPhoto: PHOTO })
+    const r = await setProductMainPhoto(ACTOR, 3, null)
+    expect(r).toMatchObject({ ok: true, photoUrl: AUTO })
+    expect(pp.update).toHaveBeenCalledWith({ where: { id: 3 }, data: { coverPhoto: null } })
+  })
+
+  it('мусорная ссылка отбивается до всякой записи', async () => {
+    pp.findUnique.mockResolvedValue(product)
+    for (const bad of ['javascript:alert(1)', 'https://evil.example.com/x.png', '/photos/../../.env']) {
+      expect((await setProductMainPhoto(ACTOR, 3, bad)).status).toBe(422)
+    }
+    expect(pp.update).not.toHaveBeenCalled()
+    expect(bump).not.toHaveBeenCalled()
   })
 
   it('нет товара — 404', async () => {
     pp.findUnique.mockResolvedValue(null)
-    expect((await setProductMainPhoto(ACTOR, 999, PHOTO, vi.fn())).status).toBe(404)
+    expect((await setProductMainPhoto(ACTOR, 999, PHOTO)).status).toBe(404)
   })
 })

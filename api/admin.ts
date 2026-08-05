@@ -791,13 +791,13 @@ export function adminApiRouter(): Router {
       take: 20,
       orderBy: [{ isFeatured: 'desc' }, { sortOrder: 'asc' }, { name: 'asc' }],
       select: {
-        id: true, name: true, sku: true, photoUrl: true, isFeatured: true, isAvailable: true,
+        id: true, name: true, sku: true, photoUrl: true, coverPhoto: true, isFeatured: true, isAvailable: true,
         category: { select: { name: true } },
         variants: { where: { inStock: true, quantity: { gt: 0 } }, select: { id: true }, take: 1 },
       },
     })
     res.json(products.map(p => ({
-      id: p.id, name: p.name, sku: p.sku, photoUrl: p.photoUrl || null,
+      id: p.id, name: p.name, sku: p.sku, photoUrl: p.coverPhoto || p.photoUrl || null,
       category: p.category?.name ?? null, isFeatured: p.isFeatured,
       inStock: p.isAvailable && p.variants.length > 0,
     })))
@@ -828,7 +828,7 @@ export function adminApiRouter(): Router {
     const { setProductMainPhoto } = await import('../lib/photo-writeback')
     const body = (req.body ?? {}) as { imageUrl?: unknown }
     const r = await setProductMainPhoto(req.admin!.telegramId, id, body.imageUrl == null ? null : String(body.imageUrl))
-    res.status(r.status).json(r.ok ? { ok: true, photoUrl: r.photoUrl, productPhotos: r.productPhotos, fullName: r.fullName } : { error: r.error })
+    res.status(r.status).json(r.ok ? { ok: true, photoUrl: r.photoUrl, productPhotos: r.productPhotos } : { error: r.error })
   }))
 
   router.put('/variants/:id/photo', safe(async (req, res) => {
