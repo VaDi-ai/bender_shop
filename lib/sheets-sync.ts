@@ -16,6 +16,7 @@ import { syncRunStart, syncRunFinish, SyncRunMeta } from './sync-run'
 import { decidePriceSync, getFrozenVariantIds } from './price-sync-policy'
 import { SYNC_LOCK_KEY } from './sync-lock'
 import { resolveSimType, loadSimRules, loadAttrAliases, attributesForExistingVariant, SimRuleData, AttrAliasData } from './sim-rules'
+import { isPhone } from './sim-recalc'
 import {
   applyMarkupRules as _applyMarkupRules,
   loadRules as _loadRules,
@@ -456,6 +457,40 @@ export async function readAllProducts(): Promise<SheetRow[]> {
  * - Product.attributes = агрегированные уникальные значения из всех вариантов (для chips)
  * - Product.price = минимальная цена среди вариантов
  */
+/**
+ * Агрегат Product.attributes (чипы карточки и пикер модалки витрины) из
+ * ФИНАЛЬНЫХ атрибутов вариантов — тех, что реально лягут в БД. Строить его из
+ * сырого разбора листа нельзя: у существующих вариантов SIM держится границей
+ * PR-A, и после смены словаря агрегат разъезжался с вариантами (все SIM-кнопки
+ * в модалке серые). Ключ показывается, если значений больше одного или он из
+ * ALWAYS_SHOW; «Страна» и служебные ключи в чипы не попадают.
+ */
+export function aggregateProductAttributes(variantAttrs: Array<Record<string, unknown>>): Record<string, string[]> {
+  const aggregated: Record<string, Set<string>> = {}
+  for (const attrs of variantAttrs) {
+    for (const [attrKey, attrVal] of Object.entries(attrs)) {
+      if (attrKey === 'fullName' || attrKey === 'Страна' || attrKey === 'attrOverrides') continue
+      if (typeof attrVal !== 'string') continue
+      if (!aggregated[attrKey]) aggregated[attrKey] = new Set()
+      aggregated[attrKey].add(attrVal)
+    }
+  }
+  const productAttributes: Record<string, string[]> = {}
+  const ALWAYS_SHOW = ['Память', 'RAM', 'Экран', 'Размер', 'Чип', 'SIM', 'Связь']
+  for (const [k, vals] of Object.entries(aggregated)) {
+    if (vals.size > 1 || ALWAYS_SHOW.includes(k)) {
+      productAttributes[k] = [...vals].sort()
+    }
+  }
+  // Убрать дубль Экран/Размер
+  if (productAttributes['Экран'] && productAttributes['Размер']) {
+    if (productAttributes['Экран'].join(',') === productAttributes['Размер'].join(',')) {
+      delete productAttributes['Размер']
+    }
+  }
+  return productAttributes
+}
+
 export async function syncProductsFromSheets(
   shouldAbort?: () => boolean,
   meta?: SyncRunMeta,
@@ -679,29 +714,22 @@ export async function syncProductsFromSheets(
         categoriesMap.set(group.category, category)
       }
 
-      // Aggregate attributes for Product.attributes (chips)
-      const aggregated: Record<string, Set<string>> = {}
+      // Финальные атрибуты вариантов — ровно то, что ляжет в БД: у существующего
+      // варианта SIM сохраняет смысл (граница PR-A, attributesForExistingVariant),
+      // у нового — свежий разбор. Считаем ОДИН раз: и агрегат, и апсерты вариантов
+      // ниже используют это же значение — агрегат физически не может разойтись
+      // с вариантами (баг «серые SIM-кнопки» после смены словаря).
+      const finalAttrsByFullName = new Map<string, Record<string, string>>()
       for (const v of group.variants) {
-        for (const [attrKey, attrVal] of Object.entries(v.attrs)) {
-          if (attrKey === 'fullName' || attrKey === 'Страна') continue
-          if (!aggregated[attrKey]) aggregated[attrKey] = new Set()
-          aggregated[attrKey].add(attrVal)
-        }
-      }
-      const productAttributes: Record<string, string[]> = {}
-      const ALWAYS_SHOW = ['Память', 'RAM', 'Экран', 'Размер', 'Чип', 'SIM', 'Связь']
-      for (const [k, vals] of Object.entries(aggregated)) {
-        if (vals.size > 1 || ALWAYS_SHOW.includes(k)) {
-          productAttributes[k] = [...vals].sort()
-        }
+        const existing = variantsByFullName.get(v.fullName)
+        finalAttrsByFullName.set(v.fullName, existing
+          ? attributesForExistingVariant(v.attrs, existing.attributes, simCtx.aliases)
+          : v.attrs)
       }
 
-      // Убрать дубль Экран/Размер
-      if (productAttributes['Экран'] && productAttributes['Размер']) {
-        if (productAttributes['Экран'].join(',') === productAttributes['Размер'].join(',')) {
-          delete productAttributes['Размер']
-        }
-      }
+      // Aggregate attributes for Product.attributes (chips)
+      const productAttributes = aggregateProductAttributes(
+        group.variants.map(v => finalAttrsByFullName.get(v.fullName)!))
 
       const minPrice = Math.min(...group.variants.map(v => v.price))
       const totalQty = group.variants.reduce((s, v) => s + v.quantity, 0)
@@ -803,7 +831,8 @@ export async function syncProductsFromSheets(
             inStock: v.quantity > 0,
             // PR-A: у СУЩЕСТВУЮЩЕГО варианта SIM сохраняет смысл — канонизируем
             // только метку. Словарное значение применит PR-B по кнопке владельца.
-            attributes: { ...attributesForExistingVariant(v.attrs, entry.existing.attributes, simCtx.aliases), fullName: v.fullName },
+            // Значение уже посчитано выше (finalAttrsByFullName) — то же, что в агрегате.
+            attributes: { ...finalAttrsByFullName.get(v.fullName)!, fullName: v.fullName },
           }
 
           // Фото всегда зеркало таблицы: пустая ячейка / нераспознанный URL → сбросить в каталоге
@@ -867,7 +896,7 @@ export async function syncProductsFromSheets(
             price: new Decimal(v.price),
             quantity: v.quantity,
             inStock: v.quantity > 0,
-            attributes: { ...v.attrs, fullName: v.fullName },
+            attributes: { ...finalAttrsByFullName.get(v.fullName)!, fullName: v.fullName },
             photos: v.photoUrls.length > 0 ? v.photoUrls : [],
             photoUrls: v.photoUrls.length > 0 ? v.photoUrls : [],
             costPrice: v.costPrice !== null ? new Decimal(v.costPrice) : null,
@@ -1104,8 +1133,9 @@ const CAMERA_KITS = ['Body', 'Kit', 'Fly More Combo']
 
 /**
  * Собирает атрибуты: колонки таблицы (приоритет) + парсинг названия (fallback).
+ * Экспорт — для тестов гейта «SIM только телефонам».
  */
-function getAttributes(row: SheetRow): Record<string, string> {
+export function getAttributes(row: SheetRow): Record<string, string> {
   const attrs: Record<string, string> = {}
 
   // 1. Из колонок (приоритет)
@@ -1148,7 +1178,7 @@ function getAttributes(row: SheetRow): Record<string, string> {
   if (row.country) attrs['Страна'] = row.country
 
   // 2. Fallback: парсинг из названия (если колонка пуста)
-  const parsed = parseAttributes(row.fullName, row.brand, row.country)
+  const parsed = parseAttributes(row.fullName, row.brand, row.country, row.category)
   for (const key of ['Цвет', 'Память', 'RAM', 'Размер', 'SIM', 'Связь', 'Чип', 'Ремешок', 'Комплектация', 'Экран', 'Серия', 'Диагональ', 'Разъём', 'Touch ID', 'Дисплей', 'Ревизия', 'Умный дом', 'AI', 'Материал', 'Состояние', 'Линзы', 'Крепление', 'Шумоподавление'] as const) {
     if (!attrs[key] && parsed[key]) {
       const textAttrs = ['Цвет', 'Комплектация', 'Материал', 'Состояние', 'Ремешок', 'Линзы']
@@ -1554,8 +1584,10 @@ export async function reloadSimDictionary(): Promise<void> {
 
 /**
  * Извлекает атрибуты из полного названия модели.
+ * category — категория строки листа: по ней (и имени) решаем «телефон ли это»
+ * для проставления SIM — той же isPhone, что у пересчёта и очереди обучения.
  */
-function parseAttributes(fullName: string, brand: string, country: string): Record<string, string> {
+function parseAttributes(fullName: string, brand: string, country: string, category: string): Record<string, string> {
   const attrs: Record<string, string> = {}
 
   const normalized = fullName.replace(/\bSeries\s+(\d+)\b/gi, 'S$1')
@@ -1612,22 +1644,33 @@ function parseAttributes(fullName: string, brand: string, country: string): Reco
   // eSIM» заменён на resolveSimType: явная метка → модельный оверрайд (Air) →
   // страна+поколение. Нет правила → атрибут не ставим, страна попадёт в очередь
   // обучения (не угадываем). Аксессуары SIM не получают.
-  const explicitSim = normalized.match(/\b(2Sim|2\s*SIM|eSim|e-Sim|1Sim\+eSim|SIM\s*\+\s*eSIM|Dual\s*SIM)\b/i)?.[1]
-  const simResolved = resolveSimType(
-    { explicit: explicitSim, country, brand, names: [fullName, normalized] },
-    simCtx.rules,
-    simCtx.aliases,
-  )
-  if (simResolved.simType) {
-    attrs['SIM'] = simResolved.simType
-  } else if (simResolved.reason === 'unknown' && /iphone/i.test(normalized)) {
-    // Копим ключи для очереди «не узнал» — показываем владельцу в админке.
-    // Ключ со связкой «бренд · страна»: страновые правила принадлежат Apple,
-    // и андроид требует своего правила, а не чужого странового.
-    const key = simResolved.missingBrand && simResolved.missingBrand.toLowerCase() !== 'apple'
-      ? `${simResolved.missingBrand} · ${simResolved.missingKey!}`
-      : simResolved.missingKey!
-    simCtx.unknown.set(key, (simCtx.unknown.get(key) ?? 0) + 1)
+  //
+  // Гейт «телефон»: SIM ставится только строкам, которые пересчёт (sim-recalc)
+  // считает телефоном — та же isPhone. Иначе Apple-страновое правило дотягивалось
+  // до наушников/часов/макбуков (бренд Apple + страна) и рисовало фантомный SIM.
+  const rowIsPhone = isPhone({
+    id: 0,
+    attributes: { fullName },
+    product: { name: fullName, brand: brand || null, category: { name: category } },
+  })
+  if (rowIsPhone) {
+    const explicitSim = normalized.match(/\b(2Sim|2\s*SIM|eSim|e-Sim|1Sim\+eSim|SIM\s*\+\s*eSIM|Dual\s*SIM)\b/i)?.[1]
+    const simResolved = resolveSimType(
+      { explicit: explicitSim, country, brand, names: [fullName, normalized] },
+      simCtx.rules,
+      simCtx.aliases,
+    )
+    if (simResolved.simType) {
+      attrs['SIM'] = simResolved.simType
+    } else if (simResolved.reason === 'unknown' && /iphone/i.test(normalized)) {
+      // Копим ключи для очереди «не узнал» — показываем владельцу в админке.
+      // Ключ со связкой «бренд · страна»: страновые правила принадлежат Apple,
+      // и андроид требует своего правила, а не чужого странового.
+      const key = simResolved.missingBrand && simResolved.missingBrand.toLowerCase() !== 'apple'
+        ? `${simResolved.missingBrand} · ${simResolved.missingKey!}`
+        : simResolved.missingKey!
+      simCtx.unknown.set(key, (simCtx.unknown.get(key) ?? 0) + 1)
+    }
   }
 
   // ─── Connectivity (iPad) ───

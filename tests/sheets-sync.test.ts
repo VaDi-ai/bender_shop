@@ -1,11 +1,16 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, beforeEach } from 'vitest'
 import {
   extractProductName,
   parsePhotoUrls,
   mergeVariantPhotoUrls,
   filterPlaceholderPhotoUrls,
   sanitizeSyncedPhotoUrls,
+  aggregateProductAttributes,
+  getAttributes,
+  simCtx,
+  SheetRow,
 } from '../lib/sheets-sync'
+import { SIM_SEED, ALIAS_SEED, SimRuleData, AttrAliasData, attributesForExistingVariant } from '../lib/sim-rules'
 
 describe('extractProductName', () => {
   it('iPhone: removes color, memory, country', () => {
@@ -126,5 +131,127 @@ describe('mergeVariantPhotoUrls', () => {
         { photoUrls: ['https://bendershop.store/no-photo.png'] },
       ]),
     ).toEqual(['https://a.com/ok.webp'])
+  })
+})
+
+// ─── Фикс «серые SIM-кнопки»: агрегат из финальных атрибутов + isPhone-гейт ──
+
+const norm = (s: string) => s.trim().toLowerCase()
+
+const RULES: SimRuleData[] = SIM_SEED.map((r, i) => ({
+  id: i + 1,
+  country: r.country ?? null,
+  countryNorm: r.country ? norm(r.country) : '',
+  brandNorm: r.brand ? norm(r.brand) : '',
+  modelMatch: r.modelMatch ?? '',
+  modelGenFrom: r.modelGenFrom ?? 0,
+  simType: r.simType,
+  source: 'seed',
+}))
+
+const ALIASES: AttrAliasData[] = ALIAS_SEED.map(a => ({
+  attrKey: a.attrKey, rawNorm: norm(a.raw), canonical: a.canonical,
+}))
+
+describe('aggregateProductAttributes — агрегат из ФИНАЛЬНЫХ атрибутов вариантов', () => {
+  it('после смены словаря агрегат совпадает с вариантным SIM, а не со свежим разбором', () => {
+    // Сырой разбор листа по новому словарю даёт «SIM + eSIM», но у существующего
+    // варианта в БД стоит старое «eSIM» — граница PR-A его сохраняет.
+    const raw = { fullName: 'iPhone 17 Pro 256 (Индия)', 'Страна': 'Индия', SIM: 'SIM + eSIM', 'Память': '256GB' }
+    const final = attributesForExistingVariant(raw, { SIM: 'eSIM' }, ALIASES)
+    expect(final.SIM).toBe('eSIM')                       // граница PR-A работает
+    const agg = aggregateProductAttributes([final])
+    expect(agg['SIM']).toEqual(['eSIM'])                 // агрегат = вариант, кнопка активна
+  })
+
+  it('ручной оверрайд владельца попадает в агрегат, служебный ключ attrOverrides — нет', () => {
+    const raw = { fullName: 'iPhone 17 Pro 256', SIM: 'eSIM' }
+    const final = attributesForExistingVariant(raw, { SIM: 'eSIM', attrOverrides: { SIM: { value: '2 SIM' } } }, ALIASES)
+    const agg = aggregateProductAttributes([final])
+    expect(agg['SIM']).toEqual(['2 SIM'])
+    expect(agg['attrOverrides']).toBeUndefined()
+  })
+
+  it('fullName и Страна в чипы не попадают', () => {
+    const agg = aggregateProductAttributes([
+      { fullName: 'iPhone 17 256 Black', 'Страна': 'Индия', 'Память': '256GB' },
+      { fullName: 'iPhone 17 512 White', 'Страна': 'Япония', 'Память': '512GB' },
+    ])
+    expect(agg['fullName']).toBeUndefined()
+    expect(agg['Страна']).toBeUndefined()
+    expect(agg['Память']).toEqual(['256GB', '512GB'])
+  })
+
+  it('одно значение: ALWAYS_SHOW показывается, прочие ключи скрыты', () => {
+    const agg = aggregateProductAttributes([
+      { SIM: 'eSIM', 'Цвет': 'Black' },
+      { SIM: 'eSIM', 'Цвет': 'Black' },
+    ])
+    expect(agg['SIM']).toEqual(['eSIM'])
+    expect(agg['Цвет']).toBeUndefined()
+  })
+
+  it('дубль Экран/Размер схлопывается', () => {
+    const agg = aggregateProductAttributes([
+      { 'Экран': '13', 'Размер': '13' },
+      { 'Экран': '15', 'Размер': '15' },
+    ])
+    expect(agg['Экран']).toEqual(['13', '15'])
+    expect(agg['Размер']).toBeUndefined()
+  })
+})
+
+describe('getAttributes — SIM только телефонам (isPhone-гейт)', () => {
+  const sheetRow = (over: Partial<SheetRow>): SheetRow => ({
+    brand: 'Apple', category: 'iPhone', line: 'iPhone', model: '', sortOrder: 0,
+    fullName: '', color: '', memory: '', size: '', country: '', description: '',
+    specs: '', costPrice: null, price: 0, quantity: 0, supplier: '', photo: '',
+    badge: '', hit: false, badgeColPresent: false, hitColPresent: false,
+    sheetName: 'Test', rowIndex: 2, ...over,
+  })
+
+  beforeEach(() => {
+    simCtx.rules = RULES
+    simCtx.aliases = ALIASES
+    simCtx.unknown = new Map()
+  })
+
+  it('iPhone со страной получает SIM по словарю', () => {
+    const attrs = getAttributes(sheetRow({ fullName: 'iPhone 17 Pro 256GB Desert', country: 'США' }))
+    expect(attrs['SIM']).toBe('eSIM + eSIM')
+  })
+
+  it('Samsung Galaxy с явной меткой в имени получает канонический SIM', () => {
+    const attrs = getAttributes(sheetRow({
+      brand: 'Samsung', category: 'Galaxy S',
+      fullName: 'Samsung Galaxy S26 Ultra 12/256 2Sim Black',
+    }))
+    expect(attrs['SIM']).toBe('2 SIM')
+  })
+
+  it('AirPods не получают SIM, даже с Apple-страной', () => {
+    const attrs = getAttributes(sheetRow({ category: 'AirPods', fullName: 'AirPods Pro 3', country: 'США' }))
+    expect(attrs['SIM']).toBeUndefined()
+  })
+
+  it('Apple Watch не получают SIM', () => {
+    const attrs = getAttributes(sheetRow({ category: 'Apple Watch', fullName: 'Apple Watch S11 46 Black', country: 'Индия' }))
+    expect(attrs['SIM']).toBeUndefined()
+  })
+
+  it('MacBook не получает SIM', () => {
+    const attrs = getAttributes(sheetRow({ category: 'Ноутбуки', fullName: 'MacBook Air 13 M5 16GB 512GB Midnight', country: 'США' }))
+    expect(attrs['SIM']).toBeUndefined()
+  })
+
+  it('не-телефон не шумит в очередь «не узнал»', () => {
+    getAttributes(sheetRow({ category: 'Apple Watch', fullName: 'Apple Watch S11 46 Black', country: 'Марс' }))
+    expect(simCtx.unknown.size).toBe(0)
+  })
+
+  it('iPhone с неизвестной страной попадает в очередь «не узнал» (без SIM)', () => {
+    const attrs = getAttributes(sheetRow({ fullName: 'iPhone 17 Pro 256GB Desert', country: 'Марс' }))
+    expect(attrs['SIM']).toBeUndefined()
+    expect(simCtx.unknown.size).toBe(1)
   })
 })
