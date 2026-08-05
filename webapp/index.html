@@ -1630,14 +1630,85 @@
     window.handleProductPhotoError = handleProductPhotoError
 
     // ── Variant helpers ───────────────────────────────────────────────────────
+    // ─── PURE-VARIANT-MATCH-START ─────────────────────────────────────────────
+    // Чистые хелперы матчинга вариантов — юнит-тестируются извлечением этого
+    // блока (tests/variant-matching.test.ts). Не обращаться к DOM/глобалам.
+    //
+    // Инвариант: НИ ОДИН in-stock вариант не должен быть недостижим из пикера.
+    // У части строк листа ключ атрибута пуст (титановые Watch без «Связь»,
+    // Samsung без SIM) — пустой ключ трактуем как «подходит к любому выбору»
+    // (wildcard), а не как «не совпало».
+    function attrValueOf(v, key) {
+      const val = (v.attributes || {})[key]
+      return val == null || val === '' ? null : val
+    }
+
+    /** Совместим ли вариант с выбором: точное равенство ИЛИ пустой ключ. */
+    function variantMatchesSelected(v, selected) {
+      return Object.keys(selected).every(k => {
+        const val = attrValueOf(v, k)
+        return val === null || val === selected[k]
+      })
+    }
+
+    /**
+     * Выбор варианта под комбинацию: только in-stock; при нескольких кандидатах
+     * побеждает тот, у кого больше ТОЧНЫХ совпадений (wildcard — запасной,
+     * иначе безключевой вариант перехватывал бы цену/фото у точного).
+     */
+    function pickVariantForSelection(variants, selected) {
+      if (!Array.isArray(variants) || !variants.length) return null
+      const keys = Object.keys(selected)
+      if (!keys.length) return null
+      let best = null
+      let bestExact = -1
+      for (const v of variants) {
+        if (!v.inStock) continue
+        if (!variantMatchesSelected(v, selected)) continue
+        const exact = keys.filter(k => attrValueOf(v, k) === selected[k]).length
+        if (exact > bestExact) { best = v; bestExact = exact }
+      }
+      return best
+    }
+
+    /**
+     * Можно ли автоселектить единственное значение ключа: только если ключ
+     * заполнен у ВСЕХ in-stock вариантов. Иначе автоселект «запирал» бы
+     * безключевые варианты (репро: Watch S11 титан при «Связь: GPS»).
+     */
+    function allInStockHaveKey(variants, key) {
+      if (!Array.isArray(variants) || !variants.length) return true
+      return variants.every(v => !v.inStock || attrValueOf(v, key) !== null)
+    }
+
+    /**
+     * Достаточен ли выбор для покупки. Раньше гейтом было «выбран каждый ключ
+     * агрегата» — с дырявыми ключами это запирало безключевые варианты (у
+     * титановых Watch нет «Связи» — требовать её выбор бессмысленно), а ключ,
+     * целиком скрытый фильтром наличия, блокировал товар насовсем.
+     * Теперь гейт — однозначность: среди in-stock вариантов, совместимых с
+     * выбором, ровно одна различимая комбинация атрибутов (дубли строк листа
+     * с одинаковыми атрибутами считаем одним вариантом).
+     */
+    function resolveSelection(variants, selected, keys) {
+      const inStock = (Array.isArray(variants) ? variants : []).filter(v => v.inStock)
+      const matching = inStock.filter(v => variantMatchesSelected(v, selected))
+      // Точные совпадения главнее wildcard-матчей (как в pickVariantForSelection):
+      // выбор «SIM + eSIM» разрешается в пользу варианта С ключом, даже если
+      // рядом живёт безключевой собрат с теми же остальными атрибутами
+      const selKeys = Object.keys(selected)
+      const exactOf = v => selKeys.filter(k => attrValueOf(v, k) === selected[k]).length
+      const maxExact = matching.reduce((m, v) => Math.max(m, exactOf(v)), 0)
+      const top = matching.filter(v => exactOf(v) === maxExact)
+      const sig = v => keys.map(k => attrValueOf(v, k)).join('␟')
+      const resolved = top.length > 0 && new Set(top.map(sig)).size === 1
+      return { matching, resolved }
+    }
+    // ─── PURE-VARIANT-MATCH-END ───────────────────────────────────────────────
+
     function findVariant(product, selectedAttrs) {
       if (!product.variants || !product.variants.length) return null
-      const keys = Object.keys(selectedAttrs)
-      if (!keys.length) return null
-      return product.variants.find(v => {
-        if (!v.inStock) return false
-        return keys.every(k => (v.attributes || {})[k] === selectedAttrs[k])
-      }) || null
+      return pickVariantForSelection(product.variants, selectedAttrs)
     }
 
     function getProductPhotos(p, variant) {
@@ -1681,12 +1752,7 @@
       const p = allProducts.find(x => x.id === productId)
       if (!p || !p.variants || !p.variants.length) return null
       const selected = cardSelectedAttrs.get(productId) || {}
-      if (!Object.keys(selected).length) return null
-      return p.variants.find(v => {
-        if (!v.inStock) return false
-        const va = v.attributes || {}
-        return Object.keys(selected).every(k => va[k] === selected[k])
-      }) || null
+      return pickVariantForSelection(p.variants, selected)
     }
 
     // ── Custom cursor ─────────────────────────────────────────────────────────
@@ -2690,10 +2756,12 @@
       modalActiveVariant = null
       modalPhotoIdx      = 0
 
-      // Auto-select attributes with exactly one value
+      // Auto-select attributes with exactly one value — но только когда ключ
+      // заполнен у всех in-stock вариантов: автоселект по «дырявому» ключу
+      // прятал бы безключевые варианты (Watch S11 титан без «Связь»)
       if (p.attributes && typeof p.attributes === 'object') {
         for (const [key, vals] of Object.entries(p.attributes)) {
-          if (Array.isArray(vals) && vals.length === 1) {
+          if (Array.isArray(vals) && vals.length === 1 && allInStockHaveKey(p.variants, key)) {
             modalSelectedAttrs[key] = vals[0]
           }
         }
@@ -2845,8 +2913,11 @@
           if (!vals.length) return ''
         }
 
-        // Single value — info chip (not clickable)
-        if (vals.length === 1) {
+        // Single value — info chip (not clickable), но только когда ключ есть у
+        // всех in-stock вариантов. Иначе значение остаётся выбираемой кнопкой:
+        // тап выбирает, повторный тап снимает («любой») — безключевые варианты
+        // без него достижимы.
+        if (vals.length === 1 && allInStockHaveKey(p.variants, key)) {
           return `<div class="modal-attr-group">
   <div class="modal-attr-label">${esc(key)}</div>
   <div class="modal-attr-row"><span class="modal-attr-btn info">${esc(vals[0])}</span></div>
@@ -2861,11 +2932,10 @@
           // группы всегда возможно, «залипания» нет; unavailable остаётся только
           // у реально несуществующих комбинаций с выбором ДРУГИХ атрибутов.
           const testAttrs = Object.assign({}, modalSelectedAttrs, { [key]: v })
+          // Совместимость по wildcard-правилу: вариант с пустым ключом подходит
+          // к любому выбору этого ключа — иначе он был бы вечно-серым
           const available = (p.variants && p.variants.length)
-            ? p.variants.some(variant => {
-                if (!variant.inStock) return false
-                return Object.keys(testAttrs).every(k => (variant.attributes || {})[k] === testAttrs[k])
-              })
+            ? p.variants.some(variant => variant.inStock && variantMatchesSelected(variant, testAttrs))
             : true
           const isActive = selectedVal === v
           return `<button class="modal-attr-btn${isActive ? ' active' : ''}${!available ? ' unavailable' : ''}"
@@ -2941,8 +3011,12 @@
       if (!p) { btn.classList.add('disabled'); return }
 
       const hasVariants = p.variants && p.variants.length > 0
-      const attrKeys    = (p.attributes && typeof p.attributes === 'object') ? Object.keys(p.attributes) : []
-      const allSelected = attrKeys.every(k => modalSelectedAttrs[k])
+      const attrKeys    = ((p.attributes && typeof p.attributes === 'object') ? Object.keys(p.attributes) : [])
+        .filter(k => k !== 'Регион')
+      const picked = Object.keys(modalSelectedAttrs).length > 0
+      const { matching, resolved } = hasVariants
+        ? resolveSelection(p.variants, modalSelectedAttrs, attrKeys)
+        : { matching: [], resolved: false }
 
       let canAdd     = false
       let outOfStock = false
@@ -2961,8 +3035,10 @@
         canAdd     = p.quantity > 0
         outOfStock = !canAdd
       } else {
-        canAdd     = allSelected && modalActiveVariant !== null
-        outOfStock = allSelected && modalActiveVariant === null
+        // Покупать можно, когда выбор однозначен (см. resolveSelection) —
+        // «выбран каждый ключ» больше не требуем: у части вариантов ключей нет
+        canAdd     = resolved && modalActiveVariant !== null
+        outOfStock = picked && matching.length === 0
       }
       btn.classList.toggle('disabled', !canAdd)
       if (btnSpan) btnSpan.textContent = outOfStock ? 'НЕТ В НАЛИЧИИ' : 'ВЗЯТЬ У БЕНДЕРА'
