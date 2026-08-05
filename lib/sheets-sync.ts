@@ -14,6 +14,7 @@ import { readSheet, getProductSheetNames } from './google-sheets'
 import { normalizeCdnPhotoUrl, cleanPhotoUrl } from './cdn-photo-resolve'
 import { syncRunStart, syncRunFinish, SyncRunMeta } from './sync-run'
 import { decidePriceSync, getFrozenVariantIds } from './price-sync-policy'
+import { roundPrice, formatShopTime } from './currency'
 import { SYNC_LOCK_KEY } from './sync-lock'
 import { resolveSimType, loadSimRules, loadAttrAliases, attributesForExistingVariant, SimRuleData, AttrAliasData } from './sim-rules'
 import { isPhone } from './sim-recalc'
@@ -675,7 +676,8 @@ export async function syncProductsFromSheets(
 
   // Очередь обратной записи пересчитанных рекомендованных цен в Google Sheets.
   // sheetName обязателен: строки приходят с разных листов (полистовой учёт).
-  const sheetWritebacks: Array<{ sheetName: string; rowIndex: number; price: number }> = []
+  // price → M; supplier/updatedAt (O/P) — только у строк, где они заданы
+  const sheetWritebacks: Array<{ sheetName: string; rowIndex: number; price: number; supplier?: string; updatedAt?: string }> = []
 
   // Этап 2: словарь SIM — один раз на прогон (unknown копится для очереди обучения)
   await reloadSimDictionary()
@@ -859,18 +861,36 @@ export async function syncProductsFromSheets(
               // применённый батч, пока запись в лист не проехала (усиление №2)
               delete updateData.price
             } else if (action === 'recalc_from_cost') {
-              // Закупочная изменилась → пересчитать рекомендованную по правилам
+              // Закупочная изменилась → пересчитать рекомендованную по правилам.
+              // Кто/когда: цена изменилась сейчас → P; поставщика синк не знает,
+              // O переписываем из БД (последний победитель), если он там есть.
               const newPrice = cachedApplyRules(sheetCost!)
               updateData.costPrice = new Decimal(sheetCost!)
               updateData.lastSyncedCostPrice = new Decimal(sheetCost!)
               updateData.price = new Decimal(newPrice)
-              sheetWritebacks.push({ sheetName: v.sheetName, rowIndex: v.rowIndex, price: newPrice })
+              updateData.priceUpdatedAt = new Date()
+              sheetWritebacks.push({
+                sheetName: v.sheetName, rowIndex: v.rowIndex, price: newPrice,
+                updatedAt: formatShopTime(new Date()),
+                ...(entry.existing.bestSupplierName ? { supplier: entry.existing.bestSupplierName } : {}),
+              })
             } else if (action === 'respect_sheet_price') {
-              // Рекомендованная изменилась вручную → уважать
-              updateData.price = new Decimal(sheetPrice)
+              // Рекомендованная изменилась вручную → уважать, но округлить
+              // вверх до 100 (решение владельца: округление везде). Отличие
+              // пишем и в лист — иначе следующий синк увидит расхождение
+              // dbPrice ≠ sheetPrice и цена осциллировала бы.
+              const rounded = roundPrice(sheetPrice)
+              updateData.price = new Decimal(rounded)
+              if (rounded !== sheetPrice) {
+                sheetWritebacks.push({ sheetName: v.sheetName, rowIndex: v.rowIndex, price: rounded })
+              }
             } else {
-              // Ничего не изменилось — обычное обновление цены из таблицы
-              updateData.price = new Decimal(v.price)
+              // Ничего не изменилось — зеркало таблицы с тем же округлением
+              const rounded = roundPrice(v.price)
+              updateData.price = new Decimal(rounded)
+              if (rounded !== v.price) {
+                sheetWritebacks.push({ sheetName: v.sheetName, rowIndex: v.rowIndex, price: rounded })
+              }
             }
 
             // Первичная фиксация costPrice, если в БД ещё нет снимка
@@ -879,8 +899,14 @@ export async function syncProductsFromSheets(
               updateData.lastSyncedCostPrice = new Decimal(sheetCost)
             }
           } else {
-            // Feature-флаг выключен — обычное поведение (цена из таблицы)
-            updateData.price = new Decimal(v.price)
+            // Feature-флаг выключен — цена из таблицы, но округление действует
+            // всегда: хвосты «…90» и сырые цены подтягиваются до сотни, и лист
+            // получает округлённое (иначе БД ≠ лист навсегда)
+            const rounded = roundPrice(v.price)
+            updateData.price = new Decimal(rounded)
+            if (rounded !== v.price) {
+              sheetWritebacks.push({ sheetName: v.sheetName, rowIndex: v.rowIndex, price: rounded })
+            }
           }
 
           return prisma.productVariant.update({
@@ -889,11 +915,17 @@ export async function syncProductsFromSheets(
           })
         }
         const variantSku = `${product.sku}-${Date.now().toString(36).slice(-3)}${Math.random().toString(36).slice(-2)}`
+        // Новый вариант: розница из листа тоже округляется вверх до 100,
+        // отличие уезжает обратно в лист тем же writeback-механизмом
+        const createRounded = roundPrice(v.price)
+        if (createRounded !== v.price) {
+          sheetWritebacks.push({ sheetName: v.sheetName, rowIndex: v.rowIndex, price: createRounded })
+        }
         return prisma.productVariant.create({
           data: {
             productId: product.id,
             sku: variantSku,
-            price: new Decimal(v.price),
+            price: new Decimal(createRounded),
             quantity: v.quantity,
             inStock: v.quantity > 0,
             attributes: { ...finalAttrsByFullName.get(v.fullName)!, fullName: v.fullName },
@@ -953,14 +985,26 @@ export async function syncProductsFromSheets(
     }
   }
 
-  // ── Writeback recalculated prices to Google Sheets ───────────────────
-  if (MARKUP_RULES_ENABLED && sheetWritebacks.length > 0) {
+  // ── Writeback recalculated/rounded prices to Google Sheets ────────────
+  // Без гейта MARKUP_RULES_ENABLED: округление до 100 действует всегда, и его
+  // результат обязан уехать в лист — иначе БД и лист разъезжаются навсегда.
+  // recalc-строки попадают сюда по-прежнему только при включённом флаге.
+  if (sheetWritebacks.length > 0) {
     try {
       const { batchUpdate: batchUpdateSheets } = await import('./google-sheets')
-      const updates = sheetWritebacks.map(wb => ({
-        range: "'" + wb.sheetName + "'!" + WRITEBACK_COLS.price + wb.rowIndex,
-        values: [[wb.price]],
-      }))
+      const updates = sheetWritebacks.flatMap(wb => {
+        const rows: Array<{ range: string; values: (string | number)[][] }> = [{
+          range: "'" + wb.sheetName + "'!" + WRITEBACK_COLS.price + wb.rowIndex,
+          values: [[wb.price]],
+        }]
+        if (wb.supplier !== undefined) {
+          rows.push({ range: "'" + wb.sheetName + "'!" + WRITEBACK_COLS.supplier + wb.rowIndex, values: [[wb.supplier]] })
+        }
+        if (wb.updatedAt !== undefined) {
+          rows.push({ range: "'" + wb.sheetName + "'!" + WRITEBACK_COLS.date + wb.rowIndex, values: [[wb.updatedAt]] })
+        }
+        return rows
+      })
       await batchUpdateSheets(updates)
       log.info('Sheets sync wrote back recalculated prices', { count: updates.length })
     } catch (err) {

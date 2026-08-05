@@ -195,6 +195,8 @@ export interface PreviewRow {
   supplierPriceId: number
   rawLine: string
   matched: boolean
+  /** Поставщик строки — у best_supplier-батча свой победитель на каждую строку */
+  supplierName: string | null
   variantId: number | null
   productName: string | null
   brand: string | null      // марка продукта — для полной атрибуции на экране разбора
@@ -223,6 +225,7 @@ export async function getBatchPreview(batchId: number): Promise<{
   const rows = await prisma.supplierPrice.findMany({
     where: { batchId },
     orderBy: { id: 'asc' },
+    include: { supplier: { select: { name: true } } },
   })
   const variantIds = rows.map(r => r.variantId).filter((v): v is number => v !== null)
   const variants = await prisma.productVariant.findMany({
@@ -239,9 +242,10 @@ export async function getBatchPreview(batchId: number): Promise<{
       model: r.model, storage: r.storage, ram: r.ram, color: r.color,
       country: r.country, simType: r.simType, brandGuess: detectBrandFromName(r.model),
     }
+    const supplierName = r.supplierName ?? r.supplier?.name ?? null
     if (!v) {
       return {
-        supplierPriceId: r.id, rawLine: r.rawMessage, matched: false,
+        supplierPriceId: r.id, rawLine: r.rawMessage, matched: false, supplierName,
         variantId: null, productName: null, brand: null, inStock: null, variantAttrs: null, parsed,
         currentPrice: null, currentCost: null,
         // розница справочно — экран заведения показывает «закупка → розница»;
@@ -255,6 +259,7 @@ export async function getBatchPreview(batchId: number): Promise<{
       supplierPriceId: r.id,
       rawLine: r.rawMessage,
       matched: true,
+      supplierName,
       variantId: v.id,
       productName: v.product.name,
       brand: v.product.brand ?? null,

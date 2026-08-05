@@ -192,6 +192,16 @@
       <div class="cap">НОВЫЕ ПРАЙСЫ — ПРОВЕРЬТЕ И ПРИМЕНИТЕ</div>
       <div id="pbList"><div class="empty">Загрузка…</div></div>
 
+      <div id="bsBlock" style="display:none">
+        <div class="cap">ЛУЧШИЙ ПОСТАВЩИК</div>
+        <div class="card">
+          <h3>Обновление по лучшим ценам</h3>
+          <div class="mt">Для каждого предложения — минимальная закупка среди свежих цен активных поставщиков; протухшие не участвуют, при равной цене побеждает более свежая. Сначала превью: кто выиграл и как меняется цена. Ничего не применится без вашего подтверждения, откат — одной кнопкой.</div>
+          <button class="btn b-gh" id="bsBuild">Собрать превью</button>
+          <div class="mt" id="bsErr" style="color:var(--bad)"></div>
+        </div>
+      </div>
+
       <div class="cap">СИСТЕМА НЕ УЗНАЛА — ПОДСКАЖИТЕ</div>
       <div id="unmatchedBox"><div class="empty">Загрузка…</div></div>
 
@@ -2392,14 +2402,33 @@
           : bt.status === 'rolled_back' ? '<span class="chip c-off right">откачен</span>'
           : `<span class="chip c-off right">${esc(bt.status)}</span>`
         return `<div class="card">
-          <h3>${esc(bt.supplier ? bt.supplier.name : 'Без поставщика')} ${chip}</h3>
+          <h3>${esc(bt.source === 'best_supplier' ? 'Лучший поставщик' : bt.supplier ? bt.supplier.name : 'Без поставщика')} ${chip}</h3>
           <div class="mt">Разбор #${bt.id} · ${when} · ${st.rows ?? '?'} позиций${st.outOfCorridor ? ` · вне коридора: ${st.outOfCorridor}` : ''}</div>
           <button class="btn ${bt.status === 'preview' ? 'b-main' : 'b-nt'}" data-open-batch="${bt.id}">${bt.status === 'preview' ? 'Проверить и применить' : 'Открыть разбор'}</button>
           ${bt.status === 'preview' ? '<div class="hint">Ничего не применится, пока вы не подтвердите.</div>' : ''}
         </div>`
       }).join('')
       box.querySelectorAll('[data-open-batch]').forEach(el => el.addEventListener('click', () => showBatchPreview(Number(el.dataset.openBatch))))
+      // Движок «лучший поставщик» — точка входа только для владельца
+      document.getElementById('bsBlock').style.display =
+        window.adminMe && window.adminMe.role === 'owner' ? '' : 'none'
     }
+
+    document.getElementById('bsBuild').addEventListener('click', async function () {
+      const err = document.getElementById('bsErr'); err.textContent = ''
+      this.disabled = true; this.textContent = 'Собираем превью…'
+      try {
+        const r = await api('/price-batches/best-supplier', { method: 'POST', body: '{}' }).catch(() => null)
+        if (!r || !r.ok) { err.textContent = (r && r.data && r.data.error) || 'Не получилось'; return }
+        if (!r.data.batchId) {
+          toast('Изменений нет: все цены уже от лучших поставщиков' + (r.data.stats && r.data.stats.variantsWithOffers ? ` (проверено ${r.data.stats.variantsWithOffers})` : ''))
+          return
+        }
+        toast(`Превью готово: ${r.data.stats.rows} ${plural(r.data.stats.rows, 'смена', 'смены', 'смен')} цены`)
+        await showBatchPreview(r.data.batchId)
+        loadBatches()
+      } finally { this.disabled = false; this.textContent = 'Собрать превью' }
+    })
 
     function fillSupplierSelect() {
       const sel = document.getElementById('puSupplier')
@@ -2495,13 +2524,19 @@
       const checkRows = rows.filter(x => !x.matched || x.corridor === 'out')
       const n = applyRows.length, k = checkRows.length
       const sup = (window._suppliers || []).find(s => s.id === batch.supplierId)
-      const supName = sup ? sup.name : 'Без поставщика'
+      const supName = batch.source === 'best_supplier'
+        ? 'Лучший поставщик'
+        : sup ? sup.name : 'Без поставщика'
 
+      // Движок «лучший поставщик»: победитель у каждой строки свой — показываем
+      // его и смену закупки, владелец видит «кто и почём» до применения
+      const isBestSupplier = batch.source === 'best_supplier'
       const applyHtml = applyRows.map(x => `
         <div class="pl" data-edit-row="${x.supplierPriceId}">
           <div class="grow">
             <div class="pnm">${esc(x.productName)}</div>
             <div class="pmeta">${esc(previewAttrLine(x))}</div>
+            ${isBestSupplier ? `<div class="pmeta">${esc(x.supplierName || 'без поставщика')} · закупка ${x.currentCost != null ? fmt(x.currentCost) + ' → ' : ''}${fmt(x.supplierPrice)} ₽</div>` : ''}
           </div>
           <div class="price">
             <span class="old">${fmt(x.currentPrice)}</span> → <span class="new">${fmt(x.proposedPrice)}</span><br>

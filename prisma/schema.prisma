@@ -296,6 +296,10 @@ model ProductVariant {
   costPrice           Decimal? @db.Decimal(12, 2) // Закупочная цена от поставщика
   lastSyncedCostPrice Decimal? @db.Decimal(12, 2) // Снимок закупки при последней синхронизации
   photoUrls           String[] // URL фото с хостинга (из колонки Q)
+  // Аудит применения цены (движок «лучший поставщик» / батчи): кто выиграл
+  // и когда цена менялась. Заполняются при apply; уходят писбэком в O/P.
+  bestSupplierName    String?
+  priceUpdatedAt      DateTime?
 
   createdAt DateTime @default(now())
 
