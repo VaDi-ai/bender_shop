@@ -124,7 +124,14 @@ describe.skipIf(!RUN)('applyPriceBatch / rollbackPriceBatch', () => {
     expect(Number(pc[0].oldPrice)).toBe(100000)
     expect(Number(pc[0].newPrice)).toBe(103500)
 
-    expect(wb.calls[0]).toEqual([{ fullName: 'PA7 iPhone 17 Pro 256 Black', cost: 88500, price: 103500 }])
+    // O/P едут вместе с ценой: поставщик батча и «дата время» по-магазинному
+    expect(wb.calls[0]).toEqual([{
+      fullName: 'PA7 iPhone 17 Pro 256 Black', cost: 88500, price: 103500,
+      supplier: 'PA7-QA', updatedAt: expect.stringMatching(/^\d{2}\.\d{2}\.\d{4} \d{2}:\d{2}$/),
+    }])
+    const appliedBlack = await prisma.productVariant.findUnique({ where: { id: vBlackId } })
+    expect(appliedBlack.bestSupplierName).toBe('PA7-QA')
+    expect(appliedBlack.priceUpdatedAt).toBeInstanceOf(Date)
     const rows = await prisma.supplierPrice.findMany({ where: { batchId }, orderBy: { id: 'asc' } })
     expect(rows.find((x: any) => x.variantId === vBlackId).isActive).toBe(true)
     expect(rows.find((x: any) => x.variantId === vWhiteId).isActive).toBe(false)
@@ -210,7 +217,12 @@ describe.skipIf(!RUN)('applyPriceBatch / rollbackPriceBatch', () => {
     expect(Number((await prisma.productVariant.findUnique({ where: { id: vWhiteId } })).price)).toBe(99999) // чужая правка цела
 
     const lastWb = wb.calls.at(-1)
-    expect(lastWb).toEqual([{ fullName: 'PA7 iPhone 17 Pro 256 Black', cost: 80000, price: 100000 }])
+    // Откат честно снимает поставщика (O чистится) и ставит новую метку P
+    expect(lastWb).toEqual([{
+      fullName: 'PA7 iPhone 17 Pro 256 Black', cost: 80000, price: 100000,
+      supplier: '', updatedAt: expect.stringMatching(/^\d{2}\.\d{2}\.\d{4} \d{2}:\d{2}$/),
+    }])
+    expect((await prisma.productVariant.findUnique({ where: { id: vBlackId } })).bestSupplierName).toBeNull()
 
     const b = await prisma.priceApplyBatch.findUnique({ where: { id: batchId } })
     expect(b.status).toBe('rolled_back')
@@ -242,7 +254,10 @@ describe.skipIf(!RUN)('applyPriceBatch / rollbackPriceBatch', () => {
     // Писбэк отката содержит null-cost строку → в листе колонка L очищается
     const lastWb = wb.calls.at(-1)!
     const whiteRow = lastWb.find((x: any) => x.fullName === 'PA7 iPhone 17 Pro 256 White')
-    expect(whiteRow).toEqual({ fullName: 'PA7 iPhone 17 Pro 256 White', cost: null, price: 140000 })
+    expect(whiteRow).toEqual({
+      fullName: 'PA7 iPhone 17 Pro 256 White', cost: null, price: 140000,
+      supplier: '', updatedAt: expect.stringMatching(/^\d{2}\.\d{2}\.\d{4} \d{2}:\d{2}$/),
+    })
 
     // Синк-путь после отката: лист = то, что записал писбэк (L пустая → null,
     // M = 140 000). Пересчёт НЕ срабатывает, mirror — откат прилипает.
