@@ -460,6 +460,15 @@ export function adminApiRouter(): Router {
     })
   }))
 
+  // ── Движок «лучший поставщик»: собрать превью-батч (только владелец) ──────
+  // Ничего не применяет: батч уходит в обычный флоу «Проверьте и примените»,
+  // apply/rollback — те же ручки, что у батчей разбора.
+  router.post('/price-batches/best-supplier', ownerOnly, safe(async (req, res) => {
+    const { buildBestSupplierBatch } = await import('../lib/best-supplier')
+    const r = await buildBestSupplierBatch(req.admin!.telegramId)
+    res.status(r.status).json(r.ok ? { ok: true, batchId: r.batchId, stats: r.stats } : { error: r.error })
+  }))
+
   // ── Применение / откат (PR-7) ─────────────────────────────────────────────
   router.post('/price-batches/:id/apply', safe(async (req, res) => {
     const id = parseInt(String(req.params.id), 10)

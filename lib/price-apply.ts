@@ -35,6 +35,7 @@ import { applyMarkupRules, loadRules } from './markup-rules'
 import { classifyCorridor, priceDeltaPct, CorridorClass } from './price-batch'
 import { WRITEBACK_COLS } from './sheets-sync'
 import { withSyncLock, SyncLockBusy, SYNC_LOCK_BUSY_MESSAGE } from './sync-lock'
+import { formatShopTime } from './currency'
 
 export type ApplyMode = 'off' | 'test' | 'on'
 
@@ -56,6 +57,8 @@ export interface ApplyRowResult {
   newPrice?: number
   oldCost?: number | null
   newCost?: number
+  /** Кто дал цену: строка батча → её поставщик; уходит в БД и колонку O */
+  supplierName?: string | null
 }
 
 export interface ApplyOutcome {
@@ -76,8 +79,16 @@ export interface ApplyOutcome {
 /**
  * Строки писбэка: адресация по fullName (rowIndex листа нестабилен).
  * cost=null → колонка закупки очищается ('' в L) — откат «безкостовых» строк.
+ * supplier/updatedAt (O/P) пишутся, только когда поле задано (undefined =
+ * колонку не трогаем); null/'' очищает ячейку — откат снимает имя поставщика.
  */
-export interface WritebackRow { fullName: string; cost: number | null; price: number }
+export interface WritebackRow {
+  fullName: string
+  cost: number | null
+  price: number
+  supplier?: string | null
+  updatedAt?: string | null
+}
 export type WritebackFn = (rows: WritebackRow[]) => Promise<{ missing: string[] }>
 
 /**
@@ -101,6 +112,12 @@ export function buildWritebackUpdates(
       const rowNum = i + 1
       updates.push({ range: `'${sheet.name}'!${WRITEBACK_COLS.costPrice}${rowNum}`, values: [[r.cost ?? '']] })
       updates.push({ range: `'${sheet.name}'!${WRITEBACK_COLS.price}${rowNum}`, values: [[r.price]] })
+      if (r.supplier !== undefined) {
+        updates.push({ range: `'${sheet.name}'!${WRITEBACK_COLS.supplier}${rowNum}`, values: [[r.supplier ?? '']] })
+      }
+      if (r.updatedAt !== undefined) {
+        updates.push({ range: `'${sheet.name}'!${WRITEBACK_COLS.date}${rowNum}`, values: [[r.updatedAt ?? '']] })
+      }
       found.add(key)
     }
   }
@@ -135,6 +152,7 @@ async function computeRows(
   batchId: number,
   rules: Awaited<ReturnType<typeof loadRules>>,
   includeOut: boolean,
+  batchSupplierName: string | null,
 ): Promise<ComputedRows> {
   const spRows = await db.supplierPrice.findMany({ where: { batchId }, orderBy: { id: 'asc' } })
   const variantIds = spRows.map((r: any) => r.variantId).filter((v: any): v is number => v !== null)
@@ -149,7 +167,12 @@ async function computeRows(
 
   const rows: ApplyRowResult[] = []
   for (const sp of spRows) {
-    const base = { supplierPriceId: sp.id, variantId: sp.variantId, rawLine: sp.rawMessage }
+    // Приоритет строки: best_supplier-батч кладёт победителя в supplierName;
+    // у батча разбора поставщик один на весь батч.
+    const base = {
+      supplierPriceId: sp.id, variantId: sp.variantId, rawLine: sp.rawMessage,
+      supplierName: (sp.supplierName as string | null) ?? batchSupplierName,
+    }
     const v: any = sp.variantId !== null ? byId.get(sp.variantId) : undefined
     if (!v) { rows.push({ ...base, action: 'skipped_gone', corridor: null, deltaPct: null }); continue }
     const currentPrice = Number(v.price)
@@ -199,11 +222,20 @@ export async function applyPriceBatch(opts: {
   }
   const includeOut = opts.includeOutOfCorridor === true && opts.actor.role === 'owner'
 
+  // Движок «лучший поставщик» применяет только владелец (решение 2026-08);
+  // dry-run оставляем менеджеру — превью безопасно.
+  if (batch.source === 'best_supplier' && !opts.dryRun && opts.actor.role !== 'owner') {
+    return { ok: false, status: 403, error: 'Обновление по лучшему поставщику применяет только владелец' }
+  }
+
   const rules = await loadRules() // свежие правила, не из preview
+  const batchSupplierName = batch.supplierId
+    ? (await prisma.supplier.findUnique({ where: { id: batch.supplierId }, select: { name: true } }))?.name ?? null
+    : null
 
   // ── Dry-run: только чтение, без лока/статусов/записи ──────────────────────
   if (opts.dryRun) {
-    const { rows } = await computeRows(prisma, opts.batchId, rules, includeOut)
+    const { rows } = await computeRows(prisma, opts.batchId, rules, includeOut, batchSupplierName)
     return summarize(rows, true)
   }
 
@@ -217,6 +249,7 @@ export async function applyPriceBatch(opts: {
 
   let computed: ComputedRows
   let outcome: ApplyOutcome
+  let appliedStamp: Date = new Date()
   try {
     const res = await withSyncLock(async tx => {
       // Перепроверка статуса внутри tx: гонка двух параллельных apply
@@ -224,9 +257,10 @@ export async function applyPriceBatch(opts: {
       if (!fresh || fresh.status !== 'preview') throw new BatchStatusChanged(fresh?.status ?? 'deleted')
 
       // Чтение и пересчёт ВНУТРИ tx — синк не вклинится между чтением и записью
-      const c = await computeRows(tx, opts.batchId, rules, includeOut)
+      const c = await computeRows(tx, opts.batchId, rules, includeOut, batchSupplierName)
       const o = summarize(c.rows, false)
       const applied = c.rows.filter(r => r.action === 'applied')
+      const appliedAt = new Date()
 
       for (const r of applied) {
         await tx.priceChange.create({
@@ -237,24 +271,29 @@ export async function applyPriceBatch(opts: {
         })
         await tx.productVariant.update({
           where: { id: r.variantId! },
-          data: { price: r.newPrice!, costPrice: r.newCost!, lastSyncedCostPrice: r.newCost! },
+          data: {
+            price: r.newPrice!, costPrice: r.newCost!, lastSyncedCostPrice: r.newCost!,
+            // Аудит «кто/когда»: уходит писбэком в O/P вместе с ценой
+            bestSupplierName: r.supplierName ?? null, priceUpdatedAt: appliedAt,
+          },
         })
         await tx.supplierPrice.update({ where: { id: r.supplierPriceId }, data: { isActive: true } })
       }
       await tx.priceApplyBatch.update({
         where: { id: opts.batchId },
         data: {
-          status: 'applied', appliedAt: new Date(),
+          status: 'applied', appliedAt,
           stats: { ...(fresh.stats as object), applyResult: JSON.parse(JSON.stringify(o)) } as object,
         },
       })
       if (fresh.supplierId) {
         await tx.supplier.update({ where: { id: fresh.supplierId }, data: { lastPriceAt: new Date() } }).catch(() => null)
       }
-      return { c, o }
+      return { c, o, appliedAt }
     })
     computed = res.c
     outcome = res.o
+    appliedStamp = res.appliedAt
   } catch (e) {
     if (e instanceof SyncLockBusy) return { ok: false, status: 409, error: SYNC_LOCK_BUSY_MESSAGE }
     if (e instanceof BatchStatusChanged) {
@@ -269,10 +308,13 @@ export async function applyPriceBatch(opts: {
   const applied = outcome.rows!.filter(r => r.action === 'applied')
   const appliedOutOfCorridor = applied.filter(r => r.corridor === 'out').length
   const writeback = opts.writebackFn ?? sheetPriceWriteback
+  const appliedAtSheet = formatShopTime(appliedStamp)
   const wbRows: WritebackRow[] = applied
     .map((r): WritebackRow | null => {
       const fullName = computed.fullNameByVariant.get(r.variantId!) ?? ''
-      return fullName ? { fullName, cost: r.newCost!, price: r.newPrice! } : null
+      return fullName
+        ? { fullName, cost: r.newCost!, price: r.newPrice!, supplier: r.supplierName ?? '', updatedAt: appliedAtSheet }
+        : null
     })
     .filter((x): x is WritebackRow => x !== null)
   try {
@@ -347,7 +389,12 @@ export async function rollbackPriceBatch(opts: {
       for (const r of localRestorable) {
         await tx.productVariant.update({
           where: { id: r.variantId },
-          data: { price: r.oldPrice, costPrice: r.oldCost, lastSyncedCostPrice: r.oldCost },
+          // Прежнего поставщика не знаем — честно снимаем имя; дата обновления
+          // реальная (цена только что изменилась откатом)
+          data: {
+            price: r.oldPrice, costPrice: r.oldCost, lastSyncedCostPrice: r.oldCost,
+            bestSupplierName: null, priceUpdatedAt: new Date(),
+          },
         })
         await tx.priceChange.create({
           data: { variantId: r.variantId, oldPrice: r.newPrice, newPrice: r.oldPrice, source: 'batch_rollback', batchId: opts.batchId, createdBy: opts.actor.telegramId },
@@ -373,7 +420,10 @@ export async function rollbackPriceBatch(opts: {
   // для них закупка в листе ОЧИЩАЕТСЯ (иначе синк переприменит батч: блокер #31)
   const writeback = opts.writebackFn ?? sheetPriceWriteback
   try {
-    const wbRows = restorable.filter(r => r.fullName).map(r => ({ fullName: r.fullName, cost: r.oldCost, price: r.oldPrice }))
+    const rolledAtSheet = formatShopTime(new Date())
+    const wbRows = restorable
+      .filter(r => r.fullName)
+      .map(r => ({ fullName: r.fullName, cost: r.oldCost, price: r.oldPrice, supplier: '', updatedAt: rolledAtSheet }))
     const { missing } = await writeback(wbRows)
     outcome.writebackMissing = missing
   } catch (e) {
@@ -408,8 +458,12 @@ export async function retryWriteback(batchId: number, actor: Actor, writebackFn?
     select: { id: true, attributes: true },
   })
   const nameById = new Map(variants.map(v => [v.id, String((v.attributes as Record<string, unknown> | null)?.fullName ?? '')]))
+  const retryStamp = formatShopTime(batch.appliedAt ?? new Date())
   const wbRows: WritebackRow[] = appliedRows
-    .map(r => ({ fullName: nameById.get(r.variantId!) ?? '', cost: r.newCost!, price: r.newPrice! }))
+    .map(r => ({
+      fullName: nameById.get(r.variantId!) ?? '', cost: r.newCost!, price: r.newPrice!,
+      supplier: r.supplierName ?? '', updatedAt: retryStamp,
+    }))
     .filter(r => r.fullName)
   try {
     const { missing } = await (writebackFn ?? sheetPriceWriteback)(wbRows)

@@ -2426,12 +2426,16 @@
             for (const preferred of ATTR_PRIORITY) {
               if (p.attributes[preferred] && Array.isArray(p.attributes[preferred]) && p.attributes[preferred].length > 0) { key = preferred; break }
             }
-            const vals = p.attributes[key]
+            // Значения без варианта в наличии не показываем вовсе (не серыми) —
+            // p.variants уже только in-stock. Товар без вариантов чипы не фильтрует.
+            let vals = p.attributes[key]
+            if (Array.isArray(vals) && vals.length && hasVariants) {
+              vals = vals.filter(v => p.variants.some(vt => (vt.attributes || {})[key] === v))
+            }
             if (Array.isArray(vals) && vals.length) {
-              chipsHtml = `<div class="product-attr-chips">${vals.slice(0, 6).map(v => {
-                const inStockForVal = p.variants.some(vt => (vt.attributes || {})[key] === v)
-                return `<span class="product-attr-chip${inStockForVal ? '' : ' unavailable'}" data-pid="${p.id}" data-key="${esc(key)}" data-val="${esc(v)}">${esc(v)}</span>`
-              }).join('')}</div>`
+              chipsHtml = `<div class="product-attr-chips">${vals.slice(0, 6).map(v =>
+                `<span class="product-attr-chip" data-pid="${p.id}" data-key="${esc(key)}" data-val="${esc(v)}">${esc(v)}</span>`
+              ).join('')}</div>`
             }
           }
         }
@@ -2818,9 +2822,28 @@
       section.style.display = ''
       const keys = Object.keys(p.attributes).filter(k => k !== 'Регион')
       if (!keys.length) { section.style.display = 'none'; return }
+      // Опции без остатка не показываем вовсе (решение владельца): значение
+      // попадает в пикер, только если есть хотя бы один вариант в наличии с ним.
+      // /api/products отдаёт только in-stock варианты — по ним и фильтруем.
+      // У товара без вариантов фильтровать не по чему — агрегат как есть.
+      const hasVariants = Array.isArray(p.variants) && p.variants.length > 0
+      const inStockVals = key => {
+        const seen = new Set()
+        for (const v of p.variants) {
+          if (!v.inStock) continue
+          const val = (v.attributes || {})[key]
+          if (val) seen.add(val)
+        }
+        return seen
+      }
       section.innerHTML = keys.map(key => {
-        const vals = p.attributes[key]
+        let vals = p.attributes[key]
         if (!Array.isArray(vals) || !vals.length) return ''
+        if (hasVariants) {
+          const have = inStockVals(key)
+          vals = vals.filter(v => have.has(v))
+          if (!vals.length) return ''
+        }
 
         // Single value — info chip (not clickable)
         if (vals.length === 1) {

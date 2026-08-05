@@ -46,6 +46,20 @@ export function roundPrice(price: number): number {
   return Math.ceil(price / 100) * 100
 }
 
+/**
+ * Дата и время в таймзоне магазина (МСК) для колонки P «Дата обновления».
+ * Владелец просила именно дату И время: «05.08.2026 17:20».
+ */
+export function formatShopTime(d: Date): string {
+  return d
+    .toLocaleString('ru-RU', {
+      timeZone: 'Europe/Moscow',
+      day: '2-digit', month: '2-digit', year: 'numeric',
+      hour: '2-digit', minute: '2-digit',
+    })
+    .replace(',', '')
+}
+
 export type CurrencyChange = {
   currency: string
   flag: string
