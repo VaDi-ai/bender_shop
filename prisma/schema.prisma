@@ -244,6 +244,10 @@ model Product {
   reserved    Int      @default(0)
   categoryId  Int?
   photoUrl    String? // URL главного фото (обратная совместимость)
+  // Обложка товара из админки — DB-only, как Category.imageUrl: синк и
+  // recomputeProductPhotos её НЕ трогают. Пусто → превью считается как раньше
+  // (photoUrl = первое фото первого варианта).
+  coverPhoto  String?
   photos      String[] // массив file_id фото товара
   isAvailable Boolean  @default(true)
   isFeatured  Boolean  @default(false)

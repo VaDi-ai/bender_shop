@@ -134,29 +134,47 @@ export async function setVariantPhoto(
 }
 
 /**
- * Главное фото товара — то, что покупатель видит в каталоге и поиске.
+ * Главное фото товара — обложка в каталоге и поиске (Product.coverPhoto).
  *
- * Витрина берёт его как первое фото среди предложений (mergeVariantPhotoUrls),
- * поэтому «поставить главное» = поставить фото ПЕРВОМУ предложению товара.
- * Так это и объясняется в интерфейсе — никакой магии за спиной.
+ * Это НЕ фото предложения: обложка не зависит от порядка офферов и живёт
+ * только в БД — тот же паттерн, что фото категорий и логотипы брендов.
+ * Писбэка в таблицу нет, синк и recomputeProductPhotos её не перезаписывают.
+ * url=null — снять обложку: превью снова считается авто (первый вариант).
  */
 export async function setProductMainPhoto(
   actor: string,
   productId: number,
   url: string | null,
-  writeback: PhotoWritebackFn = sheetPhotoWriteback,
 ): Promise<PhotoOutcome> {
   const product = await prisma.product.findUnique({
     where: { id: productId },
-    select: { id: true, variants: { orderBy: { id: 'asc' }, select: { id: true }, take: 1 } },
+    select: { id: true, coverPhoto: true, photoUrl: true, photos: true },
   })
   if (!product) return bad(404, 'Товар не найден')
-  const first = product.variants[0]
-  if (!first) return bad(422, 'У товара нет ни одного предложения — фото ставить некуда')
-  return setVariantPhoto(actor, first.id, url, writeback)
+
+  let value: string | null = null
+  if (url !== null && url !== '') {
+    const link = normalizePhotoLink(url)
+    if (!link.ok) return bad(422, link.error)
+    value = link.url
+  }
+
+  await prisma.product.update({ where: { id: productId }, data: { coverPhoto: value } })
+  await touchStorefrontCache('product_cover_photo')
+
+  void logAdminAction({
+    adminTelegramId: actor, action: 'update', entity: 'Product', entityId: productId,
+    before: { coverPhoto: product.coverPhoto }, after: { coverPhoto: value },
+  })
+  log.info('Product cover photo set from web admin', { productId, value: value ?? '(снята — авто)' })
+  // photoUrl — что покупатель видит теперь: обложка, а без неё — авто-превью
+  return { ok: true, status: 200, photoUrl: value ?? product.photoUrl ?? null, productPhotos: product.photos }
 }
 
-/** Пересобирает фото товара из предложений — тем же правилом, что и синк. */
+/**
+ * Пересобирает фото товара из предложений — тем же правилом, что и синк.
+ * Пишет только photos/photoUrl; coverPhoto — ручная обложка, её не трогаем.
+ */
 export async function recomputeProductPhotos(productId: number): Promise<string[]> {
   const variants = await prisma.productVariant.findMany({
     where: { productId },

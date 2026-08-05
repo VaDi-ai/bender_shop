@@ -811,11 +811,11 @@
             <span class="chip ${p.isAvailable ? (p.inStockCount ? 'c-ok' : 'c-off') : 'c-bad'}">${p.isAvailable ? (p.inStockCount ? 'на витрине' : 'нет в наличии') : 'скрыт'}</span>
           </div>
           <div class="sf-item-actions">
-            <button class="btn b-gh sm" data-pc-photo="product">${p.mainPhoto ? 'Заменить главное фото' : 'Поставить главное фото'}</button>
-            ${p.mainPhoto ? '<button class="btn b-nt sm" data-pc-photo-clear="product">Убрать фото</button>' : ''}
+            <button class="btn b-gh sm" data-pc-photo="product">${p.coverPhoto ? 'Заменить главное фото товара' : 'Поставить главное фото товара'}</button>
+            ${p.coverPhoto ? '<button class="btn b-nt sm" data-pc-photo-clear="product">Убрать</button>' : ''}
           </div>
         </div>
-        <div class="hint">Главное фото видно в каталоге и поиске. Оно берётся у первого предложения — его и меняем.</div>
+        <div class="hint">Главное фото — обложка товара в каталоге, не зависит от порядка предложений. Хранится в админке, синк её не трогает.${p.coverPhoto ? ' «Убрать» — превью снова возьмётся автоматически, у первого предложения.' : ' Сейчас обложка не задана — превью берётся автоматически, у первого предложения.'}</div>
 
         <div class="cap" style="margin:14px 0 6px">ПРЕДЛОЖЕНИЯ</div>
         ${p.offers.map(o => `<div class="sf-item">
@@ -855,7 +855,7 @@
         f.scrollIntoView({ behavior: 'smooth', block: 'center' })
       }))
       box.querySelectorAll('[data-pc-photo-clear]').forEach(b => b.addEventListener('click', async () => {
-        if (!confirm('Убрать главное фото? В таблице ячейка «Фото» очистится, товар останется без картинки.')) return
+        if (!confirm('Убрать обложку товара? Превью в каталоге снова возьмётся автоматически — у первого предложения.')) return
         await savePhoto({ kind: 'product', id: p.id }, null)
       }))
       bindAttrEdit(box)
@@ -1019,7 +1019,9 @@
     document.getElementById('pcPhotoSave').addEventListener('click', async () => {
       const err = document.getElementById('pcPhotoErr'); err.textContent = ''
       if (!pcPhotoTarget) { err.textContent = 'Сначала выберите, какому фото менять картинку'; return }
-      const btn = document.getElementById('pcPhotoSave'); btn.disabled = true; btn.textContent = 'Сохраняем в таблицу…'
+      const btn = document.getElementById('pcPhotoSave'); btn.disabled = true
+      // Фото предложения уходит писбэком в таблицу; обложка товара — только в БД
+      btn.textContent = pcPhotoTarget && pcPhotoTarget.kind === 'variant' ? 'Сохраняем в таблицу…' : 'Сохраняем…'
       try {
         let url = document.getElementById('pcUrl').value.trim()
         if (!url) url = await uploadPhoto(document.getElementById('pcFile'), err)

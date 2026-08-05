@@ -729,6 +729,7 @@ export function startApiServer(bot?: Telegraf): Server {
           quantity: true,
           categoryId: true,
           photoUrl: true,
+          coverPhoto: true,
           photos: true,
           badge: true,
           brand: true,
@@ -768,6 +769,8 @@ export function startApiServer(bot?: Telegraf): Server {
         line: p.line ?? null,
         sortOrder: p.sortOrder,
         photoUrl: normalizePublicPhotoUrl(p.photoUrl ?? ''),
+        // Обложка из админки — клиент предпочитает её; пусто → photoUrl/первый вариант
+        coverPhoto: p.coverPhoto ? normalizePublicPhotoUrl(p.coverPhoto) : null,
         photos: (p.photos ?? []).map(normalizePublicPhotoUrl).filter(Boolean),
         quantity: p.quantity,
         badge: p.badge ?? null,

@@ -1649,6 +1649,8 @@
         return []
       }
       // Превью в ленте / модал без выбранного ТП: одно фото, даже если вариантов много.
+      // Обложка из админки первая — она не зависит от порядка предложений.
+      if (p.coverPhoto) return dedupeResolvedPhotos([resolvePhoto(p.coverPhoto)])
       if (p.photoUrl) return dedupeResolvedPhotos([resolvePhoto(p.photoUrl)])
       if (Array.isArray(p.photos) && p.photos.length) {
         return dedupeResolvedPhotos([resolvePhoto(p.photos[0])])
@@ -3000,7 +3002,7 @@
 
       section.style.display = ''
       grid.innerHTML = recs.map(p => {
-        const photo = p.photos && p.photos[0] ? resolvePhoto(p.photos[0]) : null
+        const photo = getProductPhotos(p, null)[0] || null
         const imgHtml = photo
           ? `<img src="${photo}" alt="" loading="lazy">`
           : '<img src="/no-photo.webp" alt="" style="opacity:0.6" onerror="this.onerror=null;this.src=\'/no-photo.png\'">'

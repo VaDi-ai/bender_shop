@@ -930,6 +930,7 @@ export async function syncProductsFromSheets(
 
       // Карусель в магазине: на уровне Product храним объединение URL со всех вариантов
       // (в таблице фото часто только у строк вариантов; раньше в Product попадало одно preview).
+      // coverPhoto здесь НЕ трогаем: это ручная обложка из админки, она переживает синк.
       const mergedPhotos = mergeVariantPhotoUrls(group.variants)
       try {
         await prisma.product.update({
