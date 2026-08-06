@@ -193,7 +193,15 @@ export async function listCategories(): Promise<CategoryView[]> {
         select: { photoUrl: true, variants: { select: { photoUrls: true }, take: 3 } },
         take: 10,
       },
-      _count: { select: { products: true } },
+      _count: {
+        select: {
+          // Счётчик = видимые на витрине товары (фильтр тот же, что у products
+          // выше) — а не все записи категории с латентными без остатка
+          products: {
+            where: { isAvailable: true, variants: { some: { quantity: { gt: 0 }, inStock: true } } },
+          },
+        },
+      },
     },
   })
 
@@ -251,7 +259,12 @@ export function normalizeBrandKey(raw: string): string {
 /** Бренды из товаров в наличии — та же логика, что публичный /api/brands. */
 async function availableBrands(): Promise<Map<string, number>> {
   const products = await prisma.product.findMany({
-    where: { isAvailable: true },
+    // Как публичный /api/brands: считаем только видимые на витрине товары
+    // (с in-stock вариантами), а не все isAvailable-записи
+    where: {
+      isAvailable: true,
+      variants: { some: { quantity: { gt: 0 }, inStock: true } },
+    },
     select: { name: true, brand: true },
   })
   const map = new Map<string, number>()

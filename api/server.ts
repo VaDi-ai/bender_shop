@@ -810,7 +810,21 @@ export function startApiServer(bot?: Telegraf): Server {
             },
           },
         },
-        include: { _count: { select: { products: true } } },
+        include: {
+          _count: {
+            select: {
+              // Тот же фильтр, что и выше: считаем только видимые на витрине
+              // товары, а не все записи категории (латентные без остатка
+              // задирали «iPhone · 11» при 5 покупаемых)
+              products: {
+                where: {
+                  isAvailable: true,
+                  variants: { some: { quantity: { gt: 0 }, inStock: true } },
+                },
+              },
+            },
+          },
+        },
         orderBy: { name: 'asc' },
       })
 
@@ -833,7 +847,13 @@ export function startApiServer(bot?: Telegraf): Server {
     try {
       const [products, brandImages] = await Promise.all([
         prisma.product.findMany({
-          where: { isAvailable: true },
+          // Счётчик = что реально видно на витрине (как /api/products):
+          // товары без in-stock вариантов не считаем, иначе «Apple · 98»
+          // при 23 покупаемых
+          where: {
+            isAvailable: true,
+            variants: { some: { quantity: { gt: 0 }, inStock: true } },
+          },
           select: { name: true, brand: true },
         }),
         prisma.brandImage.findMany({
