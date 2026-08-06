@@ -1161,6 +1161,16 @@ export async function syncProductsFromSheets(
 
   // Прерванный прогон (кнопка «стоп» в боте) — не успех: счётчики частичные
   const aborted = shouldAbort ? shouldAbort() : false
+
+  // Открытые вкладки витрины поллят /api/cache-version раз в 30 с и без бампа
+  // не узнают о свежих ценах/остатках до перезахода. Правки из админки бампают
+  // сами (touchStorefrontCache внутри), синк до сих пор — нет. Бамп только
+  // после непрерванного прогона, тронувшего каталог; сама функция не бросает.
+  if (!aborted && created + updated + disabled > 0) {
+    const { touchStorefrontCache } = await import('./storefront-admin')
+    await touchStorefrontCache('sheet_sync')
+  }
+
   await syncRunFinish(syncRunId, {
     ok: !aborted && errors.length === 0,
     rowsRead: rows.length,
