@@ -2387,13 +2387,15 @@
         products = products.filter(p => promoFilter.ids.has(p.id))
       }
 
-      // Фильтр по категории
-      if (activeCat) {
+      // Фильтр по категории и бренду. Поиск — глобальный: активный дрилл
+      // (бренд/категория) на время запроса игнорируется, иначе «iphone» с
+      // экрана Samsung давал «Ничего не найдено». Пустой запрос — фильтры
+      // применяются снова, состояние дрилла не сбрасывается.
+      if (activeCat && !searchQuery) {
         products = products.filter(p => (p.category || '') === activeCat)
       }
 
-      // Фильтр по бренду
-      if (activeBrand) {
+      if (activeBrand && !searchQuery) {
         products = products.filter(p => {
           const b = (p.brand && p.brand.trim()) ? p.brand.trim() : (p.name || '').split(' ')[0]
           return b === activeBrand
