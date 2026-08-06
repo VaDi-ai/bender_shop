@@ -291,6 +291,17 @@ export async function listBrandPhotos(): Promise<BrandView[]> {
     .sort((a, b) => b.productCount - a.productCount || a.brand.localeCompare(b.brand, 'ru'))
 }
 
+/** Все бренды каталога (включая товары без остатка) — для валидации логотипов. */
+async function knownBrands(): Promise<string[]> {
+  const products = await prisma.product.findMany({ select: { name: true, brand: true } })
+  const set = new Set<string>()
+  for (const p of products) {
+    const b = p.brand?.trim() || p.name.split(' ')[0]
+    if (b) set.add(b)
+  }
+  return [...set]
+}
+
 /** imageUrl=null снимает логотип — бренд снова показывается текстом. */
 export async function setBrandPhoto(actor: string, brandRaw: unknown, imageUrl: unknown): Promise<Outcome> {
   const brand = String(brandRaw ?? '').trim()
@@ -298,9 +309,12 @@ export async function setBrandPhoto(actor: string, brandRaw: unknown, imageUrl: 
   const brandNorm = normalizeBrandKey(brand)
 
   // Бренд не сущность: чтобы не копить логотипы опечаток, пишем только для
-  // брендов, которые реально видны покупателю (есть товар в наличии).
-  const known = [...(await availableBrands()).keys()].find(b => normalizeBrandKey(b) === brandNorm)
-  if (!known) return bad(404, 'Такого бренда нет среди товаров в наличии')
+  // брендов, известных каталогу. Наличие остатка НЕ требуем: логотип можно
+  // предзалить бренду, чьи товары временно без остатка, — карточка появится
+  // на витрине сразу с ним. Счётчики/список витрины это не меняет
+  // (listBrandPhotos как считал по наличию, так и считает).
+  const known = (await knownBrands()).find(b => normalizeBrandKey(b) === brandNorm)
+  if (!known) return bad(404, 'Такого бренда нет среди товаров каталога')
 
   let value: string | null = null
   if (imageUrl !== null && imageUrl !== '') {
