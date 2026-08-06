@@ -1120,6 +1120,23 @@ export async function syncProductsFromSheets(
     }
   }
 
+  // ── Step 5: Гашение осиротевших продуктов ─────────────────────────────────
+  // Смена «Категории» в листе создаёт новый Product (ключ имя|категория), а
+  // варианты ре-парентятся на него по fullName. Старый Product остаётся
+  // isAvailable=true с «нарисованным» stock и нулём вариантов — так копились
+  // латентные дубли (бэклог «178»). Гасим мягко (не удаляем: возможные
+  // FK-ссылки и точка восстановления остаются). Прерванный прогон не гасит —
+  // upsert мог не дойти до групп, чьи варианты переехали бы обратно.
+  if (!shouldAbort?.()) {
+    const orphaned = await prisma.product.updateMany({
+      where: { isAvailable: true, variants: { none: {} } },
+      data: { isAvailable: false, stock: 0, quantity: 0 },
+    })
+    if (orphaned.count > 0) {
+      log.info('Sheets sync disabled orphaned products', { count: orphaned.count })
+    }
+  }
+
   log.info('Sheets sync done', { created, updated, disabled, errors: errors.length })
 
   // Audit: check products without key attributes
