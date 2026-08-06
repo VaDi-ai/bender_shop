@@ -6,6 +6,7 @@ import {
   filterPlaceholderPhotoUrls,
   sanitizeSyncedPhotoUrls,
   aggregateProductAttributes,
+  mergeGroupsByProductKey,
   getAttributes,
   simCtx,
   SheetRow,
@@ -253,5 +254,78 @@ describe('getAttributes — SIM только телефонам (isPhone-гей�
     const attrs = getAttributes(sheetRow({ fullName: 'iPhone 17 Pro 256GB Desert', country: 'Марс' }))
     expect(attrs['SIM']).toBeUndefined()
     expect(simCtx.unknown.size).toBe(1)
+  })
+})
+
+describe('mergeGroupsByProductKey', () => {
+  type G = Parameters<typeof mergeGroupsByProductKey>[0] extends Map<string, infer T> ? T : never
+  const group = (over: Partial<G> = {}): G => ({
+    productName: 'Macbook Air M5',
+    brand: 'Apple',
+    category: 'MacBook',
+    line: 'MacBook',
+    sortOrder: 0,
+    sheetDescription: '',
+    sheetSpecs: {},
+    badge: '',
+    hit: false,
+    badgeColPresent: false,
+    hitColPresent: false,
+    variants: [],
+    ...over,
+  })
+  const asMap = (entries: [string, G][]) => new Map(entries)
+
+  it('сливает группы одного productName|category: варианты — объединение', () => {
+    // Репро P1-1: «Модель» разводит MacBook Air 13/15 в две группы, Product один
+    const merged = mergeGroupsByProductKey(asMap([
+      ['Apple|MacBook|MacBook Air 13|Macbook Air M5', group({ variants: [{ fullName: '13" 512' }, { fullName: '13" 2TB' }] as unknown[] })],
+      ['Apple|MacBook|MacBook Air 15|Macbook Air M5', group({ variants: [{ fullName: '15" 512' }] as unknown[] })],
+    ]))
+    expect(merged.size).toBe(1)
+    const g = [...merged.values()][0]!
+    expect(g.variants.map(v => (v as { fullName: string }).fullName))
+      .toEqual(['13" 512', '13" 2TB', '15" 512'])
+  })
+
+  it('агрегат по слитой группе содержит обе диагонали (сценарий бага)', () => {
+    const merged = mergeGroupsByProductKey(asMap([
+      ['k13', group({ variants: [{ 'Экран': '13"', 'Память': '2TB' }] as unknown[] })],
+      ['k15', group({ variants: [{ 'Экран': '15"', 'Память': '512GB' }] as unknown[] })],
+    ]))
+    const attrs = aggregateProductAttributes([...merged.values()][0]!.variants as Record<string, string>[])
+    expect(attrs['Экран']).toEqual(['13"', '15"'])
+    expect(attrs['Память']).toEqual(['2TB', '512GB'])
+  })
+
+  it('НЕ сливает одинаковое имя в разных категориях (интент Phase 2 сохраняется)', () => {
+    const merged = mergeGroupsByProductKey(asMap([
+      ['a', group({ category: 'iPhone' })],
+      ['b', group({ category: 'Телефоны' })],
+    ]))
+    expect(merged.size).toBe(2)
+  })
+
+  it('без коллизий — прозрачный no-op, порядок сохранён', () => {
+    const g1 = group({ productName: 'Iphone 17' })
+    const g2 = group({ productName: 'Iphone 17 Pro' })
+    const merged = mergeGroupsByProductKey(asMap([['x', g1], ['y', g2]]))
+    expect([...merged.values()]).toEqual([g1, g2])
+  })
+
+  it('поля мержатся по правилам строк группы: min sortOrder, первый badge, hit-или', () => {
+    const merged = mergeGroupsByProductKey(asMap([
+      ['a', group({ sortOrder: 0, badge: '', hit: false, badgeColPresent: true, sheetDescription: '' })],
+      ['b', group({ sortOrder: 7, badge: 'Хит', hit: true, hitColPresent: true, sheetDescription: 'описание', sheetSpecs: { Чип: 'M5' } })],
+      ['c', group({ sortOrder: 3, badge: 'Новинка' })],
+    ]))
+    const g = [...merged.values()][0]!
+    expect(g.sortOrder).toBe(3)
+    expect(g.badge).toBe('Хит')
+    expect(g.hit).toBe(true)
+    expect(g.badgeColPresent).toBe(true)
+    expect(g.hitColPresent).toBe(true)
+    expect(g.sheetDescription).toBe('описание')
+    expect(g.sheetSpecs).toEqual({ Чип: 'M5' })
   })
 })
