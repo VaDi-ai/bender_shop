@@ -492,6 +492,60 @@ export function aggregateProductAttributes(variantAttrs: Array<Record<string, un
   return productAttributes
 }
 
+/**
+ * Схлопнуть группы строк, которые дальше по конвейеру лягут в ОДИН Product.
+ *
+ * Ключ группировки включает «Модель», а Product апсертится по
+ * productName|categoryId. Когда «Модель» держит вариантную ось одного товара
+ * (MacBook Air 13/15 → один productName, одна категория), получаются две
+ * группы на один Product: каждая пересчитывает attributes/price/stock только
+ * из СВОИХ строк, и последняя затирает первую — 13"-конфиги пропадают из
+ * чипов, Product.price становится ценой недостижимого минимума.
+ *
+ * Товары «под категорией и под общей категорией» (исходный интент model в
+ * ключе) здесь не склеиваются: у них разные категории, а ключ слияния —
+ * имя+категория, тот же, что у апсерта Product.
+ *
+ * Поля мержатся по тем же правилам, что и строки внутри одной группы:
+ * variants — конкатенация; sortOrder — минимальный ненулевой; badge/
+ * description/specs/brand/line — первый непустой; hit и *ColPresent — «или».
+ */
+export function mergeGroupsByProductKey<G extends {
+  productName: string
+  brand: string
+  category: string
+  line: string
+  sortOrder: number
+  sheetDescription: string
+  sheetSpecs: Record<string, string>
+  badge: string
+  hit: boolean
+  badgeColPresent: boolean
+  hitColPresent: boolean
+  variants: unknown[]
+}>(groups: Map<string, G>): Map<string, G> {
+  const merged = new Map<string, G>()
+  for (const g of groups.values()) {
+    const key = `${g.productName}|${g.category}`
+    const acc = merged.get(key)
+    if (!acc) {
+      merged.set(key, g)
+      continue
+    }
+    acc.variants.push(...g.variants)
+    if (g.sortOrder > 0 && (acc.sortOrder === 0 || g.sortOrder < acc.sortOrder)) acc.sortOrder = g.sortOrder
+    if (!acc.badge && g.badge) acc.badge = g.badge
+    if (g.hit) acc.hit = true
+    acc.badgeColPresent = acc.badgeColPresent || g.badgeColPresent
+    acc.hitColPresent = acc.hitColPresent || g.hitColPresent
+    if (!acc.sheetDescription && g.sheetDescription) acc.sheetDescription = g.sheetDescription
+    if (Object.keys(acc.sheetSpecs).length === 0 && Object.keys(g.sheetSpecs).length > 0) acc.sheetSpecs = g.sheetSpecs
+    if (!acc.brand && g.brand) acc.brand = g.brand
+    if (!acc.line && g.line) acc.line = g.line
+  }
+  return merged
+}
+
 export async function syncProductsFromSheets(
   shouldAbort?: () => boolean,
   meta?: SyncRunMeta,
@@ -634,7 +688,16 @@ export async function syncProductsFromSheets(
     })
   }
 
-  log.info('Sheets sync grouped', { productCount: groups.size })
+  // Группы, делящие один productName|category (например «Модель» = MacBook Air 13
+  // и MacBook Air 15 при одном имени товара), апсертились бы в один Product по
+  // очереди, и последняя затирала бы attributes/price/stock первой. Схлопываем
+  // их до апсерта — агрегат/цена/остаток считаются по объединению вариантов.
+  const mergedGroups = mergeGroupsByProductKey(groups)
+  if (mergedGroups.size !== groups.size) {
+    log.info('Sheets sync merged split groups', { before: groups.size, after: mergedGroups.size })
+  }
+
+  log.info('Sheets sync grouped', { productCount: mergedGroups.size })
 
   // ── Step 2: Preload existing data ─────────────────────────────────────────
 
@@ -689,17 +752,17 @@ export async function syncProductsFromSheets(
     errors.push(`Заморожены цены ${frozenVariantIds.size} вариантов: у применённого батча не проехал writeback в лист — повторите запись из админки`)
   }
 
-  for (const [key, group] of groups) {
+  for (const [key, group] of mergedGroups) {
     if (shouldAbort?.()) {
       log.info('Sheets sync aborted by user')
       break
     }
     groupIdx++
     if (groupIdx % 20 === 0) {
-      log.debug('Sheets sync progress', { current: groupIdx, total: groups.size })
+      log.debug('Sheets sync progress', { current: groupIdx, total: mergedGroups.size })
     }
     if (Date.now() - startTime > 10 * 60 * 1000) {
-      log.error('Sheets sync timeout', { current: groupIdx, total: groups.size })
+      log.error('Sheets sync timeout', { current: groupIdx, total: mergedGroups.size })
       errors.push(`Timeout after 10 minutes at product ${groupIdx}`)
       break
     }
