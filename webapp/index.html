@@ -1528,6 +1528,16 @@
     function acquiringFee(s) { return Math.round(s * 0.14) }
     function totalWithFee() { const s = subtotal(); return payMethod === 'card' ? s + acquiringFee(s) : s }
     function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;') }
+
+    /**
+     * Отображение значений атрибутов: «2 SIM» показываем как «SIM + SIM» —
+     * единообразно с «SIM + eSIM»/«eSIM + eSIM». ТОЛЬКО текст на экране:
+     * data-val кнопок, findVariant и данные БД продолжают жить на «2 SIM».
+     */
+    function displayAttrVal(key, val) {
+      if (key === 'SIM' && String(val).trim().toLowerCase() === '2 sim') return 'SIM + SIM'
+      return val
+    }
     function photoUrl(fid) { return '/api/banner/' + encodeURIComponent(fid) }
     /** Абсолютный URL (/https), путь CDN (/photos/*.webp), иначе file_id Telegram → /api/banner */
     function resolvePhoto(f) {
@@ -2502,7 +2512,7 @@
             }
             if (Array.isArray(vals) && vals.length) {
               chipsHtml = `<div class="product-attr-chips">${vals.slice(0, 6).map(v =>
-                `<span class="product-attr-chip" data-pid="${p.id}" data-key="${esc(key)}" data-val="${esc(v)}">${esc(v)}</span>`
+                `<span class="product-attr-chip" data-pid="${p.id}" data-key="${esc(key)}" data-val="${esc(v)}">${esc(displayAttrVal(key, v))}</span>`
               ).join('')}</div>`
             }
           }
@@ -2922,12 +2932,12 @@
         if (vals.length === 1 && allInStockHaveKey(p.variants, key)) {
           return `<div class="modal-attr-group">
   <div class="modal-attr-label">${esc(key)}</div>
-  <div class="modal-attr-row"><span class="modal-attr-btn info">${esc(vals[0])}</span></div>
+  <div class="modal-attr-row"><span class="modal-attr-btn info">${esc(displayAttrVal(key, vals[0]))}</span></div>
 </div>`
         }
 
         const selectedVal = modalSelectedAttrs[key]
-        const label = selectedVal ? key + ' : ' + selectedVal : key
+        const label = selectedVal ? key + ' : ' + displayAttrVal(key, selectedVal) : key
         const btns = vals.map(v => {
           // Доступность значения считаем БЕЗ учёта текущего выбора ЭТОГО атрибута:
           // {...selected, [key]: v} подменяет свой ключ, поэтому переключение внутри
@@ -2941,7 +2951,7 @@
             : true
           const isActive = selectedVal === v
           return `<button class="modal-attr-btn${isActive ? ' active' : ''}${!available ? ' unavailable' : ''}"
-            data-key="${esc(key)}" data-val="${esc(v)}">${esc(v)}</button>`
+            data-key="${esc(key)}" data-val="${esc(v)}">${esc(displayAttrVal(key, v))}</button>`
         }).join('')
         return `<div class="modal-attr-group">
   <div class="modal-attr-label">${esc(label)}</div>
@@ -3194,7 +3204,7 @@
       // fullName — сырое имя строки листа («iPhone 17 256GB Black (Индия)»), дублирует
       // цвет/память/страну рядом стоящих атрибутов — в подписи позиции не показываем.
       const attrVals = variant && variant.attributes
-        ? Object.entries(variant.attributes).filter(([k]) => k !== 'fullName').map(([, v]) => v)
+        ? Object.entries(variant.attributes).filter(([k]) => k !== 'fullName').map(([k, v]) => displayAttrVal(k, v))
         : []
       const name = attrVals.length ? p.name + ' (' + attrVals.join(' · ') + ')' : p.name
 
