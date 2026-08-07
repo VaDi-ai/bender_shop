@@ -106,7 +106,7 @@ export async function buildBestSupplierBatch(createdBy: string): Promise<BuildOu
     select: { id: true, price: true, costPrice: true },
   })
   const variantById = new Map(variants.map(v => [v.id, v]))
-  const rules = await loadRules()
+  const rules = await loadRules('site')
 
   let variantsWithOffers = 0
   let unchanged = 0

@@ -729,7 +729,7 @@ export async function syncProductsFromSheets(
   let cachedRules: MarkupRuleData[] | null = null
   if (MARKUP_RULES_ENABLED) {
     try {
-      cachedRules = await _loadRules()
+      cachedRules = await _loadRules('site')
     } catch (err) {
       log.warn('Failed to preload markup rules', { error: err instanceof Error ? err.message : String(err) })
       cachedRules = []

@@ -581,7 +581,7 @@ async function processSupplierPrice(
     })
 
     // Проверим есть ли настроенные правила
-    const rules = await loadRules()
+    const rules = await loadRules('site')
     const rulesValid = validateRules(rules)
 
     const rulesButton = rulesValid.ok
@@ -628,7 +628,7 @@ async function showCreateCard(ctx: Context, userId: number, items: ParsedLine[],
   const p = items[index]!
   const brand = detectBrandFromName(p.model)
   const category = detectCategoryFromName(p.model)
-  const rules = await loadRules()
+  const rules = await loadRules('site')
   const retailPrice = rules.length > 0 ? applyMarkupRules(p.price, rules) : p.price
   const DEFAULT_QTY = parseInt(process.env.DEFAULT_STOCK_QTY || '3', 10)
 
@@ -750,7 +750,7 @@ export function setupPricingHandlers(bot: Telegraf): void {
     const state = pricingState.get(userId)
     if (!state || state.flow !== 'awaiting_markup_or_rules') return
 
-    const rules = await loadRules()
+    const rules = await loadRules('site')
 
     const pending: PendingVariant[] = state.matches.map(m => {
       const newPrice = applyMarkupRules(m.supplierPrice, rules)
@@ -1112,7 +1112,7 @@ export function setupPricingHandlers(bot: Telegraf): void {
     const state = pricingState.get(userId)
     if (!state || state.flow !== 'awaiting_markup_or_rules') return
 
-    const rules = await loadRules()
+    const rules = await loadRules('site')
     const DEFAULT_QTY = parseInt(process.env.DEFAULT_STOCK_QTY || '3', 10)
     let created = 0
     let errors = 0
@@ -1553,7 +1553,7 @@ export function setupPricingHandlers(bot: Telegraf): void {
 
   bot.action('pricing:rules', async (ctx) => {
     try { await ctx.answerCbQuery() } catch { /* ignore */ }
-    const rules = await loadRules()
+    const rules = await loadRules('site')
     const validation = validateRules(rules)
 
     const lines = ['📊 Правила наценки\n']
@@ -1580,7 +1580,7 @@ export function setupPricingHandlers(bot: Telegraf): void {
     const userId = getUserId(ctx)
 
     // Подсказка: если правил нет, первое должно начинаться с 0
-    const rules = await loadRules()
+    const rules = await loadRules('site')
     const enabled = rules.filter(r => r.enabled).sort((a, b) => a.minCost - b.minCost)
     const nextMin = enabled.length > 0 && enabled[enabled.length - 1]!.maxCost !== null
       ? enabled[enabled.length - 1]!.maxCost
@@ -1598,7 +1598,7 @@ export function setupPricingHandlers(bot: Telegraf): void {
 
   bot.action('pricing:rules_del', async (ctx) => {
     try { await ctx.answerCbQuery() } catch { /* ignore */ }
-    const rules = await loadRules()
+    const rules = await loadRules('site')
     if (rules.length === 0) {
       await ctx.reply('Нет правил для удаления.')
       return
@@ -1614,7 +1614,7 @@ export function setupPricingHandlers(bot: Telegraf): void {
 
   bot.action('pricing:rules_edit', async (ctx) => {
     try { await ctx.answerCbQuery() } catch { /* ignore */ }
-    const rules = await loadRules()
+    const rules = await loadRules('site')
     if (rules.length === 0) {
       await ctx.reply('Нет правил для редактирования.')
       return
@@ -1651,7 +1651,7 @@ export function setupPricingHandlers(bot: Telegraf): void {
     await prisma.markupRule.delete({ where: { id: ruleId } }).catch(() => {})
     await ctx.reply('✅ Правило удалено.')
     // Показать обновлённый список
-    const rules = await loadRules()
+    const rules = await loadRules('site')
     const validation = validateRules(rules)
     const lines = ['📊 Правила наценки\n']
     if (rules.length === 0) {
@@ -1861,7 +1861,7 @@ export async function handlePricingMessage(
     pricingState.delete(userId)
 
     // Валидация после добавления
-    const rules = await loadRules()
+    const rules = await loadRules('site')
     const validation = validateRules(rules)
 
     const from = state.minCost.toLocaleString('ru-RU')
@@ -1898,7 +1898,7 @@ export async function handlePricingMessage(
 
       pricingState.delete(userId)
 
-      const rules = await loadRules()
+      const rules = await loadRules('site')
       const validation = validateRules(rules)
 
       await ctx.reply(
@@ -1920,7 +1920,7 @@ export async function handlePricingMessage(
       await ctx.reply('❌ Введите положительное число.')
       return true
     }
-    const rules = await loadRules()
+    const rules = await loadRules('site')
     const result = applyMarkupRules(val, rules)
     const diff = result - val
     const enabled = rules.filter(r => r.enabled).sort((a, b) => a.minCost - b.minCost)

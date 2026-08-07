@@ -29,9 +29,12 @@ export interface MarkupRuleData {
 export function applyMarkupRules(cost: number, rules: MarkupRuleData[]): number {
   if (cost <= 0) return 0
 
+  // Тай-брейк по id: при равных minCost выбор правила детерминирован
+  // (валидатор перекрытия запрещает, но старые/выключенные наборы могли
+  // пересекаться — поведение не должно зависеть от порядка выдачи БД)
   const enabled = rules
     .filter(r => r.enabled)
-    .sort((a, b) => a.minCost - b.minCost)
+    .sort((a, b) => a.minCost - b.minCost || a.id - b.id)
 
   const rule = enabled.find(r =>
     r.minCost <= cost && (r.maxCost === null || cost < r.maxCost)
@@ -94,8 +97,16 @@ export function validateRules(rules: MarkupRuleData[]): { ok: boolean; error?: s
 /**
  * Загрузить все правила из БД и конвертировать в MarkupRuleData[].
  */
-export async function loadRules(): Promise<MarkupRuleData[]> {
-  const rows = await prisma.markupRule.findMany({ orderBy: { minCost: 'asc' } })
+export type MarkupChannel = 'site' | 'avito'
+
+/**
+ * Правила одного канала. Дефолт — 'site': витринная цена не должна видеть
+ * avito-правила (админ-API умеет их заводить, а движок раньше грузил всё
+ * подряд — первое же avito-правило утекло бы в расчёт site-розницы).
+ * Сортировка minCost, id — детерминизм при равных minCost.
+ */
+export async function loadRules(channel: MarkupChannel = 'site'): Promise<MarkupRuleData[]> {
+  const rows = await prisma.markupRule.findMany({ where: { channel }, orderBy: [{ minCost: 'asc' }, { id: 'asc' }] })
   return rows.map(r => ({
     id: r.id,
     minCost: Number(r.minCost),
