@@ -16,6 +16,16 @@ export function pluralize(n: number, one: string, few: string, many: string): st
 }
 
 /**
+ * Отображаемый текст значения атрибута: «2 SIM» показываем как «Dual SIM» —
+ * единообразно с витриной (webapp displayAttrVal) и справочником. ТОЛЬКО
+ * отображение: значение в БД, canonicalizeSim и матчинг остаются «2 SIM».
+ */
+export function displayAttrValue(key: string, val: string): string {
+  if (key === 'SIM' && val.trim().toLowerCase() === '2 sim') return 'Dual SIM'
+  return val
+}
+
+/**
  * Форматирует атрибуты варианта (JSON) в строку для отображения.
  * Вход: { "Цвет": "Silver", "Память": "256GB", "SIM": "eSIM" }
  * Выход: "Silver / 256GB / eSIM"
@@ -28,8 +38,8 @@ export function formatVariantAttrs(attrs: unknown): string {
   const values: string[] = []
   for (const key of Object.keys(obj)) {
     const v = obj[key]
-    if (v == null) continue
-    const s = String(v).trim()
+    if (v == null || typeof v === 'object') continue
+    const s = displayAttrValue(key, String(v).trim())
     if (s) values.push(s)
   }
   return values.join(' / ')

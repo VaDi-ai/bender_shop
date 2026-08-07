@@ -102,4 +102,20 @@ describe('formatProductNameWithAttrs', () => {
     expect(formatProductNameWithAttrs('AirPods Pro', { 'Цвет': '', 'Размер': null }))
       .toBe('AirPods Pro')
   })
+
+  it('SIM «2 SIM» показывается как «Dual SIM», остальные метки не тронуты', () => {
+    expect(formatProductNameWithAttrs('iPhone 16', { 'Цвет': 'Teal', 'SIM': '2 SIM' }))
+      .toBe('iPhone 16 (Teal / Dual SIM)')
+    expect(formatProductNameWithAttrs('iPhone 17', { 'SIM': 'eSIM + eSIM' }))
+      .toBe('iPhone 17 (eSIM + eSIM)')
+    expect(formatProductNameWithAttrs('iPhone 17e', { 'SIM': 'SIM + eSIM' }))
+      .toBe('iPhone 17e (SIM + eSIM)')
+    // «2 SIM» вне ключа SIM не маппится (страховка от совпадений в других полях)
+    expect(formatVariantAttrs({ 'Комплектация': '2 SIM' })).toBe('2 SIM')
+  })
+
+  it('объектные значения (attrOverrides) не попадают в подпись', () => {
+    expect(formatVariantAttrs({ 'Цвет': 'Black', attrOverrides: { SIM: { value: 'eSIM' } } }))
+      .toBe('Black')
+  })
 })

@@ -1530,12 +1530,13 @@
     function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;') }
 
     /**
-     * Отображение значений атрибутов: «2 SIM» показываем как «SIM + SIM» —
-     * единообразно с «SIM + eSIM»/«eSIM + eSIM». ТОЛЬКО текст на экране:
-     * data-val кнопок, findVariant и данные БД продолжают жить на «2 SIM».
+     * Отображение значений атрибутов: «2 SIM» показываем как «Dual SIM» —
+     * единообразно со справочником и подписью заявки (lib/format.ts:
+     * displayAttrValue). ТОЛЬКО текст на экране: data-val кнопок, findVariant
+     * и данные БД продолжают жить на «2 SIM».
      */
     function displayAttrVal(key, val) {
-      if (key === 'SIM' && String(val).trim().toLowerCase() === '2 sim') return 'SIM + SIM'
+      if (key === 'SIM' && String(val).trim().toLowerCase() === '2 sim') return 'Dual SIM'
       return val
     }
     function photoUrl(fid) { return '/api/banner/' + encodeURIComponent(fid) }
