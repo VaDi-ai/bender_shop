@@ -1,5 +1,9 @@
-import { describe, it, expect } from 'vitest'
-import { applyMarkupRules, validateRules, type MarkupRuleData } from '../lib/markup-rules'
+import { describe, it, expect, vi } from 'vitest'
+import { applyMarkupRules, validateRules, loadRules, type MarkupRuleData } from '../lib/markup-rules'
+
+vi.mock('../lib/prisma', () => ({
+  prisma: { markupRule: { findMany: vi.fn().mockResolvedValue([]) } },
+}))
 
 const SAMPLE_RULES: MarkupRuleData[] = [
   { id: 1, minCost: 0, maxCost: 5000, mode: 'fixed', value: 500, enabled: true },
@@ -110,5 +114,36 @@ describe('validateRules', () => {
       SAMPLE_RULES[3]!,
     ]
     expect(validateRules(rules)).toEqual({ ok: true })
+  })
+})
+
+describe('изоляция каналов site/avito', () => {
+  it('loadRules по умолчанию просит только site-правила', async () => {
+    const { prisma } = await import('../lib/prisma')
+    const findMany = prisma.markupRule.findMany as ReturnType<typeof vi.fn>
+    findMany.mockClear()
+    await loadRules()
+    expect(findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { channel: 'site' } }))
+    await loadRules('avito')
+    expect(findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { channel: 'avito' } }))
+  })
+
+  it('синтетическое avito-правило не меняет site-цену (смысл фикса)', () => {
+    // Раньше loadRules грузил все каналы: avito-правило с тем же интервалом
+    // попадало в расчёт витринной цены. Теперь site-путь его не видит.
+    const siteRules = SAMPLE_RULES
+    const avitoRule: MarkupRuleData = { id: 99, minCost: 0, maxCost: null, mode: 'percent', value: 50, enabled: true }
+    const before = applyMarkupRules(7000, siteRules)                 // 8000 — чистый site
+    const leaked = applyMarkupRules(7000, [avitoRule, ...siteRules]) // старое поведение: avito утёк
+    expect(before).toBe(8000)
+    expect(leaked).not.toBe(before)  // утечка реально меняла цену…
+    expect(applyMarkupRules(7000, siteRules)).toBe(before) // …а site-набор её не видит
+  })
+
+  it('тай-брейк при равных minCost — детерминирован по id, порядок выдачи не важен', () => {
+    const a: MarkupRuleData = { id: 1, minCost: 0, maxCost: null, mode: 'fixed', value: 500, enabled: true }
+    const b: MarkupRuleData = { id: 2, minCost: 0, maxCost: null, mode: 'fixed', value: 900, enabled: true }
+    expect(applyMarkupRules(1000, [a, b])).toBe(1500)
+    expect(applyMarkupRules(1000, [b, a])).toBe(1500) // тот же результат при обратном порядке
   })
 })

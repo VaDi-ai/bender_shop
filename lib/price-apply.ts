@@ -228,7 +228,7 @@ export async function applyPriceBatch(opts: {
     return { ok: false, status: 403, error: 'Обновление по лучшему поставщику применяет только владелец' }
   }
 
-  const rules = await loadRules() // свежие правила, не из preview
+  const rules = await loadRules('site') // свежие правила, не из preview
   const batchSupplierName = batch.supplierId
     ? (await prisma.supplier.findUnique({ where: { id: batch.supplierId }, select: { name: true } }))?.name ?? null
     : null

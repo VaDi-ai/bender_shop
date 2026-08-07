@@ -122,7 +122,7 @@ export async function createPriceBatch(opts: {
   const expiresAt = computeExpiresAt(now, ttlDays)
 
   // Коридор считаем уже в предпросмотре — dry-run PR-7 обопрётся ровно на него
-  const rules = await loadRules()
+  const rules = await loadRules('site')
   let outOfCorridor = 0
   for (const m of matched) {
     if (classifyCorridor(m.currentPrice, applyMarkupRules(m.supplierPrice, rules)) === 'out') outOfCorridor++
@@ -233,7 +233,7 @@ export async function getBatchPreview(batchId: number): Promise<{
     select: { id: true, price: true, costPrice: true, attributes: true, inStock: true, product: { select: { name: true, brand: true } } },
   })
   const byId = new Map(variants.map(v => [v.id, v]))
-  const rules: MarkupRuleData[] = await loadRules()
+  const rules: MarkupRuleData[] = await loadRules('site')
 
   const preview: PreviewRow[] = rows.map(r => {
     const v = r.variantId !== null ? byId.get(r.variantId) : undefined
