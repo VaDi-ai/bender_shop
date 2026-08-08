@@ -150,9 +150,18 @@ describe.skipIf(!RUN)('витрина из веб-админки', () => {
     view = (await sf.listBrandPhotos()).find((b: any) => b.brand === 'Тестобренд')
     expect(view.imageUrl).toBeNull()
 
-    const audits = await prisma.auditLog.findMany({ where: { entity: 'Brand' }, orderBy: { id: 'asc' } })
-    expect(audits.map((a: any) => a.action)).toEqual(['update', 'update', 'delete'])
-    expect(audits[2].before).toMatchObject({ imageFile: '/photos/logo2.webp' })
+    // logAdminAction — fire-and-forget (void): ждём, пока все три записи долетят,
+    // иначе тест гоняется с async-вставкой аудита и флачит
+    let audits: any[] = []
+    for (let i = 0; i < 40 && audits.length < 3; i++) {
+      await new Promise(r => setTimeout(r, 50))
+      audits = await prisma.auditLog.findMany({ where: { entity: 'Brand' }, orderBy: { id: 'asc' } })
+    }
+    // порядок вставки двух async-«update» не гарантирован — сверяем состав,
+    // а строку удаления находим по action, не по позиции
+    expect(audits.map((a: any) => a.action).sort()).toEqual(['delete', 'update', 'update'])
+    const del = audits.find((a: any) => a.action === 'delete')
+    expect(del.before).toMatchObject({ imageFile: '/photos/logo2.webp' })
 
     await prisma.product.delete({ where: { id: p.id } })
   })
