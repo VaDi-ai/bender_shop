@@ -6,6 +6,8 @@ import { prisma } from './prisma'
 import { getAvitoItems, updateAvitoPrice, isAvitoConfigured } from './avito'
 import { readSheet, getProductSheetNames } from './google-sheets'
 import { mapHeaders } from './sheets-sync'
+import { applyMarkupRules, loadRules, MarkupRuleData } from './markup-rules'
+import { roundPrice } from './currency'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -322,6 +324,41 @@ export async function applyAvitoMapping(mappings: AvitoMapping[]): Promise<numbe
 }
 
 /** Синхронизировать цены БД → Avito (МГНОВЕННО через REST API) */
+/** Минимальный срез варианта для расчёта avito-цены (тестируется без БД). */
+export interface AvitoPriceVariant {
+  price: number | string | { toString(): string }
+  costPrice: number | string | { toString(): string } | null
+  inStock: boolean
+  quantity: number
+}
+
+/**
+ * Avito-цена товара: min по in-stock вариантам, где кандидат каждого варианта —
+ * наценка на ЗАКУПКУ по avito-правилам (может быть НИЖЕ site — аудитория Avito),
+ * а без закупки или без avito-правил — его site-розница (фолбэк на уровне
+ * варианта: одна строка без закупки не роняет сборку всего товара).
+ * Вырожденные случаи (нет правил / нет закупок) схлопываются в прежнее
+ * поведение: min site-цен вариантов. Нет in-stock вариантов → fallbackPrice
+ * (Product.price — товары без вариантов).
+ */
+export function computeAvitoPrice(
+  variants: AvitoPriceVariant[],
+  avitoRules: MarkupRuleData[],
+  fallbackPrice: number,
+): number {
+  const candidates = variants
+    .filter(v => v.inStock && v.quantity > 0)
+    .map(v => {
+      const cost = v.costPrice === null ? 0 : Number(v.costPrice)
+      return cost > 0 && avitoRules.length > 0
+        ? applyMarkupRules(cost, avitoRules)
+        : Number(v.price)
+    })
+    .filter(p => p > 0)
+  if (!candidates.length) return roundPrice(fallbackPrice)
+  return roundPrice(Math.min(...candidates))
+}
+
 export async function syncPricesToAvito(): Promise<{ updated: number; failed: number; skipped: number }> {
   if (!isAvitoConfigured()) return { updated: 0, failed: 0, skipped: 0 }
 
@@ -331,13 +368,17 @@ export async function syncPricesToAvito(): Promise<{ updated: number; failed: nu
       avitoEnabled: true,
       isAvailable: true,
     },
-    select: { id: true, name: true, avitoItemId: true, price: true },
+    select: {
+      id: true, name: true, avitoItemId: true, price: true,
+      variants: { select: { price: true, costPrice: true, inStock: true, quantity: true } },
+    },
   })
+  const avitoRules = await loadRules('avito')
 
   let updated = 0, failed = 0, skipped = 0
   for (const p of products) {
     if (!p.avitoItemId) { skipped++; continue }
-    const price = Number(p.price)
+    const price = computeAvitoPrice(p.variants, avitoRules, Number(p.price))
     if (price <= 0) { skipped++; continue }
     await new Promise(r => setTimeout(r, 500))
     const ok = await updateAvitoPrice(Number(p.avitoItemId), price)
