@@ -73,8 +73,7 @@ export interface BuildOutcome {
  * Ничего не применяет: батч уходит в обычный флоу «Проверьте и примените».
  * Прежние best_supplier-превью помечаются discarded — актуально только последнее.
  */
-export async function buildBestSupplierBatch(createdBy: string): Promise<BuildOutcome> {
-  const now = new Date()
+export async function buildBestSupplierBatch(createdBy: string, now: Date = new Date()): Promise<BuildOutcome> {
   const candidates = await prisma.supplierPrice.findMany({
     where: { isActive: true, variantId: { not: null } },
     select: {

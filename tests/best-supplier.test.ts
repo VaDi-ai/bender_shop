@@ -100,7 +100,7 @@ describe('buildBestSupplierBatch', () => {
     ])
     p.productVariant.findMany.mockResolvedValue([{ id: 10, price: 120_000, costPrice: 95_000 }])
 
-    const r = await buildBestSupplierBatch('900')
+    const r = await buildBestSupplierBatch('900', NOW)
     expect(r).toMatchObject({ ok: true, batchId: 77, stats: { rows: 1, variantsWithOffers: 1 } })
 
     const created = p.supplierPrice.createMany.mock.calls[0][0].data
@@ -124,7 +124,7 @@ describe('buildBestSupplierBatch', () => {
     ])
     p.productVariant.findMany.mockResolvedValue([{ id: 10, price: 120_000, costPrice: null }])
 
-    await buildBestSupplierBatch('900')
+    await buildBestSupplierBatch('900', NOW)
     const created = p.supplierPrice.createMany.mock.calls[0][0].data
     expect(created[0].price).toBe(90_000)
     expect(created[0].supplierName).toBe('Дубай-опт')
@@ -135,7 +135,7 @@ describe('buildBestSupplierBatch', () => {
     // roundPrice(90000)=90000 при пустых правилах
     p.productVariant.findMany.mockResolvedValue([{ id: 10, price: 90_000, costPrice: 90_000 }])
 
-    const r = await buildBestSupplierBatch('900')
+    const r = await buildBestSupplierBatch('900', NOW)
     expect(r).toMatchObject({ ok: true, batchId: null, stats: { rows: 0, unchanged: 1 } })
     expect(p.priceApplyBatch.create).not.toHaveBeenCalled()
   })
@@ -144,7 +144,7 @@ describe('buildBestSupplierBatch', () => {
     p.supplierPrice.findMany.mockResolvedValue([sp({ parsedAt: days(-30) })])
     p.productVariant.findMany.mockResolvedValue([{ id: 10, price: 120_000, costPrice: null }])
 
-    const r = await buildBestSupplierBatch('900')
+    const r = await buildBestSupplierBatch('900', NOW)
     expect(r.batchId).toBeNull()
     expect(r.stats).toMatchObject({ variantsWithOffers: 0, rows: 0 })
   })
