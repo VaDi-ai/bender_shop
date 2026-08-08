@@ -418,26 +418,41 @@ export function parseSheetRows(sheetName: string, data: string[][]): SheetRow[] 
   return rows
 }
 
+export interface ReadAllProductsResult {
+  rows: SheetRow[]
+  /** Листов прочитано успешно (включая пустые) */
+  sheetsRead: number
+  /** Листов, чьё чтение упало (Google API/парсинг) — их строки отсутствуют в rows */
+  sheetsFailed: number
+}
+
 /**
  * Читает все листы таблицы (кроме служебных, напр. «не использовать») и
  * возвращает объединённый массив строк. Полистовой парсинг: каждый лист
- * читается отдельно со своими заголовками; ошибка одного листа не роняет sync.
+ * читается отдельно со своими заголовками; ошибка одного листа не роняет sync,
+ * но СЧИТАЕТСЯ: по sheetsFailed синк отличает «лист реально пуст» от «чтение
+ * упало» и не гасит каталог по неполному набору (прайм-директива Step 4).
+ * Упали ВСЕ листы → throw: прогон завершается ошибкой, не пустым каталогом.
  */
-export async function readAllProducts(): Promise<SheetRow[]> {
+export async function readAllProducts(): Promise<ReadAllProductsResult> {
   const sheetNames = await getProductSheetNames()
-  if (sheetNames.length === 0) return []
+  if (sheetNames.length === 0) return { rows: [], sheetsRead: 0, sheetsFailed: 0 }
 
   const allRows: SheetRow[] = []
+  let sheetsRead = 0
+  let sheetsFailed = 0
 
   for (const sheetName of sheetNames) {
     try {
       const data = await readSheet(sheetName)
+      sheetsRead++
       if (data.length === 0) continue
       const rows = parseSheetRows(sheetName, data)
       log.debug('Sheets sync sheet parsed', { sheetName, rows: rows.length })
       allRows.push(...rows)
     } catch (err) {
       // Один проблемный лист не должен ломать весь товарный учёт
+      sheetsFailed++
       Sentry.captureException(err, { tags: { operation: 'sheets-sync-read', sheetName } })
       log.error('Sheets sync failed to read sheet', {
         sheetName,
@@ -446,7 +461,30 @@ export async function readAllProducts(): Promise<SheetRow[]> {
     }
   }
 
-  return allRows
+  if (sheetsRead === 0 && sheetsFailed > 0) {
+    throw new Error(`Не прочитан ни один лист (${sheetsFailed} с ошибками) — синк прерван, каталог не тронут`)
+  }
+
+  return { rows: allRows, sheetsRead, sheetsFailed }
+}
+
+/**
+ * Причина пропуска Step 4 (гашение «не увиденных» вариантов), либо null —
+ * гасить можно. Чистая функция: прайм-директива «не гасить каталог по
+ * неполному прогону» тестируется без БД и Google API.
+ */
+export function disableStepSkipReason(i: {
+  /** Основной цикл прерван (стоп-кнопка или таймаут) */
+  interrupted: boolean
+  /** Сколько строк прочитано со всех листов */
+  rowsCount: number
+  /** Сколько листов упало при чтении */
+  sheetsFailed: number
+}): string | null {
+  if (i.interrupted) return 'прогон прерван (стоп/таймаут)'
+  if (i.rowsCount === 0) return 'чтение листов пустое'
+  if (i.sheetsFailed > 0) return `не прочитано листов: ${i.sheetsFailed}`
+  return null
 }
 
 /**
@@ -593,15 +631,18 @@ export async function syncProductsFromSheets(
   }
 
   let rows: SheetRow[]
+  let sheetsFailed = 0
   try {
-    rows = await readAllProducts()
+    const read = await readAllProducts()
+    rows = read.rows
+    sheetsFailed = read.sheetsFailed
   } catch (err) {
     Sentry.captureException(err, { tags: { operation: 'sheets-sync' } })
     log.error('Sheets sync read failed', { error: err instanceof Error ? err.message : String(err) })
     await syncRunFinish(syncRunId, { ok: false, errors: [`Failed to read sheets: ${err}`] })
     return { created: 0, updated: 0, disabled: 0, total: 0, errors: [`Failed to read sheets: ${err}`] }
   }
-  log.info('Sheets sync rows read', { count: rows.length })
+  log.info('Sheets sync rows read', { count: rows.length, sheetsFailed })
 
   // ── Step 1: Group rows by productName + category ──────────────────────────
 
@@ -724,6 +765,12 @@ export async function syncProductsFromSheets(
   const seenVariantIds = new Set<number>()
   const startTime = Date.now()
   let groupIdx = 0
+  // Прерван ли основной цикл (стоп-кнопка/таймаут): по неполному прогону
+  // гасить «не увиденное» нельзя — seenVariantIds заполнен частично
+  let interrupted = false
+  if (sheetsFailed > 0) {
+    errors.push(`Не прочитано листов: ${sheetsFailed} — их строки в этом прогоне отсутствуют, гашение пропущено`)
+  }
 
   // Кеш правил наценки на время одной синхронизации
   let cachedRules: MarkupRuleData[] | null = null
@@ -755,6 +802,7 @@ export async function syncProductsFromSheets(
   for (const [key, group] of mergedGroups) {
     if (shouldAbort?.()) {
       log.info('Sheets sync aborted by user')
+      interrupted = true
       break
     }
     groupIdx++
@@ -764,6 +812,7 @@ export async function syncProductsFromSheets(
     if (Date.now() - startTime > 10 * 60 * 1000) {
       log.error('Sheets sync timeout', { current: groupIdx, total: mergedGroups.size })
       errors.push(`Timeout after 10 minutes at product ${groupIdx}`)
+      interrupted = true
       break
     }
 
@@ -1079,7 +1128,20 @@ export async function syncProductsFromSheets(
   }
 
   // ── Step 4: Disable variants not seen in the sheet ────────────────────────
+  // ПРАЙМ-ДИРЕКТИВА: гасим «не увиденное» только по ПОЛНОМУ прогону. Пустое
+  // чтение, упавшие листы, стоп-кнопка или таймаут → seenVariantIds неполон,
+  // и updateMany погасил бы живой каталог из-за транзиентного сбоя Google.
+  const step4Reason = disableStepSkipReason({
+    interrupted: interrupted || Boolean(shouldAbort?.()),
+    rowsCount: rows.length,
+    sheetsFailed,
+  })
 
+  let disabled = 0
+  if (step4Reason) {
+    log.warn('Sheets sync Step 4 skipped', { reason: step4Reason, seen: seenVariantIds.size })
+    errors.push(`Гашение вариантов пропущено: ${step4Reason}`)
+  } else {
   const allVariantsInDb = await prisma.productVariant.findMany({
     where: { NOT: { id: { in: Array.from(seenVariantIds) } } },
     select: { id: true, productId: true, attributes: true },
@@ -1090,7 +1152,6 @@ export async function syncProductsFromSheets(
     return a && typeof a === 'object' && 'fullName' in a
   })
 
-  let disabled = 0
   if (toDisable.length > 0) {
     await prisma.productVariant.updateMany({
       where: { id: { in: toDisable.map(v => v.id) } },
@@ -1119,6 +1180,7 @@ export async function syncProductsFromSheets(
       await prisma.$transaction(updates.slice(i, i + 10))
     }
   }
+  }
 
   // ── Step 5: Гашение осиротевших продуктов ─────────────────────────────────
   // Смена «Категории» в листе создаёт новый Product (ключ имя|категория), а
@@ -1127,7 +1189,7 @@ export async function syncProductsFromSheets(
   // латентные дубли (бэклог «178»). Гасим мягко (не удаляем: возможные
   // FK-ссылки и точка восстановления остаются). Прерванный прогон не гасит —
   // upsert мог не дойти до групп, чьи варианты переехали бы обратно.
-  if (!shouldAbort?.()) {
+  if (!shouldAbort?.() && !interrupted) {
     const orphaned = await prisma.product.updateMany({
       where: { isAvailable: true, variants: { none: {} } },
       data: { isAvailable: false, stock: 0, quantity: 0 },
