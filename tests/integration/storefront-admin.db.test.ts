@@ -130,6 +130,11 @@ describe.skipIf(!RUN)('витрина из веб-админки', () => {
     const p = await prisma.product.create({
       data: { sku: 'sf-br', name: 'Тестофон X', brand: 'Тестобренд', price: 1000, categoryId: cat.id, attributes: {} },
     })
+    // listBrandPhotos показывает бренды ВИДИМЫХ товаров (как /api/brands):
+    // без in-stock варианта «Тестобренд» в списке не появится вовсе
+    await prisma.productVariant.create({
+      data: { productId: p.id, sku: 'sf-br-v', price: 1000, quantity: 1, inStock: true, attributes: { fullName: 'Тестофон X' } },
+    })
 
     // до логотипа — бренд в списке, но текстом
     let view = (await sf.listBrandPhotos()).find((b: any) => b.brand === 'Тестобренд')
