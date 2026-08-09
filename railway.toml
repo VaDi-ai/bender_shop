@@ -11,9 +11,11 @@ buildCommand = "npm run build"
 # Явный healthcheck быстрее редиректа / → /shop; без npm-обёртки меньше шума по SIGTERM.
 healthcheckPath = "/health"
 healthcheckTimeout = 120
-# Prisma 7: у db push нет флага --skip-generate (ломало контейнер).
-# generate + push: на Railway dist иногда собирается без актуального generated-клиента относительно schema.
-# Повторная проверка dist на старте: если Volume смонтирован на /app, подложится старый
-# dist/bot/index.js → бессмысленные P2021 Region и пр. Сборка уже гоняет verify-dist.
-startCommand = "npx prisma generate && npx prisma db push && node scripts/verify-dist.cjs && node dist/bot/index.js"
+# СХЕМНЫХ ОПЕРАЦИЙ В startCommand НЕТ (урок #107: start-time db push упал на
+# unique-констрейнте, старый контейнер уже был погашен из-за Volume → 20 мин 502).
+# db push живёт ТОЛЬКО в releaseCommand; рестарт контейнера схему не трогает.
+# prisma generate на старте оставлен намеренно: клиент запекается в образ на
+# build (prebuild), но исторический край с Volume, подкладывающим старый /app,
+# лечится связкой generate + verify-dist — оба без обращения к БД.
+startCommand = "npx prisma generate && node scripts/verify-dist.cjs && node dist/bot/index.js"
 releaseCommand = "npx prisma generate && npx prisma db push"
