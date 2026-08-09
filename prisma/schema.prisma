@@ -257,7 +257,7 @@ model Product {
   specs        Json? // { "Процессор": "A18", "Экран": "6.1 дюйм" }
   badge        String? // "ХИТ", "НОВИНКА", "АКЦИЯ"
   brand        String? // бренд / производитель (Apple, Samsung и т.д.)
-  avitoItemId  BigInt? // ID объявления на Avito (заполняется при маппинге)
+  avitoItemId  BigInt? @unique // ID объявления на Avito (заполняется при маппинге; два товара на одно объявление — ошибка маппинга)
   avitoEnabled Boolean @default(false) // Включён ли товар для Avito
 
   // Phase 2 — таксономия бренд → линейка → модель
@@ -276,7 +276,6 @@ model Product {
   @@index([isFeatured])
   @@index([brand])
   @@index([name])
-  @@index([avitoItemId])
   @@index([avitoEnabled])
   @@index([brand, line])
 }
