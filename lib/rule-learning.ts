@@ -29,7 +29,7 @@
 import { prisma } from './prisma'
 import { log } from './logger'
 import { logAdminAction } from './audit'
-import { norm } from './sim-rules'
+import { norm, SIM_CANON } from './sim-rules'
 
 export const REPEATS_REQUIRED = 3
 /** Единственный атрибут, который умеем обобщать в правило. */
@@ -181,6 +181,17 @@ export async function learnRule(actor: string, p: PatternKey): Promise<Outcome> 
     return bad(422, `Пока умеем обобщать только тип SIM. «${attr}» останется ручной правкой этой строки — на других товарах она ничего не изменит`)
   }
   if (!p.brand && !p.country) return bad(422, 'Правило не к чему привязать — нужен бренд или страна')
+  // Страновое правило без бренда накрыло бы ВСЕ бренды (включая Apple со всей
+  // его страновой матрицей) — ограда PR #60: связка учится только с брендом
+  if (p.country && !p.brand) {
+    return bad(422, 'Страновое правило без бренда накрыло бы все бренды — укажите бренд')
+  }
+  // Значение — только из канона SIM: опечатка в словаре молча красила бы
+  // весь бренд·страну в несуществующий тип
+  const canon = SIM_CANON.find(c => norm(c) === norm(value))
+  if (!canon) {
+    return bad(422, `«${value}» не похоже на тип SIM. Допустимые: ${SIM_CANON.join(' / ')}`)
+  }
 
   const key = {
     countryNorm: norm(p.country), brandNorm: norm(p.brand), modelMatch: '', modelGenFrom: 0,
@@ -188,13 +199,13 @@ export async function learnRule(actor: string, p: PatternKey): Promise<Outcome> 
   const existing = await prisma.simRule.findUnique({
     where: { countryNorm_brandNorm_modelMatch_modelGenFrom: key },
   })
-  if (existing && existing.simType !== value) {
+  if (existing && existing.simType !== canon) {
     return bad(409, `Правило для этой связки уже есть: ${existing.simType}. Сначала забудьте старое`)
   }
   const rule = await prisma.simRule.upsert({
     where: { countryNorm_brandNorm_modelMatch_modelGenFrom: key },
-    update: { simType: value, source: 'learned', note: 'выучено из правок владельца' },
-    create: { ...key, country: p.country, brand: p.brand, simType: value, source: 'learned', note: 'выучено из правок владельца' },
+    update: { simType: canon, source: 'learned', note: 'выучено из правок владельца' },
+    create: { ...key, country: p.country, brand: p.brand, simType: canon, source: 'learned', note: 'выучено из правок владельца' },
   })
   void logAdminAction({
     adminTelegramId: actor, action: 'rule_learned', entity: 'SimRule', entityId: rule.id,

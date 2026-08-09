@@ -163,6 +163,28 @@ describe('запись правила — только явная и тольк�
     expect((await learnRule(ACTOR, { attr: '', brand: 'Redmi', country: null, value: '' })).status).toBe(422)
     expect(sim.upsert).not.toHaveBeenCalled()
   })
+
+  it('страновое правило без бренда — отказ (иначе накрыло бы все бренды)', async () => {
+    const r = await learnRule(ACTOR, { attr: 'SIM', brand: null, country: 'Индия', value: '2 SIM' })
+    expect(r).toMatchObject({ ok: false, status: 422 })
+    expect(r.error).toContain('бренд')
+    expect(sim.upsert).not.toHaveBeenCalled()
+  })
+
+  it('значение вне канона SIM — отказ с перечнем допустимых', async () => {
+    for (const bad of ['2 СИМ+', 'dual', 'eSIM+eSIM+eSIM', '3 SIM']) {
+      const r = await learnRule(ACTOR, { attr: 'SIM', brand: 'Redmi', country: 'Индия', value: bad })
+      expect(r.status, bad).toBe(422)
+      expect(r.error).toContain('Допустимые')
+    }
+    expect(sim.upsert).not.toHaveBeenCalled()
+  })
+
+  it('регистр значения канонизируется («esim + esim» → «eSIM + eSIM»)', async () => {
+    const r = await learnRule(ACTOR, { attr: 'SIM', brand: 'Redmi', country: 'Индия', value: 'esim + esim' })
+    expect(r).toMatchObject({ ok: true, status: 201 })
+    expect(sim.upsert.mock.calls[0][0].create).toMatchObject({ simType: 'eSIM + eSIM' })
+  })
 })
 
 describe('«чтение» — learnAlias: raw-написание → канон, любое поле', () => {

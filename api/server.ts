@@ -1518,6 +1518,14 @@ export function startApiServer(bot?: Telegraf): Server {
       res.status(400).json({ error: 'Корзина пуста' })
       return
     }
+    // Потолок позиций: честная корзина столько не набирает, а каждая позиция —
+    // запрос в БД внутри транзакции заказа
+    if (items.length > 50) {
+      log.warn('Order validation failed', { reason: 'too many items', count: items.length, telegramId })
+      await logSecurityEvent('invalid_order_data', { ip: req.ip, reason: 'too many items', count: items.length, telegramId }, telegramId)
+      res.status(400).json({ error: 'Слишком много позиций в заказе' })
+      return
+    }
 
     if (!paymentMethod || !['cash', 'card'].includes(paymentMethod)) {
       log.warn('Order validation failed', { reason: 'invalid paymentMethod', paymentMethod, rawPayment: req.body.payment, rawPaymentMethod: req.body.paymentMethod })

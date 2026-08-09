@@ -197,8 +197,11 @@ export function attributesForExistingVariant(
 // ─── Загрузка словаря ────────────────────────────────────────────────────────
 
 export async function loadSimRules(): Promise<SimRuleData[]> {
+  // Вторичный orderBy по id: resolveSimType сортирует только по modelGenFrom,
+  // при равном поколении выбор не должен зависеть от порядка выдачи БД
   const rows = await prisma.simRule.findMany({
     select: { id: true, country: true, countryNorm: true, brandNorm: true, modelMatch: true, modelGenFrom: true, simType: true, source: true },
+    orderBy: [{ modelGenFrom: 'desc' }, { id: 'asc' }],
   })
   return rows
 }

@@ -257,7 +257,7 @@ model Product {
   specs        Json? // { "Процессор": "A18", "Экран": "6.1 дюйм" }
   badge        String? // "ХИТ", "НОВИНКА", "АКЦИЯ"
   brand        String? // бренд / производитель (Apple, Samsung и т.д.)
-  avitoItemId  BigInt? // ID объявления на Avito (заполняется при маппинге)
+  avitoItemId  BigInt? @unique // ID объявления на Avito (заполняется при маппинге; два товара на одно объявление — ошибка маппинга)
   avitoEnabled Boolean @default(false) // Включён ли товар для Avito
 
   // Phase 2 — таксономия бренд → линейка → модель
@@ -276,7 +276,6 @@ model Product {
   @@index([isFeatured])
   @@index([brand])
   @@index([name])
-  @@index([avitoItemId])
   @@index([avitoEnabled])
   @@index([brand, line])
 }
@@ -513,6 +512,9 @@ model Supplier {
   chatId       String    @unique
   chatType     String    @default("group") // "group" | "channel" | "private"
   isActive     Boolean   @default(true)
+  // HISTORICAL: в расчёте цены НЕ участвует — розницу считают только глобальные
+  // MarkupRule (loadRules). Поле осталось от раннего конвейера; drop запрещён
+  // (история/совместимость), в админ-редакторе скрыто, чтобы не крутили вхолостую.
   markup       Decimal   @default(5) @db.Decimal(5, 2)
   // ADMIN-DESIGN §7.3: срок жизни прайса; «свежая» цена = parsedAt + TTL > now (утверждено: 3 дня)
   priceTtlDays Int       @default(3)
@@ -729,6 +731,10 @@ model SyncRun {
   direction  String    @default("sheet_to_db")
   trigger    String // "cron" | "manual" | "deploy"
   startedBy  String? // telegramId админа при ручном запуске
+  // startedAt/finishedAt хранятся UTC-наивом (timestamp без tz, сессия БД —
+  // Etc/UTC) и КОРРЕКТНЫ. Осторожно с ad-hoc чтением через node-pg: он парсит
+  // naive-timestamp в ЛОКАЛЬНОЙ зоне клиента — с машины в MSK время «уедет»
+  // на −3ч (артефакт чтения, проверено против деплой-таймлайна 2026-08-09).
   startedAt  DateTime  @default(now())
   finishedAt DateTime?
   ok         Boolean?

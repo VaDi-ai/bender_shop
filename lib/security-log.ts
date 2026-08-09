@@ -253,14 +253,22 @@ export async function logSecurityEvent(
     }
   }
 
-  // Also alert the specific adminTelegramId if provided and not already in _adminIds
+  // Also alert the specific adminTelegramId if provided and not already in _adminIds.
+  // ТОЛЬКО реальным членам команды (AdminUser): в витринных событиях сюда
+  // прилетает telegramId ПОКУПАТЕЛЯ — слать ему «СОБЫТИЕ БЕЗОПАСНОСТИ» нельзя.
   if (adminTelegramId !== undefined && _bot) {
     const id = Number(adminTelegramId)
     if (!isNaN(id) && !_adminIds.includes(id)) {
+      let isTeamMember = false
       try {
-        await _bot.telegram.sendMessage(id, text)
-      } catch (err) {
-        log.error('[SECURITY] Failed to send alert to admin', { adminId: id, err: err instanceof Error ? err.message : String(err) })
+        isTeamMember = !!(await prisma.adminUser.findUnique({ where: { telegramId: String(id) }, select: { telegramId: true } }))
+      } catch { /* AdminUser недоступен — молчим, критикал-рассылка выше уже ушла */ }
+      if (isTeamMember) {
+        try {
+          await _bot.telegram.sendMessage(id, text)
+        } catch (err) {
+          log.error('[SECURITY] Failed to send alert to admin', { adminId: id, err: err instanceof Error ? err.message : String(err) })
+        }
       }
     }
   }

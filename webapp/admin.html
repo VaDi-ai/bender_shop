@@ -237,7 +237,9 @@
         <div id="supForm" style="display:none">
           <input class="inp" id="supName" placeholder="Название" maxlength="100">
           <div class="row" style="gap:8px">
-            <input class="inp" id="supMarkup" placeholder="Наценка, % (0–50)" inputmode="decimal">
+            <!-- Supplier.markup — historical: в расчёте цены не участвует (розница
+                 только по глобальным правилам наценки), поле скрыто -->
+            <input class="inp" id="supMarkup" style="display:none" placeholder="Наценка, % (0–50)" inputmode="decimal">
             <input class="inp" id="supTtl" placeholder="TTL, дней (1–30)" inputmode="numeric">
           </div>
           <input class="inp" id="supNotes" placeholder="Заметка" maxlength="1000">
@@ -3065,7 +3067,7 @@
           <div class="sf-item-head">
             <div class="grow">
               <div class="nm">${esc(s.name)}</div>
-              <div class="mt">наценка ${s.markup}% · цены живут ${s.priceTtlDays} дн. · ${last}${String(s.chatId || '').startsWith('web:') ? ' · без чата' : ' · чат привязан'}</div>
+              <div class="mt">цены живут ${s.priceTtlDays} дн. · ${last}${String(s.chatId || '').startsWith('web:') ? ' · без чата' : ' · чат привязан'}</div>
             </div>${chip}
           </div>
           <div class="sf-item-actions">
