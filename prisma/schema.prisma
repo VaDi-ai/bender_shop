@@ -512,6 +512,9 @@ model Supplier {
   chatId       String    @unique
   chatType     String    @default("group") // "group" | "channel" | "private"
   isActive     Boolean   @default(true)
+  // HISTORICAL: в расчёте цены НЕ участвует — розницу считают только глобальные
+  // MarkupRule (loadRules). Поле осталось от раннего конвейера; drop запрещён
+  // (история/совместимость), в админ-редакторе скрыто, чтобы не крутили вхолостую.
   markup       Decimal   @default(5) @db.Decimal(5, 2)
   // ADMIN-DESIGN §7.3: срок жизни прайса; «свежая» цена = parsedAt + TTL > now (утверждено: 3 дня)
   priceTtlDays Int       @default(3)
