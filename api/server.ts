@@ -36,6 +36,7 @@ import {
   resolveCdnPhotoUrl,
 } from '../lib/cdn-photo-resolve'
 import { fmtPrice, formatProductNameWithAttrs } from '../lib/format'
+import { assertOrderableVariant } from '../lib/order-checks'
 import log from '../lib/logger'
 import { flattenRelativePhotoPath } from '../lib/photo-flat-name'
 import { trackEvent } from '../lib/events'
@@ -1590,13 +1591,9 @@ export function startApiServer(bot?: Telegraf): Server {
           })
 
           const stockCheckEnabled = process.env.STOCK_WRITEOFF_ENABLED === 'true'
-          if (!variant) {
-            throw Object.assign(new Error('Товар не найден'), { isStockConflict: true })
-          }
-          if (stockCheckEnabled && (!variant.inStock || variant.quantity < item.quantity)) {
-            log.warn('Stock conflict', { variantId: item.variantId, available: variant.quantity, requested: item.quantity })
-            throw Object.assign(new Error('Товар закончился или недоступен'), { isStockConflict: true })
-          }
+          // Скрытый товар / черновик (price=0) не покупается никогда,
+          // остаток — при включённом списании (lib/order-checks.ts)
+          assertOrderableVariant(variant, item.quantity, stockCheckEnabled, item.variantId)
 
           // Цена всегда из БД — никогда от клиента
           const variantPrice = new Decimal(variant.price)
