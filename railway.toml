@@ -18,4 +18,9 @@ healthcheckTimeout = 120
 # build (prebuild), но исторический край с Volume, подкладывающим старый /app,
 # лечится связкой generate + verify-dist — оба без обращения к БД.
 startCommand = "npx prisma generate && node scripts/verify-dist.cjs && node dist/bot/index.js"
-releaseCommand = "npx prisma generate && npx prisma db push"
+# Фаза Б перехода на миграции: db push заменён на migrate deploy — схемные
+# изменения едут только ревьюированным SQL из prisma/migrations. ДО деплоя
+# этого изменения на проде должен быть выполнен РУКАМИ:
+#   npx prisma migrate resolve --applied 0_init
+# (пишет только в _prisma_migrations; после него первый migrate deploy — no-op).
+releaseCommand = "npx prisma generate && npx prisma migrate deploy"
