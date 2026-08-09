@@ -728,6 +728,10 @@ model SyncRun {
   direction  String    @default("sheet_to_db")
   trigger    String // "cron" | "manual" | "deploy"
   startedBy  String? // telegramId админа при ручном запуске
+  // startedAt/finishedAt хранятся UTC-наивом (timestamp без tz, сессия БД —
+  // Etc/UTC) и КОРРЕКТНЫ. Осторожно с ad-hoc чтением через node-pg: он парсит
+  // naive-timestamp в ЛОКАЛЬНОЙ зоне клиента — с машины в MSK время «уедет»
+  // на −3ч (артефакт чтения, проверено против деплой-таймлайна 2026-08-09).
   startedAt  DateTime  @default(now())
   finishedAt DateTime?
   ok         Boolean?
