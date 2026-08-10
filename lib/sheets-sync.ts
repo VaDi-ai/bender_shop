@@ -1275,7 +1275,7 @@ const COLORS_LONG = [
   // Standard compounds
   'Cobalt Violet', 'Cobalt Blue', 'Sky Blue', 'Rose Gold', 'Space Gray', 'Space Black',
   'Jet Black', 'Alpine Green', 'Deep Purple', 'Dark Green', 'Sierra Blue',
-  'Pur Fog', 'Anchor Blue', 'Prussian Blue', 'Vinca Blue', 'Icy Blue',
+  'Purple Fog', 'Pur Fog', 'Anchor Blue', 'Prussian Blue', 'Vinca Blue', 'Icy Blue',
   'Ice Blue', 'Ceramic White', 'Ceramic Pink', 'Ceramic Patina',
   'Phantom Black', 'Phantom White', 'Cream Gold', 'White Gold',
   'Lunar Silver', 'Mars Orange', 'Almond Green', 'Rock Gray',

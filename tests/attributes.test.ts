@@ -23,6 +23,12 @@ describe('extractProductName', () => {
     expect(result).toContain('M5')
   })
 
+  it('strips compound band color Purple Fog from Watch name', () => {
+    const result = extractProductName('Apple Watch S11 42mm Silver Al Purple Fog SB M/L GPS', 'Apple')
+    expect(result).not.toContain('Fog')
+    expect(result).toContain('Watch S11')
+  })
+
   it('handles single-word product', () => {
     const result = extractProductName('AirPods Pro 2', 'Apple')
     expect(result).toContain('Airpods Pro')
