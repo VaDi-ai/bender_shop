@@ -226,6 +226,23 @@
         <div class="hint">Если цена из прайса меняет розницу сильнее коридора ±15% — система не применит её сама и спросит владельца.</div>
       </div>
 
+      <div class="cap">ДОСТАВКА</div>
+      <div class="card">
+        <h3>Тарифы доставки (Москва)</h3>
+        <div class="mt" id="dpStatus">Загрузка…</div>
+        <div class="lbl" style="margin-top:10px">Внутри МКАД, ₽ (фикс)</div>
+        <input class="inp" id="dpBase" placeholder="1000" inputmode="numeric">
+        <div class="lbl">За МКАД: ₽ за каждый км от МКАД (поверх фикса)</div>
+        <input class="inp" id="dpPerKm" placeholder="40" inputmode="numeric">
+        <div class="lbl">Отсечка, км от МКАД (дальше — «стоимость уточнит оператор»)</div>
+        <input class="inp" id="dpCutoff" placeholder="50" inputmode="numeric">
+        <div class="lbl">Бесплатная доставка от суммы товаров, ₽ (пусто = выключено)</div>
+        <input class="inp" id="dpFree" placeholder="пусто — порога нет" inputmode="numeric">
+        <button class="btn b-main" id="dpSave">Сохранить тарифы</button>
+        <div class="mt" id="dpErr" style="color:var(--bad)"></div>
+        <div class="hint">Формула: внутри МКАД — фикс; за МКАД — фикс + ₽/км × км от МКАД (км округляются вверх, данные DaData). Считает сервер при оформлении заказа; если адрес не распознан или дальше отсечки — заказ проходит с пометкой «стоимость уточнит оператор». Менять цифры может только владелец.</div>
+      </div>
+
       <div class="cap">ПОСТАВЩИКИ</div>
       <div class="card">
         <h3 id="supFormTitle">Поставщики</h3>
@@ -704,7 +721,7 @@
       who.append(b, document.createElement('br'), document.createTextNode(ROLE_LABEL[me.role] || me.role))
       window.adminMe = me
       gate.classList.add('hidden')
-      loadDashboard(); loadSyncRuns(); loadSuppliers(); loadBatches(); loadUnmatched(); loadMarkupRules()
+      loadDashboard(); loadSyncRuns(); loadSuppliers(); loadBatches(); loadUnmatched(); loadMarkupRules(); loadDeliveryPricing()
       loadSimQueue(); loadSimRecalc(); loadDictionary(); loadStorefront(); loadTeam(); loadIssues(); loadPromotions(); loadInsights(); loadBroadcasts(); loadSegments(); loadAiAgent(); loadMaintenance()
     }
 
@@ -2931,6 +2948,40 @@
       if (last.maxCost !== null) gaps.push(`${fmt(last.maxCost)} ₽ и выше`)
       return gaps
     }
+
+    // ── Тарифы доставки ───────────────────────────────────────────────────────
+    async function loadDeliveryPricing() {
+      const st = document.getElementById('dpStatus')
+      const r = await api('/settings/delivery-pricing').catch(() => null)
+      if (!r || !r.ok) { st.textContent = 'Не удалось загрузить'; return }
+      const d = r.data
+      document.getElementById('dpBase').value = d.baseMkad ?? ''
+      document.getElementById('dpPerKm').value = d.perKm ?? ''
+      document.getElementById('dpCutoff').value = d.cutoffKm ?? ''
+      document.getElementById('dpFree').value = d.freeThreshold ?? ''
+      const engine = d.engineEnabled
+        ? '<span class="chip c-ok">расчёт в чекауте ВКЛЮЧЁН</span>'
+        : '<span class="chip c-off">расчёт в чекауте выключен</span> — включается на сервере (DELIVERY_PRICING_ENABLED)'
+      st.innerHTML = engine + (d.broken ? '<div class="warnbox" style="margin-top:6px">Сохранённые тарифы не читаются — доставка считается «уточнит оператор». Пересохраните цифры.</div>' : '')
+      const isOwner = window.adminMe && window.adminMe.role === 'owner'
+      document.getElementById('dpSave').style.display = isOwner ? '' : 'none'
+      ;['dpBase', 'dpPerKm', 'dpCutoff', 'dpFree'].forEach(id => { document.getElementById(id).disabled = !isOwner })
+    }
+
+    document.getElementById('dpSave').addEventListener('click', async () => {
+      const err = document.getElementById('dpErr')
+      err.textContent = ''
+      const body = {
+        baseMkad: document.getElementById('dpBase').value.trim(),
+        perKm: document.getElementById('dpPerKm').value.trim(),
+        cutoffKm: document.getElementById('dpCutoff').value.trim(),
+        freeThreshold: document.getElementById('dpFree').value.trim(),
+      }
+      const r = await api('/settings/delivery-pricing', { method: 'PUT', body: JSON.stringify(body) }).catch(() => null)
+      if (!r || !r.ok) { err.textContent = (r && r.data && r.data.error) || 'Не получилось сохранить'; return }
+      err.textContent = ''
+      loadDeliveryPricing()
+    })
 
     async function loadMarkupRules() {
       const r = await api('/markup-rules').catch(() => null)

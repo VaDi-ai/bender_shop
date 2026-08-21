@@ -752,7 +752,16 @@
     .dtoggle-btn { flex: 1; padding: 10px 8px; background: transparent; border: 1px solid #333; color: #555; font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: 2px; cursor: pointer; transition: border-color 0.2s, color 0.2s, text-shadow 0.2s; }
     .dtoggle-btn.active { border-color: #a8ff3e; color: #a8ff3e; text-shadow: 0 0 8px rgba(168,255,62,0.5); }
     .delivery-addr-wrap { overflow: hidden; max-height: 0; opacity: 0; transition: max-height 0.3s ease, opacity 0.3s ease; }
-    .delivery-addr-wrap.show { max-height: 130px; opacity: 1; }
+    /* overflow:visible в раскрытом виде — иначе дропдаун подсказок DaData режется рамкой */
+    .delivery-addr-wrap.show { max-height: 200px; opacity: 1; overflow: visible; }
+    .addr-suggest { position: relative; }
+    .addr-suggest-list { position: absolute; left: 0; right: 0; top: 100%; z-index: 60; background: #111; border: 1px solid #333; display: none; max-height: 180px; overflow-y: auto; }
+    .addr-suggest-list.show { display: block; }
+    .addr-suggest-item { padding: 8px 10px; font-size: 12px; color: #ddd; cursor: pointer; border-bottom: 1px solid #1a1a1a; }
+    .addr-suggest-item:last-child { border-bottom: none; }
+    .addr-suggest-item:hover { background: #1c1c1c; color: var(--accent); }
+    .delivery-quote-note { font-size: 11px; color: var(--hint); margin: 4px 0 0; display: none; }
+    .delivery-quote-note.show { display: block; }
     .pickup-info { border-left: 2px solid #a8ff3e; padding: 10px 0 10px 12px; color: #888; font-size: 12px; line-height: 1.7; letter-spacing: 0.5px; overflow: hidden; max-height: 0; opacity: 0; transition: max-height 0.3s ease, opacity 0.3s ease; }
     .pickup-info.show { max-height: 140px; opacity: 1; }
 
@@ -1149,10 +1158,12 @@
             <button class="dtoggle-btn" data-dt="delivery" onclick="setDeliveryType('delivery')">ДОСТАВКА</button>
           </div>
           <div class="delivery-addr-wrap" id="deliveryAddrWrap">
-            <div class="cform-field">
+            <div class="cform-field addr-suggest">
               <textarea id="cfAddress" rows="2" placeholder=" " maxlength="500"></textarea>
               <label for="cfAddress">Адрес доставки</label>
+              <div class="addr-suggest-list" id="addrSuggest"></div>
             </div>
+            <div class="delivery-quote-note" id="deliveryQuoteNote"></div>
           </div>
           <div class="pickup-info show" id="pickupInfo">
             📍 Барклая 8 (ТЦ Горбушка)<br>
@@ -1173,6 +1184,7 @@
         </div>
         <div class="total-block">
           <div class="total-row"><span>Товары</span><span id="subtotalVal">0 ₽</span></div>
+          <div class="total-row" id="deliveryRow" style="display:none"><span>Доставка</span><span id="deliveryVal">—</span></div>
           <div class="total-row main"><span>ИТОГО</span><span class="total-amount" id="totalVal">0 ₽</span></div>
         </div>
       </div>
@@ -1494,6 +1506,12 @@
     let brands        = []
     let cartOpen      = false
     let deliveryType  = 'pickup'
+
+    // ── Платная доставка (флаг с сервера; при false вся механика спит) ──
+    let deliveryPricingOn = false
+    // Предварительная оценка сервера: {mode:'fixed',cost,…} | {mode:'operator'} | null.
+    // Окончательную стоимость считает сервер при создании заказа — эта цифра только для показа.
+    let deliveryQuote = null
 
     // Slider
     let heroSlides  = []
@@ -3285,9 +3303,30 @@
 
     function updateTotals() {
       const sub  = subtotal()
+      // Эквайринг +14% считается ТОЛЬКО от товаров — доставка идёт фикс-суммой поверх
       const comm = payMethod === 'card' ? acquiringFee(sub) : 0
+      const showDelivery = deliveryPricingOn && deliveryType === 'delivery' && deliveryQuote
+      const delivCost = showDelivery && deliveryQuote.mode === 'fixed' ? Number(deliveryQuote.cost) : 0
       document.getElementById('subtotalVal').textContent = fmt(sub) + ' ₽'
-      document.getElementById('totalVal').textContent    = fmt(sub + comm) + ' ₽'
+      document.getElementById('totalVal').textContent    = fmt(sub + comm + delivCost) + ' ₽'
+      const dRow = document.getElementById('deliveryRow')
+      const dNote = document.getElementById('deliveryQuoteNote')
+      if (dRow) {
+        dRow.style.display = showDelivery ? '' : 'none'
+        if (showDelivery) {
+          document.getElementById('deliveryVal').textContent = deliveryQuote.mode === 'fixed'
+            ? (delivCost === 0 ? 'бесплатно' : '~' + fmt(delivCost) + ' ₽')
+            : 'уточнит оператор'
+        }
+      }
+      if (dNote) {
+        if (showDelivery) {
+          dNote.textContent = deliveryQuote.mode === 'fixed'
+            ? 'Предварительная оценка — точная сумма посчитается при оформлении.'
+            : 'Адрес вне зоны авто-расчёта — стоимость доставки сообщит оператор при подтверждении заказа.'
+          dNote.classList.add('show')
+        } else dNote.classList.remove('show')
+      }
       const bd = document.getElementById('commBreakdown')
       if (payMethod === 'card') {
         document.getElementById('commSubtotal').textContent = fmt(sub) + ' ₽'
@@ -3316,6 +3355,75 @@
       document.querySelectorAll('.dtoggle-btn').forEach(b => b.classList.toggle('active', b.dataset.dt === type))
       document.getElementById('deliveryAddrWrap').classList.toggle('show', type === 'delivery')
       document.getElementById('pickupInfo').classList.toggle('show', type === 'pickup')
+      if (type === 'delivery') requestDeliveryQuote()
+      updateTotals()
+    }
+
+    // ── Платная доставка: автоподсказка адреса (DaData через наш прокси) ──────
+    async function loadDeliveryConfig() {
+      try {
+        const r = await fetch('/api/delivery/config')
+        if (r.ok) { const j = await r.json(); deliveryPricingOn = !!j.enabled }
+      } catch { deliveryPricingOn = false }
+    }
+
+    let addrDebounce = null, addrQuoteSeq = 0
+    function initAddressAutocomplete() {
+      const addr = document.getElementById('cfAddress')
+      const list = document.getElementById('addrSuggest')
+      if (!addr || !list) return
+      const hideSuggest = () => { list.classList.remove('show'); list.innerHTML = '' }
+      addr.addEventListener('input', () => {
+        deliveryQuote = null; updateTotals()
+        if (!deliveryPricingOn) return
+        clearTimeout(addrDebounce)
+        const q = addr.value.trim()
+        if (q.length < 3) { hideSuggest(); return }
+        addrDebounce = setTimeout(async () => {
+          try {
+            const r = await fetch('/api/delivery/suggest', {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ query: q }),
+            })
+            const j = r.ok ? await r.json() : null
+            const items = (j && j.suggestions) || []
+            if (!items.length || document.activeElement !== addr) { hideSuggest(); return }
+            list.innerHTML = items.map((s, i) => `<div class="addr-suggest-item" data-i="${i}">${esc(s.value)}</div>`).join('')
+            list.classList.add('show')
+            list.querySelectorAll('.addr-suggest-item').forEach((el, i) => {
+              // mousedown: срабатывает раньше blur textarea, клик не теряется
+              el.addEventListener('mousedown', (e) => {
+                e.preventDefault()
+                addr.value = items[i].value
+                hideSuggest()
+                requestDeliveryQuote()
+              })
+            })
+          } catch { hideSuggest() }
+        }, 300)
+      })
+      addr.addEventListener('blur', () => {
+        setTimeout(hideSuggest, 200)
+        // Свободный ввод без выбора подсказки — тоже оцениваем: сервер сам геокодит
+        if (deliveryPricingOn && deliveryType === 'delivery' && addr.value.trim().length >= 5 && !deliveryQuote) requestDeliveryQuote()
+      })
+    }
+
+    async function requestDeliveryQuote() {
+      if (!deliveryPricingOn || deliveryType !== 'delivery') return
+      const addrVal = (document.getElementById('cfAddress')?.value || '').trim()
+      if (addrVal.length < 5) return
+      const seq = ++addrQuoteSeq
+      try {
+        const r = await fetch('/api/delivery/quote', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ address: addrVal, itemsTotal: subtotal() }),
+        })
+        const j = r.ok ? await r.json() : null
+        if (seq !== addrQuoteSeq) return // ответ на уже изменённый адрес — игнор
+        deliveryQuote = (j && j.enabled && j.mode) ? j : null
+      } catch { if (seq === addrQuoteSeq) deliveryQuote = null }
+      updateTotals()
     }
 
     function validatePhoneRU(phone) {
@@ -3405,7 +3513,12 @@
         const orderId = json.orderId || json.id || 0
         const savedItems = items.map(i => ({ name: i.name, qty: i.qty }))
         cart = []; updateBadge(); closeCart()
-        showOrderSuccess(orderId, savedItems, totalAmt, payMethod, deliveryType, deliveryAddress)
+        // Итог берём из ответа СЕРВЕРА (клиентская цифра — предварительная);
+        // при выключенном расчёте доставки сервер полей не шлёт — старое поведение
+        const serverTotal = json.totalAmount !== undefined ? json.totalAmount : totalAmt
+        const deliveryInfo = json.totalAmount !== undefined && deliveryType === 'delivery'
+          ? { cost: json.deliveryCost, pending: !!json.deliveryPending } : null
+        showOrderSuccess(orderId, savedItems, serverTotal, payMethod, deliveryType, deliveryAddress, deliveryInfo)
         // Сбросить submit-флаг и текст кнопки чтобы клиент мог оформить ещё один заказ
         // после нажатия "Продолжить покупки". Без этого флаг останется true и повторный
         // checkout заблокируется на строке "if (window.__isSubmitting) return".
@@ -3552,21 +3665,29 @@
 
     // ─── Order result screens ───────────────────────────────────────────────
 
-    function showOrderSuccess(orderId, items, total, payment, delivery, address) {
+    function showOrderSuccess(orderId, items, total, payment, delivery, address, deliveryInfo) {
       const el = document.getElementById('orderSuccess')
       document.getElementById('successOrderNum').textContent = '#' + orderId
 
       const itemLines = items.map(i => esc(i.name) + ' × ' + i.qty).join('<br>')
       const payText = payment === 'cash' ? '💵 Наличные' : '💳 Карта'
-      const deliveryText = delivery === 'pickup'
+      let deliveryText = delivery === 'pickup'
         ? '📍 Самовывоз — ТЦ Горбушка, 202'
         : '🚚 Доставка: ' + esc(address || '')
+      if (deliveryInfo) {
+        if (deliveryInfo.pending) deliveryText += ' — стоимость сообщит оператор'
+        else if (deliveryInfo.cost !== null && deliveryInfo.cost !== undefined) {
+          const c = parseFloat(deliveryInfo.cost)
+          deliveryText += c === 0 ? ' — бесплатно' : ' — ' + fmt(c) + ' ₽'
+        }
+      }
 
       document.getElementById('successDetails').innerHTML = [
         itemLines,
         '<br>' + payText,
         deliveryText,
-        '<br>💵 Итого: <strong style="color:#a8ff3e">' + fmt(parseFloat(total)) + ' ₽</strong>',
+        '<br>💵 Итого: <strong style="color:#a8ff3e">' + fmt(parseFloat(total)) + ' ₽</strong>' +
+          (deliveryInfo && deliveryInfo.pending ? ' <span style="color:#888">(без доставки)</span>' : ''),
       ].join('<br>')
 
       el.style.display = 'flex'
@@ -3713,6 +3834,8 @@
     })
     initPhoneMask()
     initSearch()
+    loadDeliveryConfig()
+    initAddressAutocomplete()
     document.getElementById('consentCheckbox')?.addEventListener('change', function() {
       document.getElementById('consentLabel').classList.remove('error')
       updateTotals()
