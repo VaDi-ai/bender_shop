@@ -431,6 +431,75 @@ export async function setMaintenance(actor: string, enabled: boolean, rawNote: u
   return { ok: true, status: 200, data: { enabled, note } }
 }
 
+// ─── Тарифы доставки (Москва/МКАД) ───────────────────────────────────────────
+
+export interface DeliveryPricingView {
+  baseMkad: string
+  perKm: string
+  cutoffKm: number
+  /** null = порог бесплатной доставки выключен */
+  freeThreshold: string | null
+  /** Сохранённый JSON не разобрался — чекаут работает в режиме «уточнит оператор» */
+  broken: boolean
+  /** Флаг DELIVERY_PRICING_ENABLED + наличие ключей DaData: считает ли прод вообще */
+  engineEnabled: boolean
+}
+
+export async function getDeliveryPricing(): Promise<DeliveryPricingView> {
+  const { parseDeliveryPricingConfig, DEFAULT_DELIVERY_PRICING, DELIVERY_PRICING_SETTING } = await import('./delivery-pricing')
+  const { dadataCleanConfigured } = await import('./dadata')
+  const raw = await getApiKeyValue(DELIVERY_PRICING_SETTING)
+  const cfg = parseDeliveryPricingConfig(raw)
+  const engineEnabled = process.env.DELIVERY_PRICING_ENABLED === 'true' && dadataCleanConfigured()
+  if (!cfg) {
+    return { ...DEFAULT_DELIVERY_PRICING, broken: raw !== null && raw.trim() !== '', engineEnabled }
+  }
+  return {
+    baseMkad: cfg.baseMkad.toFixed(0),
+    perKm: cfg.perKm.toFixed(0),
+    cutoffKm: cfg.cutoffKm,
+    freeThreshold: cfg.freeThreshold ? cfg.freeThreshold.toFixed(0) : null,
+    broken: false,
+    engineEnabled,
+  }
+}
+
+/** Целое ₽ в разумных пределах; пусто недопустимо (для порога — отдельная ветка). */
+const parseRub = (raw: unknown, max: number): number | null => {
+  const n = Number(String(raw ?? '').trim())
+  return Number.isInteger(n) && n >= 0 && n <= max ? n : null
+}
+
+export async function setDeliveryPricing(
+  actor: string,
+  body: { baseMkad?: unknown; perKm?: unknown; cutoffKm?: unknown; freeThreshold?: unknown },
+): Promise<Outcome<DeliveryPricingView>> {
+  const { DELIVERY_PRICING_SETTING } = await import('./delivery-pricing')
+  const baseMkad = parseRub(body.baseMkad, 1_000_000)
+  const perKm = parseRub(body.perKm, 100_000)
+  const cutoffKm = parseRub(body.cutoffKm, 1000)
+  if (baseMkad === null) return bad(422, 'Цена внутри МКАД — целое число рублей от 0') as Outcome<DeliveryPricingView>
+  if (perKm === null) return bad(422, 'Цена за км — целое число рублей от 0') as Outcome<DeliveryPricingView>
+  if (cutoffKm === null || cutoffKm < 1) return bad(422, 'Отсечка — целое число км от 1 до 1000') as Outcome<DeliveryPricingView>
+  const freeRaw = String(body.freeThreshold ?? '').trim()
+  let freeThreshold: number | null = null
+  if (freeRaw !== '') {
+    freeThreshold = parseRub(freeRaw, 100_000_000)
+    if (freeThreshold === null || freeThreshold === 0) {
+      return bad(422, 'Порог бесплатной доставки — целое число рублей больше 0, либо пустое поле (выключено)') as Outcome<DeliveryPricingView>
+    }
+  }
+  const before = await getDeliveryPricing()
+  const stored = { baseMkad: String(baseMkad), perKm: String(perKm), cutoffKm, freeThreshold: freeThreshold === null ? null : String(freeThreshold) }
+  await setApiKeyValue(DELIVERY_PRICING_SETTING, JSON.stringify(stored))
+  void logAdminAction({
+    adminTelegramId: actor, action: 'update', entity: 'Setting', entityId: 'delivery_pricing',
+    before: { baseMkad: before.baseMkad, perKm: before.perKm, cutoffKm: before.cutoffKm, freeThreshold: before.freeThreshold },
+    after: stored,
+  })
+  return { ok: true, status: 200, data: await getDeliveryPricing() }
+}
+
 // ─── Обновить сайт (сброс кэша витрины) ──────────────────────────────────────
 
 /**

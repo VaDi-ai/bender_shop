@@ -784,6 +784,19 @@ export function adminApiRouter(): Router {
     res.status(r.status).json({ ok: true, ...(r.data as object) })
   }))
 
+  // Тарифы доставки — owner: это деньги покупателя. Чтение — всем админам
+  // (видеть текущие цифры полезно и менеджеру), запись — только владельцу.
+  router.get('/settings/delivery-pricing', safe(async (_req, res) => {
+    const { getDeliveryPricing } = await import('../lib/storefront-admin')
+    res.json(await getDeliveryPricing())
+  }))
+
+  router.put('/settings/delivery-pricing', ownerOnly, safe(async (req, res) => {
+    const { setDeliveryPricing } = await import('../lib/storefront-admin')
+    const r = await setDeliveryPricing(req.admin!.telegramId, (req.body ?? {}) as Record<string, unknown>)
+    res.status(r.status).json(r.ok ? { ok: true, ...(r.data as object) } : { error: r.error })
+  }))
+
   router.post('/cache-reset', safe(async (req, res) => {
     const { bumpCacheVersion } = await import('../lib/storefront-admin')
     const r = await bumpCacheVersion(req.admin!.telegramId)

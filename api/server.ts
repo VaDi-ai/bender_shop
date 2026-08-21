@@ -42,6 +42,8 @@ import { flattenRelativePhotoPath } from '../lib/photo-flat-name'
 import { trackEvent } from '../lib/events'
 import { validateTelegramWebApp } from '../lib/telegram-webapp-auth'
 import { buildProfileWriteback } from '../lib/client-profile'
+import { suggestAddress, verifyAddress, dadataCleanConfigured, VerifiedAddress } from '../lib/dadata'
+import { computeDeliveryCost, loadDeliveryPricingConfig, DeliveryPricingConfig, DeliveryQuote } from '../lib/delivery-pricing'
 import { adminApiRouter } from './admin'
 
 // BigInt → JSON serialization (avitoItemId etc.)
@@ -262,6 +264,15 @@ export function startApiServer(bot?: Telegraf): Server {
 
   const trackLimiter = rateLimit({ windowMs: 60_000, max: 100 })
   app.use('/api/track', trackLimiter)
+
+  // Автоподсказки адреса стреляют на каждый ввод — свой лимит, чтобы не
+  // съедали глобальный и не позволяли выкачивать DaData через наш прокси.
+  const deliveryLimiter = rateLimit({
+    windowMs: 60_000,
+    max: 30,
+    message: { error: 'Слишком много запросов адреса. Подождите минуту.' },
+  })
+  app.use('/api/delivery', deliveryLimiter)
 
   // ── Админ-API (ADMIN-DESIGN §2, PR-2): initData-auth + AdminUser, свой лимитер внутри ──
   app.use('/admin/api', adminApiRouter())
@@ -927,6 +938,67 @@ export function startApiServer(bot?: Telegraf): Server {
     }
   })
 
+  // ── Платная доставка: прокси подсказок и предварительная оценка ───────────
+  // Ключи DaData живут только на сервере; фронт ходит сюда. Флаг выключен →
+  // config отвечает enabled:false и фронт не включает автокомплит/расчёт —
+  // поведение чекаута остаётся прежним.
+  const deliveryPricingEnabled = () =>
+    process.env.DELIVERY_PRICING_ENABLED === 'true' && dadataCleanConfigured()
+
+  app.get('/api/delivery/config', (_req: Request, res: Response) => {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate')
+    res.json({ enabled: deliveryPricingEnabled() })
+  })
+
+  app.post('/api/delivery/suggest', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      if (!deliveryPricingEnabled()) {
+        res.json({ suggestions: [] })
+        return
+      }
+      const query = typeof req.body?.query === 'string' ? req.body.query : ''
+      const suggestions = await suggestAddress(query)
+      res.json({ suggestions: suggestions ?? [] })
+    } catch (err) {
+      if (!res.headersSent) next(err)
+    }
+  })
+
+  // Оценка для UI: сервер геокодит и считает по своим тарифам, но это
+  // ПРЕДВАРИТЕЛЬНАЯ цифра — окончательная считается заново при создании
+  // заказа из проверенного адреса и серверной суммы товаров.
+  app.post('/api/delivery/quote', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      if (!deliveryPricingEnabled()) {
+        res.json({ enabled: false })
+        return
+      }
+      const address = typeof req.body?.address === 'string' ? req.body.address.trim() : ''
+      if (address.length < 5) {
+        res.status(400).json({ error: 'Укажите адрес' })
+        return
+      }
+      let itemsTotal = new Decimal(0)
+      try {
+        const raw = req.body?.itemsTotal
+        if (raw !== undefined && raw !== null && raw !== '') itemsTotal = new Decimal(String(raw))
+        if (!itemsTotal.isFinite() || itemsTotal.isNegative()) itemsTotal = new Decimal(0)
+      } catch { itemsTotal = new Decimal(0) }
+      const [verified, config] = await Promise.all([verifyAddress(address), loadDeliveryPricingConfig()])
+      const quote = computeDeliveryCost(verified, config, itemsTotal)
+      res.json({
+        enabled: true,
+        preliminary: true,
+        mode: quote.mode,
+        ...(quote.mode === 'fixed'
+          ? { cost: quote.cost.toFixed(0), zone: quote.zone, distanceKm: quote.distanceKm, free: quote.free }
+          : {}),
+      })
+    } catch (err) {
+      if (!res.headersSent) next(err)
+    }
+  })
+
   // ── Кабинет: профиль пользователя (Telegram-auth) ──────────────────────────
   // Профиль хранится на Client (source=telegram, externalId=telegramId). phone/email/
   // birthDate шифруются (lib/client-crypto); fullName — открыто. Дата рождения — строка
@@ -1577,9 +1649,24 @@ export function startApiServer(bot?: Telegraf): Server {
       }
     }
 
+    // ── Платная доставка: геокод адреса ДО транзакции ──────────────────────
+    // Сеть внутри транзакции недопустима. Клиентские оценки не принимаем:
+    // сервер сам геокодит поданный адрес. Любой сбой DaData → null → заказ
+    // всё равно пройдёт, но со статусом «стоимость уточнит оператор».
+    const deliveryPricingOn = deliveryPricingEnabled() && deliveryType === 'delivery'
+    let deliveryVerified: VerifiedAddress | null = null
+    let deliveryConfig: DeliveryPricingConfig | null = null
+    if (deliveryPricingOn) {
+      ;[deliveryVerified, deliveryConfig] = await Promise.all([
+        verifyAddress(String(deliveryAddress)),
+        loadDeliveryPricingConfig(),
+      ])
+    }
+
     // ── Весь заказ атомарно: проверка остатков, создание заказа, списание ──
     try {
       let pdnConsentNew = false // A4: согласие впервые проставлено в этом заказе
+      let deliveryQuote: DeliveryQuote | null = null
       const order = await prisma.$transaction(async (tx) => {
         let totalDecimal = new Decimal(0)
         const enrichedItems: Array<{
@@ -1631,6 +1718,15 @@ export function startApiServer(bot?: Telegraf): Server {
             quantity: item.quantity,
             newQty: variant.quantity - item.quantity,
           })
+        }
+
+        // Стоимость доставки: чистый расчёт (сеть отработала до транзакции).
+        // Итог заказа = товары из БД + доставка; порог бесплатной считается
+        // от суммы товаров. Фолбэк «уточнит оператор» — deliveryCost=null,
+        // к сумме ничего не прибавляется (НЕ ноль-рублей-доставка).
+        if (deliveryPricingOn) {
+          deliveryQuote = computeDeliveryCost(deliveryVerified, deliveryConfig, totalDecimal)
+          if (deliveryQuote.mode === 'fixed') totalDecimal = totalDecimal.plus(deliveryQuote.cost)
         }
 
         // Найти или создать клиента
@@ -1687,6 +1783,18 @@ export function startApiServer(bot?: Telegraf): Server {
             deliveryType: deliveryType as DeliveryType,
             deliveryAddress: deliveryAddress?.trim() ?? null,
             customerComment: typeof customerComment === 'string' ? customerComment.trim().slice(0, 500) : null,
+            // Разложение доставки: зона/км/гео пишутся и в режиме «оператор»
+            // (когда получены) — оператору важно видеть, что адрес за отсечкой.
+            ...(deliveryPricingOn ? {
+              deliveryCost: deliveryQuote?.mode === 'fixed' ? deliveryQuote.cost.toFixed(2) : null,
+              deliveryZone: deliveryVerified?.beltwayHit === 'IN_MKAD' || deliveryVerified?.beltwayHit === 'OUT_MKAD'
+                ? deliveryVerified.beltwayHit : null,
+              deliveryDistanceKm: deliveryVerified?.beltwayDistanceKm != null && deliveryVerified.beltwayDistanceKm >= 0
+                ? Math.ceil(deliveryVerified.beltwayDistanceKm) : null,
+              deliveryGeoLat: deliveryVerified?.geoLat ?? null,
+              deliveryGeoLon: deliveryVerified?.geoLon ?? null,
+              deliveryQcGeo: deliveryVerified?.qcGeo ?? null,
+            } : {}),
           },
         })
 
@@ -1770,7 +1878,20 @@ export function startApiServer(bot?: Telegraf): Server {
       // Ответ клиенту СРАЗУ — до уведомлений
       log.info('Order created', { orderId: order.id, telegramId, items: items.length, total: Number(order.totalAmount), paymentMethod })
       if (!res.headersSent) {
-        res.json({ success: true, orderId: order.id })
+        // При включённом расчёте доставки фронт показывает итог СЕРВЕРА
+        // (клиентская цифра — лишь предварительная оценка). При выключенном
+        // флаге ответ остаётся прежним byte-в-byte.
+        if (deliveryPricingEnabled()) {
+          res.json({
+            success: true,
+            orderId: order.id,
+            totalAmount: order.totalAmount.toString(),
+            deliveryCost: order.deliveryCost !== null ? order.deliveryCost.toString() : null,
+            deliveryPending: deliveryPricingOn && order.deliveryCost === null,
+          })
+        } else {
+          res.json({ success: true, orderId: order.id })
+        }
         log.debug('Order response sent', { orderId: order.id })
       }
 
@@ -1795,9 +1916,23 @@ export function startApiServer(bot?: Telegraf): Server {
           ).join('\n')
 
           const cardSurcharge = paymentMethod === 'card' ? '\n💳 Эквайринг +14%' : ''
-          const deliveryText = deliveryType === 'pickup'
+          let deliveryText = deliveryType === 'pickup'
             ? '📍 Самовывоз (ТЦ Горбушка, 202)'
             : `🚚 Доставка: ${deliveryAddress}`
+          if (deliveryPricingOn) {
+            if (order.deliveryCost !== null) {
+              const zoneNote = order.deliveryZone === 'OUT_MKAD'
+                ? `${order.deliveryDistanceKm} км за МКАД`
+                : 'внутри МКАД'
+              const costRub = Number(order.deliveryCost)
+              deliveryText += costRub === 0
+                ? ` — бесплатно, порог по сумме (${zoneNote})`
+                : ` — ${costRub.toLocaleString('ru-RU')}₽ (${zoneNote})`
+            } else {
+              const distNote = order.deliveryDistanceKm != null ? ` (≈${order.deliveryDistanceKm} км от МКАД)` : ''
+              deliveryText += ` — ❗ стоимость уточнит оператор${distNote}`
+            }
+          }
           const commentLine = customerComment ? `\n💬 Комментарий: ${String(customerComment).slice(0, 200)}` : ''
 
           // Получить клиента (telegram или shop)
@@ -1822,6 +1957,16 @@ export function startApiServer(bot?: Telegraf): Server {
             : `tg://user?id=${telegramId}`
           const tgLine = tgUsername ? `📱 Telegram: ${tgUsername} (${tgLink})` : `📱 Telegram: ${tgLink}`
 
+          // Разложение итога: при посчитанной доставке оператор видит
+          // «товары + доставка = итого», при фолбэке — что итог БЕЗ доставки.
+          const totalLines = [`💵 Итого: ${totalStr}₽`]
+          if (deliveryPricingOn && order.deliveryCost !== null) {
+            const goodsStr = new Decimal(order.totalAmount.toString()).minus(order.deliveryCost.toString()).toFixed(2)
+            totalLines.unshift(`🛍 Товары: ${goodsStr}₽ + доставка ${order.deliveryCost.toString()}₽`)
+          } else if (deliveryPricingOn && order.deliveryCost === null) {
+            totalLines.push(`(доставка НЕ включена — уточнит оператор)`)
+          }
+
           const orderText = [
             `🛒 Новый заказ #${order.id}`,
             '',
@@ -1834,7 +1979,7 @@ export function startApiServer(bot?: Telegraf): Server {
             `📦 Товары:`,
             itemLines,
             '',
-            `💵 Итого: ${totalStr}₽`,
+            ...totalLines,
           ].join('\n')
 
           // 1. Отправить в топик продаж CRM-группы
