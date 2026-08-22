@@ -42,8 +42,8 @@ import { flattenRelativePhotoPath } from '../lib/photo-flat-name'
 import { trackEvent } from '../lib/events'
 import { validateTelegramWebApp } from '../lib/telegram-webapp-auth'
 import { buildProfileWriteback } from '../lib/client-profile'
-import { suggestAddress, verifyAddress, dadataCleanConfigured, VerifiedAddress } from '../lib/dadata'
-import { computeDeliveryCost, loadDeliveryPricingConfig, DeliveryPricingConfig, DeliveryQuote } from '../lib/delivery-pricing'
+import { suggestAddress, verifyAddress, dadataConfigured, VerifiedAddress } from '../lib/dadata'
+import { computeDeliveryCost, deliveryZoneOf, loadDeliveryPricingConfig, DeliveryPricingConfig, DeliveryQuote } from '../lib/delivery-pricing'
 import { adminApiRouter } from './admin'
 
 // BigInt → JSON serialization (avitoItemId etc.)
@@ -939,11 +939,12 @@ export function startApiServer(bot?: Telegraf): Server {
   })
 
   // ── Платная доставка: прокси подсказок и предварительная оценка ───────────
-  // Ключи DaData живут только на сервере; фронт ходит сюда. Флаг выключен →
+  // Токен DaData живёт только на сервере; фронт ходит сюда. Флаг выключен →
   // config отвечает enabled:false и фронт не включает автокомплит/расчёт —
-  // поведение чекаута остаётся прежним.
+  // поведение чекаута остаётся прежним. Нужен только DADATA_TOKEN (Suggestions):
+  // платный Clean упрощённой модели «Москва → фикс» не требуется.
   const deliveryPricingEnabled = () =>
-    process.env.DELIVERY_PRICING_ENABLED === 'true' && dadataCleanConfigured()
+    process.env.DELIVERY_PRICING_ENABLED === 'true' && dadataConfigured()
 
   app.get('/api/delivery/config', (_req: Request, res: Response) => {
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate')
@@ -991,7 +992,7 @@ export function startApiServer(bot?: Telegraf): Server {
         preliminary: true,
         mode: quote.mode,
         ...(quote.mode === 'fixed'
-          ? { cost: quote.cost.toFixed(0), zone: quote.zone, distanceKm: quote.distanceKm, free: quote.free }
+          ? { cost: quote.cost.toFixed(0), zone: quote.zone, free: quote.free }
           : {}),
       })
     } catch (err) {
@@ -1783,14 +1784,13 @@ export function startApiServer(bot?: Telegraf): Server {
             deliveryType: deliveryType as DeliveryType,
             deliveryAddress: deliveryAddress?.trim() ?? null,
             customerComment: typeof customerComment === 'string' ? customerComment.trim().slice(0, 500) : null,
-            // Разложение доставки: зона/км/гео пишутся и в режиме «оператор»
-            // (когда получены) — оператору важно видеть, что адрес за отсечкой.
+            // Разложение доставки: зона/гео пишутся и в режиме «оператор»
+            // (когда получены) — оператору важно видеть, что адрес вне Москвы.
+            // Км (deliveryDistanceKm) упрощённая модель не считает — остаётся NULL,
+            // колонка зарезервирована под ручной ввод «км от метро».
             ...(deliveryPricingOn ? {
               deliveryCost: deliveryQuote?.mode === 'fixed' ? deliveryQuote.cost.toFixed(2) : null,
-              deliveryZone: deliveryVerified?.beltwayHit === 'IN_MKAD' || deliveryVerified?.beltwayHit === 'OUT_MKAD'
-                ? deliveryVerified.beltwayHit : null,
-              deliveryDistanceKm: deliveryVerified?.beltwayDistanceKm != null && deliveryVerified.beltwayDistanceKm >= 0
-                ? Math.ceil(deliveryVerified.beltwayDistanceKm) : null,
+              deliveryZone: deliveryZoneOf(deliveryVerified),
               deliveryGeoLat: deliveryVerified?.geoLat ?? null,
               deliveryGeoLon: deliveryVerified?.geoLon ?? null,
               deliveryQcGeo: deliveryVerified?.qcGeo ?? null,
@@ -1921,16 +1921,17 @@ export function startApiServer(bot?: Telegraf): Server {
             : `🚚 Доставка: ${deliveryAddress}`
           if (deliveryPricingOn) {
             if (order.deliveryCost !== null) {
-              const zoneNote = order.deliveryZone === 'OUT_MKAD'
-                ? `${order.deliveryDistanceKm} км за МКАД`
-                : 'внутри МКАД'
               const costRub = Number(order.deliveryCost)
               deliveryText += costRub === 0
-                ? ` — бесплатно, порог по сумме (${zoneNote})`
-                : ` — ${costRub.toLocaleString('ru-RU')}₽ (${zoneNote})`
+                ? ' — бесплатно, порог по сумме (Москва)'
+                : ` — ${costRub.toLocaleString('ru-RU')}₽ (Москва)`
             } else {
-              const distNote = order.deliveryDistanceKm != null ? ` (≈${order.deliveryDistanceKm} км от МКАД)` : ''
-              deliveryText += ` — ❗ стоимость уточнит оператор${distNote}`
+              // Регион из геокода подсказывает оператору, почему авто-цены нет
+              // (Московская обл / другой регион / адрес не распознан).
+              const regionNote = deliveryVerified?.regionWithType
+                ? ` (${deliveryVerified.regionWithType} — вне Москвы)`
+                : ' (адрес не распознан)'
+              deliveryText += ` — ❗ стоимость уточнит оператор${regionNote}`
             }
           }
           const commentLine = customerComment ? `\n💬 Комментарий: ${String(customerComment).slice(0, 200)}` : ''

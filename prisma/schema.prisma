@@ -345,12 +345,12 @@ model Order {
   customerComment String?
   createdAt       DateTime      @default(now())
 
-  // Платная доставка (Москва/МКАД): все поля считает СЕРВЕР из DaData Clean,
+  // Платная доставка (регион Москва → фикс, иначе оператор): все поля считает СЕРВЕР из DaData Suggestions,
   // клиентские значения не принимаются. null в deliveryCost при deliveryType=
   // delivery означает «стоимость уточнит оператор» (фолбэк, не бесплатно).
   deliveryCost       Decimal? @db.Decimal(12, 2)
-  deliveryZone       String? // IN_MKAD | OUT_MKAD (из beltway_hit)
-  deliveryDistanceKm Int? // ⌈км от МКАД⌉, только для OUT_MKAD
+  deliveryZone       String? // MOSCOW (регион КЛАДР 77, авто-цена) | OUTSIDE (любой другой регион → оператор)
+  deliveryDistanceKm Int? // зарезервировано под ручной ввод «км от метро»; авто-расчёт не пишет (до 2026-08-22 — ⌈км от МКАД⌉)
   deliveryGeoLat     Decimal? @db.Decimal(9, 6)
   deliveryGeoLon     Decimal? @db.Decimal(9, 6)
   deliveryQcGeo      Int? // качество геокодинга DaData (0 — точные координаты дома)
