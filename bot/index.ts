@@ -5,6 +5,7 @@ initSentry()
 import { Telegraf, Markup } from 'telegraf'
 import { message } from 'telegraf/filters'
 import { setupClientHandlers } from '../webhooks/telegram'
+import { isBotAdmin } from '../lib/bot-admin-access'
 import { startScheduler, isRunning as schedulerRunning } from './scheduler'
 import { getUserId } from './helpers'
 import log from '../lib/logger'
@@ -248,6 +249,19 @@ async function setAdminMenuButton(adminId: number): Promise<void> {
   }
 }
 
+/** /admin в списке команд конкретного чата (у покупателей его не видно). */
+async function setAdminChatCommands(adminId: number): Promise<void> {
+  try {
+    await bot.telegram.setMyCommands([
+      { command: 'start', description: 'Главное меню' },
+      { command: 'shop', description: 'Открыть магазин' },
+      { command: 'admin', description: 'Веб-админка' },
+    ], { scope: { type: 'chat', chat_id: adminId } })
+  } catch (e) {
+    log.warn('setMyCommands (admin scope) failed', { adminId, error: e instanceof Error ? e.message : String(e) })
+  }
+}
+
 if (process.env.NODE_ENV === 'production' && !process.env.WEBHOOK_SECRET) {
   throw new Error('WEBHOOK_SECRET is required in production (webhook mode)')
 }
@@ -270,7 +284,8 @@ bot.start(async (ctx, next) => {
 // но это лишь UX: сам мини-апп гейтит по подписи Telegram (requireAdmin).
 bot.command('admin', async (ctx) => {
   const userId = ctx.from?.id
-  if (!userId || !ADMIN_IDS.includes(userId)) {
+  // env ADMIN_IDS ИЛИ активная запись AdminUser — менеджеру из панели команды этого достаточно
+  if (!userId || !(await isBotAdmin(userId))) {
     await ctx.reply('Команда только для администраторов.')
     return
   }
@@ -285,7 +300,7 @@ bot.command('admin', async (ctx) => {
 // /stats — быстрая статистика для админов
 bot.command('stats', async (ctx) => {
   const userId = ctx.from?.id
-  if (!userId || !ADMIN_IDS.includes(userId)) return
+  if (!userId || !(await isBotAdmin(userId))) return
   const [products, orders, clients, revenue] = await Promise.all([
     prisma.product.count({ where: { isAvailable: true } }),
     prisma.order.count(),
@@ -414,6 +429,50 @@ bot.on(message('new_chat_members'), async (ctx) => {
       // Пользователь мог не начать диалог с ботом — игнорируем
     }
   }
+})
+
+// ─── /start: «Быстрый вход» (витрина + админка) ─────────────────────────────
+// Стоит ДО env-middleware ниже: вход в веб-админку должен работать и для
+// менеджера из AdminUser (isBotAdmin), а легаси бот-панель за middleware
+// остаётся только для env ADMIN_IDS. Не-админы сюда не доходят — их /start
+// перехватывает клиентский флоу в webhooks/telegram.ts.
+bot.start(async (ctx, next) => {
+  const userId = ctx.from?.id
+  if (!userId || !(await isBotAdmin(userId))) return next()
+  inventoryState.delete(userId)
+  broadcastsState.delete(userId)
+  segmentsState.delete(userId)
+  salesState.delete(userId)
+  analyticsState.delete(userId)
+  storefrontState.delete(userId)
+  promotionsState.delete(userId)
+  pricingState.delete(userId)
+  apiKeysState.delete(userId)
+  securityState.delete(userId)
+  suppliersState.delete(userId)
+  await ctx.reply(
+    `Привет, ${ctx.from?.first_name ?? ''}! Добро пожаловать в панель управления Bender Shop.`,
+    adminKeyboard,
+  )
+  // Веб-входы: витрина и админка. Старое бот-меню остаётся фолбэком (env-админам).
+  const sent = await ctx.reply(
+    'Быстрый вход:',
+    Markup.inlineKeyboard([[
+      Markup.button.webApp('🛍 Открыть магазин', WEBAPP_URL || ADMIN_URL.replace(/\/admin$/, '/shop')),
+      Markup.button.webApp('🛠 Админка', ADMIN_URL),
+    ]]),
+  )
+  // Закрепляем свежее сообщение: старый пин Telegram заменяет сам при
+  // повторном pin в том же чате. Тихо — уведомление о пине не нужно.
+  try {
+    await ctx.telegram.pinChatMessage(ctx.chat.id, sent.message_id, { disable_notification: true })
+  } catch (e) {
+    log.warn('pin quick-entry failed', { userId, error: e instanceof Error ? e.message : String(e) })
+  }
+  // Кнопка «Админка» у поля ввода + /admin в списке команд этого чата —
+  // менеджеру из AdminUser их на старте бота никто не ставит (там только env).
+  await setAdminMenuButton(userId)
+  await setAdminChatCommands(userId)
 })
 
 // ─── Middleware: только для администраторов ────────────────────────────────────
@@ -680,45 +739,6 @@ bot.on(message('document'), async (ctx, next) => {
 })
 
 // ─── /start ───────────────────────────────────────────────────────────────────
-
-bot.start((ctx) => {
-  const userId = ctx.from?.id
-  if (userId) {
-    inventoryState.delete(userId)
-    broadcastsState.delete(userId)
-    segmentsState.delete(userId)
-    salesState.delete(userId)
-    analyticsState.delete(userId)
-    storefrontState.delete(userId)
-    promotionsState.delete(userId)
-    pricingState.delete(userId)
-    apiKeysState.delete(userId)
-    securityState.delete(userId)
-    suppliersState.delete(userId)
-  }
-  return ctx.reply(
-    `Привет, ${ctx.from?.first_name ?? ''}! Добро пожаловать в панель управления Bender Shop.`,
-    adminKeyboard,
-  ).then(async () => {
-    // Веб-входы: витрина и новая админка. Старое бот-меню выше остаётся фолбэком.
-    if (!userId) return
-    const sent = await ctx.reply(
-      'Быстрый вход:',
-      Markup.inlineKeyboard([[
-        Markup.button.webApp('🛍 Открыть магазин', WEBAPP_URL || ADMIN_URL.replace(/\/admin$/, '/shop')),
-        Markup.button.webApp('🛠 Админка', ADMIN_URL),
-      ]]),
-    )
-    // Закрепляем свежее сообщение: старый пин Telegram заменяет сам при
-    // повторном pin в том же чате. Тихо — уведомление о пине не нужно.
-    try {
-      await ctx.telegram.pinChatMessage(ctx.chat.id, sent.message_id, { disable_notification: true })
-    } catch (e) {
-      log.warn('pin quick-entry failed', { userId, error: e instanceof Error ? e.message : String(e) })
-    }
-    await setAdminMenuButton(userId)
-  })
-})
 
 // ─── 📊 Аналитика ─────────────────────────────────────────────────────────────
 // Кнопка убрана (фаза 2): период 7/30/90, воронка и топ клиентов — в мини-аппе
@@ -1676,14 +1696,9 @@ bot.telegram.setMyCommands([
   { command: 'shop', description: 'Открыть магазин' },
 ]).catch((e) => log.error('setMyCommands error', { error: e instanceof Error ? e.message : String(e) }))
 
-// /admin — только в списке команд у самих админов (у покупателей его не видно)
-Promise.all(ADMIN_IDS.map(adminId =>
-  bot.telegram.setMyCommands([
-    { command: 'start', description: 'Главное меню' },
-    { command: 'shop', description: 'Открыть магазин' },
-    { command: 'admin', description: 'Веб-админка' },
-  ], { scope: { type: 'chat', chat_id: adminId } }),
-)).catch((e) => log.warn('setMyCommands (admin scope) failed', { error: e instanceof Error ? e.message : String(e) }))
+// /admin — в списке команд у env-админов на старте; менеджерам из AdminUser
+// то же самое ставится при их /start (setAdminChatCommands).
+void Promise.all(ADMIN_IDS.map(setAdminChatCommands))
 
 // Кнопка-меню Mini App в личных чатах
 if (WEBAPP_URL) {
