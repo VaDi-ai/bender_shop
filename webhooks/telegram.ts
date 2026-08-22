@@ -38,6 +38,7 @@ import { getApiKeyValue } from '../lib/api-key-store'
 import { encryptClientField, decryptClientField, encryptDate, decryptDate } from '../lib/client-crypto'
 import log, { safeLog } from '../lib/logger'
 import { Sentry } from '../lib/sentry'
+import { isBotAdmin } from '../lib/bot-admin-access'
 
 const CRM_GROUP_ID = Number(process.env.CRM_GROUP_ID)
 const ADMIN_IDS = (process.env.ADMIN_IDS ?? '').split(',').map((id) => Number(id.trim()))
@@ -904,6 +905,11 @@ export function setupClientHandlers(bot: Telegraf): void {
       }
       return next()
     }
+
+    // Менеджер из AdminUser (заведён в панели команды, в env ADMIN_IDS его нет):
+    // это сотрудник, а не покупатель — его /start и /admin должны дойти до
+    // бот-входа в админку (bot/index.ts), а не заводить клиента в CRM.
+    if (await isBotAdmin(from.id)) return next()
 
     // ── Клиентское сообщение ──────────────────────────────────────────────────
     const text = rawMsg['text'] as string | undefined
