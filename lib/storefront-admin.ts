@@ -431,33 +431,30 @@ export async function setMaintenance(actor: string, enabled: boolean, rawNote: u
   return { ok: true, status: 200, data: { enabled, note } }
 }
 
-// ─── Тарифы доставки (Москва/МКАД) ───────────────────────────────────────────
+// ─── Тарифы доставки (Москва → фикс, иначе оператор) ─────────────────────────
 
 export interface DeliveryPricingView {
-  baseMkad: string
-  perKm: string
-  cutoffKm: number
+  /** Фикс за адрес в регионе Москва (с Зеленоградом и Новой Москвой), ₽ */
+  moscowPrice: string
   /** null = порог бесплатной доставки выключен */
   freeThreshold: string | null
   /** Сохранённый JSON не разобрался — чекаут работает в режиме «уточнит оператор» */
   broken: boolean
-  /** Флаг DELIVERY_PRICING_ENABLED + наличие ключей DaData: считает ли прод вообще */
+  /** Флаг DELIVERY_PRICING_ENABLED + DADATA_TOKEN: считает ли прод вообще */
   engineEnabled: boolean
 }
 
 export async function getDeliveryPricing(): Promise<DeliveryPricingView> {
   const { parseDeliveryPricingConfig, DEFAULT_DELIVERY_PRICING, DELIVERY_PRICING_SETTING } = await import('./delivery-pricing')
-  const { dadataCleanConfigured } = await import('./dadata')
+  const { dadataConfigured } = await import('./dadata')
   const raw = await getApiKeyValue(DELIVERY_PRICING_SETTING)
   const cfg = parseDeliveryPricingConfig(raw)
-  const engineEnabled = process.env.DELIVERY_PRICING_ENABLED === 'true' && dadataCleanConfigured()
+  const engineEnabled = process.env.DELIVERY_PRICING_ENABLED === 'true' && dadataConfigured()
   if (!cfg) {
     return { ...DEFAULT_DELIVERY_PRICING, broken: raw !== null && raw.trim() !== '', engineEnabled }
   }
   return {
-    baseMkad: cfg.baseMkad.toFixed(0),
-    perKm: cfg.perKm.toFixed(0),
-    cutoffKm: cfg.cutoffKm,
+    moscowPrice: cfg.moscowPrice.toFixed(0),
     freeThreshold: cfg.freeThreshold ? cfg.freeThreshold.toFixed(0) : null,
     broken: false,
     engineEnabled,
@@ -472,15 +469,11 @@ const parseRub = (raw: unknown, max: number): number | null => {
 
 export async function setDeliveryPricing(
   actor: string,
-  body: { baseMkad?: unknown; perKm?: unknown; cutoffKm?: unknown; freeThreshold?: unknown },
+  body: { moscowPrice?: unknown; freeThreshold?: unknown },
 ): Promise<Outcome<DeliveryPricingView>> {
   const { DELIVERY_PRICING_SETTING } = await import('./delivery-pricing')
-  const baseMkad = parseRub(body.baseMkad, 1_000_000)
-  const perKm = parseRub(body.perKm, 100_000)
-  const cutoffKm = parseRub(body.cutoffKm, 1000)
-  if (baseMkad === null) return bad(422, 'Цена внутри МКАД — целое число рублей от 0') as Outcome<DeliveryPricingView>
-  if (perKm === null) return bad(422, 'Цена за км — целое число рублей от 0') as Outcome<DeliveryPricingView>
-  if (cutoffKm === null || cutoffKm < 1) return bad(422, 'Отсечка — целое число км от 1 до 1000') as Outcome<DeliveryPricingView>
+  const moscowPrice = parseRub(body.moscowPrice, 1_000_000)
+  if (moscowPrice === null) return bad(422, 'Цена доставки по Москве — целое число рублей от 0') as Outcome<DeliveryPricingView>
   const freeRaw = String(body.freeThreshold ?? '').trim()
   let freeThreshold: number | null = null
   if (freeRaw !== '') {
@@ -490,11 +483,11 @@ export async function setDeliveryPricing(
     }
   }
   const before = await getDeliveryPricing()
-  const stored = { baseMkad: String(baseMkad), perKm: String(perKm), cutoffKm, freeThreshold: freeThreshold === null ? null : String(freeThreshold) }
+  const stored = { moscowPrice: String(moscowPrice), freeThreshold: freeThreshold === null ? null : String(freeThreshold) }
   await setApiKeyValue(DELIVERY_PRICING_SETTING, JSON.stringify(stored))
   void logAdminAction({
     adminTelegramId: actor, action: 'update', entity: 'Setting', entityId: 'delivery_pricing',
-    before: { baseMkad: before.baseMkad, perKm: before.perKm, cutoffKm: before.cutoffKm, freeThreshold: before.freeThreshold },
+    before: { moscowPrice: before.moscowPrice, freeThreshold: before.freeThreshold },
     after: stored,
   })
   return { ok: true, status: 200, data: await getDeliveryPricing() }

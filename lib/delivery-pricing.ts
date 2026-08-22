@@ -1,13 +1,18 @@
 /**
- * Стоимость доставки (Москва/МКАД) — согласованная с владельцем модель:
- *   • внутри МКАД — фикс (baseMkad, по умолчанию 1000 ₽);
- *   • за МКАД — baseMkad + perKm × ⌈км от МКАД⌉ (км — beltway_distance из DaData Clean);
- *   • ⌈км⌉ больше отсечки (cutoffKm, по умолчанию 50) → авто-расчёта нет,
- *     «стоимость уточнит оператор» (mode:'operator', deliveryCost=null — НЕ ноль);
+ * Стоимость доставки — упрощённая модель, согласованная с владельцем:
+ *   • адрес в регионе «Москва» (КЛАДР 77 — включая Зеленоград и Новую Москву/
+ *     ТиНАО) — фикс (moscowPrice, по умолчанию 1000 ₽);
+ *   • любой другой регион (в т.ч. Московская обл, КЛАДР 50), сбой геокода или
+ *     адрес, не разобранный хотя бы до улицы → «стоимость уточнит оператор»
+ *     (mode:'operator', deliveryCost=null — НЕ ноль);
  *   • порог бесплатной доставки freeThreshold: по умолчанию ВЫКЛ (null); если
  *     задан и сумма товаров ≥ порога — доставка 0 ₽.
+ * Габариты и «км от метро» не автоматизируются — это ручная работа оператора.
  *
- * Деньги — Decimal, итог округляется до рубля. Все параметры редактируются
+ * Зона определяется по РЕГИОНУ, а не по city == «Москва»: у Зеленограда city
+ * «Зеленоград», у Коммунарки — settlement; регион у всех «Москва».
+ *
+ * Деньги — Decimal, итог округляется до рубля. Параметры редактируются
  * владельцем в админке (ApiKey setting_delivery_pricing, JSON). Битый конфиг —
  * это тоже фолбэк в «оператора»: лучше не посчитать, чем посчитать неправильно.
  */
@@ -17,16 +22,17 @@ import log from './logger'
 
 export const DELIVERY_PRICING_SETTING = 'setting_delivery_pricing'
 
+/** Первые две цифры КЛАДР-кода региона «Москва». */
+export const MOSCOW_REGION_KLADR_PREFIX = '77'
+
 export interface DeliveryPricingConfig {
-  baseMkad: Decimal
-  perKm: Decimal
-  cutoffKm: number
+  moscowPrice: Decimal
   /** null = порог бесплатной доставки выключен */
   freeThreshold: Decimal | null
 }
 
 /** Дефолты, согласованные владельцем; действуют, пока настройка не сохранена. */
-export const DEFAULT_DELIVERY_PRICING = { baseMkad: '1000', perKm: '40', cutoffKm: 50, freeThreshold: null as string | null }
+export const DEFAULT_DELIVERY_PRICING = { moscowPrice: '1000', freeThreshold: null as string | null }
 
 const decOrNull = (v: unknown): Decimal | null => {
   if (v === null || v === undefined || v === '') return null
@@ -41,6 +47,7 @@ const decOrNull = (v: unknown): Decimal | null => {
 /**
  * Разбор JSON-конфига. null/пустая строка (настройку ещё не сохраняли) →
  * дефолты; кривой JSON или значения → null (расчёт уходит в «оператора»).
+ * Старый ключ baseMkad (модель МКАД до 2026-08-22) читается как moscowPrice.
  */
 export function parseDeliveryPricingConfig(raw: string | null): DeliveryPricingConfig | null {
   let src: Record<string, unknown>
@@ -55,15 +62,12 @@ export function parseDeliveryPricingConfig(raw: string | null): DeliveryPricingC
       return null
     }
   }
-  const baseMkad = decOrNull(src.baseMkad)
-  const perKm = decOrNull(src.perKm)
-  const cutoff = Number(src.cutoffKm)
+  const moscowPrice = decOrNull(src.moscowPrice ?? src.baseMkad)
   const freeRaw = src.freeThreshold
   const freeThreshold = freeRaw === null || freeRaw === undefined || freeRaw === '' ? null : decOrNull(freeRaw)
-  if (!baseMkad || !perKm) return null
-  if (!Number.isInteger(cutoff) || cutoff < 1 || cutoff > 1000) return null
+  if (!moscowPrice) return null
   if (freeRaw !== null && freeRaw !== undefined && freeRaw !== '' && (freeThreshold === null || freeThreshold.isZero())) return null
-  return { baseMkad, perKm, cutoffKm: cutoff, freeThreshold }
+  return { moscowPrice, freeThreshold }
 }
 
 /** Конфиг из админ-настроек (с дефолтами); ошибка чтения → null → «оператор». */
@@ -78,21 +82,39 @@ export async function loadDeliveryPricingConfig(): Promise<DeliveryPricingConfig
 
 /** Что нужно формуле от геокода (подмножество VerifiedAddress из lib/dadata). */
 export interface DeliveryGeo {
-  beltwayHit: string | null
-  beltwayDistanceKm: number | null
-  qcGeo: number | null
-  qc: number | null
+  regionKladrId: string | null
+  fiasLevel: number | null
 }
 
+export type DeliveryZone = 'MOSCOW' | 'OUTSIDE'
+
 export type DeliveryQuote =
-  | { mode: 'fixed'; cost: Decimal; zone: 'IN_MKAD' | 'OUT_MKAD'; distanceKm: number | null; free: boolean }
+  | { mode: 'fixed'; cost: Decimal; zone: 'MOSCOW'; free: boolean }
   | { mode: 'operator' }
 
 const OPERATOR: DeliveryQuote = { mode: 'operator' }
 
-// Порог доверия геокоду: qc=0 (адрес разобран уверенно) и qc_geo ≤ 2
-// (координаты не грубее улицы). Хуже — пусть смотрит человек.
-const QC_GEO_MAX = 2
+/**
+ * Адрес разобран хотя бы до улицы (fias_level 7 — улица, 8 — дом, 9 —
+ * помещение, 65 — планировочная структура, 90/91 — доп. территория/улица в ней).
+ * «Москва» без улицы (fias_level 1/4/6) — пусть смотрит человек.
+ * Suggestions не отдаёт qc, поэтому качество гейтим именно так.
+ */
+export function isAddressResolved(fiasLevel: number | null): boolean {
+  return fiasLevel !== null && ((fiasLevel >= 7 && fiasLevel <= 9) || fiasLevel >= 65)
+}
+
+/** Регион «Москва» (КЛАДР 77…): Москва, Зеленоград, Новая Москва (ТиНАО). */
+export function isMoscowRegion(regionKladrId: string | null): boolean {
+  return typeof regionKladrId === 'string' && /^\d{13}$/.test(regionKladrId)
+    && regionKladrId.startsWith(MOSCOW_REGION_KLADR_PREFIX)
+}
+
+/** Зона для записи в заказ: null, если геокод не дал региона. */
+export function deliveryZoneOf(geo: DeliveryGeo | null): DeliveryZone | null {
+  if (!geo || !geo.regionKladrId) return null
+  return isMoscowRegion(geo.regionKladrId) ? 'MOSCOW' : 'OUTSIDE'
+}
 
 /**
  * Чистая функция расчёта. Любая нехватка данных → «оператор», никогда не 0 ₽.
@@ -104,28 +126,16 @@ export function computeDeliveryCost(
   itemsTotal: Decimal,
 ): DeliveryQuote {
   if (!config || !geo) return OPERATOR
-  if (geo.qc !== 0 || geo.qcGeo === null || geo.qcGeo > QC_GEO_MAX) return OPERATOR
-  if (geo.beltwayHit !== 'IN_MKAD' && geo.beltwayHit !== 'OUT_MKAD') return OPERATOR
-
-  let distanceKm: number | null = null
-  let cost: Decimal
-  if (geo.beltwayHit === 'IN_MKAD') {
-    cost = config.baseMkad
-  } else {
-    if (geo.beltwayDistanceKm === null || geo.beltwayDistanceKm < 0) return OPERATOR
-    distanceKm = Math.ceil(geo.beltwayDistanceKm)
-    if (distanceKm > config.cutoffKm) return OPERATOR
-    cost = config.baseMkad.plus(config.perKm.times(distanceKm))
-  }
+  if (!isAddressResolved(geo.fiasLevel)) return OPERATOR
+  if (!isMoscowRegion(geo.regionKladrId)) return OPERATOR
 
   const free = config.freeThreshold !== null && itemsTotal.gte(config.freeThreshold)
-  if (free) cost = new Decimal(0)
+  const cost = free ? new Decimal(0) : config.moscowPrice
 
   return {
     mode: 'fixed',
     cost: cost.toDecimalPlaces(0, Decimal.ROUND_HALF_UP),
-    zone: geo.beltwayHit,
-    distanceKm,
+    zone: 'MOSCOW',
     free,
   }
 }

@@ -230,17 +230,13 @@
       <div class="card">
         <h3>Тарифы доставки (Москва)</h3>
         <div class="mt" id="dpStatus">Загрузка…</div>
-        <div class="lbl" style="margin-top:10px">Внутри МКАД, ₽ (фикс)</div>
-        <input class="inp" id="dpBase" placeholder="1000" inputmode="numeric">
-        <div class="lbl">За МКАД: ₽ за каждый км от МКАД (поверх фикса)</div>
-        <input class="inp" id="dpPerKm" placeholder="40" inputmode="numeric">
-        <div class="lbl">Отсечка, км от МКАД (дальше — «стоимость уточнит оператор»)</div>
-        <input class="inp" id="dpCutoff" placeholder="50" inputmode="numeric">
+        <div class="lbl" style="margin-top:10px">Доставка по Москве, ₽ (фикс)</div>
+        <input class="inp" id="dpMoscow" placeholder="1000" inputmode="numeric">
         <div class="lbl">Бесплатная доставка от суммы товаров, ₽ (пусто = выключено)</div>
         <input class="inp" id="dpFree" placeholder="пусто — порога нет" inputmode="numeric">
         <button class="btn b-main" id="dpSave">Сохранить тарифы</button>
         <div class="mt" id="dpErr" style="color:var(--bad)"></div>
-        <div class="hint">Формула: внутри МКАД — фикс; за МКАД — фикс + ₽/км × км от МКАД (км округляются вверх, данные DaData). Считает сервер при оформлении заказа; если адрес не распознан или дальше отсечки — заказ проходит с пометкой «стоимость уточнит оператор». Менять цифры может только владелец.</div>
+        <div class="hint">Адрес в регионе Москва (включая Зеленоград и Новую Москву) — фикс. Подмосковье и другие регионы, а также нераспознанный адрес — заказ проходит с пометкой «стоимость уточнит оператор». Габариты и расстояние от метро оператор учитывает вручную. Считает сервер при оформлении заказа по данным DaData. Менять цифры может только владелец.</div>
       </div>
 
       <div class="cap">ПОСТАВЩИКИ</div>
@@ -2955,9 +2951,7 @@
       const r = await api('/settings/delivery-pricing').catch(() => null)
       if (!r || !r.ok) { st.textContent = 'Не удалось загрузить'; return }
       const d = r.data
-      document.getElementById('dpBase').value = d.baseMkad ?? ''
-      document.getElementById('dpPerKm').value = d.perKm ?? ''
-      document.getElementById('dpCutoff').value = d.cutoffKm ?? ''
+      document.getElementById('dpMoscow').value = d.moscowPrice ?? ''
       document.getElementById('dpFree').value = d.freeThreshold ?? ''
       const engine = d.engineEnabled
         ? '<span class="chip c-ok">расчёт в чекауте ВКЛЮЧЁН</span>'
@@ -2965,16 +2959,14 @@
       st.innerHTML = engine + (d.broken ? '<div class="warnbox" style="margin-top:6px">Сохранённые тарифы не читаются — доставка считается «уточнит оператор». Пересохраните цифры.</div>' : '')
       const isOwner = window.adminMe && window.adminMe.role === 'owner'
       document.getElementById('dpSave').style.display = isOwner ? '' : 'none'
-      ;['dpBase', 'dpPerKm', 'dpCutoff', 'dpFree'].forEach(id => { document.getElementById(id).disabled = !isOwner })
+      ;['dpMoscow', 'dpFree'].forEach(id => { document.getElementById(id).disabled = !isOwner })
     }
 
     document.getElementById('dpSave').addEventListener('click', async () => {
       const err = document.getElementById('dpErr')
       err.textContent = ''
       const body = {
-        baseMkad: document.getElementById('dpBase').value.trim(),
-        perKm: document.getElementById('dpPerKm').value.trim(),
-        cutoffKm: document.getElementById('dpCutoff').value.trim(),
+        moscowPrice: document.getElementById('dpMoscow').value.trim(),
         freeThreshold: document.getElementById('dpFree').value.trim(),
       }
       const r = await api('/settings/delivery-pricing', { method: 'PUT', body: JSON.stringify(body) }).catch(() => null)
