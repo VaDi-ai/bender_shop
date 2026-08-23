@@ -697,7 +697,8 @@
     .cart-sidebar.open { transform: translateX(0); }
     .cart-head { padding: 18px 20px; border-bottom: 1px solid #161616; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; position: sticky; top: 0; z-index: 10; background: var(--bg); }
     .cart-head-title { font-family: 'JetBrains Mono', monospace; font-size: 18px; color: var(--accent); text-shadow: 0 0 12px rgba(168,255,62,0.4); letter-spacing: 3px; }
-    .cart-body { flex: 1; overflow-y: auto; padding: 16px 20px; }
+    /* Нижний отступ прокрутки: итог должен целиком выезжать над «ОФОРМИТЬ» и над клавиатурой/нижней панелью Telegram */
+    .cart-body { flex: 1; overflow-y: auto; padding: 16px 20px calc(32px + env(safe-area-inset-bottom, 0px)); scroll-padding-bottom: 32px; }
     .cart-body::-webkit-scrollbar { width: 3px; }
     .cart-body::-webkit-scrollbar-thumb { background: #222; }
     .cart-empty { text-align: center; padding: 48px 0; color: var(--hint); }
@@ -717,6 +718,7 @@
     .qty-btn:disabled { opacity: 0.32; cursor: not-allowed; border-color: #1e1e1e; color: #444; }
     .qty-val { font-size: 14px; font-weight: 600; min-width: 20px; text-align: center; }
     .section-label { font-size: 10px; font-weight: 600; letter-spacing: 3px; color: var(--hint); text-transform: uppercase; margin-bottom: 10px; }
+    #cartFilled .section-label { margin-bottom: 14px; }
     .pay-group { display: flex; gap: 8px; margin-bottom: 16px; }
     .pay-btn { flex: 1; padding: 10px 4px; border: 1px solid #2a2a2a; background: var(--surface); color: var(--text); font-family: 'JetBrains Mono', monospace; font-size: 10px; cursor: pointer; text-align: center; letter-spacing: 0.5px; line-height: 1.4; transition: border-color 0.15s, background 0.15s, color 0.15s; }
     .pay-btn:active { transform: scale(0.97); }
@@ -731,7 +733,7 @@
     .total-row.main { border-top: 1px solid #2a2a2a; margin-top: 8px; padding-top: 10px; color: var(--text); }
     .total-row.main span { font-size: 14px; font-weight: 600; }
     .total-amount { font-family: 'JetBrains Mono', monospace; color: var(--accent); font-size: 20px !important; }
-    .cart-footer { padding: 16px 20px; border-top: 1px solid #161616; flex-shrink: 0; position: sticky; bottom: 0; background: var(--bg); }
+    .cart-footer { padding: 14px 20px calc(14px + env(safe-area-inset-bottom, 0px)); border-top: 1px solid #161616; flex-shrink: 0; position: sticky; bottom: 0; background: var(--bg); }
 
     /* ── Toast ────────────────────────────────────────────────────────────── */
     .toast { position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%) translateY(10px); background: #1a1a1a; border: 1px solid #333; color: var(--text); padding: 10px 20px; font-size: 12px; letter-spacing: 1.5px; text-transform: uppercase; z-index: 9999; opacity: 0; transition: opacity 0.2s, transform 0.2s; pointer-events: none; white-space: nowrap; }
@@ -739,7 +741,9 @@
 
     /* ── Customer form ────────────────────────────────────────────────────── */
     @keyframes glitch-label { 0% { transform: translate(0px, 0px); } 25% { transform: translate(-2px, 1px) skewX(1deg); } 50% { transform: translate(2px, -1px) skewX(-1deg); } 75% { transform: translate(-1px, 2px); } 100% { transform: translate(0px, 0px); } }
-    .customer-form { margin-bottom: 20px; }
+    .customer-form { margin-bottom: 24px; }
+    /* Первому полю — зазор под всплывающий лейбл «ФИО», иначе он прилипает к заголовку секции */
+    .customer-form > .cform-field:first-child { margin-top: 12px; }
     .cform-title { font-size: 10px; font-weight: 600; letter-spacing: 3px; color: var(--hint); text-transform: uppercase; margin-bottom: 14px; }
     .cform-field { position: relative; margin-bottom: 24px; }
     .cform-field input, .cform-field textarea { width: 100%; background: transparent; border: none; border-bottom: 2px solid rgba(168,255,62,0.3); padding: 8px 0 6px; color: #e5e5e5; font-family: 'JetBrains Mono', monospace; font-size: 14px; outline: none; resize: none; transition: border-bottom-color 0.2s; }
@@ -754,16 +758,25 @@
     .delivery-addr-wrap { overflow: hidden; max-height: 0; opacity: 0; transition: max-height 0.3s ease, opacity 0.3s ease; }
     /* overflow:visible в раскрытом виде — иначе дропдаун подсказок DaData режется рамкой */
     .delivery-addr-wrap.show { max-height: 200px; opacity: 1; overflow: visible; }
+    /* Поле адреса внутри свёрнутого wrap: верхний отступ под «всплывающий» лейбл (top:-14px), иначе лейбл прилипает
+       к переключателю; при самовывозе wrap схлопнут (max-height:0; overflow:hidden) — дыры не образуется */
+    .delivery-addr-wrap .cform-field { margin: 26px 0 0; }
     .addr-suggest { position: relative; }
     .addr-suggest-list { position: absolute; left: 0; right: 0; top: 100%; z-index: 60; background: #111; border: 1px solid #333; display: none; max-height: 180px; overflow-y: auto; }
     .addr-suggest-list.show { display: block; }
     .addr-suggest-item { padding: 8px 10px; font-size: 12px; color: #ddd; cursor: pointer; border-bottom: 1px solid #1a1a1a; }
     .addr-suggest-item:last-child { border-bottom: none; }
     .addr-suggest-item:hover { background: #1c1c1c; color: var(--accent); }
-    .delivery-quote-note { font-size: 11px; color: var(--hint); margin: 4px 0 0; display: none; }
+    /* Состояние загрузки подсказок: строка «ищу адрес…» (пустой список) или приглушённые старые пункты */
+    .addr-suggest-item.addr-suggest-loading { color: var(--hint); cursor: default; font-style: italic; animation: addr-pulse 1s ease-in-out infinite; }
+    .addr-suggest-item.addr-suggest-loading:hover { background: transparent; color: var(--hint); }
+    .addr-suggest-list.loading .addr-suggest-item:not(.addr-suggest-loading) { opacity: 0.45; }
+    @keyframes addr-pulse { 0%, 100% { opacity: 0.5; } 50% { opacity: 1; } }
+    .delivery-quote-note { font-size: 11px; color: var(--hint); margin: 8px 0 0; line-height: 1.5; display: none; }
     .delivery-quote-note.show { display: block; }
-    .pickup-info { border-left: 2px solid #a8ff3e; padding: 10px 0 10px 12px; color: #888; font-size: 12px; line-height: 1.7; letter-spacing: 0.5px; overflow: hidden; max-height: 0; opacity: 0; transition: max-height 0.3s ease, opacity 0.3s ease; }
-    .pickup-info.show { max-height: 140px; opacity: 1; }
+    /* В свёрнутом виде без вертикального padding — иначе при доставке под адресом остаётся пустая полоса 20px */
+    .pickup-info { border-left: 2px solid #a8ff3e; padding: 0 0 0 12px; color: #888; font-size: 12px; line-height: 1.7; letter-spacing: 0.5px; overflow: hidden; max-height: 0; opacity: 0; transition: max-height 0.3s ease, opacity 0.3s ease, padding 0.3s ease; }
+    .pickup-info.show { max-height: 140px; opacity: 1; padding: 10px 0 10px 12px; }
 
     /* ── Site footer ──────────────────────────────────────────────────────── */
     .site-footer { background: #0a0a0a; border-top: 1px solid #1a1a1a; padding: 40px 20px; }
@@ -3367,18 +3380,46 @@
       } catch { deliveryPricingOn = false }
     }
 
-    let addrDebounce = null, addrQuoteSeq = 0
+    // Дебаунс 150 мс (было 300 — подсказки выходили только когда пользователь останавливался).
+    // Порог показа — 3 символа. addrSuggestSeq — та же защита от гонки, что у quote:
+    // ответ на уже изменённое поле игнорируем, чтобы старый список не перетирал новый.
+    const ADDR_SUGGEST_DEBOUNCE_MS = 150
+    let addrDebounce = null, addrQuoteSeq = 0, addrSuggestSeq = 0
     function initAddressAutocomplete() {
       const addr = document.getElementById('cfAddress')
       const list = document.getElementById('addrSuggest')
       if (!addr || !list) return
-      const hideSuggest = () => { list.classList.remove('show'); list.innerHTML = '' }
+      const hideSuggest = () => { addrSuggestSeq++; list.classList.remove('show', 'loading'); list.innerHTML = '' }
+      // Показываем ожидание сразу при вводе, а не после дебаунса: старые пункты (если есть) приглушаем,
+      // пустой список — строка «ищу адрес…», чтобы пауза не читалась как зависание
+      const showLoading = () => {
+        if (!list.querySelector('.addr-suggest-item:not(.addr-suggest-loading)')) {
+          list.innerHTML = '<div class="addr-suggest-item addr-suggest-loading">ищу адрес…</div>'
+        }
+        list.classList.add('show', 'loading')
+      }
+      const renderItems = (items) => {
+        list.classList.remove('loading')
+        list.innerHTML = items.map((s, i) => `<div class="addr-suggest-item" data-i="${i}">${esc(s.value)}</div>`).join('')
+        list.classList.add('show')
+        list.querySelectorAll('.addr-suggest-item').forEach((el, i) => {
+          // mousedown: срабатывает раньше blur textarea, клик не теряется
+          el.addEventListener('mousedown', (e) => {
+            e.preventDefault()
+            addr.value = items[i].value
+            hideSuggest()
+            requestDeliveryQuote()
+          })
+        })
+      }
       addr.addEventListener('input', () => {
         deliveryQuote = null; updateTotals()
         if (!deliveryPricingOn) return
         clearTimeout(addrDebounce)
         const q = addr.value.trim()
         if (q.length < 3) { hideSuggest(); return }
+        const seq = ++addrSuggestSeq
+        showLoading()
         addrDebounce = setTimeout(async () => {
           try {
             const r = await fetch('/api/delivery/suggest', {
@@ -3386,21 +3427,12 @@
               body: JSON.stringify({ query: q }),
             })
             const j = r.ok ? await r.json() : null
+            if (seq !== addrSuggestSeq) return // поле уже изменилось — ответ устарел, ждём свежий
             const items = (j && j.suggestions) || []
             if (!items.length || document.activeElement !== addr) { hideSuggest(); return }
-            list.innerHTML = items.map((s, i) => `<div class="addr-suggest-item" data-i="${i}">${esc(s.value)}</div>`).join('')
-            list.classList.add('show')
-            list.querySelectorAll('.addr-suggest-item').forEach((el, i) => {
-              // mousedown: срабатывает раньше blur textarea, клик не теряется
-              el.addEventListener('mousedown', (e) => {
-                e.preventDefault()
-                addr.value = items[i].value
-                hideSuggest()
-                requestDeliveryQuote()
-              })
-            })
-          } catch { hideSuggest() }
-        }, 300)
+            renderItems(items)
+          } catch { if (seq === addrSuggestSeq) hideSuggest() }
+        }, ADDR_SUGGEST_DEBOUNCE_MS)
       })
       addr.addEventListener('blur', () => {
         setTimeout(hideSuggest, 200)
