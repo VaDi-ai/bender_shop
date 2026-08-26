@@ -1490,10 +1490,38 @@ const M_KEEP_WORDS = new Set([
 /**
  * Извлекает базовое имя продукта из полного названия.
  */
+/**
+ * Убирает ВИСЯЩИЕ закрывающие скобки — те, у которых нет открывающей.
+ *
+ * Зачем: в листе встречается опечатка «… Wi-Fi 2026) M4» (потеряна открывающая
+ * скобка у года). Разбор снимал год, а «)» оставалась в имени товара — так
+ * родились товары-призраки «Ipad Air 11 )» и «Ipad Air 13 )», которые лист
+ * кормит как отдельные позиции. Чиним на входе, а не руками в листе:
+ * переименование строк в таблице плодит новых сирот.
+ *
+ * Парные скобки не трогаем — легальные имена вроде «Whoop 5.0 ONE (подписка
+ * 199€/год)» и «Картридж … (20 sheets)» обязаны остаться как есть.
+ */
+export function dropUnmatchedParens(s: string): string {
+  let depth = 0
+  let out = ''
+  for (const ch of String(s ?? '')) {
+    if (ch === '(') { depth++; out += ch; continue }
+    if (ch === ')') {
+      if (depth > 0) { depth--; out += ch }   // парная — сохраняем
+      continue                                 // висящая — выбрасываем
+    }
+    out += ch
+  }
+  return out
+}
+
 export function extractProductName(fullName: string, brand: string): string {
   let name = fullName
 
   // ─── Step 0: Normalize ───
+  // Висящая «)» — раньше доезжала до имени товара и плодила призраков
+  name = dropUnmatchedParens(name)
   name = name.replace(/\bSeries\s+(\d+)\b/gi, 'S$1')  // "Series 11" → "S11"
 
   // ─── Step 1: Remove country in brackets (Russian) ───

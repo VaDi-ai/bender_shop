@@ -78,8 +78,13 @@ describe('гейт по бренду: чип бывает только у Apple'
 
 describe('РЕГРЕССИЯ: имена товаров не поехали (838 живых строк листа)', () => {
   it('extractProductName даёт ровно то же имя, что до правки', () => {
+    // Исключение — 58 строк со сломанной скобкой «…2026)»: их имя намеренно
+    // чинится отдельной защитной нормализацией, и это покрыто своим тестом
+    // (tests/stray-paren.test.ts). Здесь гейт остаётся строгим для остальных.
+    const BROKEN_PAREN = new Set(['Ipad Air 11 )', 'Ipad Air 13 )'])
     const changed: string[] = []
     for (const row of baseline as Array<{ fullName: string; brand: string; name: string }>) {
+      if (BROKEN_PAREN.has(row.name)) continue
       const got = extractProductName(row.fullName, row.brand)
       if (got !== row.name) changed.push(`«${row.fullName}»: ${row.name} → ${got}`)
     }
