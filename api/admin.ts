@@ -536,6 +536,64 @@ export function adminApiRouter(): Router {
     }))
   }))
 
+  // ── Управление привязками (Фаза B) ────────────────────────────────────────
+  // Права по образцу markup/sim: список и правка — owner+manager (операционка),
+  // забыть и откат эффекта — owner-only. Кэш витрины не бампается: привязки
+  // влияют на разбор прайсов, покупателю показывать нечего.
+
+  router.get('/aliases', safe(async (req, res) => {
+    const { listAliases } = await import('../lib/price-alias')
+    const limit = parseInt(String(req.query.limit ?? '50'), 10) || 50
+    res.json(await listAliases({ query: String(req.query.q ?? ''), limit }))
+  }))
+
+  // Строки, которые система узнала сама (алиаса нет) — их тоже можно переиграть
+  router.get('/aliases/auto-matched', safe(async (req, res) => {
+    const { listAutoMatched } = await import('../lib/price-alias')
+    const limit = parseInt(String(req.query.limit ?? '100'), 10) || 100
+    res.json(await listAutoMatched(limit))
+  }))
+
+  // Перепривязка ЛЮБОГО прочтения прайса — в т.ч. уже привязанного или
+  // авто-узнанного (создаёт override-алиас). Штатная операция, не 409.
+  router.post('/aliases/rebind', safe(async (req, res) => {
+    const body = (req.body ?? {}) as Record<string, unknown>
+    const supplierPriceId = parseInt(String(body.supplierPriceId), 10)
+    const variantId = parseInt(String(body.variantId), 10)
+    if (!Number.isInteger(supplierPriceId)) { res.status(422).json({ error: 'validation', fields: [{ field: 'supplierPriceId', message: 'Укажите строку прайса' }] }); return }
+    if (!Number.isInteger(variantId)) { res.status(422).json({ error: 'validation', fields: [{ field: 'variantId', message: 'Укажите вариант' }] }); return }
+    const { rebindSupplierPriceRow } = await import('../lib/price-alias')
+    const result = await rebindSupplierPriceRow({ supplierPriceId, variantId, actor: { telegramId: req.admin!.telegramId } })
+    res.status(result.status).json(result)
+  }))
+
+  router.put('/aliases/:id', safe(async (req, res) => {
+    const id = parseInt(String(req.params.id), 10)
+    if (!Number.isInteger(id)) { res.status(422).json({ error: 'validation', fields: [{ field: 'id', message: 'Неверный ID' }] }); return }
+    const body = (req.body ?? {}) as Record<string, unknown>
+    const variantId = body.variantId !== undefined ? parseInt(String(body.variantId), 10) : undefined
+    if (variantId !== undefined && !Number.isInteger(variantId)) { res.status(422).json({ error: 'validation', fields: [{ field: 'variantId', message: 'Неверный вариант' }] }); return }
+    const { updateAlias } = await import('../lib/price-alias')
+    const result = await updateAlias({ id, variantId, ignore: body.ignore === true ? true : undefined, actor: { telegramId: req.admin!.telegramId } })
+    res.status(result.status).json(result)
+  }))
+
+  router.delete('/aliases/:id', ownerOnly, safe(async (req, res) => {
+    const id = parseInt(String(req.params.id), 10)
+    if (!Number.isInteger(id)) { res.status(422).json({ error: 'validation', fields: [{ field: 'id', message: 'Неверный ID' }] }); return }
+    const { deleteAlias } = await import('../lib/price-alias')
+    const result = await deleteAlias({ id, actor: { telegramId: req.admin!.telegramId } })
+    res.status(result.status).json(result)
+  }))
+
+  router.post('/aliases/:id/rollback', ownerOnly, safe(async (req, res) => {
+    const id = parseInt(String(req.params.id), 10)
+    if (!Number.isInteger(id)) { res.status(422).json({ error: 'validation', fields: [{ field: 'id', message: 'Неверный ID' }] }); return }
+    const { rollbackAliasEffect } = await import('../lib/price-alias')
+    const result = await rollbackAliasEffect({ id, actor: { telegramId: req.admin!.telegramId } })
+    res.status(result.status).json(result)
+  }))
+
   router.post('/aliases', safe(async (req, res) => {
     const body = (req.body ?? {}) as Record<string, unknown>
     const supplierPriceId = parseInt(String(body.supplierPriceId), 10)
