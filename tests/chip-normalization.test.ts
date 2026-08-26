@@ -13,7 +13,7 @@
  * Плюс контроль, что гейт Step 4 (#105) не ослаблен.
  */
 import { describe, it, expect } from 'vitest'
-import { extractChip, extractProductName, disableStepSkipReason, CHIPS_LONG, CHIPS_SHORT } from '../lib/sheets-sync'
+import { extractChip, extractProductName, disableStepSkipReason, isAppleChipLine, CHIPS_LONG, CHIPS_SHORT } from '../lib/sheets-sync'
 import baseline from './fixtures/sheet-name-baseline.json'
 
 describe('extractChip — канон чипа', () => {
@@ -49,6 +49,30 @@ describe('extractChip — канон чипа', () => {
     expect(new Set(CHIPS_SHORT).size).toBe(CHIPS_SHORT.length)
     for (const long of CHIPS_LONG) expect(long.includes(' ')).toBe(true)
     for (const short of CHIPS_SHORT) expect(short.includes(' ')).toBe(false)
+  })
+})
+
+describe('гейт по бренду: чип бывает только у Apple', () => {
+  it('«Poco M4/M5» (Xiaomi) фантомного чипа не получают', () => {
+    // Канон сам по себе токен видит — именно поэтому нужен гейт на вызове
+    expect(extractChip('Poco M4 Pro 8/256')).toBe('M4 Pro')
+    expect(isAppleChipLine('Xiaomi', 'Poco M4 Pro 8/256')).toBe(false)
+    expect(isAppleChipLine('Xiaomi', 'Poco M5 6/128 Black')).toBe(false)
+    expect(isAppleChipLine('', 'Poco M4 5G')).toBe(false)
+  })
+
+  it('Apple-линейки проходят гейт: по бренду и по названию', () => {
+    expect(isAppleChipLine('Apple', 'MacBook Air 13 M5 16GB 512GB Midnight')).toBe(true)
+    expect(isAppleChipLine('apple', 'что угодно')).toBe(true)          // бренд из листа
+    expect(isAppleChipLine('', 'MacBook Pro 16 M5 Max')).toBe(true)    // пустой бренд — узнаём линейку
+    expect(isAppleChipLine('', 'iPad 11 (A16) 128GB')).toBe(true)
+    expect(isAppleChipLine('', 'Mac mini M4 10c/10c')).toBe(true)
+    expect(isAppleChipLine('', 'iMac 24 M4')).toBe(true)
+  })
+
+  it('чужие бренды с M-токенами гейт не проходят', () => {
+    expect(isAppleChipLine('Sony', 'Sony WH-1000XM5')).toBe(false)
+    expect(isAppleChipLine('Samsung', 'Galaxy M14 5G')).toBe(false)
   })
 })
 

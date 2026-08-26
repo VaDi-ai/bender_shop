@@ -1290,9 +1290,24 @@ export const CHIPS_SHORT = [
 ]
 
 /**
+ * Гейт: у кого вообще бывает Apple-чип. Только Apple-линейки — иначе токены
+ * «M4»/«M5» из чужих названий («Poco M4», «Poco M5» — телефоны Xiaomi) дали бы
+ * фантомный атрибут «Чип». Бренд из листа главнее, но пустой бренд не должен
+ * ронять разбор — поэтому дополнительно узнаём линейку по названию.
+ */
+export function isAppleChipLine(brand: string, fullName: string): boolean {
+  const isAppleBrand = /^apple$/i.test(String(brand ?? '').trim())
+  const isAppleLine = /\b(iPad|MacBook|iMac|Mac\s*(mini|Studio))\b/i.test(String(fullName ?? ''))
+  return isAppleBrand || isAppleLine
+}
+
+/**
  * Достаёт канонический чип из названия. Скобки не мешают («iPad 11 (A16) …»),
  * регистр не важен. Границы слова обязательны: «XM5» (Sony WH-1000XM5) чипом
  * не считается, «S26»/«42mm» тоже.
+ *
+ * Чистая функция без гейта по бренду — гейт применяется на вызове
+ * (см. isAppleChipLine в parseAttributes).
  */
 export function extractChip(fullName: string): string | null {
   const s = String(fullName ?? '').replace(/[()]/g, ' ')
@@ -1849,7 +1864,11 @@ function parseAttributes(fullName: string, brand: string, country: string, categ
   // ─── Чип как структурированный атрибут: A16, M4 Pro, M5 Max ───
   // Канон длинных вариантов первым (как COLORS_LONG): иначе «M4 Pro» усечётся
   // до «M4». Ставим ТОЛЬКО если ключ ещё пуст — конфигурация ядер выше главнее.
-  if (!attrs['Чип']) {
+  //
+  // ГЕЙТ ПО БРЕНДУ: только Apple-линейки, где чип реально существует. Токены
+  // «M4»/«M5» встречаются в чужих названиях телефонов («Poco M4», «Poco M5»),
+  // и без гейта они получили бы фантомный Чип.
+  if (!attrs['Чип'] && isAppleChipLine(brand, normalized)) {
     const chip = extractChip(normalized)
     if (chip) attrs['Чип'] = chip
   }
