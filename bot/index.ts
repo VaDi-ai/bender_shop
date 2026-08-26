@@ -6,6 +6,7 @@ import { Telegraf, Markup } from 'telegraf'
 import { message } from 'telegraf/filters'
 import { setupClientHandlers } from '../webhooks/telegram'
 import { isBotAdmin } from '../lib/bot-admin-access'
+import { auditedAliasUpsert, auditedAliasDelete } from '../lib/price-alias'
 import { startScheduler, isRunning as schedulerRunning } from './scheduler'
 import { getUserId } from './helpers'
 import log from '../lib/logger'
@@ -807,7 +808,9 @@ bot.command('sync', async (ctx) => {
 
 bot.command('alias', async (ctx) => {
   const userId = ctx.from?.id
-  if (!userId || !ADMIN_IDS.includes(userId)) return
+  // Фаза A: гейт как у веб-входа (#114) — активный менеджер из AdminUser тоже
+  // проходит, посторонний и деактивированный режутся
+  if (!userId || !(await isBotAdmin(userId))) return
 
   const args = ctx.message.text.split(/\s+/).slice(1)
   const sub = args[0]?.toLowerCase()
@@ -872,8 +875,9 @@ bot.command('alias', async (ctx) => {
       return
     }
 
-    await prisma.priceAlias.upsert({
-      where: { alias: aliasText.toLowerCase() },
+    await auditedAliasUpsert({
+      actor: { telegramId: String(userId) },
+      alias: aliasText.toLowerCase(),
       create: {
         alias: aliasText.toLowerCase(),
         productId: product.id,
@@ -884,6 +888,7 @@ bot.command('alias', async (ctx) => {
         variantId: null,
         isIgnored: false,
       },
+      via: 'bot_alias_add',
     })
 
     await ctx.reply(`✅ Алиас создан:\n"${aliasText}" → ${product.name} (#${product.id})`)
@@ -897,8 +902,9 @@ bot.command('alias', async (ctx) => {
       return
     }
 
-    await prisma.priceAlias.upsert({
-      where: { alias: aliasText.toLowerCase() },
+    await auditedAliasUpsert({
+      actor: { telegramId: String(userId) },
+      alias: aliasText.toLowerCase(),
       create: {
         alias: aliasText.toLowerCase(),
         isIgnored: true,
@@ -908,6 +914,7 @@ bot.command('alias', async (ctx) => {
         productId: null,
         variantId: null,
       },
+      via: 'bot_alias_ignore',
     })
 
     await ctx.reply(`🚫 "${aliasText}" будет игнорироваться при парсинге цен`)
@@ -921,9 +928,12 @@ bot.command('alias', async (ctx) => {
       return
     }
 
-    const deleted = await prisma.priceAlias.deleteMany({
-      where: { alias: aliasText.toLowerCase() },
+    const deletedCount = await auditedAliasDelete({
+      actor: { telegramId: String(userId) },
+      alias: aliasText.toLowerCase(),
+      via: 'bot_alias_remove',
     })
+    const deleted = { count: deletedCount }
 
     if (deleted.count > 0) {
       await ctx.reply(`✅ Алиас "${aliasText}" удалён`)

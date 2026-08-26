@@ -22,6 +22,76 @@ function aliasKeysFor(row: { rawMessage: string; model: string; storage: string 
   return [...new Set([raw, composite].filter(Boolean))]
 }
 
+/** Прежнее состояние ключа алиаса для audit.before — upsert затирает его молча. */
+export interface AliasPrior { variantId: number | null; productId: number | null; isIgnored: boolean }
+
+/** before по списку ключей: ключ → прежнее состояние или null (алиаса не было). */
+async function aliasPriorByKey(keys: string[]): Promise<Record<string, AliasPrior | null>> {
+  const prior = await prisma.priceAlias.findMany({
+    where: { alias: { in: keys } },
+    select: { alias: true, variantId: true, productId: true, isIgnored: true },
+  })
+  return Object.fromEntries(keys.map(k => {
+    const p = prior.find(a => a.alias === k)
+    return [k, p ? { variantId: p.variantId, productId: p.productId, isIgnored: p.isIgnored } : null]
+  }))
+}
+
+/**
+ * Наблюдаемый upsert алиаса для легаси-путей бота: create/update передаются
+ * НАСКВОЗЬ (поведение байт-в-байт с прежним прямым prisma.priceAlias.upsert),
+ * добавляется только запись в AuditLog с прежним состоянием ключа.
+ */
+export async function auditedAliasUpsert(opts: {
+  actor: { telegramId: string }
+  alias: string
+  create: { alias: string; productId?: number; variantId?: number; isIgnored?: boolean }
+  update: Record<string, number | boolean | null>
+  via: string
+}): Promise<void> {
+  const before = await aliasPriorByKey([opts.alias])
+  const row = await prisma.priceAlias.upsert({
+    where: { alias: opts.alias },
+    create: opts.create,
+    update: opts.update,
+  })
+  void logAdminAction({
+    adminTelegramId: opts.actor.telegramId,
+    action: row.isIgnored ? 'price_alias_ignore' : 'price_alias_link',
+    entity: 'PriceAlias',
+    entityId: row.id,
+    before: { aliases: before },
+    after: {
+      aliases: [opts.alias], variantId: row.variantId, productId: row.productId,
+      ignore: row.isIgnored, via: opts.via,
+    },
+  })
+}
+
+/**
+ * Наблюдаемое удаление алиаса (легаси /alias remove): before в AuditLog,
+ * та же семантика deleteMany по точному ключу. Возвращает число удалённых.
+ */
+export async function auditedAliasDelete(opts: {
+  actor: { telegramId: string }
+  alias: string
+  via: string
+}): Promise<number> {
+  const before = await aliasPriorByKey([opts.alias])
+  const deleted = await prisma.priceAlias.deleteMany({ where: { alias: opts.alias } })
+  if (deleted.count > 0) {
+    void logAdminAction({
+      adminTelegramId: opts.actor.telegramId,
+      action: 'price_alias_remove',
+      entity: 'PriceAlias',
+      entityId: opts.alias.slice(0, 80),
+      before: { aliases: before },
+      after: { deleted: deleted.count, via: opts.via },
+    })
+  }
+  return deleted.count
+}
+
 export interface LinkResult {
   ok: boolean
   status: number
@@ -47,6 +117,9 @@ export async function linkSupplierPriceRow(opts: {
   }
 
   const keys = aliasKeysFor(row)
+  // Наблюдаемость (Фаза A): прежнее состояние обоих ключей — до сих пор upsert
+  // перезатирал чужой variantId без следа, и откат был невозможен
+  const aliasesBefore = await aliasPriorByKey(keys)
   for (const alias of keys) {
     await prisma.priceAlias.upsert({
       where: { alias },
@@ -56,6 +129,7 @@ export async function linkSupplierPriceRow(opts: {
   }
 
   let rematched = 0
+  const rematchedRowIds: number[] = []
   const batchesTouched = new Set<number>()
   if (!opts.ignore) {
     // Точечный пере-матч: unmatched-строки preview-батчей с теми же ключами
@@ -67,6 +141,7 @@ export async function linkSupplierPriceRow(opts: {
       if (!aliasKeysFor(c).some(k => keys.includes(k))) continue
       await prisma.supplierPrice.update({ where: { id: c.id }, data: { variantId: opts.variantId! } })
       rematched++
+      rematchedRowIds.push(c.id)
       if (c.batchId) batchesTouched.add(c.batchId)
     }
     // Обновить счётчики затронутых батчей
@@ -88,7 +163,13 @@ export async function linkSupplierPriceRow(opts: {
     action: opts.ignore ? 'price_alias_ignore' : 'price_alias_link',
     entity: 'PriceAlias',
     entityId: opts.supplierPriceId,
-    after: { aliases: keys, variantId: opts.variantId ?? null, ignore: !!opts.ignore, rematched },
+    // before: прежнее состояние ключей; after: КАКИЕ строки перевязаны, не счётчик —
+    // без этого точечный откат (Фаза B) невозможен
+    before: { aliases: aliasesBefore },
+    after: {
+      aliases: keys, variantId: opts.variantId ?? null, ignore: !!opts.ignore,
+      rematchedRowIds, batchIds: [...batchesTouched],
+    },
   })
 
   return { ok: true, status: 200, aliases: keys, rematched, batchesTouched: [...batchesTouched] }

@@ -9,6 +9,7 @@ import ExcelJS from 'exceljs'
 import { Context, Markup, Telegraf } from 'telegraf'
 import log from '../../lib/logger'
 import { formatAttrPairs } from '../../lib/format'
+import { auditedAliasUpsert } from '../../lib/price-alias'
 import { prisma } from '../../lib/prisma'
 import {
   CURRENCY_FLAGS, fetchCurrencyRates,
@@ -254,10 +255,12 @@ async function applyChanges(ctx: Context, userId: number): Promise<void> {
       if (state.source === 'message' && v.costPrice && v.costPrice > 0) {
         try {
           const aliasText = v.productName.toLowerCase()
-          await prisma.priceAlias.upsert({
-            where: { alias: aliasText },
+          await auditedAliasUpsert({
+            actor: { telegramId: String(userId) },
+            alias: aliasText,
             create: { alias: aliasText, productId: v.productId, variantId: v.variantId },
             update: { productId: v.productId, variantId: v.variantId, isIgnored: false },
+            via: 'bot_price_apply_autosave',
           }).catch(() => {})
         } catch { /* ignore alias save errors */ }
       }
@@ -992,10 +995,12 @@ export function setupPricingHandlers(bot: Telegraf): void {
       })
 
       const aliasKey = d.name.trim().toLowerCase()
-      await prisma.priceAlias.upsert({
-        where: { alias: aliasKey },
+      await auditedAliasUpsert({
+        actor: { telegramId: String(userId) },
+        alias: aliasKey,
         create: { alias: aliasKey, productId: product.id },
         update: { productId: product.id, isIgnored: false },
+        via: 'bot_quick_create',
       }).catch(() => {})
 
       await ctx.reply('✅ Товар создан: ' + d.name + ' (' + d.category + ')')
@@ -1028,10 +1033,12 @@ export function setupPricingHandlers(bot: Telegraf): void {
     const p = state.items[state.currentIndex]
     if (p) {
       const aliasKey = p.rawLine.trim().toLowerCase()
-      await prisma.priceAlias.upsert({
-        where: { alias: aliasKey },
+      await auditedAliasUpsert({
+        actor: { telegramId: String(userId) },
+        alias: aliasKey,
         create: { alias: aliasKey, isIgnored: true },
         update: { isIgnored: true, productId: null, variantId: null },
+        via: 'bot_qc_ignore',
       }).catch(() => {})
       await ctx.reply('🚫 «' + p.rawLine.slice(0, 50) + '» будет игнорироваться.')
     }
@@ -1094,10 +1101,12 @@ export function setupPricingHandlers(bot: Telegraf): void {
     if (!p) return
 
     const aliasKey = p.rawLine.trim().toLowerCase()
-    await prisma.priceAlias.upsert({
-      where: { alias: aliasKey },
+    await auditedAliasUpsert({
+      actor: { telegramId: String(userId) },
+      alias: aliasKey,
       create: { alias: aliasKey, productId: product.id },
       update: { productId: product.id, isIgnored: false },
+      via: 'bot_qc_link',
     }).catch(() => {})
 
     await ctx.reply('✅ Привязано: «' + p.model + '» → ' + product.name + '\nАлиас сохранён — в следующий раз сматчится автоматически.')
@@ -1172,10 +1181,12 @@ export function setupPricingHandlers(bot: Telegraf): void {
           },
         })
 
-        await prisma.priceAlias.upsert({
-          where: { alias: name.trim().toLowerCase() },
+        await auditedAliasUpsert({
+          actor: { telegramId: String(userId) },
+          alias: name.trim().toLowerCase(),
           create: { alias: name.trim().toLowerCase(), productId: product.id },
           update: { productId: product.id, isIgnored: false },
+          via: 'bot_bulk_create',
         }).catch(() => {})
 
         created++
