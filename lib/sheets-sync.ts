@@ -1266,6 +1266,45 @@ export async function syncProductsFromSheets(
   }
 }
 
+// ─── Chip dictionary (long first for greedy match) ──────────────────────────
+//
+// Чип — структурированный атрибут, а не часть названия модели. Канон устроен
+// как COLORS_LONG/COLORS_SHORT: сначала длинные («M4 Pro»), иначе «M4 Pro»
+// усечётся до «M4» и два разных чипа сольются в один.
+//
+// ВАЖНО: у Mac чип входит в ИМЯ товара («Macbook Air M5», «Imac M4»), и оттуда
+// его вырезать нельзя — это идентичность модели. Здесь мы только ДОСТАЁМ чип в
+// атрибут; extractProductName не трогается (см. тесты «имена не поехали»).
+
+export const CHIPS_LONG = [
+  'M5 Ultra', 'M5 Max', 'M5 Pro',
+  'M4 Ultra', 'M4 Max', 'M4 Pro',
+  'M3 Ultra', 'M3 Max', 'M3 Pro',
+  'M2 Ultra', 'M2 Max', 'M2 Pro',
+  'M1 Ultra', 'M1 Max', 'M1 Pro',
+  'A19 Pro', 'A18 Pro', 'A17 Pro',
+]
+export const CHIPS_SHORT = [
+  'M5', 'M4', 'M3', 'M2', 'M1',
+  'A19', 'A18', 'A17', 'A16', 'A15', 'A14', 'A13',
+]
+
+/**
+ * Достаёт канонический чип из названия. Скобки не мешают («iPad 11 (A16) …»),
+ * регистр не важен. Границы слова обязательны: «XM5» (Sony WH-1000XM5) чипом
+ * не считается, «S26»/«42mm» тоже.
+ */
+export function extractChip(fullName: string): string | null {
+  const s = String(fullName ?? '').replace(/[()]/g, ' ')
+  for (const c of CHIPS_LONG) {
+    if (new RegExp(`\\b${c.replace(/\s+/g, '\\s+')}\\b`, 'i').test(s)) return c
+  }
+  for (const c of CHIPS_SHORT) {
+    if (new RegExp(`\\b${c}\\b`, 'i').test(s)) return c
+  }
+  return null
+}
+
 // ─── Color dictionary (long first for greedy match) ─────────────────────────
 
 const COLORS_LONG = [
@@ -1802,13 +1841,17 @@ function parseAttributes(fullName: string, brand: string, country: string, categ
   const isCamera = /\b(Canon|Sony|Nikon|DJI|GoPro)\b/i.test(normalized)
 
   // ─── CPU chip config (Mac Desktop): 10c/10c, 14c/20c ───
+  // Конфигурация ядер исторически живёт в том же ключе «Чип» и имеет приоритет:
+  // менять её задним числом нельзя — это существующие значения на 94 вариантах.
   const chipConfig = normalized.match(/\b(\d+c\/\d+c)\b/)
   if (chipConfig) attrs['Чип'] = chipConfig[1]!
 
-  // ─── Chip (iPad): A16, M3, M4 ───
-  if (isiPad) {
-    const ipadChip = normalized.match(/\b(A\d+|M\d+)\b/)
-    if (ipadChip) attrs['Чип'] = ipadChip[1]!
+  // ─── Чип как структурированный атрибут: A16, M4 Pro, M5 Max ───
+  // Канон длинных вариантов первым (как COLORS_LONG): иначе «M4 Pro» усечётся
+  // до «M4». Ставим ТОЛЬКО если ключ ещё пуст — конфигурация ядер выше главнее.
+  if (!attrs['Чип']) {
+    const chip = extractChip(normalized)
+    if (chip) attrs['Чип'] = chip
   }
 
   // ─── Memory / Storage ───
