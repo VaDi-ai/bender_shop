@@ -46,6 +46,27 @@ export function formatVariantAttrs(attrs: unknown): string {
 }
 
 /**
+ * Пары «Ключ: значение» атрибутов для показа человеку.
+ * Системные ключи (fullName, attrOverrides) и не-строки пропускаются — иначе
+ * объект override'ов печатается как «[object Object]». Массив значений
+ * (агрегат товара из «[v]») разворачивается через запятую.
+ */
+export function formatAttrPairs(attrs: unknown, sep = ', '): string {
+  if (!attrs || typeof attrs !== 'object' || Array.isArray(attrs)) return ''
+  const parts: string[] = []
+  for (const [k, v] of Object.entries(attrs as Record<string, unknown>)) {
+    if (k === 'fullName' || k === 'attrOverrides' || v == null) continue
+    if (Array.isArray(v)) {
+      const vals = v.filter((x) => typeof x === 'string' && x.trim())
+      if (vals.length) parts.push(`${k}: ${vals.join(', ')}`)
+    } else if (typeof v !== 'object') {
+      parts.push(`${k}: ${String(v)}`)
+    }
+  }
+  return parts.join(sep)
+}
+
+/**
  * Форматирует полное имя товара с атрибутами варианта.
  * Если атрибутов нет — возвращает только имя товара.
  * Пример: formatProductNameWithAttrs("iPhone 17 Pro", {"Цвет":"Silver","Память":"256GB"})

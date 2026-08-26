@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { fmtPrice, pluralize, formatVariantAttrs, formatProductNameWithAttrs } from '../lib/format'
+import { fmtPrice, pluralize, formatVariantAttrs, formatProductNameWithAttrs, formatAttrPairs } from '../lib/format'
 
 describe('fmtPrice', () => {
   it('formats thousands with separator', () => {
@@ -117,5 +117,25 @@ describe('formatProductNameWithAttrs', () => {
   it('объектные значения (attrOverrides) не попадают в подпись', () => {
     expect(formatVariantAttrs({ 'Цвет': 'Black', attrOverrides: { SIM: { value: 'eSIM' } } }))
       .toBe('Black')
+  })
+})
+
+describe('formatAttrPairs', () => {
+  it('пары «Ключ: значение», системные ключи и объекты пропущены', () => {
+    expect(formatAttrPairs({
+      'Цвет': 'Sky Blue', 'Память': '512GB',
+      fullName: 'MacBook Air 13 M5 16GB 512GB Sky Blue',
+      attrOverrides: { 'Цвет': { value: 'Sky Blue', by: 'x', at: 'y' } },
+    })).toBe('Цвет: Sky Blue, Память: 512GB')
+  })
+
+  it('массив значений (агрегат товара) разворачивается через запятую', () => {
+    expect(formatAttrPairs({ 'Цвет': ['Midnight', 'Starlight'] })).toBe('Цвет: Midnight, Starlight')
+  })
+
+  it('кастомный разделитель и пустые входы', () => {
+    expect(formatAttrPairs({ 'Цвет': 'Black', 'SIM': 'eSIM' }, ' · ')).toBe('Цвет: Black · SIM: eSIM')
+    expect(formatAttrPairs(null)).toBe('')
+    expect(formatAttrPairs({ attrOverrides: {} })).toBe('')
   })
 })

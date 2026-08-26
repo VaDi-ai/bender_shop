@@ -529,7 +529,7 @@ export function adminApiRouter(): Router {
       return {
         variantId: v.id,
         productName: v.product.name,
-        attrs: Object.entries(attrs).filter(([k]) => k !== 'fullName').map(([, x]) => x).join(' · '),
+        attrs: Object.entries(attrs).filter(([k, x]) => k !== 'fullName' && typeof x === 'string').map(([, x]) => x).join(' · '),
         price: Number(v.price),
         inStock: v.inStock,
       }

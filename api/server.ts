@@ -35,7 +35,7 @@ import {
   readPhotoFilenamesFromDir,
   resolveCdnPhotoUrl,
 } from '../lib/cdn-photo-resolve'
-import { fmtPrice, formatProductNameWithAttrs } from '../lib/format'
+import { fmtPrice, formatProductNameWithAttrs, formatAttrPairs } from '../lib/format'
 import { assertOrderableVariant } from '../lib/order-checks'
 import log from '../lib/logger'
 import { flattenRelativePhotoPath } from '../lib/photo-flat-name'
@@ -1443,9 +1443,7 @@ export function startApiServer(bot?: Telegraf): Server {
               'Приход со склада',
               ex1.product.name +
                 ' — ' +
-                Object.entries(ex1.attributes as Record<string, string>)
-                  .map(([k, v]) => `${k}: ${v}`)
-                  .join(', '),
+                formatAttrPairs(ex1.attributes),
             ]
           : ['VARIANT-SKU-001', 5, 'Приход со склада', 'Название товара'],
         ex2
@@ -1455,9 +1453,7 @@ export function startApiServer(bot?: Telegraf): Server {
               'Возврат',
               ex2.product.name +
                 ' — ' +
-                Object.entries(ex2.attributes as Record<string, string>)
-                  .map(([k, v]) => `${k}: ${v}`)
-                  .join(', '),
+                formatAttrPairs(ex2.attributes),
             ]
           : ['VARIANT-SKU-002', -2, 'Возврат', 'Название товара'],
       ]
@@ -1490,9 +1486,7 @@ export function startApiServer(bot?: Telegraf): Server {
 
       const rowFills = ['FFFFFFFF', 'FFF2F2F2']
       variants.forEach((v, i) => {
-        const attrs = Object.entries(v.attributes as Record<string, string>)
-          .map(([k, val]) => `${k}: ${val}`)
-          .join(', ')
+        const attrs = formatAttrPairs(v.attributes)
         const row = ws2.addRow([
           v.sku,
           v.product.name,
