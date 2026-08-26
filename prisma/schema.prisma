@@ -300,6 +300,14 @@ model ProductVariant {
   bestSupplierName    String?
   priceUpdatedAt      DateTime?
 
+  /// Архивный вариант — схлопнутый дубль или вариант товара-призрака.
+  /// NULL = обычный вариант (в том числе честно распроданный: остаток 0 у
+  /// живого товара архивом НЕ считается). Архивные скрыты из пикера привязки
+  /// (/admin/api/variants), но остаются в БД: заказы на них ссылаются
+  /// (OrderItem.variantId — onDelete: Restrict). Снятие в NULL возвращает
+  /// вариант в работу — операция обратима.
+  archivedAt DateTime?
+
   createdAt DateTime @default(now())
 
   product         Product          @relation(fields: [productId], references: [id], onDelete: Cascade)
@@ -311,6 +319,7 @@ model ProductVariant {
 
   @@index([productId])
   @@index([inStock])
+  @@index([archivedAt])
 }
 
 model StockMovement {
