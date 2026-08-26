@@ -21,6 +21,7 @@ import { stockIn, stockOut, getStockHistory } from '../../lib/stock'
 import { logSecurityEvent } from '../../lib/security-log'
 import { getUserId } from '../helpers'
 import log from '../../lib/logger'
+import { formatAttrPairs } from '../../lib/format'
 
 // ─── Форматирование вариантов ─────────────────────────────────────────────────
 
@@ -1344,7 +1345,7 @@ export function setupInventoryHandlers(bot: Telegraf): void {
     const lines = [
       `🎛️ Вариант [${variant.sku}]`,
       `Товар: ${variant.product.name}`,
-      ...Object.entries(attrs).map(([k, v]) => `${k}: ${v}`),
+      ...formatAttrPairs(attrs, '\n').split('\n').filter(Boolean),
       `Цена: ${variant.price} ₽`,
       `Остаток: ${variant.quantity} шт.`,
       `В наличии: ${variant.inStock ? 'Да' : 'Нет'}`,
@@ -2875,8 +2876,7 @@ async function exportInventory(ctx: Context): Promise<void> {
 
     const rowFills = ['FFFFFFFF', 'FFF2F2F2']
     variants.forEach((v, i) => {
-      const attrs = Object.entries(v.attributes as Record<string, string>)
-        .map(([k, val]) => `${k}: ${val}`).join(', ')
+      const attrs = formatAttrPairs(v.attributes)
       const row = ws.addRow([v.sku, v.product.name, attrs, v.price.toString(), v.quantity])
       const fill: ExcelJS.FillPattern = {
         type: 'pattern', pattern: 'solid', fgColor: { argb: rowFills[i % 2] },

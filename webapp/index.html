@@ -2418,7 +2418,7 @@
         products = products.filter(p => {
           const searchIn = [
             p.name, p.brand, p.description,
-            ...(p.variants || []).map(v => Object.values(v.attributes || {}).join(' ')),
+            ...(p.variants || []).map(v => Object.values(v.attributes || {}).filter(x => typeof x === 'string').join(' ')),
           ].filter(Boolean).join(' ').toLowerCase()
           return searchIn.includes(searchQuery)
         })

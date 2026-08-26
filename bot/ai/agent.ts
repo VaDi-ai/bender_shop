@@ -15,6 +15,7 @@ import log from '../../lib/logger'
 import { prisma } from '../../lib/prisma'
 import { notifyAdminsAboutApiError } from '../../lib/notify-admins'
 import { getApiKeyValue, setApiKeyValue } from '../../lib/api-key-store'
+import { formatAttrPairs } from '../../lib/format'
 
 // ─── Клиент OpenRouter ────────────────────────────────────────────────────────
 
@@ -346,7 +347,7 @@ export async function generateAIResponse(
           ? p.variants.map((v) => {
               const attrs = v.attributes as Record<string, string> | null
               const attrStr = attrs
-                ? Object.entries(attrs).filter(([k]) => k !== 'fullName' && k !== 'Страна').map(([k, val]) => `${k}: ${val}`).join(', ')
+                ? Object.entries(attrs).filter(([k, val]) => k !== 'fullName' && k !== 'Страна' && typeof val === 'string').map(([k, val]) => `${k}: ${val}`).join(', ')
                 : ''
               return `  → ${v.sku} ${attrStr} — ${Number(v.price).toLocaleString('ru-RU')} ₽ (${v.quantity > 0 ? 'в наличии' : 'нет'})`
             }).join('\n')

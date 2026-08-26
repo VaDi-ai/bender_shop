@@ -2508,8 +2508,11 @@
     const PREVIEW_ATTR_ORDER = ['Память', 'Цвет', 'Страна', 'SIM']
     function previewAttrLine(x) {
       const a = x.variantAttrs || {}
-      const rest = Object.keys(a).filter(k => k !== 'fullName' && !PREVIEW_ATTR_ORDER.includes(k))
-      return [x.brand, ...PREVIEW_ATTR_ORDER.map(k => a[k]), ...rest.map(k => a[k]),
+      // Только строковые значения: attrOverrides (объект) и будущие служебные
+      // ключи не должны печататься как «[object Object]»
+      const show = k => (typeof a[k] === 'string' ? a[k] : Array.isArray(a[k]) ? a[k].join(', ') : null)
+      const rest = Object.keys(a).filter(k => k !== 'fullName' && k !== 'attrOverrides' && !PREVIEW_ATTR_ORDER.includes(k))
+      return [x.brand, ...PREVIEW_ATTR_ORDER.map(show), ...rest.map(show),
         x.inStock === false ? 'нет в наличии' : x.inStock === true ? 'в наличии' : null]
         .filter(Boolean).join(' · ')
     }

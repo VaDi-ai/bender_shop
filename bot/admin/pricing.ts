@@ -8,6 +8,7 @@ import https from 'https'
 import ExcelJS from 'exceljs'
 import { Context, Markup, Telegraf } from 'telegraf'
 import log from '../../lib/logger'
+import { formatAttrPairs } from '../../lib/format'
 import { prisma } from '../../lib/prisma'
 import {
   CURRENCY_FLAGS, fetchCurrencyRates,
@@ -1283,7 +1284,7 @@ export function setupPricingHandlers(bot: Telegraf): void {
       brand: v.product.brand ?? undefined,
       categoryId: v.product.categoryId ?? undefined,
       variantSku: v.sku,
-      attrs: Object.entries(v.attributes as Record<string, string>).map(([k, val]) => `${k}: ${val}`).join(', '),
+      attrs: formatAttrPairs(v.attributes),
       currentPrice: Number(v.price),
       newPrice: roundPrice(Number(v.price) * (1 + changePct / 100)),
     })).filter(v => v.newPrice !== v.currentPrice)
@@ -1357,7 +1358,7 @@ export function setupPricingHandlers(bot: Telegraf): void {
       brand: v.product.brand ?? undefined,
       categoryId: v.product.categoryId ?? undefined,
       variantSku: v.sku,
-      attrs: Object.entries(v.attributes as Record<string, string>).map(([k, val]) => `${k}: ${val}`).join(', '),
+      attrs: formatAttrPairs(v.attributes),
       currentPrice: Number(v.price),
       newPrice: roundPrice(Number(v.price) * (1 + changePct / 100)),
     })).filter(v => v.newPrice !== v.currentPrice)
