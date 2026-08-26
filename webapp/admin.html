@@ -205,6 +205,16 @@
       <div class="cap">СИСТЕМА НЕ УЗНАЛА — ПОДСКАЖИТЕ</div>
       <div id="unmatchedBox"><div class="empty">Загрузка…</div></div>
 
+      <div class="cap">ПРИВЯЗКИ ПРАЙСА</div>
+      <div class="card">
+        <h3>Привязки <span class="chip c-off right" id="alChip">—</span></h3>
+        <div id="alList" class="mt">Загрузка…</div>
+        <div class="hint">Привязка учит матчер: строка прайса с этим ключом всегда ложится на выбранный вариант. «Перепривязать» меняет цель, «Забыть» (владелец) останавливает будущее узнавание, «Откатить эффект» (владелец) возвращает перевязанные строки текущих разборов в «не узнал». Цены, уже применённые к витрине, эти кнопки не трогают — их откатывает кнопка отката самого разбора.</div>
+        <div class="cap" style="margin:14px 0 6px">УЗНАНО БЕЗ ПРИВЯЗКИ — МОЖНО ПЕРЕИГРАТЬ</div>
+        <div id="alAuto" class="mt">Загрузка…</div>
+        <div class="hint">Эти строки система сматчила сама по названию. Если попала не туда — «Перепривязать» создаст привязку поверх авто-чтения, и дальше строка будет ложиться куда указали.</div>
+      </div>
+
       <div class="cap">НАЦЕНКА</div>
       <div class="card">
         <h3>Настройки наценки</h3>
@@ -717,7 +727,7 @@
       who.append(b, document.createElement('br'), document.createTextNode(ROLE_LABEL[me.role] || me.role))
       window.adminMe = me
       gate.classList.add('hidden')
-      loadDashboard(); loadSyncRuns(); loadSuppliers(); loadBatches(); loadUnmatched(); loadMarkupRules(); loadDeliveryPricing()
+      loadDashboard(); loadSyncRuns(); loadSuppliers(); loadBatches(); loadUnmatched(); loadAliases(); loadMarkupRules(); loadDeliveryPricing()
       loadSimQueue(); loadSimRecalc(); loadDictionary(); loadStorefront(); loadTeam(); loadIssues(); loadPromotions(); loadInsights(); loadBroadcasts(); loadSegments(); loadAiAgent(); loadMaintenance()
     }
 
@@ -1267,9 +1277,16 @@
       }))
 
       const jr = r.data.journal || []
+      const J_LABEL = {
+        rule_learned: 'Запомнил', rule_forgotten: 'Забыл',
+        price_alias_link: 'Привязка', price_alias_ignore: 'Не наше',
+        price_alias_rebind: 'Перепривязка', price_alias_update: 'Правка привязки',
+        price_alias_remove: 'Забыта привязка', price_alias_rollback: 'Откат эффекта',
+        manual_fix: 'Ручная правка',
+      }
       document.getElementById('dictLog').innerHTML = jr.length
         ? jr.map(j => `<div class="list-i"><div style="flex:1">
-            <div class="nm">${j.action === 'rule_learned' ? 'Запомнил' : 'Забыл'}: ${esc(j.phrase)}</div>
+            <div class="nm">${J_LABEL[j.action] || j.action}: ${esc(j.phrase)}</div>
             <div class="mt">${new Date(j.at).toLocaleString('ru-RU')}</div></div></div>`).join('')
         : '<div class="hint">Пока пусто: тут появится, что и когда система выучила с ваших правок.</div>'
     }
@@ -2849,6 +2866,132 @@
     async function searchVariants(q) {
       const r = await api('/variants?q=' + encodeURIComponent(q)).catch(() => null)
       return r && r.ok ? r.data : []
+    }
+
+    // ── Привязки прайса (экран «Правила и привязки», Фаза C) ─────────────────
+    const VIA_LABEL = {
+      web: 'веб-админка', web_rebind: 'веб · перепривязка', web_forget: 'веб · забыта',
+      bot_alias_add: 'бот · /alias', bot_alias_ignore: 'бот · /alias', bot_alias_remove: 'бот · /alias',
+      bot_price_apply_autosave: 'бот · применение цен', bot_quick_create: 'бот · мастер создания',
+      bot_qc_ignore: 'бот · мастер создания', bot_qc_link: 'бот · мастер создания', bot_bulk_create: 'бот · массовое создание',
+    }
+
+    /** Панель выбора варианта: тот же поиск, что в «Проверьте товар» (peResults). */
+    function alPickPanel(panel, onPick) {
+      panel.style.display = panel.style.display === 'none' ? '' : 'none'
+      if (panel.style.display === 'none') { panel.innerHTML = ''; return }
+      panel.innerHTML = `<input class="inp" data-al-search placeholder="Поиск: название или SKU (от 2 букв)"><div data-al-results></div>`
+      const inp = panel.querySelector('[data-al-search]')
+      const box = panel.querySelector('[data-al-results]')
+      let t = null
+      inp.addEventListener('input', function () {
+        clearTimeout(t)
+        const q = this.value.trim()
+        t = setTimeout(async () => {
+          const found = q.length >= 2 ? await searchVariants(q) : []
+          box.innerHTML = found.map(v => `
+            <div class="list-i" data-al-pick="${v.variantId}" style="cursor:pointer">
+              <div class="grow"><div class="nm">${esc(v.productName)}</div><div class="mt">${esc(v.attrs)}${v.inStock ? '' : ' · нет в наличии'}</div></div>
+              <span class="mono" style="font-size:12px">${fmt(v.price)} ₽</span>
+            </div>`).join('') || (q.length >= 2 ? '<div class="empty">Не нашлось</div>' : '')
+          box.querySelectorAll('[data-al-pick]').forEach(el => el.addEventListener('click', () => {
+            const label = el.querySelector('.nm').textContent + ' · ' + el.querySelector('.mt').textContent
+            onPick(Number(el.dataset.alPick), label)
+          }))
+        }, 250)
+      })
+      inp.focus()
+    }
+
+    async function loadAliases() {
+      const [ra, rauto] = await Promise.all([
+        api('/aliases?limit=50').catch(() => null),
+        api('/aliases/auto-matched?limit=30').catch(() => null),
+      ])
+      const list = document.getElementById('alList')
+      const auto = document.getElementById('alAuto')
+      const isOwner = window.adminMe && window.adminMe.role === 'owner'
+
+      if (!ra || !ra.ok) { list.innerHTML = '<div class="empty">Не удалось загрузить</div>' } else {
+        const items = ra.data
+        document.getElementById('alChip').textContent = items.length ? `${items.length}` : '—'
+        list.innerHTML = items.length ? items.map(a => `
+          <div class="sf-item">
+            <div class="sf-item-head"><div class="grow">
+              <div class="nm">«${esc(a.alias)}»${a.isIgnored ? ' <span class="tag">не наше</span>' : ''}</div>
+              <div class="mt">${a.isIgnored
+                ? 'строка пропускается при разборе'
+                : a.variantId
+                  ? '→ ' + esc(a.fullName || a.productName || 'вариант #' + a.variantId)
+                  : a.productId
+                    ? '→ ' + esc(a.productName || 'товар #' + a.productId) + ' <span class="tag">товар целиком</span>'
+                    : '→ ?'}</div>
+              <div class="mt">${esc(VIA_LABEL[a.via] || a.via || '—')}${a.lastActionAt ? ' · ' + new Date(a.lastActionAt).toLocaleDateString('ru-RU') : ''}</div>
+            </div></div>
+            <div class="sf-item-actions">
+              <button class="btn b-gh sm" data-al-rebind="${a.id}">Перепривязать</button>
+              ${isOwner ? `<button class="btn b-nt sm" data-al-forget="${a.id}">Забыть</button>` : ''}
+              ${isOwner && a.variantId ? `<button class="btn b-nt sm" data-al-rollback="${a.id}">Откатить эффект</button>` : ''}
+            </div>
+            <div data-al-panel="a${a.id}" style="display:none"></div>
+          </div>`).join('') : '<div class="empty">Привязок пока нет.<br>Они появляются, когда вы указываете товар для строки «не узнал».</div>'
+      }
+
+      if (!rauto || !rauto.ok) { auto.innerHTML = '<div class="empty">Не удалось загрузить</div>' } else {
+        auto.innerHTML = rauto.data.length ? rauto.data.map(r => `
+          <div class="sf-item">
+            <div class="sf-item-head"><div class="grow">
+              <div class="nm rawline" style="margin:0">${esc(r.rawLine)}</div>
+              <div class="mt">→ ${esc(r.fullName || r.productName || 'вариант #' + r.variantId)} · узнано по названию</div>
+            </div></div>
+            <div class="sf-item-actions"><button class="btn b-gh sm" data-al-auto="${r.supplierPriceId}">Перепривязать</button></div>
+            <div data-al-panel="r${r.supplierPriceId}" style="display:none"></div>
+          </div>`).join('') : '<div class="empty">Свежих авто-узнанных строк нет.</div>'
+      }
+
+      const reload = () => { loadAliases(); loadUnmatched(); loadBatches() }
+
+      document.querySelectorAll('[data-al-rebind]').forEach(b => b.addEventListener('click', () => {
+        const id = b.dataset.alRebind
+        alPickPanel(document.querySelector(`[data-al-panel="a${id}"]`), async (variantId, label) => {
+          if (!confirm(`Перепривязать на:\n${label}?\n\nБудущие прайсы с этим ключом лягут на выбранный вариант; «не узнанные» строки текущих разборов довяжутся сразу.`)) return
+          const r = await api('/aliases/' + id, { method: 'PUT', body: JSON.stringify({ variantId }) }).catch(() => null)
+          if (!r || !r.ok) { alert((r && r.data && r.data.error) || 'Не получилось'); return }
+          toast(`Перепривязано · довязано строк: ${r.data.rematched ?? 0}`)
+          reload()
+        })
+      }))
+
+      document.querySelectorAll('[data-al-auto]').forEach(b => b.addEventListener('click', () => {
+        const id = b.dataset.alAuto
+        alPickPanel(document.querySelector(`[data-al-panel="r${id}"]`), async (variantId, label) => {
+          if (!confirm(`Перепривязать на:\n${label}?\n\nСоздастся привязка поверх авто-чтения — дальше эта строка всегда ложится на выбранный вариант. История применённых цен не переписывается.`)) return
+          const r = await api('/aliases/rebind', { method: 'POST', body: JSON.stringify({ supplierPriceId: Number(id), variantId }) }).catch(() => null)
+          if (!r || !r.ok) { alert((r && r.data && r.data.error) || 'Не получилось'); return }
+          toast(`Привязано · строк: ${r.data.rematched ?? 0}`)
+          reload()
+        })
+      }))
+
+      document.querySelectorAll('[data-al-forget]').forEach(b => b.addEventListener('click', async () => {
+        if (!confirm('Забыть привязку?\n\nСистема перестанет узнавать этот ключ по привязке. Уже перевязанные строки и применённые цены останутся как есть — их возвращает «Откатить эффект» и откат разбора.')) return
+        const r = await api('/aliases/' + b.dataset.alForget, { method: 'DELETE' }).catch(() => null)
+        if (!r || !r.ok) { alert((r && r.data && r.data.error) || 'Не получилось'); return }
+        toast('Привязка забыта')
+        reload()
+      }))
+
+      document.querySelectorAll('[data-al-rollback]').forEach(b => b.addEventListener('click', async () => {
+        if (!confirm('Откатить эффект привязки?\n\nПеревязанные ею строки ТЕКУЩИХ разборов вернутся в «не узнал». Сама привязка останется (её снимает «Забыть»). Цены, уже применённые к витрине, не изменятся — их откатывает откат разбора.')) return
+        const r = await api('/aliases/' + b.dataset.alRollback + '/rollback', { method: 'POST', body: '{}' }).catch(() => null)
+        if (!r || !r.ok) { alert((r && r.data && r.data.error) || 'Не получилось'); return }
+        const d = r.data
+        const parts = [`Возвращено в «не узнал»: ${d.restored ?? 0}`]
+        if (d.conflicts && d.conflicts.length) parts.push(`Пропущено (перевязали после): ${d.conflicts.map(c => `строка ${c.rowId} → вариант ${c.actual}`).join(', ')}`)
+        if (d.appliedBatches && d.appliedBatches.length) parts.push(`Привязка участвовала в применённых разборах ${d.appliedBatches.map(x => '№' + x).join(', ')} — цены откатываются в самом разборе.`)
+        alert('Откат эффекта выполнен.\n\n' + parts.join('\n'))
+        reload()
+      }))
     }
 
     async function loadUnmatched() {

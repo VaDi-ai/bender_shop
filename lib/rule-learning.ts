@@ -327,19 +327,49 @@ export async function forgetRule(actor: string, kind: string, id: number): Promi
   return bad(422, 'Неизвестный тип правила')
 }
 
-/** Журнал «правка → правило» для витрины «Парсера». */
+/** Журнал «правка → правило» для витрины «Парсера» — включая привязки прайса. */
 export async function learningLog(limit = 20): Promise<Array<{ id: number; at: Date; who: string; phrase: string; action: string }>> {
   const rows = await prisma.auditLog.findMany({
-    where: { action: { in: ['rule_learned', 'rule_forgotten'] } },
+    where: { action: { in: [
+      'rule_learned', 'rule_forgotten',
+      // Привязки прайса (Фазы A/B) и точечные ручные правки — история едина
+      'price_alias_link', 'price_alias_ignore', 'price_alias_rebind',
+      'price_alias_update', 'price_alias_remove', 'price_alias_rollback',
+      'manual_fix',
+    ] } },
     orderBy: { id: 'desc' }, take: Math.min(limit, 50),
-    select: { id: true, createdAt: true, adminTelegramId: true, action: true, after: true, before: true, entity: true },
+    select: { id: true, createdAt: true, adminTelegramId: true, action: true, after: true, before: true, entity: true, entityId: true },
   })
   return rows.map(r => ({
     id: r.id,
     at: r.createdAt,
     who: r.adminTelegramId,
     action: r.action,
-    phrase: String(((r.after ?? {}) as Record<string, unknown>).phrase
-      ?? `${r.entity} #${(r.before as Record<string, unknown>)?.canonical ?? ''}`).slice(0, 120),
+    phrase: journalPhrase(r).slice(0, 120),
   }))
+}
+
+/** Человеческая строка журнала: у правил — их phrase, у привязок — ключ и цель. */
+function journalPhrase(r: { action: string; entity: string; entityId: string | null; after: unknown; before: unknown }): string {
+  const after = (r.after ?? {}) as Record<string, unknown>
+  const before = (r.before ?? {}) as Record<string, unknown>
+  if (typeof after.phrase === 'string') return after.phrase
+  const keyOf = (): string => {
+    if (Array.isArray(after.aliases) && after.aliases.length) return String(after.aliases[0])
+    if (typeof after.alias === 'string') return after.alias
+    if (typeof before.alias === 'string') return before.alias
+    return `${r.entity} #${r.entityId ?? ''}`
+  }
+  switch (r.action) {
+    case 'price_alias_link':
+      return after.ignore ? `«${keyOf()}» — не наше, пропускаем` : `«${keyOf()}» → вариант ${after.variantId ?? '?'}`
+    case 'price_alias_ignore': return `«${keyOf()}» — не наше, пропускаем`
+    case 'price_alias_rebind': return `Перепривязано: «${keyOf()}» → вариант ${after.variantId ?? '?'}`
+    case 'price_alias_update':
+      return after.ignore ? `Привязка «${keyOf()}» переключена в «не наше»` : `Привязка «${keyOf()}» → вариант ${after.variantId ?? '?'}`
+    case 'price_alias_remove': return `Забыта привязка «${keyOf()}»`
+    case 'price_alias_rollback': return `Откат эффекта «${keyOf()}»: строк возвращено ${after.restored ?? 0}`
+    case 'manual_fix': return `Ручная правка: ${r.entity} #${r.entityId ?? ''}`
+    default: return `${r.entity} #${(before as Record<string, unknown>)?.canonical ?? r.entityId ?? ''}`
+  }
 }
