@@ -2583,6 +2583,7 @@
         <div class="pl">
           <div class="grow">
             <div class="pnm mono" style="font-size:12px">${esc(x.matched ? x.productName : x.rawLine)}</div>
+            ${x.matched ? `<div class="pmeta">${esc(previewAttrLine(x))}</div>` : ''}
             <div class="pmeta">${esc(previewCheckReason(x))}</div>
           </div>
           <button class="btn b-gh sm" data-check-row="${x.supplierPriceId}">Проверить</button>
@@ -2729,6 +2730,12 @@
             <div class="hint">Правка меняет карточку товара. SIM-правку система предложит запомнить правилом; цвет и память остаются на этой строке.</div>
           </div>
           ${priceCard}
+          <button class="btn b-gh" id="peRebind">Привязать к другому товару</button>
+          <div id="peRebindPanel" style="display:none">
+            <input class="inp" id="peRebindSearch" placeholder="Поиск: название или SKU (от 2 букв)">
+            <div id="peRebindResults"></div>
+          </div>
+          <div class="hint">Если система узнала строку не тем вариантом — укажите правильный: привязка запомнится поверх авто-чтения. Цены, уже применённые к витрине, не переписываются.</div>
           ${outBlock}
           <div class="mt" id="peErr" style="color:var(--bad)"></div>`
         bindRowVariant(x)
@@ -2812,6 +2819,35 @@
     /** Узнанная строка: правка атрибутов варианта + вне-коридорное применение. */
     function bindRowVariant(x) {
       const err = document.getElementById('peErr')
+
+      // «Привязать к другому товару»: rebind поверх авто-чтения или старой привязки
+      document.getElementById('peRebind').addEventListener('click', () => {
+        const panel = document.getElementById('peRebindPanel')
+        panel.style.display = panel.style.display === 'none' ? '' : 'none'
+        if (panel.style.display === '') document.getElementById('peRebindSearch').focus()
+      })
+      let rt = null
+      document.getElementById('peRebindSearch').addEventListener('input', function () {
+        clearTimeout(rt)
+        const q = this.value.trim()
+        rt = setTimeout(async () => {
+          const list = q.length >= 2 ? await searchVariants(q) : []
+          document.getElementById('peRebindResults').innerHTML = list.map(v => `
+            <div class="list-i" data-pe-rebind-pick="${v.variantId}" style="cursor:pointer">
+              <div class="grow"><div class="nm">${esc(v.productName)}</div><div class="mt">${esc(v.attrs)}${v.inStock ? '' : ' · нет в наличии'}</div></div>
+              <span class="mono" style="font-size:12px">${fmt(v.price)} ₽</span>
+            </div>`).join('') || (q.length >= 2 ? '<div class="empty">Не нашлось</div>' : '')
+          document.querySelectorAll('[data-pe-rebind-pick]').forEach(el => el.addEventListener('click', async () => {
+            const label = el.querySelector('.nm').textContent + ' · ' + el.querySelector('.mt').textContent
+            if (!confirm(`Привязать эту строку к:\n${label}?\n\nПривязка запомнится — дальше строка всегда ложится на выбранный вариант. Цены, уже применённые к витрине, не переписываются.`)) return
+            const r = await api('/aliases/rebind', { method: 'POST', body: JSON.stringify({ supplierPriceId: x.supplierPriceId, variantId: Number(el.dataset.peRebindPick) }) }).catch(() => null)
+            if (!r || !r.ok) { err.textContent = (r && r.data && r.data.error) || 'Не получилось'; return }
+            toast(`Перепривязано · строк: ${r.data.rematched ?? 0}`)
+            loadUnmatched(); loadBatches(); loadAliases()
+            showBatchPreview(lastPreview.batchId)
+          }))
+        }, 250)
+      })
       document.querySelectorAll('[data-pe-key]').forEach(c => c.addEventListener('click', () => {
         const key = c.dataset.peKey, current = c.dataset.peVal
         const ed = document.getElementById('peAttrEdit')
