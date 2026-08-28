@@ -14,6 +14,7 @@ import crypto from 'crypto'
 import express, { Router, Request, Response, NextFunction } from 'express'
 import rateLimit from 'express-rate-limit'
 import { prisma } from '../lib/prisma'
+import { Prisma } from '../generated/prisma/client'
 import { log } from '../lib/logger'
 import { logSecurityEvent } from '../lib/security-log'
 import { validateTelegramWebApp } from '../lib/telegram-webapp-auth'
@@ -350,6 +351,22 @@ export function setMarkupRuleEnabled(enabled: boolean) {
   }
 }
 
+/** Сколько строк пикер показывает за раз (остальное — уточнением запроса). */
+export const VARIANT_SEARCH_TAKE = 50
+
+/**
+ * Сколько строк вычитываем из БД, чтобы отсортировать страницу по имени
+ * варианта. Порядок по attributes.fullName в SQL недоступен (JSON-путь), а
+ * сортировать только показанные 50 бессмысленно — сортируем осмысленную
+ * выборку и режем её. Точное «из скольких» приходит отдельным count().
+ */
+const VARIANT_SEARCH_SCAN = 300
+
+/** Токены запроса: до 8 слов, пустые отброшены. */
+export function variantSearchTokens(q: string): string[] {
+  return q.trim().split(/\s+/).filter(Boolean).slice(0, 8)
+}
+
 /**
  * Условие поиска вариантов для пикера привязки (/variants) — вынесено чистой
  * функцией, чтобы фильтр архивных был закрыт тестом и его нельзя было потерять.
@@ -358,17 +375,27 @@ export function setMarkupRuleEnabled(enabled: boolean) {
  * призраков (из-за них пикер двоил одинаковые с виду строки). Живой
  * распроданный вариант архивом НЕ считается и в поиске остаётся: именно на
  * него чаще всего и приходит прайс (находка сквозного QA).
+ *
+ * Ищем по имени товара, SKU И имени варианта (attributes.fullName). Без
+ * fullName пикер был слеп к вариантной оси: у «MacBook Air 15 M5» имя товара —
+ * «Macbook Air M5» (размер срезан на разборе), и запрос «MacBook Air 15» не
+ * находил НИЧЕГО, а по «Macbook Air M5» первые 20 строк оказывались 13"-ми.
+ *
+ * Токены соединяются через AND: каждое слово запроса должно найтись хотя бы в
+ * одном из трёх полей. Так «macbook air 15 m5» сходится, хотя ни имя товара,
+ * ни имя варианта не содержат всю фразу целиком.
  */
-export function variantSearchWhere(q: string): {
-  archivedAt: null
-  OR: Array<{ product: { name: { contains: string; mode: 'insensitive' } } } | { sku: { contains: string; mode: 'insensitive' } }>
-} {
+export function variantSearchWhere(q: string): Prisma.ProductVariantWhereInput {
+  const tokens = variantSearchTokens(q)
   return {
     archivedAt: null,
-    OR: [
-      { product: { name: { contains: q, mode: 'insensitive' } } },
-      { sku: { contains: q, mode: 'insensitive' } },
-    ],
+    AND: tokens.map(t => ({
+      OR: [
+        { product: { name: { contains: t, mode: 'insensitive' } } },
+        { sku: { contains: t, mode: 'insensitive' } },
+        { attributes: { path: ['fullName'], string_contains: t, mode: 'insensitive' } },
+      ],
+    })),
   }
 }
 
@@ -537,25 +564,44 @@ export function adminApiRouter(): Router {
   // товаров-призраков — из-за них пикер двоил одинаковые с виду строки.
   // Живой распроданный вариант архивом НЕ считается и в поиске остаётся:
   // именно на него чаще всего и приходит прайс.
+  //
+  // Отдаём { items, total }: усечение выдачи должно быть видно. Молчаливый
+  // take:20 по id и был корнем истории с MacBook Air — у товара с 85
+  // вариантами в пикер попадали только первые двадцать (все 13"), и 15"
+  // нельзя было привязать в принципе.
   router.get('/variants', safe(async (req, res) => {
     const q = String(req.query.q ?? '').trim()
-    if (q.length < 2) { res.json([]); return }
-    const variants = await prisma.productVariant.findMany({
-      where: variantSearchWhere(q),
-      take: 20,
-      orderBy: { id: 'asc' },
-      select: { id: true, attributes: true, price: true, inStock: true, product: { select: { name: true } } },
-    })
-    res.json(variants.map(v => {
+    if (q.length < 2) { res.json({ items: [], total: 0 }); return }
+    const where = variantSearchWhere(q)
+    const [variants, total] = await Promise.all([
+      prisma.productVariant.findMany({
+        where,
+        take: VARIANT_SEARCH_SCAN,
+        orderBy: { id: 'asc' },
+        select: { id: true, attributes: true, price: true, inStock: true, product: { select: { name: true } } },
+      }),
+      prisma.productVariant.count({ where }),
+    ])
+    const rows = variants.map(v => {
       const attrs = (v.attributes ?? {}) as Record<string, string>
       return {
         variantId: v.id,
         productName: v.product.name,
+        // Имя варианта из листа: 13" от 15" глазами не отличить по атрибутам,
+        // когда размер срезан из имени товара
+        fullName: typeof attrs.fullName === 'string' ? attrs.fullName : '',
         attrs: Object.entries(attrs).filter(([k, x]) => k !== 'fullName' && typeof x === 'string').map(([, x]) => x).join(' · '),
         price: Number(v.price),
         inStock: v.inStock,
       }
-    }))
+    })
+    // Сортировка по имени: id — порядок заведения, он рвёт соседние
+    // конфигурации одного товара. Имя варианта человек читает.
+    const byName = (a: typeof rows[0], b: typeof rows[0]) =>
+      a.productName.localeCompare(b.productName, 'ru') ||
+      (a.fullName || '').localeCompare(b.fullName || '', 'ru') ||
+      a.variantId - b.variantId
+    res.json({ items: rows.sort(byName).slice(0, VARIANT_SEARCH_TAKE), total })
   }))
 
   // ── Управление привязками (Фаза B) ────────────────────────────────────────

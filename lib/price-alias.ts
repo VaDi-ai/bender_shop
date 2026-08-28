@@ -185,10 +185,25 @@ export async function linkSupplierPriceRow(opts: {
   return { ok: true, status: 200, aliases: keys, rematched, batchesTouched: [...batchesTouched] }
 }
 
-/** Сводная очередь «не узнал»: unmatched-строки всех preview-батчей. */
+/**
+ * Статусы батчей, чьи непривязанные строки видны в очереди «не узнал».
+ *
+ * 'applied' здесь обязателен. Раньше очередь брала только preview, и строка,
+ * которую разбор не узнал, исчезала из неё в момент применения батча:
+ * применение проводит УЗНАННЫЕ строки, а непривязанные так и остаются без
+ * варианта — но показать их было уже негде. Так пропали 39 строк, включая все
+ * «MacBook Air 15 M5»: правило на них никто не мог завести.
+ *
+ * discarded/rolled_back не берём осознанно: батч отменён целиком, его строки
+ * больше не про сегодняшние цены.
+ */
+export const UNMATCHED_BATCH_STATUSES = ['preview', 'applied'] as const
+
+/** Сводная очередь «не узнал»: unmatched-строки preview- и applied-батчей. */
 export async function listUnmatched(limit = 100): Promise<Array<{
   supplierPriceId: number
   batchId: number | null
+  batchStatus: string | null
   rawLine: string
   model: string
   price: number
@@ -196,14 +211,17 @@ export async function listUnmatched(limit = 100): Promise<Array<{
   parsedAt: Date
 }>> {
   const rows = await prisma.supplierPrice.findMany({
-    where: { variantId: null, batch: { status: 'preview' } },
+    where: { variantId: null, batch: { status: { in: [...UNMATCHED_BATCH_STATUSES] } } },
     orderBy: { id: 'desc' },
     take: limit,
-    include: { supplier: { select: { name: true } } },
+    include: { supplier: { select: { name: true } }, batch: { select: { status: true } } },
   })
   return rows.map(r => ({
     supplierPriceId: r.id,
     batchId: r.batchId,
+    // Из применённого разбора — цену такой строки уже никто не ждёт «сейчас»,
+    // но правило на будущее завести нужно. UI помечает их отдельно.
+    batchStatus: r.batch?.status ?? null,
     rawLine: r.rawMessage,
     model: r.model,
     price: Number(r.price),
