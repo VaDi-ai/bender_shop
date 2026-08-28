@@ -8,7 +8,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 vi.mock('../lib/prisma', () => ({
   prisma: {
-    priceAlias: { findFirst: vi.fn() },
+    priceAlias: { findMany: vi.fn() },
     product: { findMany: vi.fn(), findUnique: vi.fn() },
     productVariant: { findUnique: vi.fn() },
     attrValueAlias: { findMany: vi.fn() },
@@ -20,7 +20,7 @@ import { matchVariants, normalizeModelName, normalizeStorage, ParsedLine } from 
 import { ALIAS_SEED } from '../lib/sim-rules'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
-const alias = prisma.priceAlias.findFirst as any
+const alias = prisma.priceAlias.findMany as any
 const findMany = prisma.product.findMany as any
 const findProduct = prisma.product.findUnique as any
 const findVariant = prisma.productVariant.findUnique as any
@@ -33,6 +33,13 @@ const line = (over: Partial<ParsedLine> = {}): ParsedLine => ({
   model: 'iPhone 17 Pro', storage: '256GB', color: 'Silver', price: 122000,
   rawLine: 'iPhone 17 Pro 256 Silver - 122.000₽', ...over,
 })
+
+/**
+ * Привязка, найденная по композитному ключу строки-фикстуры. Матчер тянет
+ * ключи одним findMany и выбирает первый по точности — мок отдаёт список.
+ */
+const aliasHit = (over: Record<string, unknown>) =>
+  [{ alias: 'iphone 17 pro 256gb silver', variantId: null, productId: null, isIgnored: false, ...over }]
 
 let vid = 0
 const variant = (attrs: Record<string, string>, over: Record<string, unknown> = {}) => ({
@@ -50,44 +57,111 @@ const catalog = (products: ReturnType<typeof product>[]) => {
 
 beforeEach(() => {
   vid = 0
-  alias.mockReset(); alias.mockResolvedValue(null)
+  alias.mockReset(); alias.mockResolvedValue([])
   findMany.mockReset(); findMany.mockResolvedValue([])
   findProduct.mockReset(); findProduct.mockResolvedValue(null)
   findVariant.mockReset(); findVariant.mockResolvedValue(null)
   attrAliases.mockReset(); attrAliases.mockResolvedValue(SEED_ALIASES)
 })
 
-describe('поиск алиаса: композитный ключ строится тем же compositeAliasKey', () => {
-  it('RAM известна → композит с RAM среди ключей поиска', async () => {
+describe('поиск алиаса: ключи в порядке убывания точности', () => {
+  const keysOf = () => alias.mock.calls[0][0].where.alias.in
+
+  it('порядок ключей фиксирован: rawLine → композит с RAM → композит без RAM → модель', async () => {
     await matchVariants([line({ model: 'MacBook Air 13 M5', storage: '1TB', ram: '16GB', color: 'Midnight', rawLine: 'raw 1' })])
-    const keys = alias.mock.calls[0][0].where.OR.map((c: any) => c.alias)
-    expect(keys).toContain('macbook air 13 m5 1tb 16gb midnight')
-    expect(keys).toContain('macbook air 13 m5')   // ключ по модели
-    expect(keys).toContain('raw 1')               // точный ключ строки
-  })
-
-  it('RAM неизвестна → ищем композит прежнего формата: ключи планшетов и часов живы', async () => {
-    await matchVariants([line({ model: 'iPad 11', storage: '128GB', color: 'Silver', rawLine: 'raw 2' })])
-    const keys = alias.mock.calls[0][0].where.OR.map((c: any) => c.alias)
-    expect(keys).toEqual(['ipad 11 128gb silver', 'ipad 11', 'raw 2'])
-  })
-
-  it('RAM известна → ищем ОБЕ формы: с RAM и без неё (старые ключи ещё живут)', async () => {
-    await matchVariants([line({ model: 'MacBook Air 13 M5', storage: '1TB', ram: '16GB', color: 'Midnight', rawLine: 'raw 4' })])
-    const keys = alias.mock.calls[0][0].where.OR.map((c: any) => c.alias)
-    expect(keys).toEqual([
+    expect(keysOf()).toEqual([
+      'raw 1',
       'macbook air 13 m5 1tb 16gb midnight',
       'macbook air 13 m5 1tb midnight',
       'macbook air 13 m5',
-      'raw 4',
     ])
+  })
+
+  it('RAM неизвестна → композит прежнего формата: ключи планшетов и часов живы', async () => {
+    await matchVariants([line({ model: 'iPad 11', storage: '128GB', color: 'Silver', rawLine: 'raw 2' })])
+    expect(keysOf()).toEqual(['raw 2', 'ipad 11 128gb silver', 'ipad 11'])
   })
 
   it('разная RAM — разные ключи: строка 24GB не подхватит привязку 16GB', async () => {
     await matchVariants([line({ model: 'MacBook Air 13 M5', storage: '1TB', ram: '24GB', color: 'Midnight', rawLine: 'raw 3' })])
-    const keys = alias.mock.calls[0][0].where.OR.map((c: any) => c.alias)
-    expect(keys).toContain('macbook air 13 m5 1tb 24gb midnight')
-    expect(keys).not.toContain('macbook air 13 m5 1tb 16gb midnight')
+    expect(keysOf()).toContain('macbook air 13 m5 1tb 24gb midnight')
+    expect(keysOf()).not.toContain('macbook air 13 m5 1tb 16gb midnight')
+  })
+
+  it('точный ключ строки побеждает общий по модели — порядок выдачи БД больше не решает', async () => {
+    // БД возвращает сначала общий ключ по модели: с findFirst({OR}) выиграл бы он
+    alias.mockResolvedValue([
+      { alias: 'iphone 17 pro', variantId: 11, productId: null, isIgnored: false },
+      { alias: 'iphone 17 pro 256 silver - 122.000₽', variantId: 22, productId: null, isIgnored: false },
+    ])
+    findVariant.mockResolvedValue({
+      id: 22, sku: 'sku-22', productId: 444, price: 90000,
+      product: { id: 444, name: 'Iphone 17 Pro', brand: 'Apple', categoryId: 5 },
+    })
+    const { matched } = await matchVariants([line()])
+    expect(matched.map(m => m.variantId)).toEqual([22])
+  })
+
+  it('композит с RAM побеждает композит без RAM', async () => {
+    alias.mockResolvedValue([
+      { alias: 'macbook air 13 m5 1tb midnight', variantId: 398, productId: null, isIgnored: false },
+      { alias: 'macbook air 13 m5 1tb 24gb midnight', variantId: 410, productId: null, isIgnored: false },
+    ])
+    findVariant.mockResolvedValue({
+      id: 410, sku: 'sku-410', productId: 448, price: 163000,
+      product: { id: 448, name: 'Macbook Air M5', brand: 'Apple', categoryId: 20 },
+    })
+    const { matched } = await matchVariants([
+      line({ model: 'MacBook Air 13 M5', storage: '1TB', ram: '24GB', color: 'Midnight', rawLine: 'свежая строка' }),
+    ])
+    expect(matched.map(m => m.variantId)).toEqual([410])
+  })
+})
+
+describe('RAM сужает кандидатов', () => {
+  const threeConfigs = () => catalog([product('Macbook Air M5', [
+    variant({ RAM: '16GB', Память: '1TB', Цвет: 'Midnight' }),
+    variant({ RAM: '24GB', Память: '1TB', Цвет: 'Midnight' }),
+    variant({ RAM: '32GB', Память: '1TB', Цвет: 'Midnight' }),
+  ])])
+  const mbLine = (over = {}) => line({
+    model: 'Macbook Air M5', storage: '1TB', color: 'Midnight',
+    rawLine: 'MacBook Air 13 Midnight (M5, 24GB, 1TB) 163000', ...over,
+  })
+
+  it('RAM из прайса выбирает свою конфигурацию', async () => {
+    threeConfigs()
+    const { matched, unmatched } = await matchVariants([mbLine({ ram: '24GB' })])
+    expect(unmatched).toEqual([])
+    expect(matched).toHaveLength(1)
+    expect((matched[0].parsed as any).ram).toBe('24GB')
+    expect(matched[0].variantId).toBe(2) // второй вариант каталога — 24GB
+  })
+
+  it('без RAM в строке — три кандидата, честная очередь вместо случайного выбора', async () => {
+    threeConfigs()
+    const { matched, unmatched } = await matchVariants([mbLine()])
+    expect(matched).toEqual([])
+    expect(unmatched).toHaveLength(1)
+  })
+
+  it('RAM заявлена, а у варианта ключа RAM нет — не кандидат («не смог сверить» ≠ «совпало»)', async () => {
+    catalog([product('Macbook Air M5', [variant({ Память: '1TB', Цвет: 'Midnight' })])])
+    const { matched, unmatched } = await matchVariants([mbLine({ ram: '24GB' })])
+    expect(matched).toEqual([])
+    expect(unmatched).toHaveLength(1)
+  })
+
+  it('RAM в прайсе не указана — сверка по RAM не проводится, прежнее поведение', async () => {
+    catalog([product('Macbook Air M5', [variant({ RAM: '16GB', Память: '1TB', Цвет: 'Midnight' })])])
+    const { matched } = await matchVariants([mbLine()])
+    expect(matched).toHaveLength(1)
+  })
+
+  it('формат RAM нормализуется: «16 GB» из прайса == «16GB» в каталоге', async () => {
+    catalog([product('Macbook Air M5', [variant({ RAM: '16GB', Память: '1TB', Цвет: 'Midnight' })])])
+    const { matched } = await matchVariants([mbLine({ ram: '16 GB' })])
+    expect(matched).toHaveLength(1)
   })
 })
 
@@ -174,7 +248,7 @@ describe('память/цвет — только по ключам «Памят�
 
 describe('алиасы', () => {
   it('alias.variantId — прямое попадание, как раньше', async () => {
-    alias.mockResolvedValue({ id: 1, variantId: 77, productId: null, isIgnored: false })
+    alias.mockResolvedValue(aliasHit({ id: 1, variantId: 77, productId: null, isIgnored: false }))
     findVariant.mockResolvedValue({
       id: 77, sku: 'sku-77', productId: 444, price: 90000,
       product: { id: 444, name: 'Iphone 17 Pro', brand: 'Apple', categoryId: 5 },
@@ -184,14 +258,14 @@ describe('алиасы', () => {
   })
 
   it('alias.isIgnored — строка игнорируется', async () => {
-    alias.mockResolvedValue({ id: 1, isIgnored: true })
+    alias.mockResolvedValue(aliasHit({ id: 1, isIgnored: true }))
     const { ignored, matched, unmatched } = await matchVariants([line()])
     expect(ignored).toHaveLength(1)
     expect(matched).toEqual([]); expect(unmatched).toEqual([])
   })
 
   it('alias.productId + однозначный вариант — матч ровно на него', async () => {
-    alias.mockResolvedValue({ id: 1, productId: 444, variantId: null, isIgnored: false })
+    alias.mockResolvedValue(aliasHit({ id: 1, productId: 444, variantId: null, isIgnored: false }))
     findProduct.mockResolvedValue(product('Iphone 17 Pro', [
       variant({ Память: '256GB', Цвет: 'Silver' }),
       variant({ Память: '512GB', Цвет: 'Silver' }),
@@ -203,7 +277,7 @@ describe('алиасы', () => {
   })
 
   it('alias.productId БЕЗ точного варианта — в очередь, а не на все варианты', async () => {
-    alias.mockResolvedValue({ id: 1, productId: 444, variantId: null, isIgnored: false })
+    alias.mockResolvedValue(aliasHit({ id: 1, productId: 444, variantId: null, isIgnored: false }))
     findProduct.mockResolvedValue(product('Iphone 17 Pro', [
       variant({ Память: '512GB', Цвет: 'Silver' }),
       variant({ Память: '1TB', Цвет: 'Silver' }),
@@ -214,7 +288,7 @@ describe('алиасы', () => {
   })
 
   it('alias.productId с несколькими подходящими вариантами — тоже в очередь', async () => {
-    alias.mockResolvedValue({ id: 1, productId: 444, variantId: null, isIgnored: false })
+    alias.mockResolvedValue(aliasHit({ id: 1, productId: 444, variantId: null, isIgnored: false }))
     findProduct.mockResolvedValue(product('Iphone 17 Pro', [
       variant({ Память: '256GB', Цвет: 'Silver', Страна: 'Япония' }),
       variant({ Память: '256GB', Цвет: 'Silver', Страна: 'Гонконг' }),
@@ -275,7 +349,7 @@ describe('страна разруливает неоднозначность', (
   })
 
   it('alias.productId: страна разруливает варианты внутри товара', async () => {
-    alias.mockResolvedValue({ id: 1, productId: 444, variantId: null, isIgnored: false })
+    alias.mockResolvedValue(aliasHit({ id: 1, productId: 444, variantId: null, isIgnored: false }))
     findProduct.mockResolvedValue(product('Iphone 17 Pro', [
       variant({ Память: '256GB', Цвет: 'Silver', Страна: 'Япония' }),
       variant({ Память: '256GB', Цвет: 'Silver', Страна: 'Гонконг' }),
