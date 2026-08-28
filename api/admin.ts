@@ -350,6 +350,28 @@ export function setMarkupRuleEnabled(enabled: boolean) {
   }
 }
 
+/**
+ * Условие поиска вариантов для пикера привязки (/variants) — вынесено чистой
+ * функцией, чтобы фильтр архивных был закрыт тестом и его нельзя было потерять.
+ *
+ * archivedAt: null — из выдачи убраны схлопнутые дубли и варианты товаров-
+ * призраков (из-за них пикер двоил одинаковые с виду строки). Живой
+ * распроданный вариант архивом НЕ считается и в поиске остаётся: именно на
+ * него чаще всего и приходит прайс (находка сквозного QA).
+ */
+export function variantSearchWhere(q: string): {
+  archivedAt: null
+  OR: Array<{ product: { name: { contains: string; mode: 'insensitive' } } } | { sku: { contains: string; mode: 'insensitive' } }>
+} {
+  return {
+    archivedAt: null,
+    OR: [
+      { product: { name: { contains: q, mode: 'insensitive' } } },
+      { sku: { contains: q, mode: 'insensitive' } },
+    ],
+  }
+}
+
 /** owner-гейт для отдельных роутов (базовый requireAdmin уже отработал). */
 export function ownerOnly(req: AdminRequest, res: Response, next: NextFunction): void {
   if (req.admin?.role !== 'owner') {
@@ -510,16 +532,16 @@ export function adminApiRouter(): Router {
   // Поиск вариантов для связывания «не узнал» — по ВСЕМУ каталогу, включая
   // товары не в наличии: витринный /api/products их скрывает, а прайс чаще
   // всего приходит именно на закончившийся товар (находка сквозного QA).
+  //
+  // Архивные (archivedAt) из выдачи убраны: это схлопнутые дубли и варианты
+  // товаров-призраков — из-за них пикер двоил одинаковые с виду строки.
+  // Живой распроданный вариант архивом НЕ считается и в поиске остаётся:
+  // именно на него чаще всего и приходит прайс.
   router.get('/variants', safe(async (req, res) => {
     const q = String(req.query.q ?? '').trim()
     if (q.length < 2) { res.json([]); return }
     const variants = await prisma.productVariant.findMany({
-      where: {
-        OR: [
-          { product: { name: { contains: q, mode: 'insensitive' } } },
-          { sku: { contains: q, mode: 'insensitive' } },
-        ],
-      },
+      where: variantSearchWhere(q),
       take: 20,
       orderBy: { id: 'asc' },
       select: { id: true, attributes: true, price: true, inStock: true, product: { select: { name: true } } },
