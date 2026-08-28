@@ -2,9 +2,10 @@
  * Обучение алиасами из веба (PR-8): «связал один раз — дальше узнаёт сама».
  *
  * Связывание строки «не узнал» с вариантом:
- * 1) создаёт/обновляет PriceAlias по ДВУМ ключам матчера — точный rawMessage
- *    и композит «model storage color» (оба lower) — будущие прайсы матчятся
- *    без подсказки;
+ * 1) создаёт/обновляет PriceAlias по ключам матчера — точный rawMessage и
+ *    композит «model storage ram color» (оба lower) — будущие прайсы матчятся
+ *    без подсказки. Композит появляется, ТОЛЬКО когда RAM известна (см.
+ *    compositeAliasKey);
  * 2) точечно пере-матчит unmatched-строки существующих preview-батчей по
  *    этим ключам (isActive остаётся false — read-only контракт не трогаем);
  * 3) обновляет счётчики stats затронутых батчей.
@@ -14,12 +15,85 @@
  * батча не переписываем).
  */
 import { prisma } from './prisma'
+import { log } from './logger'
 import { logAdminAction } from './audit'
 
-function aliasKeysFor(row: { rawMessage: string; model: string; storage: string | null; color: string | null }): string[] {
-  const composite = (row.model + (row.storage ? ' ' + row.storage : '') + (row.color ? ' ' + row.color : '')).trim().toLowerCase()
+/** Строка прайса в объёме, достаточном для построения ключей алиаса. */
+export interface AliasKeySource {
+  rawMessage: string
+  model: string
+  storage: string | null
+  ram: string | null
+  color: string | null
+}
+
+/**
+ * Композитный ключ алиаса — «model storage ram color» (lower).
+ *
+ * RAM в ключе, когда разбор её дал. Раньше композит был «model storage color»,
+ * и у MacBook Air одна связка память+цвет живёт в трёх конфигурациях RAM: ключ
+ * «macbook air 13 m5 1tb midnight» одинаково подходил вариантам 16/24/32 GB.
+ * Привязка ложилась на тот, что привязали последним, и следующий прайс с
+ * другой RAM молча уезжал не туда — на живом каталоге таких ключей было 8.
+ *
+ * Когда RAM в строке нет, ключ строится по-старому, без неё. Это не лень:
+ * у планшетов, часов и телефонов оси RAM нет вовсе (в каталоге 36 таких
+ * композитных ключей), и для них ключ без RAM однозначен. Требовать RAM
+ * всегда — значит осиротить их: rawMessage-ключ содержит цену и живёт ровно
+ * одно сообщение, так что композит для них — единственная память системы.
+ *
+ * Двусмысленность отсекается на записи (aliasKeysToWrite), где известен
+ * целевой вариант: если у него ось RAM есть, а в строке RAM нет — композит
+ * не пишем вовсе.
+ *
+ * ВАЖНО: этот же ключ строит матчер при поиске алиаса (lib/price-matching).
+ * Формат живёт в одном месте — иначе записанный ключ перестанет находиться.
+ */
+export function compositeAliasKey(p: {
+  model: string
+  storage?: string | null
+  ram?: string | null
+  color?: string | null
+}): string | null {
+  const key = [p.model, p.storage, p.ram, p.color]
+    .map(x => (x ?? '').trim())
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase()
+  return key || null
+}
+
+function aliasKeysFor(row: AliasKeySource): string[] {
+  const composite = compositeAliasKey(row)
   const raw = row.rawMessage.trim().toLowerCase()
-  return [...new Set([raw, composite].filter(Boolean))]
+  return [...new Set([raw, composite].filter((x): x is string => !!x))]
+}
+
+/**
+ * Ключи, которые РАЗРЕШЕНО записать при привязке строки к варианту.
+ *
+ * Отличается от aliasKeysFor одним: композит без RAM не пишем, если у целевого
+ * варианта ось RAM есть. Такой ключ подошёл бы и соседним конфигурациям того же
+ * цвета и памяти — ровно так 15"-строки MacBook уезжали на 13"-вариант. Строка
+ * при этом не теряется: у неё остаётся точный rawMessage-ключ, а следующий
+ * прайс с той же неоднозначностью честно попадёт в очередь «не узнал».
+ */
+export async function aliasKeysToWrite(
+  row: AliasKeySource,
+  variantId: number | null | undefined,
+): Promise<{ keys: string[]; skippedComposite: string | null }> {
+  const keys = aliasKeysFor(row)
+  const composite = compositeAliasKey(row)
+  if (!composite || row.ram?.trim() || !variantId) return { keys, skippedComposite: null }
+
+  const variant = await prisma.productVariant.findUnique({ where: { id: variantId }, select: { attributes: true } })
+  const hasRamAxis = typeof ((variant?.attributes ?? {}) as Record<string, unknown>).RAM === 'string'
+  if (!hasRamAxis) return { keys, skippedComposite: null }
+
+  log.warn('price-alias: композит без RAM не записан — у варианта есть ось RAM', {
+    variantId, composite, rawMessage: row.rawMessage,
+  })
+  return { keys: keys.filter(k => k !== composite), skippedComposite: composite }
 }
 
 /** Прежнее состояние ключа алиаса для audit.before — upsert затирает его молча. */
@@ -136,7 +210,8 @@ export async function linkSupplierPriceRow(opts: {
     if (!variant) return { ok: false, status: 404, error: 'Вариант не найден' }
   }
 
-  const keys = aliasKeysFor(row)
+  // Гейт двусмысленности: композит без RAM у варианта с осью RAM не пишем
+  const { keys, skippedComposite } = await aliasKeysToWrite(row, opts.variantId ?? null)
   // Наблюдаемость (Фаза A): прежнее состояние обоих ключей — до сих пор upsert
   // перезатирал чужой variantId без следа, и откат был невозможен
   const aliasesBefore = await aliasPriorByKey(keys)
@@ -155,7 +230,7 @@ export async function linkSupplierPriceRow(opts: {
     // Точечный пере-матч: unmatched-строки preview-батчей с теми же ключами
     const candidates = await prisma.supplierPrice.findMany({
       where: { variantId: null, batch: { status: 'preview' } },
-      select: { id: true, rawMessage: true, model: true, storage: true, color: true, batchId: true },
+      select: { id: true, rawMessage: true, model: true, storage: true, ram: true, color: true, batchId: true },
     })
     for (const c of candidates) {
       if (!aliasKeysFor(c).some(k => keys.includes(k))) continue
@@ -179,6 +254,8 @@ export async function linkSupplierPriceRow(opts: {
     after: {
       aliases: keys, variantId: opts.variantId ?? null, ignore: !!opts.ignore,
       rematchedRowIds, batchIds: [...batchesTouched],
+      // Композит не записан как двусмысленный — видно в аудите, не молча
+      ...(skippedComposite ? { skippedComposite } : {}),
     },
   })
 
@@ -392,7 +469,7 @@ export async function rebindSupplierPriceRow(opts: {
   const variant = await prisma.productVariant.findUnique({ where: { id: opts.variantId }, select: { id: true } })
   if (!variant) return { ok: false, status: 404, error: 'Вариант не найден' }
 
-  const keys = aliasKeysFor(row)
+  const { keys, skippedComposite } = await aliasKeysToWrite(row, opts.variantId)
   const aliasesBefore = await aliasPriorByKey(keys)
   for (const alias of keys) {
     await prisma.priceAlias.upsert({
@@ -418,7 +495,7 @@ export async function rebindSupplierPriceRow(opts: {
   // Тот же точечный пере-матч, что в linkSupplierPriceRow
   const candidates = await prisma.supplierPrice.findMany({
     where: { variantId: null, batch: { status: 'preview' } },
-    select: { id: true, rawMessage: true, model: true, storage: true, color: true, batchId: true },
+    select: { id: true, rawMessage: true, model: true, storage: true, ram: true, color: true, batchId: true },
   })
   for (const c of candidates) {
     if (!aliasKeysFor(c).some(k => keys.includes(k))) continue
@@ -434,7 +511,10 @@ export async function rebindSupplierPriceRow(opts: {
     entity: 'PriceAlias',
     entityId: opts.supplierPriceId,
     before: { aliases: aliasesBefore, rowVariantId: rowVariantIdBefore },
-    after: { aliases: keys, variantId: opts.variantId, rematchedRowIds, batchIds: [...batchesTouched], rowUpdated },
+    after: {
+      aliases: keys, variantId: opts.variantId, rematchedRowIds, batchIds: [...batchesTouched], rowUpdated,
+      ...(skippedComposite ? { skippedComposite } : {}),
+    },
   })
 
   return { ok: true, status: 200, aliases: keys, rematched: rematchedRowIds.length, batchesTouched: [...batchesTouched], rowUpdated }
@@ -478,7 +558,7 @@ export async function updateAlias(opts: {
     // Пере-матч по ЭТОМУ ключу — как в linkSupplierPriceRow
     const candidates = await prisma.supplierPrice.findMany({
       where: { variantId: null, batch: { status: 'preview' } },
-      select: { id: true, rawMessage: true, model: true, storage: true, color: true, batchId: true },
+      select: { id: true, rawMessage: true, model: true, storage: true, ram: true, color: true, batchId: true },
     })
     for (const c of candidates) {
       if (!aliasKeysFor(c).includes(alias.alias)) continue

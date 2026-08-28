@@ -30,10 +30,13 @@
  */
 import { prisma } from './prisma'
 import { log } from './logger'
+import { compositeAliasKey } from './price-alias'
 
 export type ParsedLine = {
   model: string
   storage?: string
+  /** RAM из прайса («16GB») — входит в композитный ключ алиаса */
+  ram?: string
   color?: string
   /** Страна из прайса: код/флаг/имя (🇭🇰, HK, Hong Kong) — канонизируется словарём */
   country?: string
@@ -165,11 +168,17 @@ export async function matchVariants(parsed: ParsedLine[]): Promise<{ matched: Ma
 
   for (const p of parsed) {
     // 1. Проверить PriceAlias
-    const aliasFull = (p.model + (p.storage ? ' ' + p.storage : '') + (p.color ? ' ' + p.color : '')).trim().toLowerCase()
+    // Композит строится ТЕМ ЖЕ compositeAliasKey, что пишет привязку: формат
+    // ключа обязан жить в одном месте, иначе записанный ключ не найдётся.
+    // Ищем обе формы: с RAM (точная, для товаров с осью RAM) и без неё —
+    // у планшетов, часов и телефонов оси RAM нет, их ключи всегда без неё.
+    const aliasWithRam = p.ram?.trim() ? compositeAliasKey(p) : null
+    const aliasPlain = compositeAliasKey({ ...p, ram: null })
     const alias = await prisma.priceAlias.findFirst({
       where: {
         OR: [
-          { alias: aliasFull },
+          ...(aliasWithRam ? [{ alias: aliasWithRam }] : []),
+          ...(aliasPlain ? [{ alias: aliasPlain }] : []),
           { alias: p.model.trim().toLowerCase() },
           { alias: p.rawLine.trim().toLowerCase() },
         ],

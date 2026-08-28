@@ -37,11 +37,12 @@ const ACTOR = { telegramId: '7461166995' }
 const ROW = {
   id: 740, batchId: 53,
   rawMessage: 'MacBook MDHE4 Air 13 Midnight (M5, 16GB, 512GB) 2026 117000',
-  model: 'MacBook Air 13 M5', storage: '512GB', color: 'Midnight',
+  model: 'MacBook Air 13 M5', storage: '512GB', ram: '16GB', color: 'Midnight',
   variantId: 395, parsedAt: new Date('2026-08-26T09:00:00Z'),
 }
 const RAW_KEY = ROW.rawMessage.toLowerCase()
-const COMPOSITE_KEY = 'macbook air 13 m5 512gb midnight'
+// Композит включает RAM: без неё ключ подходил бы и 24GB-, и 32GB-варианту
+const COMPOSITE_KEY = 'macbook air 13 m5 512gb 16gb midnight'
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -123,8 +124,8 @@ describe('updateAlias — PUT по привязке', () => {
   it('перепривязка на другой вариант: дельта before/after + пере-матч по этому ключу', async () => {
     p.priceAlias.findUnique.mockResolvedValue({ id: 23, alias: COMPOSITE_KEY, variantId: 395, productId: null, isIgnored: false })
     p.supplierPrice.findMany.mockResolvedValue([
-      { id: 901, rawMessage: ROW.rawMessage, model: ROW.model, storage: ROW.storage, color: ROW.color, batchId: 53 },
-      { id: 902, rawMessage: 'iPhone 17 128', model: 'iPhone 17', storage: '128GB', color: null, batchId: 53 },
+      { id: 901, rawMessage: ROW.rawMessage, model: ROW.model, storage: ROW.storage, ram: ROW.ram, color: ROW.color, batchId: 53 },
+      { id: 902, rawMessage: 'iPhone 17 128', model: 'iPhone 17', storage: '128GB', ram: null, color: null, batchId: 53 },
     ])
     const r = await updateAlias({ id: 23, variantId: 394, actor: ACTOR })
     expect(r.ok).toBe(true)
@@ -220,9 +221,9 @@ describe('rollbackAliasEffect — откат эффекта, три слоя', (
     p.supplierPrice.findMany.mockImplementation(async ({ where }: any) =>
       where.variantId === 395
         ? [
-            { id: 901, rawMessage: ROW.rawMessage, model: ROW.model, storage: ROW.storage, color: ROW.color, variantId: 395, batchId: 53, batch: { id: 53, status: 'preview' } },
+            { id: 901, rawMessage: ROW.rawMessage, model: ROW.model, storage: ROW.storage, ram: ROW.ram, color: ROW.color, variantId: 395, batchId: 53, batch: { id: 53, status: 'preview' } },
             // однофамилец по имени, ключи другие — фолбэк его НЕ трогает
-            { id: 902, rawMessage: 'MacBook Air 15 M5 512 Midnight', model: 'MacBook Air 15 M5', storage: '512GB', color: 'Midnight', variantId: 395, batchId: 53, batch: { id: 53, status: 'preview' } },
+            { id: 902, rawMessage: 'MacBook Air 15 M5 512 Midnight', model: 'MacBook Air 15 M5', storage: '512GB', ram: '16GB', color: 'Midnight', variantId: 395, batchId: 53, batch: { id: 53, status: 'preview' } },
           ]
         : [])
 
@@ -266,8 +267,8 @@ describe('списки', () => {
 
   it('listAutoMatched: отдаёт только строки без алиасов по их ключам', async () => {
     p.supplierPrice.findMany.mockResolvedValue([
-      { id: 901, rawMessage: 'iPhone 17 Pro 256 Silver 122500', model: 'iPhone 17 Pro', storage: '256GB', color: 'Silver', variantId: 10, batchId: 53, batch: { id: 53, status: 'preview' }, parsedAt: new Date() },
-      { id: 902, rawMessage: ROW.rawMessage, model: ROW.model, storage: ROW.storage, color: ROW.color, variantId: 394, batchId: 53, batch: { id: 53, status: 'preview' }, parsedAt: new Date() },
+      { id: 901, rawMessage: 'iPhone 17 Pro 256 Silver 122500', model: 'iPhone 17 Pro', storage: '256GB', ram: null, color: 'Silver', variantId: 10, batchId: 53, batch: { id: 53, status: 'preview' }, parsedAt: new Date() },
+      { id: 902, rawMessage: ROW.rawMessage, model: ROW.model, storage: ROW.storage, ram: ROW.ram, color: ROW.color, variantId: 394, batchId: 53, batch: { id: 53, status: 'preview' }, parsedAt: new Date() },
     ])
     p.priceAlias.findMany.mockResolvedValue([{ alias: COMPOSITE_KEY }]) // у 902 алиас есть
     p.productVariant.findMany.mockResolvedValue([

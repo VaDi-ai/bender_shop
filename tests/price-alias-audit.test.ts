@@ -31,10 +31,11 @@ const audit = logAdminAction as any
 const ROW = {
   id: 740,
   rawMessage: 'MacBook MDHE4 Air 13 Midnight (M5, 16GB, 512GB) 2026 117000',
-  model: 'MacBook Air 13 M5', storage: '512GB', color: 'Midnight',
+  model: 'MacBook Air 13 M5', storage: '512GB', ram: '16GB', color: 'Midnight',
 }
 const RAW_KEY = ROW.rawMessage.toLowerCase()
-const COMPOSITE_KEY = 'macbook air 13 m5 512gb midnight'
+// Композит включает RAM: без неё ключ подходил бы и 24GB-, и 32GB-варианту
+const COMPOSITE_KEY = 'macbook air 13 m5 512gb 16gb midnight'
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -69,8 +70,8 @@ describe('linkSupplierPriceRow: before/after в AuditLog', () => {
 
   it('after: rematchedRowIds + batchIds — какие строки перевязаны, не счётчик', async () => {
     p.supplierPrice.findMany.mockResolvedValue([
-      { id: 901, rawMessage: ROW.rawMessage, model: ROW.model, storage: ROW.storage, color: ROW.color, batchId: 53 },
-      { id: 902, rawMessage: 'другая строка', model: 'iPhone 17', storage: null, color: null, batchId: 53 },
+      { id: 901, rawMessage: ROW.rawMessage, model: ROW.model, storage: ROW.storage, ram: ROW.ram, color: ROW.color, batchId: 53 },
+      { id: 902, rawMessage: 'другая строка', model: 'iPhone 17', storage: null, ram: null, color: null, batchId: 53 },
     ])
     p.supplierPrice.count.mockResolvedValueOnce(3).mockResolvedValueOnce(2)
     p.priceApplyBatch.findUnique.mockResolvedValue({ stats: {} })

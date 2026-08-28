@@ -57,6 +57,9 @@ export function toParsedLine(p: AIParsedProduct): ParsedLine {
   return {
     model: p.model,
     storage: p.storage ?? undefined,
+    // RAM доезжает до матчера: она входит в композитный ключ алиаса. Парсер
+    // возвращал её и раньше — терялась ровно здесь.
+    ram: p.ram ?? undefined,
     color: p.color ?? undefined,
     country: p.country ?? undefined,
     simType: p.simType ?? undefined,
@@ -158,7 +161,7 @@ export async function createPriceBatch(opts: {
         supplierId: opts.supplierId ?? null,
         model: p.model,
         storage: p.storage ?? null,
-        ram: raw?.ram ?? null,
+        ram: p.ram ?? raw?.ram ?? null,
         color: p.color ?? null,
         simType: raw?.simType ?? null,
         country: raw?.country ?? null,
