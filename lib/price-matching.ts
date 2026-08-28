@@ -60,6 +60,7 @@ export type MatchedVariant = {
 }
 
 const STORAGE_ATTR = 'Память'
+const RAM_ATTR = 'RAM'
 const COLOR_ATTR = 'Цвет'
 const COUNTRY_ATTR = 'Страна'
 const SIM_ATTR = 'SIM'
@@ -101,15 +102,24 @@ function normalizeColor(s: string): string {
 }
 
 /**
- * Точное совпадение по заявленным в строке память/цвет.
- * Сверка только с ключами «Память»/«Цвет»: попадание подстроки в другие
+ * Точное совпадение по заявленным в строке память/RAM/цвет.
+ * Сверка только с ключами «Память»/«RAM»/«Цвет»: попадание подстроки в другие
  * атрибуты (fullName, Страна…) совпадением не считается. Вариант без нужного
  * ключа при заявленном значении — не кандидат: «не смог сверить» ≠ «совпало».
+ *
+ * RAM здесь с 2026-08: у MacBook Air конфигурации 16/24/32 GB отличаются ТОЛЬКО
+ * ею, и без этой сверки строка «24GB 1TB Midnight» проходила отбор наравне с
+ * 16GB-вариантом. Сужение строгое и в безопасную сторону: неоднозначные строки
+ * уходят в очередь «не узнал», а не садятся на соседнюю конфигурацию.
  */
 function matchesStorageColor(attrs: Record<string, unknown>, p: ParsedLine): boolean {
   if (p.storage) {
     const val = attrs[STORAGE_ATTR]
     if (typeof val !== 'string' || normalizeStorage(val) !== normalizeStorage(p.storage)) return false
+  }
+  if (p.ram) {
+    const val = attrs[RAM_ATTR]
+    if (typeof val !== 'string' || normalizeStorage(val) !== normalizeStorage(p.ram)) return false
   }
   if (p.color) {
     const val = attrs[COLOR_ATTR]
@@ -168,22 +178,24 @@ export async function matchVariants(parsed: ParsedLine[]): Promise<{ matched: Ma
 
   for (const p of parsed) {
     // 1. Проверить PriceAlias
+    // Ключи в порядке УБЫВАНИЯ точности; побеждает первый найденный.
+    // Раньше здесь был findFirst({ OR: [...] }) — при нескольких подходящих
+    // ключах выбор определял порядок выдачи БД. Скрытый недетерминизм: точная
+    // привязка строки могла проиграть общему ключу по модели.
+    //
     // Композит строится ТЕМ ЖЕ compositeAliasKey, что пишет привязку: формат
     // ключа обязан жить в одном месте, иначе записанный ключ не найдётся.
-    // Ищем обе формы: с RAM (точная, для товаров с осью RAM) и без неё —
-    // у планшетов, часов и телефонов оси RAM нет, их ключи всегда без неё.
-    const aliasWithRam = p.ram?.trim() ? compositeAliasKey(p) : null
-    const aliasPlain = compositeAliasKey({ ...p, ram: null })
-    const alias = await prisma.priceAlias.findFirst({
-      where: {
-        OR: [
-          ...(aliasWithRam ? [{ alias: aliasWithRam }] : []),
-          ...(aliasPlain ? [{ alias: aliasPlain }] : []),
-          { alias: p.model.trim().toLowerCase() },
-          { alias: p.rawLine.trim().toLowerCase() },
-        ],
-      },
-    })
+    // Форм две — с RAM (товары с осью RAM) и без неё (планшеты, часы, телефоны).
+    const aliasKeysByPrecision = [
+      p.rawLine.trim().toLowerCase(),
+      p.ram?.trim() ? compositeAliasKey(p) : null,
+      compositeAliasKey({ ...p, ram: null }),
+      p.model.trim().toLowerCase(),
+    ].filter((k): k is string => !!k)
+    const aliasRows = await prisma.priceAlias.findMany({ where: { alias: { in: aliasKeysByPrecision } } })
+    const alias = aliasKeysByPrecision
+      .map(k => aliasRows.find(a => a.alias === k))
+      .find((a): a is NonNullable<typeof a> => !!a) ?? null
 
     if (alias?.isIgnored) {
       ignored.push(p)
