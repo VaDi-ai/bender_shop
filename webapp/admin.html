@@ -2790,12 +2790,10 @@
         clearTimeout(t)
         const q = this.value.trim()
         t = setTimeout(async () => {
-          const list = q.length >= 2 ? await searchVariants(q) : []
-          document.getElementById('peResults').innerHTML = list.map(v => `
-            <div class="list-i" data-pe-pick="${v.variantId}" style="cursor:pointer">
-              <div class="grow"><div class="nm">${esc(v.productName)}</div><div class="mt">${esc(v.attrs)}${v.inStock ? '' : ' · нет в наличии'}</div></div>
-              <span class="mono" style="font-size:12px">${fmt(v.price)} ₽</span>
-            </div>`).join('') || (q.length >= 2 ? '<div class="empty">Не нашлось</div>' : '')
+          const res = q.length >= 2 ? await searchVariants(q) : { items: [], total: 0 }
+          document.getElementById('peResults').innerHTML =
+            (res.items.map(v => pickerRow(v, 'data-pe-pick')).join('') + pickerMore(res))
+            || (q.length >= 2 ? '<div class="empty">Не нашлось</div>' : '')
           document.querySelectorAll('[data-pe-pick]').forEach(el => el.addEventListener('click', async () => {
             const r = await api('/aliases', { method: 'POST', body: JSON.stringify({ supplierPriceId: x.supplierPriceId, variantId: Number(el.dataset.pePick) }) }).catch(() => null)
             if (!r || !r.ok) { err.textContent = (r && r.data && r.data.error) || 'Не получилось'; return }
@@ -2831,12 +2829,10 @@
         clearTimeout(rt)
         const q = this.value.trim()
         rt = setTimeout(async () => {
-          const list = q.length >= 2 ? await searchVariants(q) : []
-          document.getElementById('peRebindResults').innerHTML = list.map(v => `
-            <div class="list-i" data-pe-rebind-pick="${v.variantId}" style="cursor:pointer">
-              <div class="grow"><div class="nm">${esc(v.productName)}</div><div class="mt">${esc(v.attrs)}${v.inStock ? '' : ' · нет в наличии'}</div></div>
-              <span class="mono" style="font-size:12px">${fmt(v.price)} ₽</span>
-            </div>`).join('') || (q.length >= 2 ? '<div class="empty">Не нашлось</div>' : '')
+          const res = q.length >= 2 ? await searchVariants(q) : { items: [], total: 0 }
+          document.getElementById('peRebindResults').innerHTML =
+            (res.items.map(v => pickerRow(v, 'data-pe-rebind-pick')).join('') + pickerMore(res))
+            || (q.length >= 2 ? '<div class="empty">Не нашлось</div>' : '')
           document.querySelectorAll('[data-pe-rebind-pick]').forEach(el => el.addEventListener('click', async () => {
             const label = el.querySelector('.nm').textContent + ' · ' + el.querySelector('.mt').textContent
             if (!confirm(`Привязать эту строку к:\n${label}?\n\nПривязка запомнится — дальше строка всегда ложится на выбранный вариант. Цены, уже применённые к витрине, не переписываются.`)) return
@@ -2898,10 +2894,32 @@
 
     // ── Цены: очередь «не узнал» + связывание ────────────────────────────────
     // Поиск по ВСЕМУ каталогу (админский эндпоинт): витринный /api/products
-    // скрывает товары не в наличии, а прайс обычно приходит именно на них
+    // скрывает товары не в наличии, а прайс обычно приходит именно на них.
+    // Отдаёт { items, total }: сколько нашлось всего — видно, усечение выдачи
+    // больше не молчит (из-за него 15"-варианты MacBook были недостижимы).
     async function searchVariants(q) {
       const r = await api('/variants?q=' + encodeURIComponent(q)).catch(() => null)
-      return r && r.ok ? r.data : []
+      const d = r && r.ok ? r.data : null
+      return d && Array.isArray(d.items) ? d : { items: [], total: 0 }
+    }
+
+    /** Строка варианта в пикере: имя товара, имя варианта из листа, атрибуты. */
+    function pickerRow(v, pickAttr) {
+      return `<div class="list-i" ${pickAttr}="${v.variantId}" style="cursor:pointer">
+        <div class="grow">
+          <div class="nm">${esc(v.productName)}</div>
+          ${v.fullName ? `<div class="mt">${esc(v.fullName)}</div>` : ''}
+          <div class="mt">${esc(v.attrs)}${v.inStock ? '' : ' · нет в наличии'}</div>
+        </div>
+        <span class="mono" style="font-size:12px">${fmt(v.price)} ₽</span>
+      </div>`
+    }
+
+    /** «Показаны N из M» — чтобы усечение было видно, а не угадывалось. */
+    function pickerMore(res) {
+      return res.total > res.items.length
+        ? `<div class="mt" style="padding:6px 2px">Показаны ${res.items.length} из ${res.total} — уточните запрос</div>`
+        : ''
     }
 
     // ── Привязки прайса (экран «Правила и привязки», Фаза C) ─────────────────
@@ -2924,12 +2942,9 @@
         clearTimeout(t)
         const q = this.value.trim()
         t = setTimeout(async () => {
-          const found = q.length >= 2 ? await searchVariants(q) : []
-          box.innerHTML = found.map(v => `
-            <div class="list-i" data-al-pick="${v.variantId}" style="cursor:pointer">
-              <div class="grow"><div class="nm">${esc(v.productName)}</div><div class="mt">${esc(v.attrs)}${v.inStock ? '' : ' · нет в наличии'}</div></div>
-              <span class="mono" style="font-size:12px">${fmt(v.price)} ₽</span>
-            </div>`).join('') || (q.length >= 2 ? '<div class="empty">Не нашлось</div>' : '')
+          const res = q.length >= 2 ? await searchVariants(q) : { items: [], total: 0 }
+          box.innerHTML = (res.items.map(v => pickerRow(v, 'data-al-pick')).join('') + pickerMore(res))
+            || (q.length >= 2 ? '<div class="empty">Не нашлось</div>' : '')
           box.querySelectorAll('[data-al-pick]').forEach(el => el.addEventListener('click', () => {
             const label = el.querySelector('.nm').textContent + ' · ' + el.querySelector('.mt').textContent
             onPick(Number(el.dataset.alPick), label)
@@ -3046,7 +3061,7 @@
         ${r.data.map(u => `
           <div class="list-i" data-um="${u.supplierPriceId}"><div style="flex:1">
             <div class="nm mono">«${esc(u.rawLine)}»</div>
-            <div class="mt">${esc(u.supplierName || 'без поставщика')} · ${fmt(u.price)} ₽ · ${esc(u.model)}</div>
+            <div class="mt">${esc(u.supplierName || 'без поставщика')} · ${fmt(u.price)} ₽ · ${esc(u.model)}${u.batchStatus === 'applied' ? ' · <span class="chip c-warn">из применённого разбора</span>' : ''}</div>
             <div class="um-panel" style="display:none">
               <input class="inp" placeholder="Начните вводить название товара…" data-um-search="${u.supplierPriceId}">
               <div data-um-results="${u.supplierPriceId}"></div>
@@ -3071,8 +3086,8 @@
           searchTimer = setTimeout(async () => {
           const q = input.value.trim()
           if (q.length < 2) { results.innerHTML = ''; return }
-          const found = await searchVariants(q)
-          results.innerHTML = found.map(x => `<div class="list-i" style="cursor:pointer" data-pick="${x.variantId}"><div style="flex:1"><div class="nm">${esc(x.productName)} · ${esc(x.attrs)}</div><div class="mt">${fmt(x.price)} ₽${x.inStock ? '' : ' · нет в наличии'}</div></div></div>`).join('') || '<div class="mt">Ничего не нашлось</div>'
+          const res = await searchVariants(q)
+          results.innerHTML = (res.items.map(x => `<div class="list-i" style="cursor:pointer" data-pick="${x.variantId}"><div style="flex:1"><div class="nm">${esc(x.productName)}${x.fullName ? ' · ' + esc(x.fullName) : ''}</div><div class="mt">${esc(x.attrs)}</div><div class="mt">${fmt(x.price)} ₽${x.inStock ? '' : ' · нет в наличии'}</div></div></div>`).join('') + pickerMore(res)) || '<div class="mt">Ничего не нашлось</div>'
           results.querySelectorAll('[data-pick]').forEach(el => el.addEventListener('click', async () => {
             const r2 = await api('/aliases', { method: 'POST', body: JSON.stringify({ supplierPriceId: Number(id), variantId: Number(el.dataset.pick) }) })
             alert(r2.ok ? `Связано. Система запомнила название${r2.data.rematched > 1 ? `, довязано строк: ${r2.data.rematched}` : ''}.` : (r2.data && r2.data.error || 'Не получилось'))
