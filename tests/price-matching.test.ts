@@ -57,6 +57,40 @@ beforeEach(() => {
   attrAliases.mockReset(); attrAliases.mockResolvedValue(SEED_ALIASES)
 })
 
+describe('поиск алиаса: композитный ключ строится тем же compositeAliasKey', () => {
+  it('RAM известна → композит с RAM среди ключей поиска', async () => {
+    await matchVariants([line({ model: 'MacBook Air 13 M5', storage: '1TB', ram: '16GB', color: 'Midnight', rawLine: 'raw 1' })])
+    const keys = alias.mock.calls[0][0].where.OR.map((c: any) => c.alias)
+    expect(keys).toContain('macbook air 13 m5 1tb 16gb midnight')
+    expect(keys).toContain('macbook air 13 m5')   // ключ по модели
+    expect(keys).toContain('raw 1')               // точный ключ строки
+  })
+
+  it('RAM неизвестна → ищем композит прежнего формата: ключи планшетов и часов живы', async () => {
+    await matchVariants([line({ model: 'iPad 11', storage: '128GB', color: 'Silver', rawLine: 'raw 2' })])
+    const keys = alias.mock.calls[0][0].where.OR.map((c: any) => c.alias)
+    expect(keys).toEqual(['ipad 11 128gb silver', 'ipad 11', 'raw 2'])
+  })
+
+  it('RAM известна → ищем ОБЕ формы: с RAM и без неё (старые ключи ещё живут)', async () => {
+    await matchVariants([line({ model: 'MacBook Air 13 M5', storage: '1TB', ram: '16GB', color: 'Midnight', rawLine: 'raw 4' })])
+    const keys = alias.mock.calls[0][0].where.OR.map((c: any) => c.alias)
+    expect(keys).toEqual([
+      'macbook air 13 m5 1tb 16gb midnight',
+      'macbook air 13 m5 1tb midnight',
+      'macbook air 13 m5',
+      'raw 4',
+    ])
+  })
+
+  it('разная RAM — разные ключи: строка 24GB не подхватит привязку 16GB', async () => {
+    await matchVariants([line({ model: 'MacBook Air 13 M5', storage: '1TB', ram: '24GB', color: 'Midnight', rawLine: 'raw 3' })])
+    const keys = alias.mock.calls[0][0].where.OR.map((c: any) => c.alias)
+    expect(keys).toContain('macbook air 13 m5 1tb 24gb midnight')
+    expect(keys).not.toContain('macbook air 13 m5 1tb 16gb midnight')
+  })
+})
+
 describe('точное имя модели вместо contains', () => {
   it('«iPhone 17 Pro» не липнет к «Iphone 17 Pro Max» — каждая строка на свой товар', async () => {
     const pro = product('Iphone 17 Pro', [variant({ Память: '256GB', Цвет: 'Silver', Страна: 'Япония' })], { id: 444 })
