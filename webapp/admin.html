@@ -596,6 +596,17 @@
         <div class="mt">Ночью (20:00–11:00 МСК) включает «Авто», утром возвращает прежний режим.</div>
         <button class="btn b-nt" id="aiSchedBtn">—</button>
       </div>
+      <div class="card" id="enrichCard" style="display:none">
+        <h3>Обогащение карточек <span class="chip c-off right" id="enrichChip">—</span></h3>
+        <div class="mt" id="enrichSummary">Считаем…</div>
+        <div id="enrichProgress" class="mt" style="display:none"></div>
+        <div class="sf-item-actions">
+          <button class="btn b-main" id="enrichRunBtn" style="display:none">Обогатить пустые</button>
+          <button class="btn b-dg" id="enrichStopBtn" style="display:none">Остановить</button>
+        </div>
+        <div class="mt" id="enrichErr" style="color:var(--bad)"></div>
+        <div class="hint">Заполняются только пустые поля — то, что написано руками, не трогаем. Каждый товар — отдельный платный запрос к ИИ, между ними пауза 2 секунды. За один прогон берём не больше 50 товаров; остаток добирается повторным запуском.</div>
+      </div>
       <div class="card" id="aiKeyCard" style="display:none">
         <h3>Ключ OpenRouter <span class="chip c-off right" id="aiKeyChip">—</span></h3>
         <input class="inp" id="aiKeyInput" placeholder="sk-or-… (новый ключ — заменит текущий)" autocomplete="off">
@@ -1689,6 +1700,9 @@
       // Расписание и ключ — owner-only
       document.getElementById('aiScheduleCard').style.display = isOwner ? '' : 'none'
       document.getElementById('aiKeyCard').style.display = isOwner ? '' : 'none'
+      // Массовое обогащение — деньги, поэтому даже смотреть счётчик может только владелец
+      document.getElementById('enrichCard').style.display = isOwner ? '' : 'none'
+      if (isOwner) loadEnrich()
       if (isOwner) {
         document.getElementById('aiSchedChip').textContent = d.scheduleEnabled ? 'включено' : 'выключено'
         document.getElementById('aiSchedChip').className = 'chip right ' + (d.scheduleEnabled ? 'c-ok' : 'c-off')
@@ -1719,6 +1733,99 @@
         loadAiAgent()
       } finally { this.disabled = false; this.textContent = 'Проверить и заменить ключ' }
     })
+
+    // ── Массовое обогащение «все пустые» (только владелец) ────────────────────
+    //
+    // Сначала счётчик и сумма, и только потом запуск: каждый товар — платный
+    // запрос, и владелец должен видеть цену до нажатия, а не в счёте.
+    let enrichPollTimer = null
+
+    async function loadEnrich() {
+      const summary = document.getElementById('enrichSummary')
+      const runBtn = document.getElementById('enrichRunBtn')
+      const stopBtn = document.getElementById('enrichStopBtn')
+      const chip = document.getElementById('enrichChip')
+
+      const r = await api('/enrich/preview').catch(() => null)
+      if (!r || !r.ok) { summary.textContent = 'Не удалось посчитать'; return }
+      const d = r.data
+
+      if (d.running) { runBtn.style.display = 'none'; pollEnrich(); return }
+
+      chip.textContent = d.candidates ? d.candidates + ' без описания' : 'всё заполнено'
+      chip.className = 'chip right ' + (d.candidates ? 'c-warn' : 'c-ok')
+      document.getElementById('enrichProgress').style.display = 'none'
+      stopBtn.style.display = 'none'
+
+      if (!d.candidates) {
+        summary.textContent = 'У всех товаров с предложениями описание на месте — обогащать нечего.'
+        runBtn.style.display = 'none'
+        return
+      }
+
+      const price = d.costRub != null ? `примерно ${fmt(d.costRub)} ₽` : `примерно $${d.costUsd}`
+      summary.innerHTML = `<b>${d.candidates}</b> ${plural(d.candidates, 'товар без описания', 'товара без описания', 'товаров без описания')}.
+        За этот прогон обогатим ${d.willRun} — ${price}.
+        ${d.candidates > d.willRun ? `Остальные ${d.candidates - d.willRun} доберутся следующим запуском.` : ''}
+        ${d.skippedWithoutVariants ? `<br>Ещё ${d.skippedWithoutVariants} ${plural(d.skippedWithoutVariants, 'товар пропустим', 'товара пропустим', 'товаров пропустим')}: у них нет предложений — покупателю их не видно, строк в таблице тоже нет.` : ''}`
+      runBtn.style.display = ''
+      runBtn.textContent = `Обогатить ${d.willRun} ${plural(d.willRun, 'пустой', 'пустых', 'пустых')}`
+      runBtn.onclick = () => startEnrich(d)
+    }
+
+    async function startEnrich(d) {
+      const price = d.costRub != null ? `примерно ${fmt(d.costRub)} ₽` : `примерно $${d.costUsd}`
+      if (!confirm(`Обогатить ${d.willRun} ${plural(d.willRun, 'товар', 'товара', 'товаров')} без описания?\n\nКаждый товар — отдельный платный запрос к ИИ, всего ${price}. Заполнятся только пустые поля, ручной текст не тронем. Прогон можно остановить в любой момент.`)) return
+      const err = document.getElementById('enrichErr'); err.textContent = ''
+      const runBtn = document.getElementById('enrichRunBtn')
+      runBtn.disabled = true
+      const r = await api('/enrich/run', { method: 'POST', body: JSON.stringify({ scope: 'empty_description' }) }).catch(() => null)
+      runBtn.disabled = false
+      if (!r || (!r.ok && r.status !== 409)) { err.textContent = (r && r.data && r.data.error) || 'Не получилось запустить'; return }
+      runBtn.style.display = 'none'
+      pollEnrich()
+    }
+
+    function pollEnrich() {
+      clearTimeout(enrichPollTimer)
+      const box = document.getElementById('enrichProgress')
+      const stopBtn = document.getElementById('enrichStopBtn')
+      const tick = async () => {
+        const r = await api('/enrich/status').catch(() => null)
+        const d = r && r.ok ? r.data : null
+        if (!d || d.status === 'idle') { loadEnrich(); return }
+
+        if (d.status === 'running') {
+          document.getElementById('enrichChip').textContent = 'идёт'
+          document.getElementById('enrichChip').className = 'chip right c-warn'
+          box.style.display = ''
+          box.innerHTML = `Обработано <b>${d.done}</b> из <b>${d.total || '?'}</b> · заполнено ${d.enriched}${d.failed ? ' · не вышло ' + d.failed : ''}
+            ${d.current ? `<div class="mt">сейчас: ${esc(d.current)}</div>` : ''}`
+          stopBtn.style.display = ''
+          stopBtn.onclick = async () => {
+            stopBtn.disabled = true
+            stopBtn.textContent = 'Останавливаем…'
+            await api('/enrich/abort', { method: 'POST', body: '{}' }).catch(() => null)
+            stopBtn.disabled = false
+            stopBtn.textContent = 'Остановить'
+          }
+          enrichPollTimer = setTimeout(tick, 3000)
+          return
+        }
+
+        stopBtn.style.display = 'none'
+        box.style.display = ''
+        const rest = Math.max(0, (d.candidates || 0) - (d.total || 0))
+        box.innerHTML = `${d.status === 'aborted' ? 'Остановлено. ' : 'Готово. '}
+          Заполнено <b>${d.enriched}</b> из ${d.total}${d.skipped ? ' · пропущено ' + d.skipped : ''}${d.failed ? ' · не вышло ' + d.failed : ''}.
+          ${rest ? `<div class="mt">Осталось ${rest} — запустите ещё раз.</div>` : ''}
+          ${d.lastError ? `<div class="mt">Последняя ошибка: ${esc(d.lastError)}</div>` : ''}`
+        toast(d.status === 'aborted' ? 'Обогащение остановлено' : `Обогащено: ${d.enriched}`)
+        loadIssues()
+        setTimeout(loadEnrich, 4000)
+      }
+      tick()
+    }
 
     // ── СЕГМЕНТЫ (перенос bot/admin/segments.ts) ──────────────────────────────
     const SEG_COLORS = ['🔵', '🟡', '🟢', '🔴', '🟣', '⚪']

@@ -2185,7 +2185,8 @@ async function processImportFile(ctx: Context, buffer: Buffer, userId: number): 
           const { enrichAllProducts } = await import('../../lib/enrich')
           const result = await enrichAllProducts()
           if (result.enriched > 0) {
-            await ctx.reply(`✨ Автообогащение: характеристики заполнены для ${result.enriched} товаров.`)
+            const rest = Math.max(0, result.candidates - result.total)
+            await ctx.reply(`✨ Автообогащение: характеристики заполнены для ${result.enriched} товаров.${rest > 0 ? ` Осталось ${rest} — допрогнать можно из веб-админки.` : ''}`)
           }
         } catch (err) {
           log.error('Enrich after create-import error', { error: err instanceof Error ? err.message : String(err) })
@@ -2326,7 +2327,8 @@ async function processImport(ctx: Context, rows: FileRow[]): Promise<void> {
       const { enrichAllProducts } = await import('../../lib/enrich')
       const result = await enrichAllProducts()
       if (result.enriched > 0) {
-        await ctx.reply(`✨ Автообогащение: заполнены характеристики для ${result.enriched} товаров из ${result.total}.`)
+        const rest = Math.max(0, result.candidates - result.total)
+        await ctx.reply(`✨ Автообогащение: заполнены характеристики для ${result.enriched} товаров из ${result.total}.${rest > 0 ? ` Осталось ${rest} — допрогнать можно из веб-админки.` : ''}`)
       }
     } catch (err) {
       log.error('Enrich after import error', { error: err instanceof Error ? err.message : String(err) })

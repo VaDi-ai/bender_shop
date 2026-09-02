@@ -1537,18 +1537,21 @@ bot.action('maint:enrich_all', async (ctx) => {
     try {
       const { enrichAllProducts } = await import('../lib/enrich')
       const result = await enrichAllProducts(() => enrichAbortFlag)
+      // Остаток сверх потолка прогона — чтобы «всего 50» не читалось как «всё»
+      const rest = Math.max(0, result.candidates - result.total)
       if (userId) {
-        if (enrichAbortFlag) {
+        if (result.aborted) {
           await bot.telegram.sendMessage(userId, `⏹️ Обогащение остановлено. Обогащено: ${result.enriched} из ${result.total}`)
         } else {
           await bot.telegram.sendMessage(userId, [
             '✨ Обогащение завершено!',
             '',
             `✅ Обогащено: ${result.enriched}`,
-            `⏭️ Пропущено: ${result.total - result.enriched - result.failed}`,
+            `⏭️ Пропущено: ${result.skipped}`,
             `❌ Ошибок: ${result.failed}`,
-            `📦 Всего: ${result.total}`,
-          ].join('\n'))
+            `📦 Взято в прогон: ${result.total}`,
+            rest > 0 ? `⏭️ Осталось на следующий прогон: ${rest}` : '',
+          ].filter(Boolean).join('\n'))
         }
       }
     } catch (err) {

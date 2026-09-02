@@ -11,6 +11,7 @@ export type SecurityEvent =
   | 'unauthorized_access'
   | 'ai_key_changed'
   | 'ai_mode_changed'
+  | 'enrich_batch_started'
   | 'maintenance_mode_toggled'
   | 'security_log_purged'
   | 'price_changed'
@@ -82,6 +83,7 @@ const EVENT_DESCRIPTIONS: Record<SecurityEvent, string> = {
   invalid_order_data:         '📋 Неверные данные заказа',
   ai_key_changed:             '🔑 Изменён ключ API (OpenRouter)',
   ai_mode_changed:            '🤖 Изменён режим AI-агента',
+  enrich_batch_started:       '✨ Запущено массовое обогащение карточек (платные запросы)',
   maintenance_mode_toggled:   '🔧 Переключён режим техработ',
   security_log_purged:        '🗑️ Очищен лог безопасности',
   price_changed:              '💰 Изменена цена товара',
