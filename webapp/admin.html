@@ -829,6 +829,7 @@
       const p = pcProduct
       const box = document.getElementById('pcCard')
       const isOwner = window.adminMe && window.adminMe.role === 'owner'
+      const specKeys = Object.keys(p.specs || {})
       box.style.display = ''
       box.innerHTML = `
         <div class="cap" style="margin:12px 0 6px">${esc(p.name.toUpperCase())}</div>
@@ -872,7 +873,17 @@
 
         <div class="cap" style="margin:14px 0 6px">ОПИСАНИЕ</div>
         <div class="mt">${p.description ? esc(p.description) : 'Описания нет — покупатель видит только характеристики.'}</div>
-        <button class="btn b-nt sm" data-pc-desc="1">${p.description ? 'Изменить описание' : 'Добавить описание'}</button>
+        <div class="sf-item-actions">
+          <button class="btn b-nt sm" data-pc-desc="1">${p.description ? 'Изменить описание' : 'Добавить описание'}</button>
+          <button class="btn b-gh sm" data-pc-enrich="1">✨ Заполнить из интернета</button>
+        </div>
+        <div class="mt" id="pcEnrichMsg"></div>
+        <div class="hint">Кнопка ищет описание и характеристики в интернете и записывает их в карточку и в таблицу. Один товар — один платный запрос, ответа ждать 5–20 секунд.</div>
+
+        <div class="cap" style="margin:14px 0 6px">ХАРАКТЕРИСТИКИ</div>
+        ${specKeys.length
+          ? specKeys.map(k => `<div class="list-i"><div style="flex:1"><div class="nm">${esc(k)}</div><div class="mt">${esc(p.specs[k])}</div></div></div>`).join('')
+          : '<div class="mt">Характеристик нет — их заполняет кнопка «Заполнить из интернета» или колонка «Характеристики» в таблице.</div>'}
 
         ${isOwner ? `<div class="cap" style="margin:14px 0 6px">ОПАСНАЯ ЗОНА</div>
           <button class="btn ${p.isAvailable ? 'b-dg' : 'b-gh'}" data-pc-vis="${p.isAvailable ? '0' : '1'}">${p.isAvailable ? 'Скрыть товар с витрины' : 'Вернуть товар на витрину'}</button>
@@ -902,6 +913,8 @@
         f.style.display = ''
         f.scrollIntoView({ behavior: 'smooth', block: 'center' })
       })
+      const enrichBtn = box.querySelector('[data-pc-enrich]')
+      if (enrichBtn) enrichBtn.addEventListener('click', () => runEnrich(p, enrichBtn))
       const visBtn = box.querySelector('[data-pc-vis]')
       if (visBtn) visBtn.addEventListener('click', async () => {
         const to = visBtn.dataset.pcVis === '1'
@@ -910,6 +923,60 @@
         if (!r || !r.ok) { alert(r && r.data && r.data.error || 'Не получилось'); return }
         openProductCard(p.id)
       })
+    }
+
+    // ── «Заполнить из интернета»: 202 + опрос статуса ────────────────────────
+    //
+    // Кнопка перезаписывает то, что уже стоит в карточке, поэтому при непустом
+    // описании переспрашиваем: это и деньги, и потеря ручного текста.
+    async function runEnrich(p, btn) {
+      const hasContent = !!p.description || Object.keys(p.specs || {}).length > 0
+      if (hasContent && !confirm(`Заполнить «${p.name}» из интернета?\n\nНынешнее описание и характеристики заменятся тем, что найдёт ИИ. Это один платный запрос.`)) return
+
+      // Опрос переживает уход с карточки: если владелец открыл другой товар,
+      // молча дорабатываем, но экран под ним не дёргаем.
+      const stillHere = () => pcProduct && pcProduct.id === p.id
+      const msg = document.getElementById('pcEnrichMsg')
+      const setMsg = (text, bad) => {
+        const el = document.getElementById('pcEnrichMsg')
+        if (el && el === msg && stillHere()) { el.textContent = text; el.style.color = bad ? 'var(--bad)' : '' }
+      }
+      btn.disabled = true
+      btn.textContent = '⏳ Ищем в интернете…'
+      setMsg('Обычно 5–20 секунд. Можно уйти с экрана — обогащение идёт на сервере.')
+
+      const resetBtn = () => { btn.disabled = false; btn.textContent = '✨ Заполнить из интернета' }
+      const started = await api(`/products/${p.id}/enrich`, { method: 'POST', body: '{}' }).catch(() => null)
+      // 409 — прогон по этому товару уже идёт: не ошибка, просто ждём его же результат
+      if (!started || (!started.ok && started.status !== 409)) {
+        resetBtn()
+        setMsg((started && started.data && started.data.error) || 'Не получилось запустить — попробуйте позже', true)
+        return
+      }
+
+      const deadline = Date.now() + 90000
+      const tick = async () => {
+        if (Date.now() > deadline) {
+          resetBtn()
+          setMsg('Ответа пока нет. Обогащение продолжается на сервере — откройте карточку чуть позже.', true)
+          return
+        }
+        const st = await api(`/products/${p.id}/enrich-status`).catch(() => null)
+        const d = st && st.ok ? st.data : null
+        if (!d || d.status === 'running' || d.status === 'idle') { setTimeout(tick, 2500); return }
+        if (d.status === 'done') {
+          if (!stillHere()) return
+          const parts = []
+          if (d.filled && d.filled.description) parts.push('описание')
+          if (d.filled && d.filled.specs) parts.push(`${d.filled.specs} ${plural(d.filled.specs, 'характеристика', 'характеристики', 'характеристик')}`)
+          await openProductCard(p.id)
+          toast(parts.length ? 'Заполнено: ' + parts.join(', ') : 'Готово')
+        } else {
+          resetBtn()
+          setMsg(d.message || 'Не удалось найти характеристики', true)
+        }
+      }
+      setTimeout(tick, 2500)
     }
 
     // ── Правка атрибута прямо в строке предложения (два касания) ──────────────

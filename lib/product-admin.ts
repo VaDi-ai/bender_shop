@@ -38,6 +38,8 @@ export interface ProductCard {
   brand: string | null
   category: string | null
   description: string
+  /** Характеристики карточки: их заполняет обогащение, карточка показывает результат */
+  specs: Record<string, string>
   isAvailable: boolean
   isFeatured: boolean
   /** Что покупатель видит в каталоге: coverPhoto, а без неё — авто (первый вариант) */
@@ -65,7 +67,7 @@ export async function getProductCard(productId: number): Promise<ProductCard | n
   const p = await prisma.product.findUnique({
     where: { id: productId },
     select: {
-      id: true, name: true, sku: true, brand: true, description: true,
+      id: true, name: true, sku: true, brand: true, description: true, specs: true,
       isAvailable: true, isFeatured: true, photoUrl: true, coverPhoto: true, photos: true,
       category: { select: { name: true } },
       variants: {
@@ -102,6 +104,7 @@ export async function getProductCard(productId: number): Promise<ProductCard | n
     brand: p.brand,
     category: p.category?.name ?? null,
     description: p.description ?? '',
+    specs: (p.specs ?? {}) as Record<string, string>,
     isAvailable: p.isAvailable,
     isFeatured: p.isFeatured,
     mainPhoto: p.coverPhoto || p.photoUrl || null,

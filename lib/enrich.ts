@@ -12,29 +12,109 @@ import log from './logger'
 
 let _enrichClient: OpenAI | null = null
 
+/** Ключа нет нигде: ни в ApiKey.openrouter_key, ни в env. Отдельный класс —
+ *  чтобы отличить «некуда идти» от «сходили и получили отказ». */
+export class EnrichKeyMissingError extends Error {
+  constructor() {
+    super('OPENROUTER_API_KEY not set')
+    this.name = 'EnrichKeyMissingError'
+  }
+}
+
+/** Почему обогащение не дало результата. Наружу уходит вместе с текстом. */
+export type EnrichFailReason =
+  | 'no_key'        // ключ не задан ни в БД, ни в env
+  | 'unauthorized'  // 401/403 — ключ отозван или протух
+  | 'rate_limit'    // 429 — упёрлись в лимит OpenRouter/провайдера
+  | 'provider'      // прочий отказ провайдера
+  | 'network'       // не дозвонились
+  | 'empty'         // модель ответила пустотой
+  | 'parse'         // ответ не разобрался в JSON
+  | 'nothing'       // разобрали, но заполнять нечего
+  | 'not_found'     // товара нет
+  | 'skipped'       // force=false и характеристики уже стоят
+
+export interface EnrichResult {
+  ok: boolean
+  /** Что реально записали: описание и сколько характеристик. */
+  filled: { description: boolean; specs: number }
+  reason?: EnrichFailReason
+  /** Готовый текст для админа — один и тот же в боте и в вебе. */
+  message?: string
+}
+
+/** Тексты причин: показываются владельцу как есть, поэтому живут рядом с кодом. */
+export const ENRICH_FAIL_MESSAGE: Record<EnrichFailReason, string> = {
+  no_key: 'Не задан ключ OpenRouter — «Ещё» → «AI Агент» → «Ключ OpenRouter»',
+  unauthorized: 'OpenRouter не принял ключ — он отозван или истёк. Замените его в «AI Агент»',
+  rate_limit: 'OpenRouter временно ограничил запросы — попробуйте через пару минут',
+  provider: 'Поиск характеристик сейчас недоступен — попробуйте позже',
+  network: 'Не дозвонились до OpenRouter — проверьте связь и попробуйте позже',
+  empty: 'В интернете ничего не нашлось по этому названию — заполните вручную',
+  parse: 'Ответ пришёл в непонятном виде — попробуйте ещё раз или заполните вручную',
+  nothing: 'Новых данных не нашлось — в карточке уже стоит всё, что нашли',
+  not_found: 'Товар не найден',
+  skipped: 'Характеристики уже заполнены — обогащение пропущено',
+}
+
+const fail = (reason: EnrichFailReason): EnrichResult => ({
+  ok: false,
+  filled: { description: false, specs: 0 },
+  reason,
+  message: ENRICH_FAIL_MESSAGE[reason],
+})
+
+/**
+ * Разбирает отказ в понятную причину. Чистая функция: тестируется без сети и
+ * без SDK — SDK-ошибки OpenAI несут числовой `status`, всё прочее считаем сетью.
+ */
+export function classifyEnrichError(err: unknown): EnrichFailReason {
+  if (err instanceof EnrichKeyMissingError) return 'no_key'
+  const status = (err as { status?: unknown } | null)?.status
+  if (typeof status === 'number') {
+    if (status === 401 || status === 403) return 'unauthorized'
+    if (status === 429) return 'rate_limit'
+    if (status >= 400) return 'provider'
+  }
+  return 'network'
+}
+
+/**
+ * Сбрасывает кэш клиента после смены ключа. Без этого процесс до самого
+ * рестарта ходит со старым ключом: агент и парсер свои клиенты пересоздают,
+ * а обогащение раньше — нет, и «ключ заменили, а всё равно 401».
+ * Без аргумента — просто забыть клиента, ключ перечитается из БД при следующем
+ * обращении.
+ */
+export function reinitEnrichClient(key?: string | null): void {
+  _enrichClient = key
+    ? new OpenAI({ baseURL: 'https://openrouter.ai/api/v1', apiKey: key })
+    : null
+}
+
 async function getEnrichClient(): Promise<OpenAI> {
   if (_enrichClient) return _enrichClient
   const dbKey = await getApiKeyValue('openrouter_key')
   const apiKey = dbKey || process.env.OPENROUTER_API_KEY
-  if (!apiKey) throw new Error('OPENROUTER_API_KEY not set')
+  if (!apiKey) throw new EnrichKeyMissingError()
   _enrichClient = new OpenAI({ baseURL: 'https://openrouter.ai/api/v1', apiKey })
   return _enrichClient
 }
 
 /**
  * Обогащает одну карточку товара.
- * Заполняет description и specs если они пустые.
- * Возвращает true если данные были обновлены.
+ * Заполняет description и specs если они пустые (force — перезаписывает).
+ * Возвращает, что именно записали, а при неудаче — почему: вызывающему коду
+ * нужно отличать «ключ отозвали» от «в интернете ничего не нашлось».
  */
-export async function enrichProductCard(productId: number, force = false, preloaded?: { id: number; name: string; description: string | null; specs: any; attributes: any }): Promise<boolean> {
+export async function enrichProductCard(productId: number, force = false, preloaded?: { id: number; name: string; description: string | null; specs: any; attributes: any }): Promise<EnrichResult> {
   const product = preloaded ?? await prisma.product.findUnique({ where: { id: productId } })
-  if (!product) return false
+  if (!product) return fail('not_found')
 
-  const hasDescription = !!product.description
   const hasSpecs = product.specs && typeof product.specs === 'object' && Object.keys(product.specs as object).length > 0
   if (!force && hasSpecs) {
     log.debug('Enrich skipped, specs already filled', { product: product.name })
-    return false
+    return fail('skipped')
   }
 
   log.info('Fetching specs', { product: product.name })
@@ -79,7 +159,7 @@ export async function enrichProductCard(productId: number, force = false, preloa
     const rawText = specsResponse.choices[0]?.message?.content?.trim() ?? ''
     if (!rawText) {
       log.warn('Enrich empty response from Perplexity', { product: product.name })
-      return false
+      return fail('empty')
     }
 
     let parsed: { description?: string; specs?: Record<string, string> }
@@ -113,7 +193,7 @@ export async function enrichProductCard(productId: number, force = false, preloa
       if (descMatch) {
         parsed = { description: descMatch[1] }
       } else {
-        return false
+        return fail('parse')
       }
     }
 
@@ -122,7 +202,7 @@ export async function enrichProductCard(productId: number, force = false, preloa
 
     if (!description && !specs) {
       log.warn('Enrich no usable data in response', { product: product.name })
-      return false
+      return fail('empty')
     }
 
     const updateData: Record<string, any> = {}
@@ -166,7 +246,7 @@ export async function enrichProductCard(productId: number, force = false, preloa
 
     if (Object.keys(updateData).length === 0) {
       log.debug('Enrich nothing to update', { product: product.name })
-      return false
+      return fail('nothing')
     }
 
     await prisma.product.update({
@@ -180,10 +260,11 @@ export async function enrichProductCard(productId: number, force = false, preloa
     // Write to Google Sheets (all variant rows)
     await writeEnrichToSheets(product.id, updateData.description as string | undefined, updateData.specs as Record<string, string> | undefined)
 
-    return true
+    return { ok: true, filled: { description: !!updateData.description, specs: specCount } }
   } catch (err) {
-    log.error('Enrich error', { product: product.name, error: err instanceof Error ? err.message : String(err) })
-    return false
+    const reason = classifyEnrichError(err)
+    log.error('Enrich error', { product: product.name, reason, error: err instanceof Error ? err.message : String(err) })
+    return fail(reason)
   }
 }
 
@@ -218,8 +299,8 @@ export async function enrichAllProducts(shouldAbort?: () => boolean, force = fal
       break
     }
     try {
-      const success = await enrichProductCard(product.id, force, product)
-      if (success) enriched++
+      const r = await enrichProductCard(product.id, force, product)
+      if (r.ok) enriched++
       else failed++
     } catch {
       failed++
