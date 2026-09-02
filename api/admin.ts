@@ -1069,6 +1069,40 @@ export function adminApiRouter(): Router {
     res.status(r.status).json(r.ok ? { ok: true, ...((r.data as object) ?? {}) } : { error: r.error })
   }))
 
+  // ── Обогащение карточки из интернета (owner+manager) ─────────────────────
+  //
+  // Кнопка на карточке — единственное место, где перезапись разрешена: владелец
+  // видит текущее описание и жмёт осознанно (фронт переспрашивает). Запрос не
+  // ждёт OpenRouter — 202 и опрос статуса, иначе Mini App висел бы 10-20 секунд.
+  router.post('/products/:id/enrich', safe(async (req, res) => {
+    const id = parseInt(String(req.params.id), 10)
+    if (!Number.isInteger(id)) { res.status(422).json({ error: 'Неверный ID' }); return }
+    const product = await prisma.product.findUnique({ where: { id }, select: { id: true, name: true } })
+    if (!product) { res.status(404).json({ error: 'Товар не найден' }); return }
+
+    const { startCardEnrich } = await import('../lib/enrich-job')
+    const { started, job } = startCardEnrich(id, req.admin!.telegramId)
+    if (!started) { res.status(409).json({ error: 'По этому товару обогащение уже идёт — дождитесь результата' }); return }
+    log.info('Enrich started from web admin', { productId: id, actor: req.admin!.telegramId })
+    res.status(202).json({ started: true, startedAt: job.startedAt })
+  }))
+
+  router.get('/products/:id/enrich-status', safe(async (req, res) => {
+    const id = parseInt(String(req.params.id), 10)
+    if (!Number.isInteger(id)) { res.status(422).json({ error: 'Неверный ID' }); return }
+    const { getCardJob } = await import('../lib/enrich-job')
+    const job = getCardJob(id)
+    if (!job) { res.json({ status: 'idle' }); return }
+    res.json({
+      status: job.status,
+      startedAt: job.startedAt,
+      finishedAt: job.finishedAt ?? null,
+      filled: job.filled ?? null,
+      reason: job.reason ?? null,
+      message: job.message ?? null,
+    })
+  }))
+
   // Скрытие товара с витрины — owner: это прямое вычитание из продаж.
   router.post('/products/:id/visibility', ownerOnly, safe(async (req, res) => {
     const id = parseInt(String(req.params.id), 10)
@@ -1297,6 +1331,9 @@ export function adminApiRouter(): Router {
     process.env.OPENROUTER_API_KEY = key
     ;(await import('../bot/ai/agent')).reinitClient(key)
     ;(await import('../lib/ai-parser')).reinitClient(key)
+    // Обогащение тоже кэширует клиента: без сброса оно до рестарта ходило бы
+    // со старым ключом и отвечало «ключ отозван» уже после замены.
+    ;(await import('../lib/enrich')).reinitEnrichClient(key)
     await logSecurityEvent('ai_key_changed', { via: 'web' }, req.admin!.telegramId)
     res.json({ ok: true })
   }))

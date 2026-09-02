@@ -1735,14 +1735,15 @@ export function setupInventoryHandlers(bot: Telegraf): void {
     try {
       const { enrichProductCard } = await import('../../lib/enrich')
       await ctx.reply('⏳ Ищу характеристики в интернете...')
-      const success = await enrichProductCard(productId, true)
+      const r = await enrichProductCard(productId, true)
 
-      if (success) {
+      if (r.ok) {
         const product = await prisma.product.findUnique({ where: { id: productId } })
         const specCount = product?.specs ? Object.keys(product.specs as object).length : 0
         await ctx.reply(`✨ Готово! Заполнено:\n📝 Описание: ${product?.description ? 'да' : 'нет'}\n📋 Характеристик: ${specCount}`)
       } else {
-        await ctx.reply('❌ Не удалось найти характеристики. Попробуйте позже или заполните вручную.')
+        // Причину теперь знаем точно — «попробуйте позже» на отозванном ключе врало
+        await ctx.reply(`❌ ${r.message ?? 'Не удалось найти характеристики.'}`)
       }
     } catch (err) {
       log.error('Enrich manual error', { error: err instanceof Error ? err.message : String(err) })
@@ -3243,8 +3244,8 @@ async function handleAddFlow(
         ;(async () => {
           try {
             const { enrichProductCard } = await import('../../lib/enrich')
-            const success = await enrichProductCard(product.id)
-            if (success) {
+            const r = await enrichProductCard(product.id)
+            if (r.ok) {
               await ctx.reply(`✨ Характеристики для "${product.name}" заполнены из интернета.`)
             }
           } catch (err) {

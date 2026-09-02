@@ -1456,9 +1456,9 @@ bot.action('maint:test_enrich', async (ctx) => {
       }
 
       // enrichProductCard now writes to ALL sheet rows internally
-      const success = await enrichProductCard(product.id, true)
-      if (!success) {
-        results.push(`❌ ${target.type}: "${target.search}" — обогащение не удалось`)
+      const enriched = await enrichProductCard(product.id, true)
+      if (!enriched.ok) {
+        results.push(`❌ ${target.type}: "${target.search}" — ${enriched.message ?? 'обогащение не удалось'}`)
         continue
       }
 

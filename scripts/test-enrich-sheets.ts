@@ -34,9 +34,9 @@ async function main() {
     console.log(`  DB id=${product.id}, ${product._count.variants} variants`)
 
     console.log(`  ⏳ Enriching + writing to ALL sheet rows...`)
-    const success = await enrichProductCard(product.id, true)
-    if (!success) {
-      console.log(`  ❌ Enrichment failed`)
+    const enriched = await enrichProductCard(product.id, true)
+    if (!enriched.ok) {
+      console.log(`  ❌ Enrichment failed: ${enriched.reason} — ${enriched.message}`)
       continue
     }
 
