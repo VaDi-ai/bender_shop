@@ -44,6 +44,9 @@ import { validateTelegramWebApp } from '../lib/telegram-webapp-auth'
 import { buildProfileWriteback } from '../lib/client-profile'
 import { suggestAddress, verifyAddress, dadataConfigured, VerifiedAddress } from '../lib/dadata'
 import { computeDeliveryCost, deliveryZoneOf, loadDeliveryPricingConfig, DeliveryPricingConfig, DeliveryQuote } from '../lib/delivery-pricing'
+import {
+  loadPreorderDefaults, resolvePreorder, splitOrderPrepayment, type PreorderPolicy,
+} from '../lib/preorder'
 import { adminApiRouter } from './admin'
 
 // BigInt → JSON serialization (avitoItemId etc.)
@@ -1671,7 +1674,12 @@ export function startApiServer(bot?: Telegraf): Server {
           price: string
           quantity: number
           newQty: number
+          isPreorder: boolean
         }> = []
+        // Позиции для расчёта предоплаты: считаем СЕРВЕРОМ, как цены и доставку
+        const preorderLines: Array<{ lineTotal: Decimal; policy: PreorderPolicy | null; name: string }> = []
+        // Дефолты магазина читаем один раз на заказ
+        const preorderDefaults = await loadPreorderDefaults()
 
         // Загрузка актуальных цен из БД, проверка остатков
         for (const item of items) {
@@ -1701,14 +1709,32 @@ export function startApiServer(bot?: Telegraf): Server {
           const lineTotal = variantPrice.times(item.quantity)
           totalDecimal = totalDecimal.plus(lineTotal)
 
+          // Предзаказ: политика складывается из полей товара поверх дефолтов
+          // магазина. Полузаполненный предзаказ не продаём — иначе взяли бы с
+          // покупателя сумму, которой никто не назначал.
+          const readiness = resolvePreorder(variant.product, preorderDefaults)
+          if (readiness.kind === 'incomplete') {
+            log.warn('Preorder not configured, order rejected', {
+              variantId: item.variantId, gaps: readiness.gaps,
+            })
+            throw Object.assign(
+              new Error('Предзаказ этого товара пока не настроен — напишите менеджеру'),
+              { isStockConflict: true },
+            )
+          }
+          const policy = readiness.kind === 'ready' ? readiness.policy : null
+          const itemName = formatProductNameWithAttrs(variant.product.name, variant.attributes)
+          preorderLines.push({ lineTotal, policy, name: itemName })
+
           enrichedItems.push({
             variantId: variant.id,
             productId: variant.productId,
+            isPreorder: policy !== null,
             // Сохраняем имя товара вместе с атрибутами варианта в OrderItem.productName.
             // Это автоматически подтянет атрибуты во все уведомления: админам в топик
             // продаж, админам в личку, в CRM-топик клиента, в личку клиенту.
             // Старые заказы остаются со своими именами — несогласованность приемлема.
-            name: formatProductNameWithAttrs(variant.product.name, variant.attributes),
+            name: itemName,
             price: variantPrice.toFixed(2),
             quantity: item.quantity,
             newQty: variant.quantity - item.quantity,
@@ -1723,6 +1749,14 @@ export function startApiServer(bot?: Telegraf): Server {
           deliveryQuote = computeDeliveryCost(deliveryVerified, deliveryConfig, totalDecimal)
           if (deliveryQuote.mode === 'fixed') totalDecimal = totalDecimal.plus(deliveryQuote.cost)
         }
+
+        // Предоплата: только по предзаказным позициям и только от товаров
+        // (доставка в неё не входит — решение владельца). Остаток заказа —
+        // «итог минус предоплата»: туда попадают и обычные позиции, и доставка,
+        // ровно то, что оператор возьмёт при выдаче.
+        const prep = splitOrderPrepayment(preorderLines)
+        const prepaymentAmount = prep.isPreorder ? prep.prepayment : null
+        const remainingAmount = prepaymentAmount ? totalDecimal.minus(prepaymentAmount) : null
 
         // Найти или создать клиента
         const isRealTelegram = telegramId && !telegramId.startsWith('web_')
@@ -1769,9 +1803,16 @@ export function startApiServer(bot?: Telegraf): Server {
                 quantity: i.quantity,
                 priceAtPurchase: i.price,
                 productName: i.name,
+                isPreorder: i.isPreorder,
               })),
             },
             totalAmount: totalDecimal.toFixed(2),
+            // Условия снимаем КОПИЕЙ: их потом поменяют, а обязательство перед
+            // покупателем остаётся тем, что он видел на чекауте.
+            isPreorder: prep.isPreorder,
+            prepaymentAmount: prepaymentAmount ? prepaymentAmount.toFixed(2) : null,
+            remainingAmount: remainingAmount ? remainingAmount.toFixed(2) : null,
+            preorderTermsSnapshot: prep.terms,
             payment: paymentMethod as 'cash' | 'card',
             customerName: customerName.trim(),
             customerPhone: customerPhone.trim(),
@@ -1795,6 +1836,10 @@ export function startApiServer(bot?: Telegraf): Server {
         // Списать со склада (только если складской учёт включён)
         const doWriteoff = process.env.STOCK_WRITEOFF_ENABLED === 'true'
         for (const item of enrichedItems) {
+          // Предзаказ со склада не списывается и движения не порождает: товара
+          // физически нет, а движение «out» на несуществующий остаток увело бы
+          // складскую историю в минус и посчиталось бы продажей в отчётах.
+          if (item.isPreorder) continue
           if (doWriteoff) {
             await tx.productVariant.update({
               where: { id: item.variantId },
@@ -1962,9 +2007,28 @@ export function startApiServer(bot?: Telegraf): Server {
             totalLines.push(`(доставка НЕ включена — уточнит оператор)`)
           }
 
+          // Предзаказ виден оператору первой строкой: он берёт предоплату руками,
+          // и суммы должны быть перед глазами, а не в глубине сообщения.
+          const preorderLines: string[] = []
+          if (order.isPreorder && order.prepaymentAmount !== null) {
+            const pre = Number(order.prepaymentAmount).toLocaleString('ru-RU')
+            const rest = order.remainingAmount !== null
+              ? Number(order.remainingAmount).toLocaleString('ru-RU')
+              : '—'
+            preorderLines.push(`⏳ ПРЕДЗАКАЗ — предоплата ${pre} ₽ · остаток ${rest} ₽`)
+            const preNames = orderItems.filter(i => i.isPreorder).map(i => i.productName)
+            if (preNames.length && preNames.length !== orderItems.length) {
+              // Смешанная корзина: без этой строки непонятно, за что предоплата
+              preorderLines.push(`   предоплата только за: ${preNames.join(', ')}`)
+            }
+            if (order.preorderTermsSnapshot) preorderLines.push(`   ${order.preorderTermsSnapshot}`)
+            preorderLines.push('')
+          }
+
           const orderText = [
             `🛒 Новый заказ #${order.id}`,
             '',
+            ...preorderLines,
             `👤 ${customerName.trim()}`,
             `📞 ${customerPhone.trim()}`,
             tgLine,
@@ -2029,8 +2093,14 @@ export function startApiServer(bot?: Telegraf): Server {
     } catch (err: any) {
       Sentry.captureException(err, { tags: { operation: 'create-order' } })
       if (err.isStockConflict) {
-        log.info('Order stock conflict', { telegramId })
-        if (!res.headersSent) res.status(409).json({ error: 'Товар закончился или недоступен' })
+        log.info('Order stock conflict', { telegramId, reason: err.message })
+        // Тексты правил написаны для покупателя (скрытый товар, черновик без
+        // цены, ненастроенный предзаказ) — отдаём их как есть. Раньше любой
+        // отказ выглядел как «товар закончился», и покупатель шёл ждать
+        // поступления там, где ждать было нечего.
+        if (!res.headersSent) {
+          res.status(409).json({ error: err.message || 'Товар закончился или недоступен' })
+        }
         return
       }
       if (!res.headersSent) next(err)
