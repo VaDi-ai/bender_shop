@@ -421,6 +421,13 @@ function safe(handler: (req: AdminRequest, res: Response) => Promise<void>) {
   }
 }
 
+/**
+ * Потолок массового обогащения на один прогон. Не бюджет, а страховка: если
+ * таблица вдруг наплодит сотню новых товаров, один тап не превратится
+ * в неожиданный счёт. Остаток добирается повторным запуском.
+ */
+const ENRICH_BATCH_MAX = 50
+
 export function adminApiRouter(): Router {
   const router = express.Router()
   // Админов единицы — лимит скорее от залипшего фронта, чем от людей
@@ -1101,6 +1108,60 @@ export function adminApiRouter(): Router {
       reason: job.reason ?? null,
       message: job.message ?? null,
     })
+  }))
+
+  // ── Массовое обогащение «все пустые» (только владелец) ───────────────────
+  //
+  // Каждый товар — платный запрос, поэтому: сначала превью со счётчиком и
+  // суммой, потом фоновый прогон БЕЗ перезаписи (заполняются только пустые
+  // поля), с потолком на прогон и возможностью остановить.
+  router.get('/enrich/preview', ownerOnly, safe(async (req, res) => {
+    const { countEnrichCandidates, ENRICH_COST_USD } = await import('../lib/enrich')
+    const { getBatchJob } = await import('../lib/enrich-job')
+    const scope = String(req.query.scope ?? 'empty_description') === 'empty_specs' ? 'empty_specs' as const : 'empty_description' as const
+    const [candidates, allWithScope, rates] = await Promise.all([
+      countEnrichCandidates({ scope, onlyWithVariants: true }),
+      countEnrichCandidates({ scope, onlyWithVariants: false }),
+      import('../lib/currency').then(m => m.getSavedRates()).catch(() => []),
+    ])
+    const usdRate = rates.find(r => r.currency === 'USD')?.newRate ?? null
+    const willRun = Math.min(candidates, ENRICH_BATCH_MAX)
+    const usd = willRun * ENRICH_COST_USD
+    res.json({
+      scope,
+      candidates,
+      // Товары без вариантов в прогон не берём — показываем, скольких минуем
+      skippedWithoutVariants: Math.max(0, allWithScope - candidates),
+      maxItems: ENRICH_BATCH_MAX,
+      willRun,
+      costUsd: Number(usd.toFixed(2)),
+      costRub: usdRate ? Math.round(usd * usdRate) : null,
+      running: getBatchJob()?.status === 'running',
+    })
+  }))
+
+  router.post('/enrich/run', ownerOnly, safe(async (req, res) => {
+    const body = (req.body ?? {}) as Record<string, unknown>
+    const scope = body.scope === 'empty_specs' ? 'empty_specs' as const : 'empty_description' as const
+    const { startBatchEnrich } = await import('../lib/enrich-job')
+    const { started, job } = startBatchEnrich(req.admin!.telegramId, { scope, maxItems: ENRICH_BATCH_MAX })
+    if (!started) { res.status(409).json({ error: 'Обогащение уже идёт — дождитесь или остановите его' }); return }
+    log.info('Enrich batch started from web admin', { scope, actor: req.admin!.telegramId })
+    void logSecurityEvent('enrich_batch_started', { scope, maxItems: ENRICH_BATCH_MAX }, req.admin!.telegramId)
+    res.status(202).json({ started: true, startedAt: job!.startedAt })
+  }))
+
+  router.get('/enrich/status', ownerOnly, safe(async (_req, res) => {
+    const { getBatchJob } = await import('../lib/enrich-job')
+    const job = getBatchJob()
+    res.json(job ?? { status: 'idle' })
+  }))
+
+  router.post('/enrich/abort', ownerOnly, safe(async (req, res) => {
+    const { abortBatchEnrich } = await import('../lib/enrich-job')
+    const stopped = abortBatchEnrich()
+    if (stopped) log.info('Enrich batch aborted from web admin', { actor: req.admin!.telegramId })
+    res.json({ ok: true, stopping: stopped })
   }))
 
   // Скрытие товара с витрины — owner: это прямое вычитание из продаж.

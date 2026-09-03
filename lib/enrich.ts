@@ -57,6 +57,34 @@ export const ENRICH_FAIL_MESSAGE: Record<EnrichFailReason, string> = {
   skipped: 'Характеристики уже заполнены — обогащение пропущено',
 }
 
+/**
+ * Цена одного обогащения: perplexity/sonar берёт $0.005 за веб-поиск плюс
+ * токены (промпт ~300, ответ до 2000 при $1/M). Константа нужна, чтобы
+ * владелец видел сумму ДО запуска массового прогона, а не в счёте.
+ */
+export const ENRICH_COST_USD = 0.007
+
+/** Прочитанные листы товарного учёта: один проход на весь прогон, не на товар. */
+export type SheetCache = Array<{ name: string; data: string[][] }>
+
+/**
+ * Читает все листы товарного учёта один раз. Раньше писбэк читал их заново на
+ * КАЖДЫЙ товар — на прогоне в полсотни карточек это полсотни полных чтений
+ * таблицы и лишние минуты под квотой Google.
+ */
+export async function loadSheetCache(): Promise<SheetCache> {
+  const { readSheet, getProductSheetNames } = await import('./google-sheets')
+  const out: SheetCache = []
+  for (const name of await getProductSheetNames()) {
+    try {
+      out.push({ name, data: await readSheet(name) })
+    } catch (err) {
+      log.warn('Enrich failed to read sheet', { sheetName: name, error: err instanceof Error ? err.message : String(err) })
+    }
+  }
+  return out
+}
+
 const fail = (reason: EnrichFailReason): EnrichResult => ({
   ok: false,
   filled: { description: false, specs: 0 },
@@ -107,13 +135,16 @@ async function getEnrichClient(): Promise<OpenAI> {
  * Возвращает, что именно записали, а при неудаче — почему: вызывающему коду
  * нужно отличать «ключ отозвали» от «в интернете ничего не нашлось».
  */
-export async function enrichProductCard(productId: number, force = false, preloaded?: { id: number; name: string; description: string | null; specs: any; attributes: any }): Promise<EnrichResult> {
+export async function enrichProductCard(productId: number, force = false, preloaded?: { id: number; name: string; description: string | null; specs: any; attributes: any }, sheets?: SheetCache): Promise<EnrichResult> {
   const product = preloaded ?? await prisma.product.findUnique({ where: { id: productId } })
   if (!product) return fail('not_found')
 
   const hasSpecs = product.specs && typeof product.specs === 'object' && Object.keys(product.specs as object).length > 0
-  if (!force && hasSpecs) {
-    log.debug('Enrich skipped, specs already filled', { product: product.name })
+  // Пропускаем, только когда заполнять нечего вообще. Раньше выход был по
+  // одним specs, и товар с характеристиками, но БЕЗ описания, не обогащался
+  // никогда: платный запрос не делался, описание так и оставалось пустым.
+  if (!force && hasSpecs && product.description) {
+    log.debug('Enrich skipped, nothing empty to fill', { product: product.name })
     return fail('skipped')
   }
 
@@ -258,7 +289,7 @@ export async function enrichProductCard(productId: number, force = false, preloa
     log.info('Enrich updated product', { product: product.name, hasDescription: !!updateData.description, specCount })
 
     // Write to Google Sheets (all variant rows)
-    await writeEnrichToSheets(product.id, updateData.description as string | undefined, updateData.specs as Record<string, string> | undefined)
+    await writeEnrichToSheets(product.id, updateData.description as string | undefined, updateData.specs as Record<string, string> | undefined, sheets)
 
     return { ok: true, filled: { description: !!updateData.description, specs: specCount } }
   } catch (err) {
@@ -268,50 +299,128 @@ export async function enrichProductCard(productId: number, force = false, preloa
   }
 }
 
+/** Какие товары берём в массовый прогон. */
+export type EnrichScope =
+  | 'empty_description'  // нет описания (характеристики могут быть)
+  | 'empty_specs'        // нет характеристик
+  | 'either'             // пусто хоть что-то — историческое поведение бота
+  | 'all'                // весь каталог: только вместе с force, это перезапись
+
+export interface EnrichBatchOptions {
+  scope?: EnrichScope
+  /** Товары без вариантов — «призраки» от смены категории: покупателю их не
+   *  видно, строк в таблице у них нет, а платный запрос стоит столько же. */
+  onlyWithVariants?: boolean
+  /** Потолок на один прогон — страховка от неожиданной пачки новых товаров. */
+  maxItems?: number
+  /** Пауза между запросами: rate limit Perplexity. */
+  pauseMs?: number
+  force?: boolean
+  shouldAbort?: () => boolean
+  onProgress?: (p: { done: number; total: number; name: string; ok: boolean }) => void
+}
+
+export interface EnrichBatchResult {
+  /** Сколько товаров реально взяли в работу (после лимита). */
+  total: number
+  /** Сколько подходит под условие всего — без потолка maxItems. */
+  candidates: number
+  enriched: number
+  failed: number
+  skipped: number
+  aborted: boolean
+  lastError?: string
+}
+
+/** Условие выборки для scope — одно и то же в превью и в прогоне. */
+export function enrichScopeWhere(scope: EnrichScope, onlyWithVariants: boolean): Record<string, unknown> {
+  const emptyDescription = [{ description: null }, { description: '' }]
+  const emptySpecs = [{ specs: { equals: null as unknown as undefined } }, { specs: { equals: {} } }]
+  const byScope =
+    scope === 'all' ? {}
+      : scope === 'empty_description' ? { OR: emptyDescription }
+        : scope === 'empty_specs' ? { OR: emptySpecs }
+          : { OR: [...emptySpecs, ...emptyDescription] }
+  if (!onlyWithVariants) return byScope
+  return scope === 'all' ? { variants: { some: {} } } : { AND: [byScope, { variants: { some: {} } }] }
+}
+
+/** Сколько товаров попадёт в прогон — для превью «N товаров, примерно X ₽». */
+export async function countEnrichCandidates(opts?: Pick<EnrichBatchOptions, 'scope' | 'onlyWithVariants'>): Promise<number> {
+  const where = enrichScopeWhere(opts?.scope ?? 'either', opts?.onlyWithVariants ?? true)
+  return prisma.product.count({ where })
+}
+
 /**
- * Обогащает все товары без description или specs.
- * Обрабатывает батчами с паузой чтобы не перегрузить API.
+ * Массовое обогащение. По умолчанию ничего не перезаписывает (force=false):
+ * заполняются только пустые поля, ручной текст остаётся на месте.
+ *
+ * Листы таблицы читаются ОДИН раз на весь прогон и переиспользуются писбэком.
  */
-export async function enrichAllProducts(shouldAbort?: () => boolean, force = false): Promise<{ total: number; enriched: number; failed: number }> {
-  const where = force
-    ? {}
-    : { OR: [
-        { specs: { equals: null as unknown as undefined } },
-        { specs: { equals: {} } },
-        { description: null },
-        { description: '' },
-      ] }
+export async function enrichAllProducts(
+  shouldAbort?: () => boolean,
+  forceOrOptions: boolean | EnrichBatchOptions = false,
+): Promise<EnrichBatchResult> {
+  // Легаси-сигнатура (shouldAbort, force): `true` означало «перебрать весь
+  // каталог с перезаписью» — сохраняем этот смысл через scope 'all'.
+  const opts: EnrichBatchOptions = typeof forceOrOptions === 'boolean'
+    ? { force: forceOrOptions, ...(forceOrOptions ? { scope: 'all' as const } : {}) }
+    : forceOrOptions
+  const force = opts.force ?? false
+  const scope = opts.scope ?? 'either'
+  const onlyWithVariants = opts.onlyWithVariants ?? true
+  const maxItems = opts.maxItems ?? 50
+  const pauseMs = opts.pauseMs ?? 2000
+  const abort = opts.shouldAbort ?? shouldAbort
+
+  const where = enrichScopeWhere(scope, onlyWithVariants)
+  const candidates = await prisma.product.count({ where })
 
   const products = await prisma.product.findMany({
     where,
     select: { id: true, name: true, description: true, specs: true, attributes: true },
     orderBy: { createdAt: 'desc' },
+    take: maxItems,
   })
 
-  log.info('Enrich starting batch', { count: products.length })
+  log.info('Enrich starting batch', { count: products.length, candidates, scope, onlyWithVariants, force })
 
   let enriched = 0
   let failed = 0
+  let skipped = 0
+  let aborted = false
+  let lastError: string | undefined
+  let done = 0
+
+  // Один проход по таблице на весь прогон вместо чтения на каждый товар.
+  const sheets = products.length > 0 ? await loadSheetCache() : []
 
   for (const product of products) {
-    if (shouldAbort?.()) {
+    if (abort?.()) {
+      aborted = true
       log.info('Enrich aborted by user')
       break
     }
+    let ok = false
     try {
-      const r = await enrichProductCard(product.id, force, product)
+      const r = await enrichProductCard(product.id, force, product, sheets)
+      ok = r.ok
       if (r.ok) enriched++
-      else failed++
-    } catch {
+      else if (r.reason === 'skipped' || r.reason === 'nothing') skipped++
+      else { failed++; lastError = r.message }
+    } catch (e) {
       failed++
+      lastError = e instanceof Error ? e.message : String(e)
     }
+    done++
+    opts.onProgress?.({ done, total: products.length, name: product.name, ok })
 
-    // Пауза 2 секунды между запросами (rate limit Perplexity)
-    await new Promise(r => setTimeout(r, 2000))
+    // Пауза между запросами (rate limit Perplexity) — после последнего не ждём
+    if (done < products.length && pauseMs > 0) await new Promise(r => setTimeout(r, pauseMs))
   }
 
-  log.info('Enrich batch complete', { enriched, failed, total: products.length })
-  return { total: products.length, enriched, failed }
+  log.info('Enrich batch complete', { enriched, failed, skipped, total: products.length, candidates, aborted })
+  return { total: products.length, candidates, enriched, failed, skipped, aborted, lastError }
 }
 
 /**
@@ -322,14 +431,16 @@ async function writeEnrichToSheets(
   productId: number,
   description: string | undefined,
   specs: Record<string, string> | undefined,
+  cache?: SheetCache,
 ): Promise<number> {
   if (!description && !specs) return 0
 
   try {
-    const { readSheet, getProductSheetNames, batchUpdate } = await import('./google-sheets')
+    const { batchUpdate } = await import('./google-sheets')
 
-    const sheetNames = await getProductSheetNames()
-    if (sheetNames.length === 0) return 0
+    // На массовом прогоне листы уже прочитаны один раз и приходят кэшем.
+    const sheets = cache ?? await loadSheetCache()
+    if (sheets.length === 0) return 0
 
     // Collect all fullNames from product variants
     const variants = await prisma.productVariant.findMany({
@@ -351,29 +462,24 @@ async function writeEnrichToSheets(
     const batchData: { range: string; values: (string | number)[][] }[] = []
     let matchCount = 0
 
-    for (const sheetName of sheetNames) {
-      let data: string[][]
-      try {
-        data = await readSheet(sheetName)
-      } catch (err) {
-        log.warn('Enrich failed to read sheet', { sheetName, error: err instanceof Error ? err.message : String(err) })
-        continue
-      }
-
+    for (const { name: sheetName, data } of sheets) {
       for (let i = 1; i < data.length; i++) {
-        const sheetFullName = (data[i]?.[4] ?? '').toString().trim()  // Column E (index 4)
-        if (!fullNames.has(sheetFullName)) continue
+        const cells = data[i]
+        const sheetFullName = (cells?.[4] ?? '').toString().trim()  // Column E (index 4)
+        if (!cells || !fullNames.has(sheetFullName)) continue
 
         matchCount++
         const row = i + 1  // 1-indexed for Sheets API
-        const existingDesc = (data[i]?.[9] ?? '').toString().trim()   // Column J (index 9)
-        const existingSpecs = (data[i]?.[10] ?? '').toString().trim() // Column K (index 10)
+        const existingDesc = (cells[9] ?? '').toString().trim()   // Column J (index 9)
+        const existingSpecs = (cells[10] ?? '').toString().trim() // Column K (index 10)
 
         if (description && !existingDesc) {
           batchData.push({ range: `'${sheetName}'!J${row}`, values: [[description]] })
+          cells[9] = description   // кэш живёт весь прогон — держим его в согласии с листом
         }
         if (specsText && !existingSpecs) {
           batchData.push({ range: `'${sheetName}'!K${row}`, values: [[specsText]] })
+          cells[10] = specsText
         }
       }
     }

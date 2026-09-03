@@ -10,7 +10,15 @@
  * карту. Плата за это — редеплой Railway забывает незавершённые прогоны:
  * для одной карточки (≈10 с) приемлемо, фронт покажет «idle» и даст повторить.
  */
-import { enrichProductCard, ENRICH_FAIL_MESSAGE, type EnrichResult } from './enrich'
+import {
+  enrichProductCard,
+  enrichAllProducts,
+  ENRICH_FAIL_MESSAGE,
+  type EnrichResult,
+  type EnrichBatchOptions,
+  type EnrichBatchResult,
+  type EnrichScope,
+} from './enrich'
 import { logAdminAction } from './audit'
 import log from './logger'
 
@@ -101,6 +109,137 @@ export function startCardEnrich(
       })
     } finally {
       job.finishedAt = Date.now()
+    }
+  })()
+
+  return { started: true, job }
+}
+
+// ─── Массовый прогон: один на процесс ────────────────────────────────────────
+//
+// Массовое обогащение — это прямые деньги, поэтому прогон ровно один: пока он
+// идёт, второй запуск получает 409, а не удваивает счёт. Состояние тоже
+// в памяти (см. комментарий вверху файла); прогресс владелец видит опросом.
+
+export type BatchJobStatus = 'running' | 'done' | 'aborted' | 'failed'
+
+export interface BatchJob {
+  status: BatchJobStatus
+  scope: EnrichScope
+  startedBy: string
+  startedAt: number
+  finishedAt?: number
+  /** Сколько взяли в работу (после потолка maxItems). */
+  total: number
+  /** Сколько всего подходит под условие — чтобы владелец видел остаток. */
+  candidates: number
+  done: number
+  enriched: number
+  failed: number
+  skipped: number
+  /** Название товара, который обрабатывается прямо сейчас. */
+  current?: string
+  lastError?: string
+}
+
+let batchJob: BatchJob | null = null
+let batchAbort = false
+
+export function getBatchJob(): BatchJob | null {
+  return batchJob
+}
+
+/** Просит текущий прогон остановиться. Товар «в полёте» доработает до конца. */
+export function abortBatchEnrich(): boolean {
+  if (!batchJob || batchJob.status !== 'running') return false
+  batchAbort = true
+  log.info('Enrich batch abort requested')
+  return true
+}
+
+/** Только для тестов. */
+export function resetBatchJob(): void {
+  batchJob = null
+  batchAbort = false
+}
+
+/**
+ * Запускает массовое обогащение в фоне. `started: false` — прогон уже идёт.
+ * Перезаписи здесь не бывает: force не принимаем вовсе, заполняются только
+ * пустые поля (перезапись — только кнопкой на конкретной карточке).
+ */
+export function startBatchEnrich(
+  actor: string,
+  opts?: {
+    scope?: EnrichScope
+    maxItems?: number
+    onlyWithVariants?: boolean
+    pauseMs?: number
+    run?: (o: EnrichBatchOptions) => Promise<EnrichBatchResult>
+  },
+): { started: boolean; job: BatchJob | null } {
+  if (batchJob && batchJob.status === 'running') return { started: false, job: batchJob }
+
+  const scope = opts?.scope ?? 'empty_description'
+  batchAbort = false
+  const job: BatchJob = {
+    status: 'running',
+    scope,
+    startedBy: actor,
+    startedAt: Date.now(),
+    total: 0,
+    candidates: 0,
+    done: 0,
+    enriched: 0,
+    failed: 0,
+    skipped: 0,
+  }
+  batchJob = job
+
+  const run = opts?.run ?? ((o: EnrichBatchOptions) => enrichAllProducts(undefined, o))
+
+  void (async () => {
+    try {
+      const r = await run({
+        scope,
+        force: false,                                     // массовое НИКОГДА не перезаписывает
+        onlyWithVariants: opts?.onlyWithVariants ?? true,
+        maxItems: opts?.maxItems ?? 50,
+        pauseMs: opts?.pauseMs ?? 2000,
+        shouldAbort: () => batchAbort,
+        onProgress: p => {
+          job.done = p.done
+          job.total = p.total
+          job.current = p.name
+        },
+      })
+      job.total = r.total
+      job.candidates = r.candidates
+      job.done = r.total
+      job.enriched = r.enriched
+      job.failed = r.failed
+      job.skipped = r.skipped
+      job.lastError = r.lastError
+      job.status = r.aborted ? 'aborted' : 'done'
+      job.current = undefined
+      void logAdminAction({
+        adminTelegramId: actor,
+        action: 'enrich_batch',
+        entity: 'Product',
+        after: { scope, total: r.total, enriched: r.enriched, failed: r.failed, skipped: r.skipped, aborted: r.aborted },
+      })
+      if (r.enriched > 0) {
+        const { touchStorefrontCache } = await import('./storefront-admin')
+        await touchStorefrontCache('product_enrich_batch')
+      }
+    } catch (e) {
+      job.status = 'failed'
+      job.lastError = e instanceof Error ? e.message : String(e)
+      job.current = undefined
+      log.error('Enrich batch job crashed', { error: job.lastError })
+    } finally {
+      job.finishedAt = Date.now()
+      batchAbort = false
     }
   })()
 
