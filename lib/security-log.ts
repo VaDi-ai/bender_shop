@@ -13,6 +13,7 @@ export type SecurityEvent =
   | 'ai_mode_changed'
   | 'enrich_batch_started'
   | 'enrich_after_sync_toggled'
+  | 'preorder_defaults_changed'
   | 'maintenance_mode_toggled'
   | 'security_log_purged'
   | 'price_changed'
@@ -86,6 +87,7 @@ const EVENT_DESCRIPTIONS: Record<SecurityEvent, string> = {
   ai_mode_changed:            '🤖 Изменён режим AI-агента',
   enrich_batch_started:       '✨ Запущено массовое обогащение карточек (платные запросы)',
   enrich_after_sync_toggled:  '✨ Переключено автообогащение новых товаров после синка',
+  preorder_defaults_changed:  '📦 Изменены дефолты предзаказа (тип/вид/размер предоплаты)',
   maintenance_mode_toggled:   '🔧 Переключён режим техработ',
   security_log_purged:        '🗑️ Очищен лог безопасности',
   price_changed:              '💰 Изменена цена товара',

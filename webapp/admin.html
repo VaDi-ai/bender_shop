@@ -454,6 +454,7 @@
         <button class="hub-tile" data-hub="aiagent"><span class="ht-n">AI Агент</span><span class="ht-s" id="tileAiAgent">—</span></button>
         <button class="hub-tile" data-hub="sync"><span class="ht-n">Журнал синка</span><span class="ht-s" id="tileSync">—</span></button>
         <button class="hub-tile" data-hub="parser"><span class="ht-n">Парсер</span><span class="ht-s" id="tileParser">—</span></button>
+        <button class="hub-tile" data-hub="preorder"><span class="ht-n">Предзаказ</span><span class="ht-s" id="tilePreorder">—</span></button>
       </div>
 
       <div class="hub-page" id="hub-promos" style="display:none">
@@ -639,6 +640,30 @@
       </div>
       </div>
 
+      <div class="hub-page" id="hub-preorder" style="display:none">
+      <div class="card" id="preorderCard">
+        <h3>Предзаказ: дефолты магазина <span class="chip c-off right" id="poDefChip">—</span></h3>
+        <div class="mt">Действуют на все товары, отмеченные в колонке «Предзаказ» таблицы. У товара можно задать своё — оно сильнее.</div>
+        <div class="cap" style="margin:12px 0 6px">СКОЛЬКО БЕРЁМ ВПЕРЁД</div>
+        <select class="inp" id="poDefMode">
+          <option value="">— не задано —</option>
+          <option value="full">Полная предоплата (100%)</option>
+          <option value="partial">Частичная предоплата</option>
+        </select>
+        <select class="inp" id="poDefKind">
+          <option value="">— не задано —</option>
+          <option value="percent">Процент от цены</option>
+          <option value="fixed">Фиксированная сумма, ₽</option>
+        </select>
+        <input class="inp" id="poDefValue" inputmode="decimal" maxlength="10" placeholder="Размер: 30 (процент) или 15000 (сумма)">
+        <input class="inp" id="poDefEta" maxlength="120" placeholder="Срок по умолчанию: «4–6 недель»">
+        <textarea class="inp" id="poDefTerms" rows="4" maxlength="2000" placeholder="Шаблон условий выкупа. Подстановки: {предоплата}, {остаток}, {срок}"></textarea>
+        <button class="btn b-main" id="poDefSave">Сохранить дефолты</button>
+        <div class="mt" id="poDefErr" style="color:var(--bad)"></div>
+        <div class="hint">Пока тип и размер не заданы, отмеченные товары считаются «не дозаполненными» и на витрину не выходят — их видно во вкладке «Товары» → «Ошибки в товарах». Это не поломка: так магазин не начнёт продавать предзаказ с неизвестной предоплатой.</div>
+      </div>
+      </div>
+
       <div class="hub-page" id="hub-sync" style="display:none">
       <div class="card"><h3>Журнал синка</h3><div class="mt" id="syncRuns">Загрузка…</div></div>
       <div class="card"><h3>Кто что менял <span class="chip c-off right">скоро</span></h3><div class="mt">Каждое действие в админке уже пишется в журнал на сервере — просмотр появится после первых разделов Этапа 2.</div></div>
@@ -746,7 +771,7 @@
       window.adminMe = me
       gate.classList.add('hidden')
       loadDashboard(); loadSyncRuns(); loadSuppliers(); loadBatches(); loadUnmatched(); loadAliases(); loadMarkupRules(); loadDeliveryPricing()
-      loadSimQueue(); loadSimRecalc(); loadDictionary(); loadStorefront(); loadTeam(); loadIssues(); loadPromotions(); loadInsights(); loadBroadcasts(); loadSegments(); loadAiAgent(); loadMaintenance()
+      loadSimQueue(); loadSimRecalc(); loadDictionary(); loadStorefront(); loadTeam(); loadIssues(); loadPromotions(); loadInsights(); loadBroadcasts(); loadSegments(); loadAiAgent(); loadMaintenance(); loadPreorderDefaults()
     }
 
     // ── ОШИБКИ В ТОВАРАХ: идём от проблемы к карточке ─────────────────────────
@@ -903,6 +928,8 @@
           ? specKeys.map(k => `<div class="list-i"><div style="flex:1"><div class="nm">${esc(k)}</div><div class="mt">${esc(p.specs[k])}</div></div></div>`).join('')
           : '<div class="mt">Характеристик нет — их заполняет кнопка «Заполнить из интернета» или колонка «Характеристики» в таблице.</div>'}
 
+        ${pcPreorderBlock(p, isOwner)}
+
         ${isOwner ? `<div class="cap" style="margin:14px 0 6px">ОПАСНАЯ ЗОНА</div>
           <button class="btn ${p.isAvailable ? 'b-dg' : 'b-gh'}" data-pc-vis="${p.isAvailable ? '0' : '1'}">${p.isAvailable ? 'Скрыть товар с витрины' : 'Вернуть товар на витрину'}</button>
           <div class="hint">${p.isAvailable ? 'Товар пропадёт из каталога и поиска. Заказы по нему больше не оформят. Вернуть можно этой же кнопкой.' : 'Товар снова появится в каталоге, если есть остатки.'}</div>` : ''}
@@ -931,6 +958,7 @@
         f.style.display = ''
         f.scrollIntoView({ behavior: 'smooth', block: 'center' })
       })
+      bindPreorder(box, p, isOwner)
       const enrichBtn = box.querySelector('[data-pc-enrich]')
       if (enrichBtn) enrichBtn.addEventListener('click', () => runEnrich(p, enrichBtn))
       const visBtn = box.querySelector('[data-pc-vis]')
@@ -940,6 +968,89 @@
         const r = await api(`/products/${p.id}/visibility`, { method: 'POST', body: JSON.stringify({ visible: to }) }).catch(() => null)
         if (!r || !r.ok) { alert(r && r.data && r.data.error || 'Не получилось'); return }
         openProductCard(p.id)
+      })
+    }
+
+    // ── Предзаказ на карточке ────────────────────────────────────────────────
+    //
+    // Флаг приходит из таблицы и здесь не правится — это ассортимент. Правится
+    // денежная политика, и только владельцем. Показываем и «своё» значение, и
+    // итоговое после дефолтов магазина: иначе непонятно, откуда предоплата
+    // у товара, где поля пустые.
+    const PO_MODE = { full: 'полная предоплата', partial: 'частичная предоплата' }
+    const PO_KIND = { percent: 'процент от цены', fixed: 'фиксированная сумма' }
+
+    function pcPreorderBlock(p, isOwner) {
+      const po = p.preorder || { isPreorder: false, status: 'off', gaps: [], own: {}, effective: null, example: null }
+      if (!po.isPreorder) {
+        return `<div class="cap" style="margin:14px 0 6px">ПРЕДЗАКАЗ</div>
+          <div class="mt">Обычный товар. Предзаказ включается отметкой в колонке «Предзаказ» таблицы — тогда карточка остаётся на витрине даже при нулевом остатке.</div>`
+      }
+
+      const head = po.status === 'ready'
+        ? '<span class="chip c-ok">готов к витрине</span>'
+        : '<span class="chip c-bad">не дозаполнен</span>'
+
+      const gaps = po.status === 'incomplete'
+        ? `<div class="warnbox">Пока не выпускаем на витрину: ${po.gaps.map(esc).join('; ')}.
+             <div class="mt">Заполните поля ниже или задайте дефолты магазина — «Ещё» → «Предзаказ».</div></div>`
+        : ''
+
+      const eff = po.effective
+      const effLines = eff
+        ? `<div class="list-i"><div style="flex:1">
+             <div class="nm">${esc(PO_MODE[eff.mode] || eff.mode)}${eff.kind ? ' · ' + esc(PO_KIND[eff.kind] || eff.kind) : ''}${eff.value ? ' · ' + esc(eff.value) + (eff.kind === 'percent' ? '%' : ' ₽') : ''}</div>
+             <div class="mt">срок: ${eff.eta ? esc(eff.eta) : 'не указан'}</div>
+           </div></div>
+           ${po.example ? `<div class="mt">На цене ${fmt(po.example.price)} ₽ возьмём вперёд <b>${fmt(po.example.prepayment)} ₽</b>, остаток ${fmt(po.example.remaining)} ₽.</div>` : ''}
+           ${eff.terms ? `<div class="mt">${esc(eff.terms)}</div>` : '<div class="mt">Условия выкупа не заданы — покупатель увидит только суммы.</div>'}`
+        : ''
+
+      const own = po.own || {}
+      const form = isOwner
+        ? `<div class="cap" style="margin:12px 0 6px">СВОИ УСЛОВИЯ ТОВАРА</div>
+           <div class="hint">Пусто = взять из дефолтов магазина.</div>
+           <select class="inp" id="poMode">
+             <option value="">— по дефолту магазина —</option>
+             <option value="full"${own.mode === 'full' ? ' selected' : ''}>Полная предоплата</option>
+             <option value="partial"${own.mode === 'partial' ? ' selected' : ''}>Частичная предоплата</option>
+           </select>
+           <select class="inp" id="poKind">
+             <option value="">— по дефолту магазина —</option>
+             <option value="percent"${own.kind === 'percent' ? ' selected' : ''}>Процент от цены</option>
+             <option value="fixed"${own.kind === 'fixed' ? ' selected' : ''}>Фиксированная сумма, ₽</option>
+           </select>
+           <input class="inp" id="poValue" inputmode="decimal" maxlength="10" placeholder="Размер предоплаты (30 или 15000)" value="${esc(own.value || '')}">
+           <input class="inp" id="poEta" maxlength="120" placeholder="Срок: «конец октября», «4–6 недель»" value="${esc(own.eta || '')}">
+           <textarea class="inp" id="poTerms" rows="3" maxlength="2000" placeholder="Условия выкупа. Подстановки: {предоплата}, {остаток}, {срок}">${esc(own.terms || '')}</textarea>
+           <button class="btn b-main" id="poSave">Сохранить условия</button>
+           <div class="mt" id="poErr" style="color:var(--bad)"></div>`
+        : '<div class="hint">Условия предоплаты меняет только владелец.</div>'
+
+      return `<div class="cap" style="margin:14px 0 6px">ПРЕДЗАКАЗ ${head}</div>
+        ${gaps}${effLines}${form}`
+    }
+
+    function bindPreorder(box, p, isOwner) {
+      if (!isOwner) return
+      const btn = box.querySelector('#poSave')
+      if (!btn) return
+      btn.addEventListener('click', async () => {
+        const err = document.getElementById('poErr'); err.textContent = ''
+        btn.disabled = true
+        const body = {
+          mode: document.getElementById('poMode').value,
+          kind: document.getElementById('poKind').value,
+          value: document.getElementById('poValue').value.trim(),
+          eta: document.getElementById('poEta').value.trim(),
+          terms: document.getElementById('poTerms').value.trim(),
+        }
+        const r = await api(`/products/${p.id}/preorder`, { method: 'PUT', body: JSON.stringify(body) }).catch(() => null)
+        btn.disabled = false
+        if (!r || !r.ok) { err.textContent = (r && r.data && r.data.error) || 'Не получилось сохранить'; return }
+        toast('Условия предзаказа сохранены')
+        openProductCard(p.id)
+        loadIssues()
       })
     }
 
@@ -1386,6 +1497,7 @@
       aiagent: ['AI Агент', 'Как Бендер отвечает покупателям: режим и ночное расписание.'],
       sync: ['Журнал синка', 'Как прошли последние прогоны таблицы.'],
       parser: ['Парсер', 'Разобрал строку → вы поправили → запомнил. SIM — такой же атрибут.'],
+      preorder: ['Предзаказ', 'Сколько берём вперёд и на каких условиях — одна настройка на магазин.'],
     }
 
     function openHub(id) {
@@ -1859,6 +1971,52 @@
       }
       tick()
     }
+
+    // ── Предзаказ: дефолты магазина (только владелец) ─────────────────────────
+    async function loadPreorderDefaults() {
+      const isOwner = window.adminMe && window.adminMe.role === 'owner'
+      const card = document.getElementById('preorderCard')
+      if (!isOwner) {
+        card.innerHTML = '<h3>Предзаказ</h3><div class="mt">Дефолты предзаказа настраивает владелец.</div>'
+        setTile('tilePreorder', 'только владелец')
+        return
+      }
+      const r = await api('/settings/preorder').catch(() => null)
+      if (!r || !r.ok) { setTile('tilePreorder', 'не загрузилось'); return }
+      const d = r.data
+      document.getElementById('poDefMode').value = d.mode || ''
+      document.getElementById('poDefKind').value = d.kind || ''
+      document.getElementById('poDefValue').value = d.value || ''
+      document.getElementById('poDefEta').value = d.eta || ''
+      document.getElementById('poDefTerms').value = d.terms || ''
+
+      const ready = !!d.mode && (d.mode === 'full' || (!!d.kind && !!d.value))
+      const chip = document.getElementById('poDefChip')
+      chip.textContent = ready ? 'заданы' : 'не заданы'
+      chip.className = 'chip right ' + (ready ? 'c-ok' : 'c-warn')
+      setTile('tilePreorder', ready
+        ? (d.mode === 'full' ? '100% вперёд' : `${d.value}${d.kind === 'percent' ? '%' : ' ₽'} вперёд`)
+        : 'дефолты не заданы')
+    }
+
+    document.getElementById('poDefSave').addEventListener('click', async function () {
+      const err = document.getElementById('poDefErr'); err.textContent = ''
+      this.disabled = true
+      try {
+        const body = {
+          mode: document.getElementById('poDefMode').value,
+          kind: document.getElementById('poDefKind').value,
+          value: document.getElementById('poDefValue').value.trim(),
+          eta: document.getElementById('poDefEta').value.trim(),
+          terms: document.getElementById('poDefTerms').value.trim(),
+        }
+        const r = await api('/settings/preorder', { method: 'PUT', body: JSON.stringify(body) }).catch(() => null)
+        if (!r || !r.ok) { err.textContent = (r && r.data && r.data.error) || 'Не получилось'; return }
+        toast('Дефолты предзаказа сохранены')
+        loadPreorderDefaults()
+        loadIssues()
+      } finally { this.disabled = false }
+    })
 
     // ── СЕГМЕНТЫ (перенос bot/admin/segments.ts) ──────────────────────────────
     const SEG_COLORS = ['🔵', '🟡', '🟢', '🔴', '🟣', '⚪']
