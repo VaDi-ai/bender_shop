@@ -1157,6 +1157,20 @@ export function adminApiRouter(): Router {
     res.json(job ?? { status: 'idle' })
   }))
 
+  // Тумблер автообогащения после синка. Выключен по умолчанию: включение
+  // означает регулярный расход без нажатия кнопки, это решение владельца.
+  router.get('/enrich/after-sync', ownerOnly, safe(async (_req, res) => {
+    const { isEnrichAfterSyncEnabled, ENRICH_AFTER_SYNC_MAX } = await import('../lib/enrich-after-sync')
+    res.json({ enabled: await isEnrichAfterSyncEnabled(), maxItems: ENRICH_AFTER_SYNC_MAX })
+  }))
+
+  router.put('/enrich/after-sync', ownerOnly, safe(async (req, res) => {
+    const enabled = (req.body ?? {}).enabled === true
+    const { setEnrichAfterSyncEnabled, ENRICH_AFTER_SYNC_MAX } = await import('../lib/enrich-after-sync')
+    await setEnrichAfterSyncEnabled(req.admin!.telegramId, enabled)
+    res.json({ ok: true, enabled, maxItems: ENRICH_AFTER_SYNC_MAX })
+  }))
+
   router.post('/enrich/abort', ownerOnly, safe(async (req, res) => {
     const { abortBatchEnrich } = await import('../lib/enrich-job')
     const stopped = abortBatchEnrich()

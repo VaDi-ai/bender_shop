@@ -308,6 +308,8 @@ export type EnrichScope =
 
 export interface EnrichBatchOptions {
   scope?: EnrichScope
+  /** Ограничить прогон конкретными товарами (авто-обогащение новых после синка). */
+  productIds?: number[]
   /** Товары без вариантов — «призраки» от смены категории: покупателю их не
    *  видно, строк в таблице у них нет, а платный запрос стоит столько же. */
   onlyWithVariants?: boolean
@@ -373,7 +375,10 @@ export async function enrichAllProducts(
   const pauseMs = opts.pauseMs ?? 2000
   const abort = opts.shouldAbort ?? shouldAbort
 
-  const where = enrichScopeWhere(scope, onlyWithVariants)
+  const scopeWhere = enrichScopeWhere(scope, onlyWithVariants)
+  const where = opts.productIds
+    ? { AND: [scopeWhere, { id: { in: opts.productIds } }] }
+    : scopeWhere
   const candidates = await prisma.product.count({ where })
 
   const products = await prisma.product.findMany({

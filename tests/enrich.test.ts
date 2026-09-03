@@ -484,11 +484,17 @@ describe('гейт массового обогащения', () => {
     return layer.route.stack.map((h: any) => h.name || h.handle?.name || '')
   }
 
-  it('все четыре ручки — только владельцу: это деньги', async () => {
+  it('все ручки массового обогащения — только владельцу: это деньги', async () => {
     const { adminApiRouter } = await import('../api/admin')
     const router = adminApiRouter() as any
 
-    for (const [m, path] of [['get', '/enrich/preview'], ['post', '/enrich/run'], ['get', '/enrich/status'], ['post', '/enrich/abort']] as const) {
+    const routes = [
+      ['get', '/enrich/preview'], ['post', '/enrich/run'],
+      ['get', '/enrich/status'], ['post', '/enrich/abort'],
+      // тумблер авто-после-синка — тоже деньги, только регулярные
+      ['get', '/enrich/after-sync'], ['put', '/enrich/after-sync'],
+    ] as const
+    for (const [m, path] of routes) {
       expect(handlersOf(router, m, path), `${m} ${path}`).toContain('ownerOnly')
     }
   })
