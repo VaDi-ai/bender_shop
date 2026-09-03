@@ -1178,6 +1178,65 @@ export function adminApiRouter(): Router {
     res.json({ ok: true, stopping: stopped })
   }))
 
+  // ── Предзаказ: условия товара и дефолты магазина (только владелец) ────────
+  //
+  // Флаг «Предзаказ» приезжает из таблицы и здесь не правится — это ассортимент.
+  // Здесь правится ДЕНЕЖНАЯ политика: сколько берём вперёд, срок и условия
+  // выкупа. Пустая строка в поле = «убрать своё значение, взять из дефолтов».
+  router.put('/products/:id/preorder', ownerOnly, safe(async (req, res) => {
+    const id = parseInt(String(req.params.id), 10)
+    if (!Number.isInteger(id)) { res.status(422).json({ error: 'Неверный ID' }); return }
+    const { setProductPreorder } = await import('../lib/product-admin')
+    const r = await setProductPreorder(req.admin!.telegramId, id, req.body)
+    res.status(r.status).json(r.ok ? { ok: true } : { error: r.error })
+  }))
+
+  router.get('/settings/preorder', ownerOnly, safe(async (_req, res) => {
+    const { loadPreorderDefaults, SUGGESTED_PREORDER_DEFAULTS } = await import('../lib/preorder')
+    const d = await loadPreorderDefaults()
+    const saved = d.mode !== null || d.kind !== null || d.value !== null || d.terms !== null
+    res.json({
+      saved,
+      mode: d.mode, kind: d.kind,
+      value: d.value ? d.value.toString() : null,
+      terms: d.terms, eta: d.eta,
+      // Согласованные с владельцем значения. Отдаём отдельным полем, а не
+      // подставляем в d: пока настройка не сохранена, дефолтов действительно
+      // нет, и отмеченный товар честно «не дозаполнен».
+      suggested: SUGGESTED_PREORDER_DEFAULTS,
+    })
+  }))
+
+  router.put('/settings/preorder', ownerOnly, safe(async (req, res) => {
+    const b = (req.body ?? {}) as Record<string, unknown>
+    const { parsePreorderDefaults, savePreorderDefaults, serializePreorderDefaults } = await import('../lib/preorder')
+    // Через тот же парсер, что читает настройку: что не прошло валидацию —
+    // не сохраняется, и владелец видит в ответе, что именно применилось.
+    const cleaned = parsePreorderDefaults(JSON.stringify({
+      mode: b.mode ?? null, kind: b.kind ?? null, value: b.value ?? null,
+      terms: b.terms ?? null, eta: b.eta ?? null,
+    }))
+    if (b.mode && !cleaned.mode) { res.status(422).json({ error: 'Тип предоплаты — «full» или «partial»' }); return }
+    if (b.kind && !cleaned.kind) { res.status(422).json({ error: 'Вид предоплаты — «percent» или «fixed»' }); return }
+    if (b.value !== undefined && b.value !== null && b.value !== '' && !cleaned.value) {
+      res.status(422).json({ error: 'Размер предоплаты — положительное число, процент не больше 100' }); return
+    }
+    await savePreorderDefaults(cleaned)
+    void logAdminAction({
+      adminTelegramId: req.admin!.telegramId, action: 'update', entity: 'Setting',
+      entityId: 'preorder', after: JSON.parse(serializePreorderDefaults(cleaned)),
+    })
+    void logSecurityEvent('preorder_defaults_changed', {
+      mode: cleaned.mode, kind: cleaned.kind, value: cleaned.value?.toString() ?? null,
+    }, req.admin!.telegramId)
+    res.json({
+      ok: true,
+      mode: cleaned.mode, kind: cleaned.kind,
+      value: cleaned.value ? cleaned.value.toString() : null,
+      terms: cleaned.terms, eta: cleaned.eta,
+    })
+  }))
+
   // Скрытие товара с витрины — owner: это прямое вычитание из продаж.
   router.post('/products/:id/visibility', ownerOnly, safe(async (req, res) => {
     const id = parseInt(String(req.params.id), 10)

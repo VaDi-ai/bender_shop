@@ -18,6 +18,7 @@ import { roundPrice, formatShopTime } from './currency'
 import { SYNC_LOCK_KEY } from './sync-lock'
 import { resolveSimType, loadSimRules, loadAttrAliases, attributesForExistingVariant, SimRuleData, AttrAliasData } from './sim-rules'
 import { isPhone } from './sim-recalc'
+import { parsePreorderCell } from './preorder'
 import {
   applyMarkupRules as _applyMarkupRules,
   loadRules as _loadRules,
@@ -143,9 +144,13 @@ const EXACT_HEADERS: Record<string, string[]> = {
 //   • «Бейдж»  → Product.badge     (Хит / Советуем / Новинка; перебивает авто-бейдж)
 //   • «В хиты» → Product.isFeatured (да/1/✓ → принудительно в блок «Хиты»)
 // Бот позже пишет в те же поля БД — фронт/бэкенд не меняются.
+//   • «Предзаказ» → Product.isPreorder / ProductVariant.isPreorder: товар виден
+//     на витрине при нулевом остатке. Условия предоплаты в лист НЕ ездят —
+//     это денежная политика, она живёт в БД и правится в админке.
 const OPTIONAL_HEADERS: Record<string, string[]> = {
-  badge: ['Бейдж', 'Badge'],
-  hit:   ['В хиты', 'Hit'],
+  badge:    ['Бейдж', 'Badge'],
+  hit:      ['В хиты', 'Hit'],
+  preorder: ['Предзаказ', 'Preorder'],
 }
 
 const EXPECTED_HEADERS: Record<string, string[]> = {
@@ -305,6 +310,8 @@ export interface SheetRow {
   hit: boolean               // «В хиты» → принудительно в блок «Хиты»
   badgeColPresent: boolean   // был ли заголовок «Бейдж» в листе (иначе поле не трогаем)
   hitColPresent: boolean     // был ли заголовок «В хиты» в листе
+  preorder: boolean          // «Предзаказ» → показывать при нулевом остатке
+  preorderColPresent: boolean // нет заголовка → флаг не трогаем совсем
   sheetName: string
   rowIndex: number
 }
@@ -395,6 +402,8 @@ export function parseSheetRows(sheetName: string, data: string[][]): SheetRow[] 
       hit,
       badgeColPresent: COL.badge !== undefined,
       hitColPresent:   COL.hit !== undefined,
+      preorder:           parsePreorderCell(col(row, COL.preorder)),
+      preorderColPresent: COL.preorder !== undefined,
       sheetName,
       rowIndex: i + 1,
     })
@@ -560,6 +569,8 @@ export function mergeGroupsByProductKey<G extends {
   hit: boolean
   badgeColPresent: boolean
   hitColPresent: boolean
+  preorder: boolean
+  preorderColPresent: boolean
   variants: unknown[]
 }>(groups: Map<string, G>): Map<string, G> {
   const merged = new Map<string, G>()
@@ -576,6 +587,8 @@ export function mergeGroupsByProductKey<G extends {
     if (g.hit) acc.hit = true
     acc.badgeColPresent = acc.badgeColPresent || g.badgeColPresent
     acc.hitColPresent = acc.hitColPresent || g.hitColPresent
+    if (g.preorder) acc.preorder = true
+    acc.preorderColPresent = acc.preorderColPresent || g.preorderColPresent
     if (!acc.sheetDescription && g.sheetDescription) acc.sheetDescription = g.sheetDescription
     if (Object.keys(acc.sheetSpecs).length === 0 && Object.keys(g.sheetSpecs).length > 0) acc.sheetSpecs = g.sheetSpecs
     if (!acc.brand && g.brand) acc.brand = g.brand
@@ -657,6 +670,8 @@ export async function syncProductsFromSheets(
     rowIndex: number
     sheetName: string
     photoUrls: string[]
+    preorder: boolean
+    preorderColPresent: boolean
   }
   type GroupedProduct = {
     productName: string
@@ -671,6 +686,8 @@ export async function syncProductsFromSheets(
     hit: boolean             // хоть одна строка помечена «В хиты»
     badgeColPresent: boolean // колонка «Бейдж» есть в листе → badge применяется (в т.ч. очистка)
     hitColPresent: boolean   // колонка «В хиты» есть в листе → isFeatured применяется
+    preorder: boolean            // хоть одна строка модели помечена предзаказом
+    preorderColPresent: boolean  // колонка «Предзаказ» есть в листе → флаг применяется
     variants: VariantData[]
   }
 
@@ -703,6 +720,7 @@ export async function syncProductsFromSheets(
         sheetSpecs: Object.keys(sheetSpecs).length > 0 ? sheetSpecs : {},
         badge: row.badge, hit: row.hit,
         badgeColPresent: row.badgeColPresent, hitColPresent: row.hitColPresent,
+        preorder: row.preorder, preorderColPresent: row.preorderColPresent,
         variants: [],
       })
     }
@@ -718,6 +736,9 @@ export async function syncProductsFromSheets(
     if (row.hit) g.hit = true
     g.badgeColPresent = g.badgeColPresent || row.badgeColPresent
     g.hitColPresent = g.hitColPresent || row.hitColPresent
+    // Предзаказ: хоть одна строка модели помечена → карточка предзаказная
+    if (row.preorder) g.preorder = true
+    g.preorderColPresent = g.preorderColPresent || row.preorderColPresent
 
     groups.get(key)!.variants.push({
       fullName: row.fullName,
@@ -728,6 +749,8 @@ export async function syncProductsFromSheets(
       rowIndex: row.rowIndex,
       sheetName: row.sheetName,
       photoUrls: sanitizeSyncedPhotoUrls(row.photo),
+      preorder: row.preorder,
+      preorderColPresent: row.preorderColPresent,
     })
   }
 
@@ -873,9 +896,13 @@ export async function syncProductsFromSheets(
             price: new Decimal(minPrice),
             stock: totalQty,
             quantity: totalQty,
-            isAvailable: totalQty > 0,
+            // ЯДРО ПРЕДЗАКАЗА: обычный товар с нулём прячется, помеченный —
+            // остаётся видимым. Остаток при этом честный (0), врать про склад
+            // нельзя: на нём висят списание, агрегат атрибутов и цены.
+            isAvailable: totalQty > 0 || group.preorder,
             attributes: productAttributes,
             description: group.sheetDescription || null,
+            ...(group.preorderColPresent ? { isPreorder: group.preorder } : {}),
             specs: Object.keys(group.sheetSpecs).length > 0 ? group.sheetSpecs : {},
             photos: [],
             // §10 override: применяем, только когда колонка есть в листе (иначе default)
@@ -888,11 +915,18 @@ export async function syncProductsFromSheets(
         created++
       } else {
         // Update existing product
+        // Колонки «Предзаказ» в листе нет → флаг не трогаем и видимость считаем
+        // по тому, что уже стоит в БД (иначе синк погасил бы предзаказ, который
+        // владелец включил в админке).
+        const existingIsPreorder = (product as { isPreorder?: boolean }).isPreorder === true
         const updateData: Record<string, any> = {
           price: new Decimal(minPrice),
           stock: totalQty,
           quantity: totalQty,
-          isAvailable: totalQty > 0,
+          // См. комментарий в create: предзаказ живёт при нулевом остатке.
+          // Флаг берём из свежей строки листа, если колонка есть; нет колонки —
+          // не трогаем и опираемся на то, что уже стоит в БД.
+          isAvailable: totalQty > 0 || (group.preorderColPresent ? group.preorder : existingIsPreorder),
           attributes: productAttributes,
           brand: group.brand || undefined,
           line: group.line || null,
@@ -910,6 +944,7 @@ export async function syncProductsFromSheets(
         // колонки нет → поле не трогаем (сохраняем то, что мог проставить бот/админка).
         if (group.badgeColPresent) updateData.badge = group.badge || null
         if (group.hitColPresent) updateData.isFeatured = group.hit
+        if (group.preorderColPresent) updateData.isPreorder = group.preorder
         await prisma.product.update({
           where: { id: product.id },
           data: updateData,
@@ -949,7 +984,10 @@ export async function syncProductsFromSheets(
           const updateData: Record<string, any> = {
             productId: product.id,
             quantity: v.quantity,
+            // Остаток и inStock остаются честными и у предзаказа: видимость
+            // даёт отдельный флаг, а не подделанный склад.
             inStock: v.quantity > 0,
+            ...(v.preorderColPresent ? { isPreorder: v.preorder } : {}),
             // PR-A: у СУЩЕСТВУЮЩЕГО варианта SIM сохраняет смысл — канонизируем
             // только метку. Словарное значение применит PR-B по кнопке владельца.
             // Значение уже посчитано выше (finalAttrsByFullName) — то же, что в агрегате.
@@ -1047,6 +1085,7 @@ export async function syncProductsFromSheets(
             price: new Decimal(createRounded),
             quantity: v.quantity,
             inStock: v.quantity > 0,
+            ...(v.preorderColPresent ? { isPreorder: v.preorder } : {}),
             attributes: { ...finalAttrsByFullName.get(v.fullName)!, fullName: v.fullName },
             photos: v.photoUrls.length > 0 ? v.photoUrls : [],
             photoUrls: v.photoUrls.length > 0 ? v.photoUrls : [],

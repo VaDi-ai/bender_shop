@@ -13,7 +13,9 @@ export interface OrderableVariant {
   price: { toString(): string } | string | number
   inStock: boolean
   quantity: number
-  product: { isAvailable: boolean }
+  /** Предзаказный вариант: остаток 0 — норма, но касса должна уметь предоплату */
+  isPreorder?: boolean
+  product: { isAvailable: boolean; isPreorder?: boolean }
 }
 
 const conflict = (message: string): Error =>
@@ -28,7 +30,13 @@ const conflict = (message: string): Error =>
  *    STOCK_WRITEOFF_ENABLED — скрытые/черновые строки заказуемы только
  *    перебором variantId, это не покупка;
  * 3) цена ≤ 0 → отказ (черновик без цены — «Уточняйте у менеджера»);
- * 4) остаток — только при включённом списании (как раньше).
+ * 4) предзаказ → отказ, пока касса не умеет считать предоплату (снимается
+ *    вместе с предзаказной ветвью чекаута). Товар с флагом предзаказа виден
+ *    как isAvailable=true даже с нулём на складе, и без этого правила его
+ *    можно было бы заказать перебором variantId — без предоплаты, без условий
+ *    и без пометки оператору. Заказ БЕЗ обязательства хуже отказа;
+ * 5) остаток — только при включённом списании (как раньше) и только для
+ *    обычных позиций: у предзаказа ноль на складе — это и есть смысл.
  */
 export function assertOrderableVariant(
   variant: OrderableVariant | null,
@@ -46,6 +54,11 @@ export function assertOrderableVariant(
   if (Number(variant.price) <= 0) {
     log.warn('Order for zero-price variant rejected', { variantId })
     throw conflict('Товар недоступен для заказа')
+  }
+  const isPreorder = variant.isPreorder === true || variant.product.isPreorder === true
+  if (isPreorder) {
+    log.warn('Preorder checkout not enabled yet', { variantId })
+    throw conflict('Предзаказ этого товара пока нельзя оформить — напишите менеджеру')
   }
   if (stockCheckEnabled && (!variant.inStock || variant.quantity < requestedQty)) {
     log.warn('Stock conflict', { variantId, available: variant.quantity, requested: requestedQty })

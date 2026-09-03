@@ -14,6 +14,11 @@ import { logAdminAction } from './audit'
 import { WRITEBACK_COLS } from './sheets-sync'
 import { touchStorefrontCache } from './storefront-admin'
 import type { PhotoWritebackFn } from './photo-writeback'
+import {
+  loadPreorderDefaults, resolvePreorder, computePrepayment, renderPreorderTerms,
+  asPositiveDecimal, PREORDER_GAP_LABEL, type PreorderReadiness,
+} from './preorder'
+import { Decimal } from '@prisma/client/runtime/client'
 
 export interface OfferView {
   variantId: number
@@ -40,6 +45,8 @@ export interface ProductCard {
   description: string
   /** Характеристики карточки: их заполняет обогащение, карточка показывает результат */
   specs: Record<string, string>
+  /** Предзаказ: что стоит у товара, что подставилось из дефолтов и готово ли это к витрине */
+  preorder: PreorderCardView
   isAvailable: boolean
   isFeatured: boolean
   /** Что покупатель видит в каталоге: coverPhoto, а без неё — авто (первый вариант) */
@@ -52,6 +59,37 @@ export interface ProductCard {
   countries: string[]
   inStockCount: number
   priceFrom: number | null
+}
+
+/**
+ * Блок предзаказа для карточки админки. Показываем и «своё» значение товара,
+ * и итоговое (после дефолтов) — иначе владелец не поймёт, почему у товара без
+ * заполненных полей всё равно есть предоплата.
+ */
+export interface PreorderCardView {
+  isPreorder: boolean
+  /** ready — можно выпускать; incomplete — флаг есть, условий нет; off — обычный товар */
+  status: PreorderReadiness['kind']
+  /** Чего не хватает, словами владельца */
+  gaps: string[]
+  /** Значения самого товара (null = «взять из дефолтов магазина») */
+  own: {
+    mode: string | null
+    kind: string | null
+    value: string | null
+    eta: string | null
+    terms: string | null
+  }
+  /** Итог после наложения дефолтов, null если предзаказ не готов */
+  effective: {
+    mode: string
+    kind: string | null
+    value: string | null
+    eta: string | null
+    terms: string | null
+  } | null
+  /** Пример на минимальной цене товара — чтобы сумма была видна до продажи */
+  example: { price: string; prepayment: string; remaining: string } | null
 }
 
 export interface Outcome<T = unknown> {
@@ -69,6 +107,8 @@ export async function getProductCard(productId: number): Promise<ProductCard | n
     select: {
       id: true, name: true, sku: true, brand: true, description: true, specs: true,
       isAvailable: true, isFeatured: true, photoUrl: true, coverPhoto: true, photos: true,
+      isPreorder: true, preorderMode: true, prepaymentKind: true,
+      prepaymentValue: true, preorderEta: true, preorderTerms: true,
       category: { select: { name: true } },
       variants: {
         orderBy: { id: 'asc' },
@@ -114,6 +154,70 @@ export async function getProductCard(productId: number): Promise<ProductCard | n
     countries: [...new Set(offers.map(o => o.country).filter((c): c is string => !!c))],
     inStockCount: inStockOffers.length,
     priceFrom: inStockOffers.length ? Math.min(...inStockOffers.map(o => o.price)) : null,
+    preorder: await buildPreorderCardView(p, offers),
+  }
+}
+
+/**
+ * Собирает блок предзаказа карточки. Пример суммы считаем на минимальной цене
+ * предложений: владелец должен увидеть «возьмём 30 000 ₽ вперёд» глазами, а не
+ * пересчитывать процент в голове.
+ */
+async function buildPreorderCardView(
+  p: {
+    isPreorder?: boolean
+    preorderMode?: string | null
+    prepaymentKind?: string | null
+    prepaymentValue?: Decimal | null
+    preorderEta?: string | null
+    preorderTerms?: string | null
+  },
+  offers: OfferView[],
+): Promise<PreorderCardView> {
+  const defaults = await loadPreorderDefaults()
+  const readiness = resolvePreorder(p as never, defaults)
+  const own = {
+    mode: p.preorderMode ?? null,
+    kind: p.prepaymentKind ?? null,
+    // `!= null` намеренно, не `!== null`: у вызывающего select может не быть
+    // этих полей вовсе, и падать из-за undefined карточка товара не должна
+    value: p.prepaymentValue != null ? p.prepaymentValue.toString() : null,
+    eta: p.preorderEta ?? null,
+    terms: p.preorderTerms ?? null,
+  }
+  if (readiness.kind !== 'ready') {
+    return {
+      isPreorder: p.isPreorder === true,
+      status: readiness.kind,
+      gaps: readiness.kind === 'incomplete' ? readiness.gaps.map(g => PREORDER_GAP_LABEL[g]) : [],
+      own,
+      effective: null,
+      example: null,
+    }
+  }
+
+  const pol = readiness.policy
+  const prices = offers.map(o => o.price).filter(v => v > 0)
+  const base = prices.length ? new Decimal(Math.min(...prices)) : null
+  const split = base ? computePrepayment(base, pol) : null
+
+  return {
+    isPreorder: true,
+    status: 'ready',
+    gaps: [],
+    own,
+    effective: {
+      mode: pol.mode,
+      kind: pol.kind,
+      value: pol.value ? pol.value.toString() : null,
+      eta: pol.eta,
+      terms: split
+        ? renderPreorderTerms(pol.terms, { prepayment: split.prepayment, remaining: split.remaining, eta: pol.eta })
+        : pol.terms,
+    },
+    example: base && split
+      ? { price: base.toFixed(0), prepayment: split.prepayment.toFixed(0), remaining: split.remaining.toFixed(0) }
+      : null,
   }
 }
 
@@ -215,7 +319,7 @@ export type { PhotoWritebackFn }
 
 // ─── Ошибки в товарах (шаг 2) ────────────────────────────────────────────────
 
-export type IssueKind = 'no_photo' | 'no_sim' | 'no_description' | 'no_stock' | 'bad_photo'
+export type IssueKind = 'no_photo' | 'no_sim' | 'no_description' | 'no_stock' | 'bad_photo' | 'preorder_incomplete'
 
 export interface IssueRow { productId: number; name: string; category: string | null; detail: string }
 
@@ -232,6 +336,7 @@ const ISSUE_TITLES: Record<IssueKind, [string, string]> = {
   no_description: ['Без описания', 'нечего прочитать перед покупкой'],
   no_stock:       ['Числятся в продаже, но без остатка', 'покупатель их не видит — витрина такие скрывает; вернутся сами, когда в таблице появится остаток'],
   bad_photo:      ['Битая ссылка на фото', 'картинка не с нашего домена — у покупателя не откроется'],
+  preorder_incomplete: ['Предзаказ не дозаполнен', 'флаг в таблице стоит, а условий предоплаты нет — на витрину такой товар не выпускаем'],
 }
 
 /**
@@ -245,21 +350,41 @@ export async function listProductIssues(limitPerKind = 20): Promise<IssuesView> 
     where: { isAvailable: true },
     select: {
       id: true, name: true, description: true, photoUrl: true, photos: true,
+      isPreorder: true, preorderMode: true, prepaymentKind: true,
+      prepaymentValue: true, preorderEta: true, preorderTerms: true,
       category: { select: { name: true } },
       variants: { select: { id: true, inStock: true, quantity: true, attributes: true, photoUrls: true } },
     },
   })
 
   const buckets: Record<IssueKind, IssueRow[]> = {
-    no_photo: [], no_sim: [], no_description: [], no_stock: [], bad_photo: [],
+    no_photo: [], no_sim: [], no_description: [], no_stock: [], bad_photo: [], preorder_incomplete: [],
   }
+  // Дефолты магазина читаем один раз: полнота предзаказа считается «товар
+  // поверх дефолтов», и без них помеченный товар честно «не дозаполнен».
+  const preorderDefaults = await loadPreorderDefaults()
   let visibleProducts = 0
 
   for (const p of products) {
     const live = p.variants.filter(v => v.inStock && v.quantity > 0)
     const base = { productId: p.id, name: p.name, category: p.category?.name ?? null }
 
+    // ВАЖНО: проверка предзаказа стоит ДО выхода по «нет живых вариантов».
+    // У предзаказного товара живых вариантов нет по определению, и без этой
+    // ветки он падал бы в no_stock, а полузаполненность владелец не увидел бы
+    // никогда — а именно она и держит товар вне витрины.
+    const readiness = resolvePreorder(p, preorderDefaults)
+    if (readiness.kind === 'incomplete') {
+      buckets.preorder_incomplete.push({
+        ...base,
+        detail: readiness.gaps.map(g => PREORDER_GAP_LABEL[g]).join('; '),
+      })
+      continue
+    }
+
     if (!live.length) {
+      // Готовый предзаказ — не «ошибка без остатка»: нулевой склад у него норма.
+      if (readiness.kind === 'ready') continue
       // Товар помечен доступным, но купить нечего — витрина его и не покажет,
       // зато владелец думает, что он продаётся.
       buckets.no_stock.push({ ...base, detail: `${p.variants.length} ${p.variants.length === 1 ? 'предложение' : 'предложений'}, все с нулевым остатком` })
@@ -371,4 +496,82 @@ export async function setVariantAttributes(
 export function overriddenKeys(attributes: unknown): string[] {
   const o = ((attributes ?? {}) as Record<string, unknown>).attrOverrides
   return o && typeof o === 'object' ? Object.keys(o as object) : []
+}
+
+// ─── Правка условий предзаказа (owner) ───────────────────────────────────────
+
+/**
+ * Пишет поля предзаказа товара. Это DB-only правка: синк её не трогает (в лист
+ * ездит только сам флаг «Предзаказ»), поэтому писбэка здесь нет — в отличие от
+ * описания и фото.
+ *
+ * Пустая строка означает «убрать своё значение и взять из дефолтов магазина» —
+ * тот же смысл, что у снятия attrOverrides пустым PUT.
+ */
+export async function setProductPreorder(
+  actor: string,
+  productId: number,
+  raw: unknown,
+): Promise<Outcome> {
+  const p = await prisma.product.findUnique({
+    where: { id: productId },
+    select: {
+      id: true, isPreorder: true, preorderMode: true, prepaymentKind: true,
+      prepaymentValue: true, preorderEta: true, preorderTerms: true,
+    },
+  })
+  if (!p) return bad(404, 'Товар не найден')
+
+  const b = (raw ?? {}) as Record<string, unknown>
+  const data: Record<string, unknown> = {}
+
+  if ('mode' in b) {
+    const v = String(b.mode ?? '')
+    if (v === '') data.preorderMode = null
+    else if (v === 'full' || v === 'partial') data.preorderMode = v
+    else return bad(422, 'Тип предоплаты — «full» или «partial»')
+  }
+  if ('kind' in b) {
+    const v = String(b.kind ?? '')
+    if (v === '') data.prepaymentKind = null
+    else if (v === 'percent' || v === 'fixed') data.prepaymentKind = v
+    else return bad(422, 'Вид предоплаты — «percent» или «fixed»')
+  }
+  if ('value' in b) {
+    const rawV = b.value
+    if (rawV === null || rawV === '' || rawV === undefined) data.prepaymentValue = null
+    else {
+      const dec = asPositiveDecimal(rawV)
+      if (!dec) return bad(422, 'Размер предоплаты — положительное число')
+      const kind = (data.prepaymentKind as string | null | undefined) ?? p.prepaymentKind
+      if (kind === 'percent' && dec.greaterThan(100)) return bad(422, 'Процент предоплаты — от 1 до 100')
+      data.prepaymentValue = dec
+    }
+  }
+  if ('eta' in b) {
+    const v = String(b.eta ?? '').replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, ' ').trim()
+    if (v.length > 120) return bad(422, 'Срок длиннее 120 символов — напишите короче')
+    data.preorderEta = v || null
+  }
+  if ('terms' in b) {
+    const v = String(b.terms ?? '').replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, ' ').trim()
+    if (v.length > 2000) return bad(422, 'Условия длиннее 2000 символов — покупатель столько не читает')
+    data.preorderTerms = v || null
+  }
+
+  if (!Object.keys(data).length) return bad(422, 'Нечего менять')
+
+  await prisma.product.update({ where: { id: productId }, data })
+  void logAdminAction({
+    adminTelegramId: actor, action: 'update', entity: 'Product', entityId: productId,
+    before: {
+      preorderMode: p.preorderMode, prepaymentKind: p.prepaymentKind,
+      prepaymentValue: p.prepaymentValue?.toString() ?? null,
+      preorderEta: p.preorderEta, preorderTerms: p.preorderTerms,
+    },
+    after: data,
+  })
+  // Условия и суммы видны покупателю на карточке — открытые вкладки должны узнать
+  await touchStorefrontCache('product_preorder')
+  return { ok: true, status: 200 }
 }

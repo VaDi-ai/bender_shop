@@ -52,6 +52,18 @@ enum StockMovementType {
   sale
 }
 
+/// Предзаказ: сколько берём вперёд. full — вся стоимость, partial — часть.
+enum PreorderMode {
+  full
+  partial
+}
+
+/// Чем задана частичная предоплата: процентом от цены или фикс-суммой в рублях.
+enum PrepaymentKind {
+  percent
+  fixed
+}
+
 // A11
 enum OrderStatus {
   new
@@ -260,6 +272,23 @@ model Product {
   avitoItemId  BigInt? @unique // ID объявления на Avito (заполняется при маппинге; два товара на одно объявление — ошибка маппинга)
   avitoEnabled Boolean @default(false) // Включён ли товар для Avito
 
+  // ── Предзаказ ────────────────────────────────────────────────────────────
+  // Флаг приезжает из листа (колонка «Предзаказ», опциональная): помеченный
+  // товар виден на витрине даже при нулевом остатке. Условия предоплаты —
+  // DB-only, синк их НЕ трогает: это денежная политика, а не ассортимент.
+  // Пусто → работают глобальные дефолты магазина (ApiKey setting_preorder);
+  // нет ни того, ни другого → товар «полузаполнен» и на витрину не идёт.
+  /// Агрегат: хотя бы один вариант помечен предзаказом в листе
+  isPreorder      Boolean         @default(false)
+  preorderMode    PreorderMode?
+  prepaymentKind  PrepaymentKind?
+  /// Процент (1..100) при kind=percent, либо сумма в рублях при kind=fixed
+  prepaymentValue Decimal?        @db.Decimal(12, 2)
+  /// Срок как текст: «конец октября», «4-6 недель» — оператору так понятнее
+  preorderEta     String?
+  /// Условия выкупа, которые покупатель видит и которые снимаются в заказ
+  preorderTerms   String?
+
   // Phase 2 — таксономия бренд → линейка → модель
   line      String? // линейка бренда из колонки «Категория»: iPhone, MacBook, Galaxy S
   sortOrder Int     @default(0) // из колонки «Порядок», 1 = верх/новее; 0 = не задан → в конец
@@ -275,6 +304,7 @@ model Product {
   @@index([isAvailable])
   @@index([isFeatured])
   @@index([brand])
+  @@index([isPreorder])
   @@index([name])
   @@index([avitoEnabled])
   @@index([brand, line])
@@ -300,6 +330,10 @@ model ProductVariant {
   bestSupplierName    String?
   priceUpdatedAt      DateTime?
 
+  /// Зеркало ячейки «Предзаказ» строки листа. Остаток и inStock остаются
+  /// честными (0 / false) — видимость даёт этот флаг, а не вранье про склад.
+  isPreorder Boolean @default(false)
+
   /// Архивный вариант — схлопнутый дубль или вариант товара-призрака.
   /// NULL = обычный вариант (в том числе честно распроданный: остаток 0 у
   /// живого товара архивом НЕ считается). Архивные скрыты из пикера привязки
@@ -320,6 +354,7 @@ model ProductVariant {
   @@index([productId])
   @@index([inStock])
   @@index([archivedAt])
+  @@index([isPreorder])
 }
 
 model StockMovement {
@@ -364,6 +399,15 @@ model Order {
   deliveryGeoLon     Decimal? @db.Decimal(9, 6)
   deliveryQcGeo      Int? // качество геокодинга DaData (0 — точные координаты дома)
 
+  // ── Предзаказ ────────────────────────────────────────────────────────────
+  // Суммы считает ТОЛЬКО сервер (как deliveryCost). Условия снимаются копией:
+  // потом их поменяют, а обязательство перед покупателем остаётся тем, что он
+  // видел на чекауте.
+  isPreorder             Boolean  @default(false)
+  prepaymentAmount       Decimal? @db.Decimal(12, 2)
+  remainingAmount        Decimal? @db.Decimal(12, 2)
+  preorderTermsSnapshot  String?
+
   client Client?     @relation(fields: [clientId], references: [id], onDelete: SetNull)
   items  OrderItem[]
 
@@ -380,6 +424,8 @@ model OrderItem {
   quantity        Int
   priceAtPurchase Decimal @db.Decimal(12, 2)
   productName     String
+  /// Позиция куплена как предзаказ — смешанная корзина считается по позициям
+  isPreorder      Boolean @default(false)
 
   order   Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
   // Restrict: deleting a variant that has order history would corrupt financial records.

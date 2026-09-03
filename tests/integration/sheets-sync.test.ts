@@ -232,3 +232,57 @@ describe('§10 override — бейдж / «В хиты» (опц. колонки
     expect(rows.every(r => r.badgeColPresent && r.hitColPresent)).toBe(true)
   })
 })
+
+describe('колонка «Предзаказ» (R+): добавляется справа и ничего не сдвигает', () => {
+  // Живая шапка A..Q — та же, что в блоке выше; здесь она нужна как эталон,
+  // с которым сверяем индексы ПОСЛЕ добавления колонки.
+  const LIVE = ['Порядок', 'Бренд', 'Категория', 'Модель', 'Название модели',
+    'Цвет', 'Память', 'Размер', 'Страна', 'Описание', 'Характеристики',
+    'Закупочная цена', 'Рекомендованная стоимость', 'В наличие',
+    'Лучший поставщик', 'Дата обновления', 'Фото']
+
+  it('колонки нет — ключа нет, флаг не трогаем совсем', () => {
+    const COL = mapHeaders(LIVE)
+    expect(COL.preorder).toBeUndefined()
+
+    const rows = parseSheetRows('лист', [LIVE, ['1', 'Apple', 'iPhone', 'iPhone 17', 'iPhone 17 256 (США)',
+      'Black', '256GB', '', 'США', '', '', '80000', '99990', '0', '', '', '']])
+    expect(rows[0]!.preorderColPresent).toBe(false)
+    expect(rows[0]!.preorder).toBe(false)
+  })
+
+  it('колонка в R — все индексы A..Q остались на своих местах', () => {
+    const before = mapHeaders(LIVE)
+    const after = mapHeaders([...LIVE, 'Предзаказ'])
+
+    for (const key of Object.keys(before)) {
+      expect(after[key], `сдвинулся ${key}`).toBe(before[key])
+    }
+    expect(after.preorder).toBe(17)   // R
+  })
+
+  it('заголовок «Предзаказ» не перехватывает чужие колонки и не перехватывается', () => {
+    const COL = mapHeaders([...LIVE, 'Предзаказ'])
+    expect(COL.quantity).toBe(13)     // «В наличие», не «Предзаказ»
+    expect(COL.sortOrder).toBe(0)     // «Порядок» на месте
+    expect(COL.photo).toBe(16)        // «Фото» не съехало
+  })
+
+  it('значение ячейки читается, пустая = обычный товар', () => {
+    const headers = [...LIVE, 'Предзаказ']
+    const row = (flag: string) => ['1', 'Apple', 'iPhone', 'iPhone 17', 'iPhone 17 256 (США)',
+      'Black', '256GB', '', 'США', '', '', '80000', '99990', '0', '', '', '', flag]
+
+    const rows = parseSheetRows('лист', [headers, row('да'), row(''), row('мусор')])
+    expect(rows.map(r => r.preorder)).toEqual([true, false, false])
+    expect(rows.every(r => r.preorderColPresent)).toBe(true)
+  })
+
+  it('предзаказная строка сохраняет ЧЕСТНЫЙ нулевой остаток', () => {
+    const headers = [...LIVE, 'Предзаказ']
+    const rows = parseSheetRows('лист', [headers, ['1', 'Apple', 'iPhone', 'iPhone 17', 'iPhone 17 256 (США)',
+      'Black', '256GB', '', 'США', '', '', '80000', '99990', '0', '', '', '', 'да']])
+    expect(rows[0]!.preorder).toBe(true)
+    expect(rows[0]!.quantity).toBe(0)
+  })
+})
