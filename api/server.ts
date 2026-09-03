@@ -47,6 +47,7 @@ import { computeDeliveryCost, deliveryZoneOf, loadDeliveryPricingConfig, Deliver
 import {
   loadPreorderDefaults, resolvePreorder, splitOrderPrepayment, type PreorderPolicy,
   STOCK_OR_PREORDER_WHERE, VISIBLE_VARIANT_WHERE, isProductVisible, variantPreorderView,
+  showsPreorderBadge,
 } from '../lib/preorder'
 import { adminApiRouter } from './admin'
 
@@ -826,8 +827,15 @@ export function startApiServer(bot?: Telegraf): Server {
         isFeatured: p.isFeatured,
         createdAt: p.createdAt.toISOString(),
         salesCount: p.variants.reduce((s, v) => s + (v.quantity || 0), 0),
-        // Предзаказ товара целиком: бейдж и срок берутся отсюда
-        isPreorder: p.isPreorder && policy !== null,
+        // Карточка предзаказная ЦЕЛИКОМ — то есть купить сейчас нечего. У товара
+        // с живыми предложениями и одним предзаказным вариантом флага здесь нет:
+        // бейдж «Предзаказ» на товаре, который лежит на складе, обманывает
+        // покупателя. Предзаказность такого товара — на уровне варианта ниже.
+        isPreorder: showsPreorderBadge({
+          isPreorder: p.isPreorder,
+          ready: policy !== null,
+          hasLiveVariants: p.variants.some(v => v.inStock && v.quantity > 0),
+        }),
         preorderEta: policy?.eta ?? null,
         variants: p.variants.map((v) => ({
           id: v.id,
