@@ -1,0 +1,30 @@
+{
+  "sheet": "общий лист",
+  "colsAfter": 18,
+  "r1": "Предзаказ",
+  "shifted": [],
+  "preorderIdx": 17,
+  "sums": [
+    {
+      "col": "Закупочная (L)",
+      "before": 12088200,
+      "after": 12088200,
+      "equal": true
+    },
+    {
+      "col": "Рекомендованная (M)",
+      "before": 144727900,
+      "after": 144727900,
+      "equal": true
+    },
+    {
+      "col": "Остаток (N)",
+      "before": 860,
+      "after": 860,
+      "equal": true
+    }
+  ],
+  "photosFilled": 673,
+  "descFilled": 916,
+  "preorderValues": 0
+}
