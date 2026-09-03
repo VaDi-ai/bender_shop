@@ -21,6 +21,7 @@ import {
   renderPreorderTerms,
   parsePreorderCell,
   EMPTY_PREORDER_DEFAULTS,
+  SUGGESTED_PREORDER_DEFAULTS,
   type PreorderDefaults,
   type PreorderProductFields,
 } from '../lib/preorder'
@@ -219,17 +220,39 @@ describe('расчёт предоплаты — считает только се
 })
 
 describe('условия выкупа: шаблон владельца, без ИИ', () => {
-  it('подставляет суммы и срок', () => {
+  it('суммы подставляются БЕЗ знака рубля — ₽ стоит в шаблоне владельца', () => {
     const out = renderPreorderTerms(
-      'Предоплата {предоплата}, остаток {остаток} при получении. Ждать: {срок}.',
-      { prepayment: dec('30000'), remaining: dec('119900'), eta: 'конец октября' },
+      'Предоплата {предоплата} ₽, остаток {остаток} ₽.',
+      { prepayment: dec('30000'), remaining: dec('119900'), eta: null },
     )
-    // Формат — общий для проекта (lib/format): разряды отделены НЕразрывным
-    // пробелом (U+00A0), перед ₽ обычный. Проверяем ровно эти байты, иначе
-    // тест разошёлся бы с тем, что видит покупатель.
-    expect(out).toContain('30\u00a0000 ₽')
-    expect(out).toContain('119\u00a0900 ₽')
-    expect(out).toContain('конец октября')
+    // Разряды отделены НЕразрывным пробелом (U+00A0) — общий формат проекта.
+    // Двойного «₽ ₽» быть не должно: это ровно то, что дал бы формат с валютой.
+    expect(out).toBe('Предоплата 30\u00a0000 ₽, остаток 119\u00a0900 ₽.')
+    expect(out).not.toContain('₽ ₽')
+  })
+
+  it('шаблон владельца рендерится целиком', () => {
+    const out = renderPreorderTerms(
+      SUGGESTED_PREORDER_DEFAULTS.terms,
+      { prepayment: dec('44997'), remaining: dec('104993'), eta: 'конец октября' },
+    )
+    expect(out).toBe(
+      'Предзаказ. Предоплата 44\u00a0997 ₽ (30%) — бронирует товар. '
+      + 'Остаток 104\u00a0993 ₽ при получении. Ориентировочный срок: конец октября. '
+      + 'Точную дату и детали подтвердит менеджер.',
+    )
+  })
+
+  it('{процент} считается от факта: полная — 100%, фикс — реальная доля', () => {
+    const full = renderPreorderTerms('{процент}', { prepayment: dec('149900'), remaining: dec('0'), eta: null })
+    expect(full).toBe('100%')
+    const fixed = renderPreorderTerms('{процент}', { prepayment: dec('15000'), remaining: dec('134900'), eta: null })
+    expect(fixed).toBe('10%')
+  })
+
+  it('нулевой заказ не даёт деления на ноль', () => {
+    expect(renderPreorderTerms('доля {процент}', { prepayment: dec(0), remaining: dec(0), eta: null }))
+      .toBe('доля ')
   })
 
   it('срок не задан — честное «уточняется», а не пустое место', () => {
@@ -277,6 +300,36 @@ describe('касса: дверь закрыта, пока предоплату �
       expect.unreachable()
     } catch (e) {
       expect((e as { isStockConflict?: boolean }).isStockConflict).toBe(true)
+    }
+  })
+})
+
+describe('подсказка дефолтов от владельца', () => {
+  it('это подсказка, а не молчаливый дефолт: пустая настройка так и остаётся пустой', () => {
+    // Иначе «не дозаполнено» перестало бы быть видимым состоянием, и магазин
+    // начал бы продавать предзаказ по правилам, о которых никто не помнит.
+    expect(parsePreorderDefaults(null)).toEqual(EMPTY_PREORDER_DEFAULTS)
+    expect(SUGGESTED_PREORDER_DEFAULTS.mode).toBe('partial')
+    expect(SUGGESTED_PREORDER_DEFAULTS.value).toBe('30')
+  })
+
+  it('подсказку можно сохранить как есть — парсер её принимает целиком', () => {
+    const d = parsePreorderDefaults(JSON.stringify(SUGGESTED_PREORDER_DEFAULTS))
+    expect(d.mode).toBe('partial')
+    expect(d.kind).toBe('percent')
+    expect(d.value?.toString()).toBe('30')
+    expect(d.terms).toBe(SUGGESTED_PREORDER_DEFAULTS.terms)
+  })
+
+  it('с ней помеченный товар сразу готов к витрине', () => {
+    const d = parsePreorderDefaults(JSON.stringify(SUGGESTED_PREORDER_DEFAULTS))
+    const r = resolvePreorder(plainProduct(), d)
+    expect(r.kind).toBe('ready')
+    if (r.kind === 'ready') {
+      // 30% от 149 900 с округлением вверх
+      const split = computePrepayment(dec('149900'), r.policy)
+      expect(split.prepayment.toString()).toBe('44970')
+      expect(split.remaining.toString()).toBe('104930')
     }
   })
 })

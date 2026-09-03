@@ -658,6 +658,7 @@
         <input class="inp" id="poDefValue" inputmode="decimal" maxlength="10" placeholder="Размер: 30 (процент) или 15000 (сумма)">
         <input class="inp" id="poDefEta" maxlength="120" placeholder="Срок по умолчанию: «4–6 недель»">
         <textarea class="inp" id="poDefTerms" rows="4" maxlength="2000" placeholder="Шаблон условий выкупа. Подстановки: {предоплата}, {остаток}, {срок}"></textarea>
+        <div class="warnbox" id="poDefHint" style="display:none">Значения ниже подставлены как предложение и пока НЕ действуют. Пока не нажмёте «Сохранить», отмеченные товары считаются не дозаполненными и на витрину не выходят.</div>
         <button class="btn b-main" id="poDefSave">Сохранить дефолты</button>
         <div class="mt" id="poDefErr" style="color:var(--bad)"></div>
         <div class="hint">Пока тип и размер не заданы, отмеченные товары считаются «не дозаполненными» и на витрину не выходят — их видно во вкладке «Товары» → «Ошибки в товарах». Это не поломка: так магазин не начнёт продавать предзаказ с неизвестной предоплатой.</div>
@@ -1984,13 +1985,18 @@
       const r = await api('/settings/preorder').catch(() => null)
       if (!r || !r.ok) { setTile('tilePreorder', 'не загрузилось'); return }
       const d = r.data
-      document.getElementById('poDefMode').value = d.mode || ''
-      document.getElementById('poDefKind').value = d.kind || ''
-      document.getElementById('poDefValue').value = d.value || ''
-      document.getElementById('poDefEta').value = d.eta || ''
-      document.getElementById('poDefTerms').value = d.terms || ''
+      // Настройка ещё не сохранена → подставляем согласованные значения в форму,
+      // но НЕ считаем их действующими: чип и «Ошибки в товарах» честно скажут,
+      // что дефолтов нет, пока владелец не нажмёт «Сохранить».
+      const src = d.saved ? d : Object.assign({}, d.suggested || {})
+      document.getElementById('poDefMode').value = src.mode || ''
+      document.getElementById('poDefKind').value = src.kind || ''
+      document.getElementById('poDefValue').value = src.value || ''
+      document.getElementById('poDefEta').value = src.eta || ''
+      document.getElementById('poDefTerms').value = src.terms || ''
+      document.getElementById('poDefHint').style.display = d.saved ? 'none' : ''
 
-      const ready = !!d.mode && (d.mode === 'full' || (!!d.kind && !!d.value))
+      const ready = d.saved && !!d.mode && (d.mode === 'full' || (!!d.kind && !!d.value))
       const chip = document.getElementById('poDefChip')
       chip.textContent = ready ? 'заданы' : 'не заданы'
       chip.className = 'chip right ' + (ready ? 'c-ok' : 'c-warn')

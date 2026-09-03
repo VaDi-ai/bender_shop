@@ -17,7 +17,7 @@
  */
 import { Decimal } from '@prisma/client/runtime/client'
 import { getApiKeyValue, setApiKeyValue } from './api-key-store'
-import { fmtPriceWithCurrency } from './format'
+import { fmtPrice } from './format'
 import log from './logger'
 
 export const PREORDER_SETTING = 'setting_preorder'
@@ -45,6 +45,22 @@ export interface PreorderDefaults {
  */
 export const EMPTY_PREORDER_DEFAULTS: PreorderDefaults = {
   mode: null, kind: null, value: null, terms: null, eta: null,
+}
+
+/**
+ * Решение владельца от 2026-09-03. НЕ применяется молча: это подсказка, которой
+ * админка заполняет форму, пока настройка пуста. Разница принципиальная —
+ * «дефолт не сохранён» остаётся видимым состоянием, а не превращается в тихо
+ * работающие 30%, о которых никто не помнит.
+ */
+export const SUGGESTED_PREORDER_DEFAULTS = {
+  mode: 'partial' as const,
+  kind: 'percent' as const,
+  value: '30',
+  eta: null as string | null,
+  terms: 'Предзаказ. Предоплата {предоплата} ₽ ({процент}) — бронирует товар. '
+    + 'Остаток {остаток} ₽ при получении. Ориентировочный срок: {срок}. '
+    + 'Точную дату и детали подтвердит менеджер.',
 }
 
 const MODES: PreorderMode[] = ['full', 'partial']
@@ -223,12 +239,22 @@ export function renderPreorderTerms(
   v: { prepayment: Decimal; remaining: Decimal; eta: string | null },
 ): string | null {
   if (!template) return null
-  // Формат денег в проекте один — lib/format, чтобы условия выглядели так же,
-  // как цены в карточке и в CRM
-  const rub = (d: Decimal) => fmtPriceWithCurrency(d.toFixed(0))
+  // Суммы подставляем БЕЗ знака рубля: в шаблоне владельца «₽» стоит своим
+  // словом после плейсхолдера («Предоплата {предоплата} ₽»), и подстановка
+  // с валютой давала бы «44 997 ₽ ₽». Разряды — общий формат проекта.
+  const num = (d: Decimal) => fmtPrice(d.toFixed(0))
+
+  // {процент} — какую долю заказа забираем вперёд. Считается от факта, а не от
+  // настройки: при фикс-сумме доля тоже осмысленна, а при полной всегда 100%.
+  const total = v.prepayment.plus(v.remaining)
+  const share = total.greaterThan(0)
+    ? `${v.prepayment.times(100).dividedBy(total).toDecimalPlaces(0).toString()}%`
+    : ''
+
   return template
-    .replace(/\{предоплата\}/g, rub(v.prepayment))
-    .replace(/\{остаток\}/g, rub(v.remaining))
+    .replace(/\{предоплата\}/g, num(v.prepayment))
+    .replace(/\{остаток\}/g, num(v.remaining))
+    .replace(/\{процент\}/g, share)
     .replace(/\{срок\}/g, v.eta ?? 'уточняется')
     .slice(0, 2000)
 }

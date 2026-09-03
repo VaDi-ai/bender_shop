@@ -1192,12 +1192,18 @@ export function adminApiRouter(): Router {
   }))
 
   router.get('/settings/preorder', ownerOnly, safe(async (_req, res) => {
-    const { loadPreorderDefaults } = await import('../lib/preorder')
+    const { loadPreorderDefaults, SUGGESTED_PREORDER_DEFAULTS } = await import('../lib/preorder')
     const d = await loadPreorderDefaults()
+    const saved = d.mode !== null || d.kind !== null || d.value !== null || d.terms !== null
     res.json({
+      saved,
       mode: d.mode, kind: d.kind,
       value: d.value ? d.value.toString() : null,
       terms: d.terms, eta: d.eta,
+      // Согласованные с владельцем значения. Отдаём отдельным полем, а не
+      // подставляем в d: пока настройка не сохранена, дефолтов действительно
+      // нет, и отмеченный товар честно «не дозаполнен».
+      suggested: SUGGESTED_PREORDER_DEFAULTS,
     })
   }))
 
