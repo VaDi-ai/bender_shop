@@ -332,3 +332,65 @@ export function splitOrderPrepayment(lines: OrderLine[]): OrderPrepayment {
 
   return { isPreorder: true, prepayment, terms: terms.slice(0, 2000) }
 }
+
+// ─── Витрина: кого показываем ────────────────────────────────────────────────
+
+/**
+ * Условие «есть что купить»: живой остаток ИЛИ предзаказ. Один фрагмент на все
+ * витринные выборки (каталог, категории, бренды) — иначе счётчик категории
+ * разойдётся со списком товаров, как это уже было с латентными дублями.
+ *
+ * Готовность условий предоплаты SQL не проверяет: она зависит от дефолтов
+ * магазина. Её досеивает isProductVisible — предзаказных товаров единицы,
+ * и лишний проход по ним ничего не стоит.
+ */
+export const STOCK_OR_PREORDER_WHERE = {
+  OR: [
+    { variants: { some: { quantity: { gt: 0 }, inStock: true } } },
+    { isPreorder: true },
+  ],
+}
+
+/** Какие варианты вообще показываем: живые + предзаказные (у них остаток 0). */
+export const VISIBLE_VARIANT_WHERE = {
+  OR: [
+    { inStock: true, quantity: { gt: 0 } },
+    { isPreorder: true },
+  ],
+}
+
+/**
+ * Пускать ли товар на витрину.
+ *
+ * Живой остаток пускает всегда. Товар без остатка — только если он помечен
+ * предзаказом И условия предоплаты полны. Полузаполненный предзаказ на витрине
+ * означал бы кнопку «оформить» с неизвестной суммой, поэтому он остаётся
+ * невидимым и ждёт владельца в «Ошибках в товарах».
+ */
+export function isProductVisible(
+  p: PreorderProductFields & { hasLiveVariants: boolean },
+  defaults: PreorderDefaults,
+): boolean {
+  if (p.hasLiveVariants) return true
+  return resolvePreorder(p, defaults).kind === 'ready'
+}
+
+/** Цена предзаказа для витрины: что берём вперёд и что останется. */
+export interface VariantPreorderView {
+  prepayment: string
+  remaining: string
+  eta: string | null
+  terms: string | null
+}
+
+export function variantPreorderView(price: Decimal, policy: PreorderPolicy): VariantPreorderView {
+  const split = computePrepayment(price, policy)
+  return {
+    prepayment: split.prepayment.toFixed(0),
+    remaining: split.remaining.toFixed(0),
+    eta: policy.eta,
+    terms: renderPreorderTerms(policy.terms, {
+      prepayment: split.prepayment, remaining: split.remaining, eta: policy.eta,
+    }),
+  }
+}
