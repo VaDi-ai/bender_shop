@@ -46,6 +46,7 @@ import { suggestAddress, verifyAddress, dadataConfigured, VerifiedAddress } from
 import { computeDeliveryCost, deliveryZoneOf, loadDeliveryPricingConfig, DeliveryPricingConfig, DeliveryQuote } from '../lib/delivery-pricing'
 import {
   loadPreorderDefaults, resolvePreorder, splitOrderPrepayment, type PreorderPolicy,
+  STOCK_OR_PREORDER_WHERE, VISIBLE_VARIANT_WHERE, isProductVisible, variantPreorderView,
 } from '../lib/preorder'
 import { adminApiRouter } from './admin'
 
@@ -728,10 +729,13 @@ export function startApiServer(bot?: Telegraf): Server {
       const category = sanitize(req.query.category)
       const brand    = sanitize(req.query.brand)
 
+      // Дефолты магазина нужны, чтобы досеять полузаполненные предзаказы
+      const preorderDefaults = await loadPreorderDefaults()
+
       const products = await prisma.product.findMany({
         where: {
           isAvailable: true,
-          variants: { some: { quantity: { gt: 0 }, inStock: true } },
+          ...STOCK_OR_PREORDER_WHERE,
           ...(category ? { category: { name: category } } : {}),
           ...(brand ? { brand } : {}),
         },
@@ -754,9 +758,16 @@ export function startApiServer(bot?: Telegraf): Server {
           specs: true,
           isFeatured: true,
           createdAt: true,
+          isPreorder: true,
+          preorderMode: true,
+          prepaymentKind: true,
+          prepaymentValue: true,
+          preorderEta: true,
+          preorderTerms: true,
           category: { select: { id: true, name: true } },
           variants: {
-            where: { inStock: true, quantity: { gt: 0 } },
+            // Предзаказные варианты живут при нулевом остатке — они и есть смысл
+            where: VISIBLE_VARIANT_WHERE,
             select: {
               id: true,
               sku: true,
@@ -766,13 +777,33 @@ export function startApiServer(bot?: Telegraf): Server {
               photos: true,
               photoUrls: true,
               inStock: true,
+              isPreorder: true,
             },
           },
         },
         orderBy: { name: 'asc' },
       })
 
-      const payload = products.map((p) => ({
+      // Полузаполненный предзаказ (флаг есть, условий нет) на витрину не идёт:
+      // кнопка «оформить» с неизвестной суммой хуже, чем отсутствие товара.
+      const visible = products.filter(p => isProductVisible({
+        ...p,
+        preorderMode: p.preorderMode as never,
+        prepaymentKind: p.prepaymentKind as never,
+        hasLiveVariants: p.variants.some(v => v.inStock && v.quantity > 0),
+      }, preorderDefaults))
+
+      const payload = visible.map((p) => {
+        // Политика считается один раз на товар; суммы — на каждый вариант,
+        // потому что цены у вариантов разные, а процент один.
+        const readiness = resolvePreorder({
+          ...p,
+          preorderMode: p.preorderMode as never,
+          prepaymentKind: p.prepaymentKind as never,
+        }, preorderDefaults)
+        const policy = readiness.kind === 'ready' ? readiness.policy : null
+
+        return {
         id: p.id,
         sku: p.sku,
         name: p.name,
@@ -795,6 +826,9 @@ export function startApiServer(bot?: Telegraf): Server {
         isFeatured: p.isFeatured,
         createdAt: p.createdAt.toISOString(),
         salesCount: p.variants.reduce((s, v) => s + (v.quantity || 0), 0),
+        // Предзаказ товара целиком: бейдж и срок берутся отсюда
+        isPreorder: p.isPreorder && policy !== null,
+        preorderEta: policy?.eta ?? null,
         variants: p.variants.map((v) => ({
           id: v.id,
           sku: v.sku,
@@ -803,8 +837,13 @@ export function startApiServer(bot?: Telegraf): Server {
           inStock: v.inStock,
           attributes: v.attributes,
           photos: variantPhotosPublic(v),
+          // Предзаказный вариант покупается при нулевом остатке. Суммы считает
+          // СЕРВЕР — на чекауте они пересчитываются заново и должны совпасть.
+          isPreorder: v.isPreorder && policy !== null,
+          preorder: v.isPreorder && policy ? variantPreorderView(v.price, policy) : null,
         })),
-      }))
+        }
+      })
 
       res.set('Cache-Control', 'private, no-store, must-revalidate')
       res.json(payload)
@@ -816,40 +855,44 @@ export function startApiServer(bot?: Telegraf): Server {
   // ── GET /api/categories ────────────────────────────────────────────────────
   app.get('/api/categories', async (_req, res, next) => {
     try {
-      const categories = await prisma.category.findMany({
-        where: {
-          products: {
-            some: {
-              isAvailable: true,
-              variants: { some: { quantity: { gt: 0 }, inStock: true } },
-            },
+      // Счётчик считается в JS, а не через _count: готовность предзаказа
+      // зависит от дефолтов магазина, и SQL её не проверит. Разошедшийся
+      // счётчик («iPhone · 11» при 10 показанных) — та же болезнь, что была
+      // с латентными дублями, лечим её тем же способом: один источник правды.
+      const preorderDefaults = await loadPreorderDefaults()
+      const [categories, catProducts] = await Promise.all([
+        prisma.category.findMany({ orderBy: { name: 'asc' } }),
+        prisma.product.findMany({
+          where: { isAvailable: true, ...STOCK_OR_PREORDER_WHERE },
+          select: {
+            categoryId: true, isPreorder: true, preorderMode: true, prepaymentKind: true,
+            prepaymentValue: true, preorderEta: true, preorderTerms: true,
+            variants: { where: { inStock: true, quantity: { gt: 0 } }, select: { id: true }, take: 1 },
           },
-        },
-        include: {
-          _count: {
-            select: {
-              // Тот же фильтр, что и выше: считаем только видимые на витрине
-              // товары, а не все записи категории (латентные без остатка
-              // задирали «iPhone · 11» при 5 покупаемых)
-              products: {
-                where: {
-                  isAvailable: true,
-                  variants: { some: { quantity: { gt: 0 }, inStock: true } },
-                },
-              },
-            },
-          },
-        },
-        orderBy: { name: 'asc' },
-      })
+        }),
+      ])
 
-      const payload = categories.map((c) => ({
-        id: c.id,
-        name: c.name,
-        textSide: c.textSide,
-        productCount: c._count.products,
-        imageUrl: publicImageFileUrl(c.imageFile),
-      }))
+      const countByCategory = new Map<number, number>()
+      for (const p of catProducts) {
+        if (p.categoryId === null) continue
+        if (!isProductVisible({
+          ...p,
+          preorderMode: p.preorderMode as never,
+          prepaymentKind: p.prepaymentKind as never,
+          hasLiveVariants: p.variants.length > 0,
+        }, preorderDefaults)) continue
+        countByCategory.set(p.categoryId, (countByCategory.get(p.categoryId) ?? 0) + 1)
+      }
+
+      const payload = categories
+        .filter((c) => (countByCategory.get(c.id) ?? 0) > 0)
+        .map((c) => ({
+          id: c.id,
+          name: c.name,
+          textSide: c.textSide,
+          productCount: countByCategory.get(c.id) ?? 0,
+          imageUrl: publicImageFileUrl(c.imageFile),
+        }))
 
       res.json(payload)
     } catch (err) {
@@ -865,11 +908,13 @@ export function startApiServer(bot?: Telegraf): Server {
           // Счётчик = что реально видно на витрине (как /api/products):
           // товары без in-stock вариантов не считаем, иначе «Apple · 98»
           // при 23 покупаемых
-          where: {
-            isAvailable: true,
-            variants: { some: { quantity: { gt: 0 }, inStock: true } },
+          where: { isAvailable: true, ...STOCK_OR_PREORDER_WHERE },
+          select: {
+            name: true, brand: true,
+            isPreorder: true, preorderMode: true, prepaymentKind: true,
+            prepaymentValue: true, preorderEta: true, preorderTerms: true,
+            variants: { where: { inStock: true, quantity: { gt: 0 } }, select: { id: true }, take: 1 },
           },
-          select: { name: true, brand: true },
         }),
         prisma.brandImage.findMany({
           where: { imageFile: { not: null } },
@@ -877,8 +922,16 @@ export function startApiServer(bot?: Telegraf): Server {
         }),
       ])
       const logoByNorm = new Map(brandImages.map((i) => [i.brandNorm, i.imageFile]))
+      // Досеиваем полузаполненные предзаказы — как в /api/products и /api/categories
+      const preorderDefaults = await loadPreorderDefaults()
       const map = new Map<string, number>()
       for (const p of products) {
+        if (!isProductVisible({
+          ...p,
+          preorderMode: p.preorderMode as never,
+          prepaymentKind: p.prepaymentKind as never,
+          hasLiveVariants: p.variants.length > 0,
+        }, preorderDefaults)) continue
         const b = p.brand?.trim() || p.name.split(' ')[0]
         if (!b) continue
         map.set(b, (map.get(b) ?? 0) + 1)

@@ -21,6 +21,10 @@ import {
   renderPreorderTerms,
   parsePreorderCell,
   splitOrderPrepayment,
+  isProductVisible,
+  variantPreorderView,
+  STOCK_OR_PREORDER_WHERE,
+  VISIBLE_VARIANT_WHERE,
   EMPTY_PREORDER_DEFAULTS,
   SUGGESTED_PREORDER_DEFAULTS,
   type PreorderDefaults,
@@ -407,5 +411,49 @@ describe('подсказка дефолтов от владельца', () => {
       expect(split.prepayment.toString()).toBe('44970')
       expect(split.remaining.toString()).toBe('104930')
     }
+  })
+})
+
+describe('витрина: кого показываем', () => {
+  const PARTIAL = parsePreorderDefaults(JSON.stringify({ mode: 'partial', kind: 'percent', value: '30' }))
+
+  it('живой остаток пускает всегда, даже без всякого предзаказа', () => {
+    expect(isProductVisible({ ...plainProduct({ isPreorder: false }), hasLiveVariants: true }, EMPTY_PREORDER_DEFAULTS)).toBe(true)
+  })
+
+  it('нет остатка и нет предзаказа — не показываем (как было)', () => {
+    expect(isProductVisible({ ...plainProduct({ isPreorder: false }), hasLiveVariants: false }, PARTIAL)).toBe(false)
+  })
+
+  it('предзаказ с полными условиями показываем при нулевом остатке', () => {
+    expect(isProductVisible({ ...plainProduct(), hasLiveVariants: false }, PARTIAL)).toBe(true)
+  })
+
+  it('ПОЛУЗАПОЛНЕННЫЙ предзаказ на витрину не пускаем', () => {
+    // Кнопка «оформить» с неизвестной суммой хуже, чем отсутствие товара
+    expect(isProductVisible({ ...plainProduct(), hasLiveVariants: false }, EMPTY_PREORDER_DEFAULTS)).toBe(false)
+  })
+
+  it('полузаполненный предзаказ с живым остатком всё равно виден — как обычный товар', () => {
+    expect(isProductVisible({ ...plainProduct(), hasLiveVariants: true }, EMPTY_PREORDER_DEFAULTS)).toBe(true)
+  })
+
+  it('условие выборки — «остаток ИЛИ предзаказ», а не одно из двух', () => {
+    const w = JSON.stringify(STOCK_OR_PREORDER_WHERE)
+    expect(w).toContain('inStock')
+    expect(w).toContain('isPreorder')
+    expect(JSON.stringify(VISIBLE_VARIANT_WHERE)).toContain('isPreorder')
+  })
+
+  it('витрине отдаются посчитанные суммы, а не проценты для клиентской арифметики', () => {
+    const r = resolvePreorder(plainProduct(), PARTIAL)
+    expect(r.kind).toBe('ready')
+    if (r.kind !== 'ready') return
+    const view = variantPreorderView(dec('56500'), r.policy)
+    expect(view.prepayment).toBe('16950')
+    expect(view.remaining).toBe('39550')
+    // Ровно то же значение считает касса — иначе покупатель увидел бы одну
+    // сумму, а списали бы другую
+    expect(computePrepayment(dec('56500'), r.policy).prepayment.toFixed(0)).toBe(view.prepayment)
   })
 })

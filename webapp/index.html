@@ -583,6 +583,11 @@
     .modal-carousel-dot.active { background: rgba(255,255,255,0.92); transform: none; width: 18px; border-radius: 4px; }
 
     /* Badge in modal */
+    .modal-preorder-block { border:1px solid rgba(168,255,62,.35); border-radius:12px; padding:12px; margin:14px 0; background:rgba(168,255,62,.06); }
+    .modal-preorder-block .mp-head { font-weight:700; font-size:13px; letter-spacing:.3px; margin-bottom:6px; }
+    .modal-preorder-block .mp-sum { font-size:15px; font-weight:700; }
+    .modal-preorder-block .mp-rest, .modal-preorder-block .mp-eta { font-size:12px; opacity:.8; margin-top:3px; }
+    .modal-preorder-block .mp-terms { font-size:11.5px; opacity:.7; margin-top:8px; line-height:1.5; }
     .modal-badge {
       position: absolute; top: 12px; left: 12px; z-index: 6;
       background: #0a0a0a; color: var(--accent);
@@ -1238,6 +1243,8 @@
         <div class="modal-attrs-section" id="modalAttrsSection" style="display:none"></div>
         <div class="modal-attr-hint" id="modalAttrHint">Выберите вариант</div>
 
+        <div class="modal-preorder-block" id="modalPreorder" style="display:none"></div>
+
         <div class="modal-delivery-block">
           <div class="modal-delivery-row">
             <span class="modal-delivery-label">САМОВЫВОЗ</span>
@@ -1698,6 +1705,17 @@
      * побеждает тот, у кого больше ТОЧНЫХ совпадений (wildcard — запасной,
      * иначе безключевой вариант перехватывал бы цену/фото у точного).
      */
+    /**
+     * Вариант доступен к покупке: живой остаток ИЛИ предзаказ. У предзаказа
+     * остаток честно нулевой, поэтому фильтровать по inStock нельзя — иначе
+     * ни один предзаказный вариант не выбирался бы, и кнопка вечно оставалась
+     * бы серой. Сервер отдаёт только те предзаказы, у которых условия полны.
+     */
+    function isBuyable(v) { return !!v && (v.inStock || v.isPreorder) }
+
+    /** Потолок предзаказа в корзине: остатка нет, а бесконечность класть нельзя. */
+    const PREORDER_CART_LIMIT = 5
+
     function pickVariantForSelection(variants, selected) {
       if (!Array.isArray(variants) || !variants.length) return null
       const keys = Object.keys(selected)
@@ -1705,7 +1723,7 @@
       let best = null
       let bestExact = -1
       for (const v of variants) {
-        if (!v.inStock) continue
+        if (!isBuyable(v)) continue
         if (!variantMatchesSelected(v, selected)) continue
         const exact = keys.filter(k => attrValueOf(v, k) === selected[k]).length
         if (exact > bestExact) { best = v; bestExact = exact }
@@ -1720,7 +1738,7 @@
      */
     function allInStockHaveKey(variants, key) {
       if (!Array.isArray(variants) || !variants.length) return true
-      return variants.every(v => !v.inStock || attrValueOf(v, key) !== null)
+      return variants.every(v => !isBuyable(v) || attrValueOf(v, key) !== null)
     }
 
     /**
@@ -1733,8 +1751,8 @@
      * с одинаковыми атрибутами считаем одним вариантом).
      */
     function resolveSelection(variants, selected, keys) {
-      const inStock = (Array.isArray(variants) ? variants : []).filter(v => v.inStock)
-      const matching = inStock.filter(v => variantMatchesSelected(v, selected))
+      const buyable = (Array.isArray(variants) ? variants : []).filter(isBuyable)
+      const matching = buyable.filter(v => variantMatchesSelected(v, selected))
       // Точные совпадения главнее wildcard-матчей (как в pickVariantForSelection):
       // выбор «SIM + eSIM» разрешается в пользу варианта С ключом, даже если
       // рядом живёт безключевой собрат с теми же остальными атрибутами
@@ -1780,7 +1798,7 @@
 
     function minVariantPrice(p) {
       if (!p.variants || !p.variants.length) return Number(p.price)
-      const prices = p.variants.filter(v => v.inStock).map(v => Number(v.price))
+      const prices = p.variants.filter(isBuyable).map(v => Number(v.price))
       return prices.length ? Math.min(...prices) : Number(p.price)
     }
 
@@ -2512,7 +2530,10 @@
         const priceText = minPrice === 0 ? 'Уточняйте у менеджера' : (hasVariants ? 'от ' + fmt(minPrice) + ' ₽' : fmt(p.price) + ' ₽')
 
         // Badge
-        const badgeHtml = p.badge ? `<div class="product-badge">${esc(p.badge)}</div>` : ''
+        // Предзаказ перебивает ручной бейдж: «ХИТ» на товаре, которого нет
+        // на складе, вводит в заблуждение сильнее, чем отсутствие «ХИТа».
+        const badgeText = p.isPreorder ? 'Предзаказ' : (p.badge || '')
+        const badgeHtml = badgeText ? `<div class="product-badge">${esc(badgeText)}</div>` : ''
 
         // Photo area
         const photosData = JSON.stringify(photos).replace(/'/g, '&#39;').replace(/"/g, '&quot;')
@@ -2815,12 +2836,12 @@
       if (p.variants && p.variants.length === 1) {
         const v = p.variants[0]
         if (v.attributes) modalSelectedAttrs = Object.assign({}, v.attributes)
-        modalActiveVariant = v.inStock ? v : null
+        modalActiveVariant = isBuyable(v) ? v : null
       }
 
       // If no defined attrs on product but has variants — auto-pick first in-stock
       if (p.variants && p.variants.length > 0 && (!p.attributes || !Object.keys(p.attributes).length)) {
-        modalActiveVariant = p.variants.find(v => v.inStock) || null
+        modalActiveVariant = p.variants.find(isBuyable) || null
       }
 
       renderModalContent()
@@ -2841,8 +2862,9 @@
 
       // Badge
       const badgeEl = document.getElementById('modalBadge')
-      badgeEl.textContent  = p.badge || ''
-      badgeEl.style.display = p.badge ? '' : 'none'
+      const modalBadgeText = p.isPreorder ? 'Предзаказ' : (p.badge || '')
+      badgeEl.textContent  = modalBadgeText
+      badgeEl.style.display = modalBadgeText ? '' : 'none'
 
       // Name
       document.getElementById('modalProductName').textContent = p.name
@@ -2942,7 +2964,7 @@
       const inStockVals = key => {
         const seen = new Set()
         for (const v of p.variants) {
-          if (!v.inStock) continue
+          if (!isBuyable(v)) continue
           const val = (v.attributes || {})[key]
           if (val) seen.add(val)
         }
@@ -2979,7 +3001,7 @@
           // Совместимость по wildcard-правилу: вариант с пустым ключом подходит
           // к любому выбору этого ключа — иначе он был бы вечно-серым
           const available = (p.variants && p.variants.length)
-            ? p.variants.some(variant => variant.inStock && variantMatchesSelected(variant, testAttrs))
+            ? p.variants.some(variant => isBuyable(variant) && variantMatchesSelected(variant, testAttrs))
             : true
           const isActive = selectedVal === v
           return `<button class="modal-attr-btn${isActive ? ' active' : ''}${!available ? ' unavailable' : ''}"
@@ -3076,7 +3098,7 @@
       // Reset onclick for normal flow
       btn.onclick = null
       if (!hasVariants) {
-        canAdd     = p.quantity > 0
+        canAdd     = p.quantity > 0 || !!p.isPreorder
         outOfStock = !canAdd
       } else {
         // Покупать можно, когда выбор однозначен (см. resolveSelection) —
@@ -3085,8 +3107,39 @@
         outOfStock = picked && matching.length === 0
       }
       btn.classList.toggle('disabled', !canAdd)
-      if (btnSpan) btnSpan.textContent = outOfStock ? 'НЕТ В НАЛИЧИИ' : 'ВЗЯТЬ У БЕНДЕРА'
+      // «Оформить предзаказ» — только когда выбран именно предзаказный вариант:
+      // у товара с частичным предзаказом рядом живут обычные предложения, и
+      // подпись должна следовать за выбором, а не за товаром целиком.
+      const activeIsPreorder = modalActiveVariant
+        ? !!modalActiveVariant.isPreorder
+        : (!hasVariants && !!p.isPreorder)
+      if (btnSpan) {
+        btnSpan.textContent = outOfStock
+          ? 'НЕТ В НАЛИЧИИ'
+          : (activeIsPreorder ? 'ОФОРМИТЬ ПРЕДЗАКАЗ' : 'ВЗЯТЬ У БЕНДЕРА')
+      }
       if (hint) hint.style.display = 'none'
+      renderModalPreorder(activeIsPreorder)
+    }
+
+    /**
+     * Блок «сколько вперёд». Суммы приходят с сервера посчитанными на цену
+     * конкретного варианта — на чекауте они пересчитываются заново и обязаны
+     * совпасть, поэтому здесь никакой арифметики нет.
+     */
+    function renderModalPreorder(active) {
+      const box = document.getElementById('modalPreorder')
+      if (!box) return
+      const v = modalActiveVariant
+      const info = active && v && v.preorder ? v.preorder : null
+      if (!info) { box.style.display = 'none'; box.innerHTML = ''; return }
+      box.style.display = ''
+      box.innerHTML = `
+        <div class="mp-head">⏳ ПРЕДЗАКАЗ</div>
+        <div class="mp-sum">Предоплата ${fmt(info.prepayment)} ₽</div>
+        <div class="mp-rest">Остаток ${fmt(info.remaining)} ₽ при получении</div>
+        <div class="mp-eta">Ориентировочный срок: ${esc(info.eta || 'уточняется')}</div>
+        ${info.terms ? `<div class="mp-terms">${esc(info.terms)}</div>` : ''}`
     }
 
     function toggleAccordion(id) {
@@ -3232,7 +3285,11 @@
       const cartKey  = variantId ? productId + '-' + variantId : String(productId)
       const price    = variant ? variant.price : p.price
       if (Number(price) === 0) { showToast('Уточняйте цену у менеджера'); return }
-      const quantity = variant ? variant.quantity : p.quantity
+      // У предзаказа остаток честно нулевой — как лимит корзины он не годится
+      // (иначе «Больше нет в наличии» на первом же клике). Ограничиваем разумным
+      // потолком: сколько именно магазин привезёт, решает менеджер.
+      const isPre = variant ? !!variant.isPreorder : !!p.isPreorder
+      const quantity = isPre ? PREORDER_CART_LIMIT : (variant ? variant.quantity : p.quantity)
       // fullName — сырое имя строки листа («iPhone 17 256GB Black (Индия)»), дублирует
       // цвет/память/страну рядом стоящих атрибутов — в подписи позиции не показываем.
       const attrVals = variant && variant.attributes
@@ -3251,12 +3308,15 @@
 
       const existing   = cart.find(i => i.key === cartKey)
       const currentQty = existing ? existing.qty : 0
-      if (currentQty >= quantity) { showToast('Больше нет в наличии'); return }
+      if (currentQty >= quantity) {
+        showToast(isPre ? 'Больше в один предзаказ не добавить' : 'Больше нет в наличии')
+        return
+      }
 
       if (existing) {
         existing.qty++
       } else {
-        cart.push({ key: cartKey, id: p.id, variantId: variantId || null, name, price, photoUrl: itemPhotoUrl, qty: 1, quantity })
+        cart.push({ key: cartKey, id: p.id, variantId: variantId || null, name, price, photoUrl: itemPhotoUrl, qty: 1, quantity, isPreorder: isPre })
       }
       updateBadge()
       if (tg && tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light')
@@ -3902,7 +3962,8 @@
       const photos = getProductPhotos(p, null)
       const url = photos.length ? photos[0] : null
       const isPh = !url || isPlaceholderPhotoUrl(url)
-      const badge = badgeFromField(p) || opts.autoBadge || null
+      const badge = (p.isPreorder ? { t: 'ПРЕДЗАКАЗ', c: 'b-new' } : null)
+        || badgeFromField(p) || opts.autoBadge || null
       const hasVariants = p.variants && p.variants.length
       const minPrice = hasVariants ? minVariantPrice(p) : Number(p.price)
       const priceHtml = minPrice === 0
