@@ -605,6 +605,13 @@
           <button class="btn b-dg" id="enrichStopBtn" style="display:none">Остановить</button>
         </div>
         <div class="mt" id="enrichErr" style="color:var(--bad)"></div>
+        <div class="list-i" style="margin-top:10px">
+          <div class="grow">
+            <div class="nm">Обогащать новые товары после синка <span id="enrichAutoChip" class="chip c-off">—</span></div>
+            <div class="mt" id="enrichAutoDesc">—</div>
+          </div>
+          <button class="btn b-nt sm" id="enrichAutoBtn">—</button>
+        </div>
         <div class="hint">Заполняются только пустые поля — то, что написано руками, не трогаем. Каждый товар — отдельный платный запрос к ИИ, между ними пауза 2 секунды. За один прогон берём не больше 50 товаров; остаток добирается повторным запуском.</div>
       </div>
       <div class="card" id="aiKeyCard" style="display:none">
@@ -1746,6 +1753,7 @@
       const stopBtn = document.getElementById('enrichStopBtn')
       const chip = document.getElementById('enrichChip')
 
+      loadEnrichAuto()
       const r = await api('/enrich/preview').catch(() => null)
       if (!r || !r.ok) { summary.textContent = 'Не удалось посчитать'; return }
       const d = r.data
@@ -1771,6 +1779,31 @@
       runBtn.style.display = ''
       runBtn.textContent = `Обогатить ${d.willRun} ${plural(d.willRun, 'пустой', 'пустых', 'пустых')}`
       runBtn.onclick = () => startEnrich(d)
+    }
+
+    // Тумблер «обогащать новые после синка»: расход без нажатия кнопки,
+    // поэтому по умолчанию выключен и переключается отдельным подтверждением.
+    async function loadEnrichAuto() {
+      const r = await api('/enrich/after-sync').catch(() => null)
+      if (!r || !r.ok) return
+      const on = !!r.data.enabled
+      const chip = document.getElementById('enrichAutoChip')
+      chip.textContent = on ? 'включено' : 'выключено'
+      chip.className = 'chip ' + (on ? 'c-ok' : 'c-off')
+      document.getElementById('enrichAutoDesc').textContent = on
+        ? `После каждого обновления из таблицы новые товары без описания обогащаются сами — не больше ${r.data.maxItems} за раз.`
+        : 'Сейчас новые товары описание не получают — заполняйте кнопкой выше или на карточке.'
+      const btn = document.getElementById('enrichAutoBtn')
+      btn.textContent = on ? 'Выключить' : 'Включить'
+      btn.onclick = async () => {
+        if (!on && !confirm(`Обогащать новые товары автоматически?\n\nПосле каждого обновления из таблицы новые карточки без описания будут заполняться сами — до ${r.data.maxItems} за прогон, каждая это платный запрос. Выключить можно этой же кнопкой.`)) return
+        btn.disabled = true
+        const r2 = await api('/enrich/after-sync', { method: 'PUT', body: JSON.stringify({ enabled: !on }) }).catch(() => null)
+        btn.disabled = false
+        if (!r2 || !r2.ok) { document.getElementById('enrichErr').textContent = (r2 && r2.data && r2.data.error) || 'Не получилось'; return }
+        toast(r2.data.enabled ? 'Автообогащение включено' : 'Автообогащение выключено')
+        loadEnrichAuto()
+      }
     }
 
     async function startEnrich(d) {

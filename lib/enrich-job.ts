@@ -126,6 +126,8 @@ export type BatchJobStatus = 'running' | 'done' | 'aborted' | 'failed'
 export interface BatchJob {
   status: BatchJobStatus
   scope: EnrichScope
+  /** Кто затеял прогон: владелец руками или синк после создания товаров. */
+  source: 'manual' | 'after_sync'
   startedBy: string
   startedAt: number
   finishedAt?: number
@@ -172,6 +174,9 @@ export function startBatchEnrich(
   actor: string,
   opts?: {
     scope?: EnrichScope
+    /** Ограничить прогон конкретными товарами (авто после синка). */
+    productIds?: number[]
+    source?: 'manual' | 'after_sync'
     maxItems?: number
     onlyWithVariants?: boolean
     pauseMs?: number
@@ -185,6 +190,7 @@ export function startBatchEnrich(
   const job: BatchJob = {
     status: 'running',
     scope,
+    source: opts?.source ?? 'manual',
     startedBy: actor,
     startedAt: Date.now(),
     total: 0,
@@ -202,6 +208,7 @@ export function startBatchEnrich(
     try {
       const r = await run({
         scope,
+        ...(opts?.productIds ? { productIds: opts.productIds } : {}),
         force: false,                                     // массовое НИКОГДА не перезаписывает
         onlyWithVariants: opts?.onlyWithVariants ?? true,
         maxItems: opts?.maxItems ?? 50,
@@ -226,7 +233,7 @@ export function startBatchEnrich(
         adminTelegramId: actor,
         action: 'enrich_batch',
         entity: 'Product',
-        after: { scope, total: r.total, enriched: r.enriched, failed: r.failed, skipped: r.skipped, aborted: r.aborted },
+        after: { scope, source: job.source, total: r.total, enriched: r.enriched, failed: r.failed, skipped: r.skipped, aborted: r.aborted },
       })
       if (r.enriched > 0) {
         const { touchStorefrontCache } = await import('./storefront-admin')

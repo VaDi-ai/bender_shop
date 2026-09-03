@@ -593,6 +593,8 @@ export async function syncProductsFromSheets(
   disabled: number
   total: number
   errors: string[]
+  /** id товаров, созданных ЭТИМ прогоном — источник для автообогащения новых. */
+  createdProductIds: number[]
 }> {
   // Prevent concurrent syncs via PostgreSQL advisory lock (тот же ключ берут
   // массовые записи из админки — lib/sync-lock.ts)
@@ -600,7 +602,7 @@ export async function syncProductsFromSheets(
   if (!lockAcquired[0]?.pg_try_advisory_lock) {
     log.warn('Sheets sync already running, skipping')
     // Пропуск из-за конкурентного прогона — не прогон, в журнал не пишем
-    return { created: 0, updated: 0, disabled: 0, total: 0, errors: ['Sync already in progress'] }
+    return { created: 0, updated: 0, disabled: 0, total: 0, errors: ['Sync already in progress'], createdProductIds: [] }
   }
 
   // Журнал прогона (ADMIN-DESIGN §3.3). null при недоступной записи — синк идёт дальше.
@@ -640,7 +642,7 @@ export async function syncProductsFromSheets(
     Sentry.captureException(err, { tags: { operation: 'sheets-sync' } })
     log.error('Sheets sync read failed', { error: err instanceof Error ? err.message : String(err) })
     await syncRunFinish(syncRunId, { ok: false, errors: [`Failed to read sheets: ${err}`] })
-    return { created: 0, updated: 0, disabled: 0, total: 0, errors: [`Failed to read sheets: ${err}`] }
+    return { created: 0, updated: 0, disabled: 0, total: 0, errors: [`Failed to read sheets: ${err}`], createdProductIds: [] }
   }
   log.info('Sheets sync rows read', { count: rows.length, sheetsFailed })
 
@@ -761,6 +763,7 @@ export async function syncProductsFromSheets(
 
   let created = 0
   let updated = 0
+  const createdProductIds: number[] = []
   const errors: string[] = []
   const seenVariantIds = new Set<number>()
   const startTime = Date.now()
@@ -881,6 +884,7 @@ export async function syncProductsFromSheets(
           },
         })
         productsByKey.set(productKey, product)
+        createdProductIds.push(product.id)
         created++
       } else {
         // Update existing product
@@ -1260,7 +1264,16 @@ export async function syncProductsFromSheets(
     errors: aborted ? [...errors, 'Прерван вручную — счётчики частичные'] : errors,
   })
 
-  return { created, updated, disabled, total: rows.length, errors }
+  // Автообогащение новых карточек. Намеренно БЕЗ await: результат синка уже
+  // посчитан, лок снимется в finally сразу, а обогащение (десятки секунд на
+  // платных запросах) поедет отдельно. Тумблер, потолок и все проверки —
+  // внутри enrichAfterSync; наружу оно не бросает, так что успешный прогон
+  // остаётся успешным при любой поломке обогащения.
+  void import('./enrich-after-sync')
+    .then(m => m.enrichAfterSync(createdProductIds, { aborted, errors }))
+    .catch(e => log.error('Enrich after sync hook failed', { error: e instanceof Error ? e.message : String(e) }))
+
+  return { created, updated, disabled, total: rows.length, errors, createdProductIds }
   } finally {
     await prisma.$queryRaw`SELECT pg_advisory_unlock(${SYNC_LOCK_KEY})`
   }
