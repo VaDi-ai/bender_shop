@@ -394,3 +394,20 @@ export function variantPreorderView(price: Decimal, policy: PreorderPolicy): Var
     }),
   }
 }
+
+/**
+ * Вешать ли на КАРТОЧКУ каталога бейдж «Предзаказ».
+ *
+ * Только когда купить прямо сейчас нельзя вовсе. У товара с живыми
+ * предложениями и одним предзаказным вариантом бейджа не будет: карточка
+ * рекламирует товар, который есть на складе, и «Предзаказ» на ней —
+ * прямая дезинформация. Предзаказность такого товара живёт на уровне
+ * ВАРИАНТА: кнопка и блок предоплаты в модалке следуют за выбором.
+ */
+export function showsPreorderBadge(p: {
+  isPreorder: boolean
+  ready: boolean
+  hasLiveVariants: boolean
+}): boolean {
+  return p.isPreorder && p.ready && !p.hasLiveVariants
+}

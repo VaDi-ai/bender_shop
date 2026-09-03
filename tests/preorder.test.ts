@@ -22,6 +22,7 @@ import {
   parsePreorderCell,
   splitOrderPrepayment,
   isProductVisible,
+  showsPreorderBadge,
   variantPreorderView,
   STOCK_OR_PREORDER_WHERE,
   VISIBLE_VARIANT_WHERE,
@@ -455,5 +456,35 @@ describe('витрина: кого показываем', () => {
     // Ровно то же значение считает касса — иначе покупатель увидел бы одну
     // сумму, а списали бы другую
     expect(computePrepayment(dec('56500'), r.policy).prepayment.toFixed(0)).toBe(view.prepayment)
+  })
+})
+
+describe('бейдж каталога: только когда купить сейчас нечего', () => {
+  it('чистый предзаказ — бейдж есть', () => {
+    expect(showsPreorderBadge({ isPreorder: true, ready: true, hasLiveVariants: false })).toBe(true)
+  })
+
+  it('СМЕШАННЫЙ товар (живые предложения + один предзаказный вариант) — бейджа НЕТ', () => {
+    // Репро с прода: Apple Watch S11 — 18 живых вариантов и один предзаказный.
+    // Карточка получала «Предзаказ», хотя товар лежит на складе.
+    expect(showsPreorderBadge({ isPreorder: true, ready: true, hasLiveVariants: true })).toBe(false)
+  })
+
+  it('обычный товар — бейджа нет', () => {
+    expect(showsPreorderBadge({ isPreorder: false, ready: false, hasLiveVariants: true })).toBe(false)
+    expect(showsPreorderBadge({ isPreorder: false, ready: false, hasLiveVariants: false })).toBe(false)
+  })
+
+  it('полузаполненный предзаказ бейджа не получает даже без живых вариантов', () => {
+    // Такой товар и на витрину не выходит, но бейдж не должен зависеть от
+    // того, вызвали ли перед этим фильтр видимости
+    expect(showsPreorderBadge({ isPreorder: true, ready: false, hasLiveVariants: false })).toBe(false)
+  })
+
+  it('бейдж и видимость — разные решения: смешанный товар виден, но без бейджа', () => {
+    const PARTIAL = parsePreorderDefaults(JSON.stringify({ mode: 'partial', kind: 'percent', value: '30' }))
+    const mixed = { ...plainProduct(), hasLiveVariants: true }
+    expect(isProductVisible(mixed, PARTIAL)).toBe(true)
+    expect(showsPreorderBadge({ isPreorder: true, ready: true, hasLiveVariants: true })).toBe(false)
   })
 })
