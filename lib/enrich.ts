@@ -319,7 +319,19 @@ export interface EnrichBatchOptions {
   pauseMs?: number
   force?: boolean
   shouldAbort?: () => boolean
-  onProgress?: (p: { done: number; total: number; name: string; ok: boolean }) => void
+  /**
+   * Ход прогона: `current` — товар, который берём СЕЙЧАС (null, когда прогон
+   * дошёл до конца). Счётчики идут вместе с ним, иначе владелец полминуты
+   * смотрит на «заполнено 0» и думает, что прогон впустую.
+   */
+  onProgress?: (p: {
+    done: number
+    total: number
+    current: string | null
+    enriched: number
+    failed: number
+    skipped: number
+  }) => void
 }
 
 export interface EnrichBatchResult {
@@ -400,16 +412,22 @@ export async function enrichAllProducts(
   // Один проход по таблице на весь прогон вместо чтения на каждый товар.
   const sheets = products.length > 0 ? await loadSheetCache() : []
 
-  for (const product of products) {
+  const emit = (current: string | null): void =>
+    opts.onProgress?.({ done, total: products.length, current, enriched, failed, skipped })
+
+  // Первый снимок — до первого запроса: иначе опрос статуса застаёт «0 из 0».
+  if (products.length > 0) emit(products[0]!.name)
+
+  for (let i = 0; i < products.length; i++) {
+    const product = products[i]!
     if (abort?.()) {
       aborted = true
       log.info('Enrich aborted by user')
+      emit(null)
       break
     }
-    let ok = false
     try {
       const r = await enrichProductCard(product.id, force, product, sheets)
-      ok = r.ok
       if (r.ok) enriched++
       else if (r.reason === 'skipped' || r.reason === 'nothing') skipped++
       else { failed++; lastError = r.message }
@@ -418,7 +436,7 @@ export async function enrichAllProducts(
       lastError = e instanceof Error ? e.message : String(e)
     }
     done++
-    opts.onProgress?.({ done, total: products.length, name: product.name, ok })
+    emit(products[i + 1]?.name ?? null)
 
     // Пауза между запросами (rate limit Perplexity) — после последнего не ждём
     if (done < products.length && pauseMs > 0) await new Promise(r => setTimeout(r, pauseMs))

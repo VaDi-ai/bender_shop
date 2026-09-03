@@ -422,14 +422,15 @@ describe('массовый прогон как фоновая задача', () 
   it('идёт в фоне, прогресс виден по опросу', async () => {
     let release: (v: any) => void = () => {}
     const run = vi.fn((o: any) => {
-      o.onProgress?.({ done: 2, total: 5, name: 'Товар 2', ok: true })
+      o.onProgress?.({ done: 2, total: 5, current: 'Товар 3', enriched: 2, failed: 0, skipped: 0 })
       return new Promise(res => { release = res })
     })
 
     const { started } = startBatchEnrich('900', { run: run as any })
 
     expect(started).toBe(true)
-    expect(getBatchJob()).toMatchObject({ status: 'running', done: 2, total: 5, current: 'Товар 2' })
+    // Счётчик «заполнено» виден в середине прогона, а не только в итоге
+    expect(getBatchJob()).toMatchObject({ status: 'running', done: 2, total: 5, current: 'Товар 3', enriched: 2 })
 
     release(result)
     await vi.waitFor(() => expect(getBatchJob()?.status).toBe('done'))
@@ -497,5 +498,59 @@ describe('гейт массового обогащения', () => {
     for (const [m, path] of routes) {
       expect(handlersOf(router, m, path), `${m} ${path}`).toContain('ownerOnly')
     }
+  })
+})
+
+describe('прогресс массового прогона виден по ходу', () => {
+  const products = (n: number) => Array.from({ length: n }, (_, i) => ({
+    id: i + 1, name: `Товар ${i + 1}`, description: null, specs: {}, attributes: {},
+  }))
+
+  it('счётчики растут вместе с done, а не проставляются в конце', async () => {
+    count.mockResolvedValue(3)
+    findMany.mockResolvedValue(products(3))
+    createMock.mockResolvedValue(GOOD)
+    const seen: Array<{ done: number; enriched: number; current: string | null }> = []
+
+    await enrichAllProducts(undefined, {
+      pauseMs: 0,
+      onProgress: p => seen.push({ done: p.done, enriched: p.enriched, current: p.current }),
+    })
+
+    // первый снимок до первого запроса + по одному после каждого товара
+    expect(seen.map(x => x.done)).toEqual([0, 1, 2, 3])
+    expect(seen.map(x => x.enriched)).toEqual([0, 1, 2, 3])
+  })
+
+  it('current — тот товар, который берём сейчас; в конце его нет', async () => {
+    count.mockResolvedValue(2)
+    findMany.mockResolvedValue(products(2))
+    createMock.mockResolvedValue(GOOD)
+    const seen: Array<string | null> = []
+
+    await enrichAllProducts(undefined, { pauseMs: 0, onProgress: p => seen.push(p.current) })
+
+    expect(seen).toEqual(['Товар 1', 'Товар 2', null])
+  })
+
+  it('неудачи тоже видны сразу, а не только в итоге', async () => {
+    count.mockResolvedValue(2)
+    findMany.mockResolvedValue(products(2))
+    createMock.mockRejectedValue(httpError(500))
+    const seen: number[] = []
+
+    await enrichAllProducts(undefined, { pauseMs: 0, onProgress: p => seen.push(p.failed) })
+
+    expect(seen).toEqual([0, 1, 2])
+  })
+
+  it('пустой прогон не шлёт ни одного снимка', async () => {
+    count.mockResolvedValue(0)
+    findMany.mockResolvedValue([])
+    const onProgress = vi.fn()
+
+    await enrichAllProducts(undefined, { pauseMs: 0, onProgress })
+
+    expect(onProgress).not.toHaveBeenCalled()
   })
 })
