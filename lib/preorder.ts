@@ -271,3 +271,64 @@ const TRUTHY = new Set(['да', 'yes', 'y', '1', 'true', '✓', 'v', 'x', 'пр�
 export function parsePreorderCell(raw: string): boolean {
   return TRUTHY.has(raw.trim().toLowerCase())
 }
+
+// ─── Заказ: сколько берём вперёд по корзине целиком ──────────────────────────
+
+/** Позиция корзины глазами предзаказа. `policy: null` — обычная позиция. */
+export interface OrderLine {
+  lineTotal: Decimal
+  policy: PreorderPolicy | null
+  /** Название для снапшота условий, когда в заказе несколько предзаказных позиций */
+  name?: string
+}
+
+export interface OrderPrepayment {
+  /** В заказе есть хоть одна предзаказная позиция */
+  isPreorder: boolean
+  /** Сколько берём вперёд — ТОЛЬКО по предзаказным позициям */
+  prepayment: Decimal
+  /** Условия выкупа на момент заказа, уже с подставленными суммами */
+  terms: string | null
+}
+
+/**
+ * Смешанная корзина: предоплата считается только по предзаказным позициям,
+ * обычный товар оплачивается как обычно. База — товары; доставка в предоплату
+ * не входит (решение владельца), поэтому здесь про неё ничего нет.
+ *
+ * Остаток заказа считается вызывающим как `итог − предоплата`: туда попадают
+ * и обычные позиции, и доставка — ровно то, что оператор возьмёт при выдаче.
+ */
+export function splitOrderPrepayment(lines: OrderLine[]): OrderPrepayment {
+  const preorderLines = lines.filter(l => l.policy !== null)
+  if (!preorderLines.length) {
+    return { isPreorder: false, prepayment: new Decimal(0), terms: null }
+  }
+
+  let prepayment = new Decimal(0)
+  const rendered: Array<{ name: string | undefined; text: string }> = []
+
+  for (const line of preorderLines) {
+    const split = computePrepayment(line.lineTotal, line.policy!)
+    prepayment = prepayment.plus(split.prepayment)
+    const text = renderPreorderTerms(line.policy!.terms, {
+      prepayment: split.prepayment,
+      remaining: split.remaining,
+      eta: line.policy!.eta,
+    })
+    if (text) rendered.push({ name: line.name, text })
+  }
+
+  if (!rendered.length) return { isPreorder: true, prepayment, terms: null }
+
+  // Сначала сравниваем САМИ условия, и только потом подписываем именами: иначе
+  // два одинаковых текста, приписанных к разным позициям, выглядели бы как
+  // разные и дублировались в снапшоте.
+  const distinct = [...new Set(rendered.map(r => r.text))]
+  const terms = distinct.length === 1
+    ? distinct[0]!
+    // Условия разные — без имени позиции покупатель не поймёт, к чему срок
+    : rendered.map(r => (r.name ? `${r.name}: ${r.text}` : r.text)).join('\n\n')
+
+  return { isPreorder: true, prepayment, terms: terms.slice(0, 2000) }
+}

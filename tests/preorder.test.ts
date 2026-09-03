@@ -20,6 +20,7 @@ import {
   computePrepayment,
   renderPreorderTerms,
   parsePreorderCell,
+  splitOrderPrepayment,
   EMPTY_PREORDER_DEFAULTS,
   SUGGESTED_PREORDER_DEFAULTS,
   type PreorderDefaults,
@@ -265,42 +266,117 @@ describe('условия выкупа: шаблон владельца, без �
   })
 })
 
-describe('касса: дверь закрыта, пока предоплату считать нечем', () => {
+describe('касса: предзаказ заказуем при нулевом остатке', () => {
   const variant = (over: Record<string, unknown> = {}) => ({
     price: '100000', inStock: true, quantity: 5,
     product: { isAvailable: true },
     ...over,
   })
+  /** Предзаказ как он есть в жизни: склад пуст, флаг стоит. */
+  const preorder = (over: Record<string, unknown> = {}) =>
+    variant({ isPreorder: true, inStock: false, quantity: 0, ...over })
 
   it('обычный товар заказуем, как и раньше', () => {
     expect(() => assertOrderableVariant(variant() as never, 1, true)).not.toThrow()
   })
 
-  it('предзаказный вариант — отказ с понятным текстом', () => {
-    expect(() => assertOrderableVariant(
-      variant({ isPreorder: true, inStock: false, quantity: 0 }) as never, 1, false,
-    )).toThrow(/предзаказ/i)
+  it('предзаказ с нулём на складе проходит даже при включённом списании', () => {
+    expect(() => assertOrderableVariant(preorder() as never, 1, true)).not.toThrow()
   })
 
-  it('флаг на товаре ловится так же, как на варианте', () => {
+  it('флаг на товаре работает так же, как на варианте', () => {
     expect(() => assertOrderableVariant(
-      variant({ product: { isAvailable: true, isPreorder: true } }) as never, 1, false,
-    )).toThrow(/предзаказ/i)
+      variant({ inStock: false, quantity: 0, product: { isAvailable: true, isPreorder: true } }) as never, 1, true,
+    )).not.toThrow()
   })
 
-  it('скрытый товар по-прежнему отказ раньше предзаказа', () => {
+  it('обычный товар без остатка по-прежнему отклоняется', () => {
     expect(() => assertOrderableVariant(
-      variant({ isPreorder: true, product: { isAvailable: false } }) as never, 1, false,
+      variant({ inStock: false, quantity: 0 }) as never, 1, true,
+    )).toThrow('Товар закончился или недоступен')
+  })
+
+  it('скрытый товар не спасается предзаказом', () => {
+    expect(() => assertOrderableVariant(
+      preorder({ product: { isAvailable: false, isPreorder: true } }) as never, 1, false,
     )).toThrow('Товар недоступен для заказа')
   })
 
-  it('отказ помечен как конфликт остатка — обработчик отдаст 409, а не 500', () => {
-    try {
-      assertOrderableVariant(variant({ isPreorder: true }) as never, 1, false)
-      expect.unreachable()
-    } catch (e) {
-      expect((e as { isStockConflict?: boolean }).isStockConflict).toBe(true)
-    }
+  it('черновик без цены не спасается предзаказом', () => {
+    expect(() => assertOrderableVariant(
+      preorder({ price: '0' }) as never, 1, false,
+    )).toThrow('Товар недоступен для заказа')
+  })
+
+  it('предзаказ не обходит запрошенное количество сверх остатка у ОБЫЧНОЙ позиции', () => {
+    expect(() => assertOrderableVariant(variant({ quantity: 1 }) as never, 5, true))
+      .toThrow('Товар закончился или недоступен')
+  })
+})
+
+describe('корзина: сколько берём вперёд', () => {
+  const pol = (over: Record<string, unknown> = {}) => ({
+    mode: 'partial' as const, kind: 'percent' as const, value: dec(30),
+    eta: null, terms: null, ...over,
+  })
+
+  it('обычная корзина — предоплаты нет вовсе', () => {
+    const r = splitOrderPrepayment([
+      { lineTotal: dec('100000'), policy: null },
+      { lineTotal: dec('50000'), policy: null },
+    ])
+    expect(r.isPreorder).toBe(false)
+    expect(r.prepayment.toString()).toBe('0')
+    expect(r.terms).toBeNull()
+  })
+
+  it('одна предзаказная позиция — 30% от неё', () => {
+    const r = splitOrderPrepayment([{ lineTotal: dec('149900'), policy: pol() as never }])
+    expect(r.isPreorder).toBe(true)
+    expect(r.prepayment.toString()).toBe('44970')
+  })
+
+  it('смешанная корзина: обычный товар в предоплату НЕ попадает', () => {
+    const r = splitOrderPrepayment([
+      { lineTotal: dec('149900'), policy: pol() as never, name: 'Предзаказный' },
+      { lineTotal: dec('999999'), policy: null, name: 'Обычный' },
+    ])
+    // 30% считаются только от 149 900, дорогой обычный товар их не раздувает
+    expect(r.prepayment.toString()).toBe('44970')
+    expect(r.isPreorder).toBe(true)
+  })
+
+  it('две предзаказные позиции складываются', () => {
+    const r = splitOrderPrepayment([
+      { lineTotal: dec('100000'), policy: pol() as never },
+      { lineTotal: dec('50000'), policy: pol({ kind: 'fixed', value: dec('5000') }) as never },
+    ])
+    expect(r.prepayment.toString()).toBe('35000')   // 30000 + 5000
+  })
+
+  it('одинаковые условия у двух позиций не дублируются в снапшоте', () => {
+    const terms = 'Предоплата {предоплата} ₽, остаток {остаток} ₽.'
+    const r = splitOrderPrepayment([
+      { lineTotal: dec('100000'), policy: pol({ terms }) as never, name: 'A' },
+      { lineTotal: dec('100000'), policy: pol({ terms }) as never, name: 'B' },
+    ])
+    expect(r.terms!.split('\n\n')).toHaveLength(1)
+  })
+
+  it('разные условия подписываются именем позиции', () => {
+    const r = splitOrderPrepayment([
+      { lineTotal: dec('100000'), policy: pol({ terms: 'Ждать {срок}', eta: 'октябрь' }) as never, name: 'iPhone' },
+      { lineTotal: dec('50000'), policy: pol({ terms: 'Ждать {срок}', eta: 'декабрь' }) as never, name: 'MacBook' },
+    ])
+    expect(r.terms).toContain('iPhone: Ждать октябрь')
+    expect(r.terms).toContain('MacBook: Ждать декабрь')
+  })
+
+  it('снапшот условий обрезается по длине поля', () => {
+    const r = splitOrderPrepayment([
+      { lineTotal: dec('1000'), policy: pol({ terms: 'я'.repeat(5000) }) as never },
+    ])
+    expect(r.terms!.length).toBeLessThanOrEqual(2000)
   })
 })
 
