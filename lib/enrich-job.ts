@@ -217,7 +217,12 @@ export function startBatchEnrich(
         onProgress: p => {
           job.done = p.done
           job.total = p.total
-          job.current = p.name
+          job.current = p.current ?? undefined
+          // Счётчики двигаются по ходу, а не только в итоге: прогон в полминуты
+          // не должен читаться как «идёт и ничего не заполняется».
+          job.enriched = p.enriched
+          job.failed = p.failed
+          job.skipped = p.skipped
         },
       })
       job.total = r.total
