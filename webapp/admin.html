@@ -835,27 +835,56 @@
     // ── ТОВАРЫ: карточка, фото (с записью в таблицу), описание, скрытие ───────
     let pcProduct = null           // открытая карточка
     let pcPhotoTarget = null       // {kind:'product'|'variant', id, label}
-    let pcSearchTimer = null
 
-    document.getElementById('pcSearch').addEventListener('input', e => {
-      clearTimeout(pcSearchTimer)
-      const q = e.target.value.trim()
-      const box = document.getElementById('pcResults')
-      if (q.length < 2) { box.innerHTML = ''; return }
-      pcSearchTimer = setTimeout(async () => {
-        const r = await api('/products?q=' + encodeURIComponent(q)).catch(() => null)
-        if (!r || !r.ok) { box.innerHTML = ''; return }
-        if (!r.data.length) { box.innerHTML = '<div class="hint">Ничего не нашли. Попробуйте часть названия — «17 pro», «air»</div>'; return }
-        box.innerHTML = r.data.map(p => `<div class="sf-item">
-          <div class="sf-item-head">
-            ${sfThumb(p.photoUrl)}
-            <div class="grow"><div class="nm">${esc(p.name)}</div>
-              <div class="mt">${esc(p.category || 'без категории')}${p.inStock ? '' : ' · нет в наличии'}</div></div>
-          </div>
-          <div class="sf-item-actions"><button class="btn b-gh sm" data-pc-open="${p.id}">Открыть карточку</button></div>
-        </div>`).join('')
-        box.querySelectorAll('[data-pc-open]').forEach(b => b.addEventListener('click', () => openProductCard(b.dataset.pcOpen)))
-      }, 250)
+    // ── Товарный пикер: один на три экрана ───────────────────────────────────
+    //
+    // Карточка товара, «Хиты» и замена позиции в «Рекомендуем» ищут одинаково:
+    // тот же эндпоинт, та же строка, та же подпись про усечение выдачи. Раньше
+    // разметка была скопирована, и правка усечения дошла бы не до всех.
+    async function searchProducts(q) {
+      const r = await api('/products?q=' + encodeURIComponent(q)).catch(() => null)
+      const d = r && r.ok ? r.data : null
+      return d && Array.isArray(d.items) ? d : { items: [], total: 0 }
+    }
+
+    /** Строка товара в пикере. chip/actions дорисовывает вызывающий экран. */
+    function productPickerRow(p, opts) {
+      opts = opts || {}
+      return `<div class="sf-item">
+        <div class="sf-item-head">
+          ${sfThumb(p.photoUrl)}
+          <div class="grow"><div class="nm">${esc(p.name)}</div>
+            <div class="mt">${esc(p.category || 'без категории')}${p.inStock ? '' : ' · нет в наличии'}</div></div>
+          ${opts.chip ? opts.chip(p) : ''}
+        </div>
+        ${opts.actions ? opts.actions(p) : ''}
+      </div>`
+    }
+
+    /**
+     * Вешает поиск на поле ввода: дебаунс, запрос, отрисовка, привязка кнопок.
+     * `bind` зовётся после отрисовки — на нём висят действия конкретного экрана.
+     */
+    function bindProductSearch(input, box, opts) {
+      let timer = null
+      input.addEventListener('input', () => {
+        clearTimeout(timer)
+        const q = input.value.trim()
+        if (q.length < 2) { box.innerHTML = ''; return }
+        timer = setTimeout(async () => {
+          const res = await searchProducts(q)
+          if (!res.items.length) { box.innerHTML = `<div class="hint">${opts.empty}</div>`; return }
+          box.innerHTML = res.items.map(p => productPickerRow(p, opts)).join('') + pickerMore(res)
+          if (opts.bind) opts.bind(box)
+        }, 250)
+      })
+    }
+
+    bindProductSearch(document.getElementById('pcSearch'), document.getElementById('pcResults'), {
+      empty: 'Ничего не нашли. Попробуйте часть названия — «17 pro», «air»',
+      actions: p => `<div class="sf-item-actions"><button class="btn b-gh sm" data-pc-open="${p.id}">Открыть карточку</button></div>`,
+      bind: box => box.querySelectorAll('[data-pc-open]').forEach(b =>
+        b.addEventListener('click', () => openProductCard(b.dataset.pcOpen))),
     })
 
     async function openProductCard(id) {
@@ -931,6 +960,8 @@
 
         ${pcPreorderBlock(p, isOwner)}
 
+        ${pcRecsBlock(p, isOwner)}
+
         ${isOwner ? `<div class="cap" style="margin:14px 0 6px">ОПАСНАЯ ЗОНА</div>
           <button class="btn ${p.isAvailable ? 'b-dg' : 'b-gh'}" data-pc-vis="${p.isAvailable ? '0' : '1'}">${p.isAvailable ? 'Скрыть товар с витрины' : 'Вернуть товар на витрину'}</button>
           <div class="hint">${p.isAvailable ? 'Товар пропадёт из каталога и поиска. Заказы по нему больше не оформят. Вернуть можно этой же кнопкой.' : 'Товар снова появится в каталоге, если есть остатки.'}</div>` : ''}
@@ -960,6 +991,7 @@
         f.scrollIntoView({ behavior: 'smooth', block: 'center' })
       })
       bindPreorder(box, p, isOwner)
+      bindRecs(box, p, isOwner)
       const enrichBtn = box.querySelector('[data-pc-enrich]')
       if (enrichBtn) enrichBtn.addEventListener('click', () => runEnrich(p, enrichBtn))
       const visBtn = box.querySelector('[data-pc-vis]')
@@ -1053,6 +1085,114 @@
         openProductCard(p.id)
         loadIssues()
       })
+    }
+
+    // ── «Рекомендуем» на карточке ────────────────────────────────────────────
+    //
+    // Ленту подбирает витрина, алгоритмом. Здесь владелец видит тот же подбор и
+    // может точечно заменить позицию — заменённая встаёт на СВОЁ место, а
+    // остальные слоты остаются на авто. Хранятся только замены, поэтому товар
+    // без правок ведёт себя ровно как раньше.
+    const REC_SOURCE_LABEL = {
+      manual: 'вручную',
+      accessory: 'авто · аксессуар',
+      related: 'авто · сопутствующий',
+      similar: 'авто · похожий по цене',
+    }
+
+    /** Текущие замены, дополненные нулями до полной ленты: индекс = слот. */
+    function recsManualArray(p) {
+      const recs = p.recommendations || { manual: [], limit: 4 }
+      const out = (recs.manual || []).slice(0, recs.limit)
+      while (out.length < recs.limit) out.push(0)
+      return out
+    }
+
+    function pcRecsBlock(p, isOwner) {
+      const recs = p.recommendations
+      if (!recs) return ''
+      const manual = recsManualArray(p)
+      const hasManual = manual.some(id => id > 0)
+
+      const rows = recs.slots.length
+        ? recs.slots.map(sl => {
+          const isManual = sl.source === 'manual'
+          return `<div class="sf-item">
+            <div class="sf-item-head">
+              ${sfThumb(sl.photoUrl)}
+              <div class="grow">
+                <div class="nm">${sl.position}. ${esc(sl.name)}</div>
+                <div class="mt">${esc(REC_SOURCE_LABEL[sl.source] || sl.source)}${sl.price ? ' · от ' + fmt(sl.price) + ' ₽' : ''}</div>
+              </div>
+              ${isManual ? '<span class="chip c-ok">замена</span>' : ''}
+            </div>
+            ${sl.onStorefront ? '' : '<div class="hint">Этого товара нет на витрине — покупатель видит на этом месте авто-подбор.</div>'}
+            ${isOwner ? `<div class="sf-item-actions">
+              <button class="btn b-gh sm" data-rec-pick="${sl.position}">Заменить</button>
+              ${isManual ? `<button class="btn b-nt sm" data-rec-auto="${sl.position}">Вернуть авто</button>` : ''}
+            </div>
+            <div id="recPick-${sl.position}"></div>` : ''}
+          </div>`
+        }).join('')
+        : '<div class="mt">Подобрать нечего — в каталоге нет подходящих товаров.</div>'
+
+      const reset = isOwner && hasManual
+        ? `<div class="sf-item-actions"><button class="btn b-nt sm" id="recReset">Сбросить всё на авто</button></div>`
+        : ''
+
+      return `<div class="cap" style="margin:14px 0 6px">РЕКОМЕНДУЕМ</div>
+        <div class="mt">Подобрано автоматически по бренду и категории. Замените неподходящие — остальные останутся на авто-подборе.</div>
+        ${rows}
+        ${reset}
+        <div class="mt" id="recErr" style="color:var(--bad)"></div>
+        ${isOwner ? '' : '<div class="hint">Ленту меняет только владелец.</div>'}`
+    }
+
+    function bindRecs(box, p, isOwner) {
+      if (!isOwner || !p.recommendations) return
+      const err = box.querySelector('#recErr')
+
+      const save = async (ids) => {
+        err.textContent = ''
+        const r = await api(`/products/${p.id}/recommendations`, { method: 'PUT', body: JSON.stringify({ ids }) }).catch(() => null)
+        if (!r || !r.ok) { err.textContent = (r && r.data && r.data.error) || 'Не получилось сохранить'; return }
+        toast('Рекомендации сохранены')
+        openProductCard(p.id)
+      }
+
+      box.querySelectorAll('[data-rec-auto]').forEach(b => b.addEventListener('click', () => {
+        const manual = recsManualArray(p)
+        manual[Number(b.dataset.recAuto) - 1] = 0
+        save(manual)
+      }))
+
+      const resetBtn = box.querySelector('#recReset')
+      if (resetBtn) resetBtn.addEventListener('click', () => {
+        if (!confirm('Вернуть все позиции на авто-подбор? Ручные замены пропадут.')) return
+        save([])
+      })
+
+      // Замена позиции — тем же товарным пикером, что в карточке и в «Хитах»
+      box.querySelectorAll('[data-rec-pick]').forEach(b => b.addEventListener('click', () => {
+        const pos = Number(b.dataset.recPick)
+        const panel = box.querySelector('#recPick-' + pos)
+        if (panel.dataset.open === '1') { panel.dataset.open = ''; panel.innerHTML = ''; return }
+        box.querySelectorAll('[id^="recPick-"]').forEach(x => { x.dataset.open = ''; x.innerHTML = '' })
+        panel.dataset.open = '1'
+        panel.innerHTML = `<input class="inp" placeholder="Чем заменить: «airpods», «17 pro»…" maxlength="60">
+          <div></div>`
+        const input = panel.querySelector('input')
+        bindProductSearch(input, panel.querySelector('div'), {
+          empty: 'Ничего не нашли — попробуйте часть названия',
+          actions: x => `<div class="sf-item-actions"><button class="btn b-gh sm" data-rec-set="${x.id}">Поставить на ${pos}-е место</button></div>`,
+          bind: results => results.querySelectorAll('[data-rec-set]').forEach(btn => btn.addEventListener('click', () => {
+            const manual = recsManualArray(p)
+            manual[pos - 1] = Number(btn.dataset.recSet)
+            save(manual)
+          })),
+        })
+        input.focus()
+      }))
     }
 
     // ── «Заполнить из интернета»: 202 + опрос статуса ────────────────────────
@@ -2497,32 +2637,16 @@
       if (wrap.style.display === 'none') openHitSearch(); else closeHitSearch()
     })
 
-    let hitSearchTimer = null
-    document.getElementById('hitSearch').addEventListener('input', e => {
-      clearTimeout(hitSearchTimer)
-      const q = e.target.value.trim()
-      const box = document.getElementById('hitResults')
-      if (q.length < 2) { box.innerHTML = ''; return }
-      hitSearchTimer = setTimeout(async () => {
-        const r = await api('/products?q=' + encodeURIComponent(q)).catch(() => null)
-        if (!r || !r.ok) { box.innerHTML = ''; return }
-        if (!r.data.length) { box.innerHTML = '<div class="hint">Ничего не нашли — попробуйте другое слово</div>'; return }
-        box.innerHTML = r.data.map(p => `<div class="sf-item">
-          <div class="sf-item-head">
-            ${sfThumb(p.photoUrl)}
-            <div class="grow"><div class="nm">${esc(p.name)}</div>
-              <div class="mt">${esc(p.category || 'без категории')}${p.inStock ? '' : ' · нет в наличии'}</div></div>
-            ${p.isFeatured ? '<span class="chip c-ok">уже хит</span>' : ''}
-          </div>
-          ${p.isFeatured ? '' : `<div class="sf-item-actions"><button class="btn b-gh sm" data-hit-on="${p.id}">В хиты</button></div>`}
-        </div>`).join('')
-        box.querySelectorAll('[data-hit-on]').forEach(b => b.addEventListener('click', async () => {
-          const r2 = await api(`/hits/${b.dataset.hitOn}`, { method: 'POST', body: JSON.stringify({ featured: true }) }).catch(() => null)
-          if (!r2 || !r2.ok) { alert(r2 && r2.data && r2.data.error || 'Не получилось'); return }
-          closeHitSearch()
-          loadStorefront()
-        }))
-      }, 250)
+    bindProductSearch(document.getElementById('hitSearch'), document.getElementById('hitResults'), {
+      empty: 'Ничего не нашли — попробуйте другое слово',
+      chip: p => p.isFeatured ? '<span class="chip c-ok">уже хит</span>' : '',
+      actions: p => p.isFeatured ? '' : `<div class="sf-item-actions"><button class="btn b-gh sm" data-hit-on="${p.id}">В хиты</button></div>`,
+      bind: box => box.querySelectorAll('[data-hit-on]').forEach(b => b.addEventListener('click', async () => {
+        const r2 = await api(`/hits/${b.dataset.hitOn}`, { method: 'POST', body: JSON.stringify({ featured: true }) }).catch(() => null)
+        if (!r2 || !r2.ok) { alert(r2 && r2.data && r2.data.error || 'Не получилось'); return }
+        closeHitSearch()
+        loadStorefront()
+      })),
     })
 
     document.getElementById('sfCacheBtn').addEventListener('click', async () => {

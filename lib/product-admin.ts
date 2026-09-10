@@ -18,6 +18,10 @@ import {
   loadPreorderDefaults, resolvePreorder, computePrepayment, renderPreorderTerms,
   asPositiveDecimal, PREORDER_GAP_LABEL, type PreorderReadiness,
 } from './preorder'
+import {
+  autoRecommendations, resolveRecSlots, loadVisibleCatalog, trimManual,
+  REC_SLOTS, type RecSource,
+} from './recommendations'
 import { Decimal } from '@prisma/client/runtime/client'
 
 export interface OfferView {
@@ -47,6 +51,8 @@ export interface ProductCard {
   specs: Record<string, string>
   /** Предзаказ: что стоит у товара, что подставилось из дефолтов и готово ли это к витрине */
   preorder: PreorderCardView
+  /** «Рекомендуем»: что лента показывает сейчас и что из этого закреплено руками */
+  recommendations: RecsCardView
   isAvailable: boolean
   isFeatured: boolean
   /** Что покупатель видит в каталоге: coverPhoto, а без неё — авто (первый вариант) */
@@ -59,6 +65,33 @@ export interface ProductCard {
   countries: string[]
   inStockCount: number
   priceFrom: number | null
+}
+
+/**
+ * Блок «Рекомендуем» для карточки админки: лента по слотам с пометкой, откуда
+ * взялась каждая позиция, и сырой массив замен — по нему рисуются кнопки.
+ */
+export interface RecsCardView {
+  slots: RecSlotView[]
+  /** Как лежит в БД: 0 = слот на авто. Пустой массив = замен нет */
+  manual: number[]
+  /** Сколько всего позиций в ленте — столько же слотов у покупателя */
+  limit: number
+}
+
+export interface RecSlotView {
+  position: number
+  productId: number
+  name: string
+  photoUrl: string | null
+  price: number | null
+  source: RecSource
+  /**
+   * Виден ли товар покупателю. У закреплённого товара, ушедшего с витрины
+   * (скрыт, кончился, удалён), тут false: в ленте покупателя на этом месте
+   * стоит авто-подбор, и владелец должен это видеть, а не гадать.
+   */
+  onStorefront: boolean
 }
 
 /**
@@ -109,6 +142,7 @@ export async function getProductCard(productId: number): Promise<ProductCard | n
       isAvailable: true, isFeatured: true, photoUrl: true, coverPhoto: true, photos: true,
       isPreorder: true, preorderMode: true, prepaymentKind: true,
       prepaymentValue: true, preorderEta: true, preorderTerms: true,
+      recommendedIds: true,
       category: { select: { name: true } },
       variants: {
         orderBy: { id: 'asc' },
@@ -155,6 +189,55 @@ export async function getProductCard(productId: number): Promise<ProductCard | n
     inStockCount: inStockOffers.length,
     priceFrom: inStockOffers.length ? Math.min(...inStockOffers.map(o => o.price)) : null,
     preorder: await buildPreorderCardView(p, offers),
+    recommendations: await buildRecsCardView(p.id, p.recommendedIds ?? []),
+  }
+}
+
+/**
+ * Собирает ленту «Рекомендуем» для карточки: считает тот же авто-подбор, что и
+ * витрина, и накладывает ручные замены.
+ *
+ * Закреплённый товар показываем ВСЕГДА, даже если он ушёл с витрины — иначе
+ * владелец не поймёт, почему его замена не работает. Отсюда `() => true` вместо
+ * проверки существования и флаг onStorefront: у покупателя такой слот
+ * добивается авто-подбором.
+ */
+async function buildRecsCardView(productId: number, manual: number[]): Promise<RecsCardView> {
+  const catalog = await loadVisibleCatalog()
+  const self = catalog.find(c => c.id === productId)
+  const visible = new Set(catalog.map(c => c.id))
+
+  // Товара нет на витрине — ленты у покупателя тоже нет. Замены при этом
+  // показываем: владелец их ставил и должен видеть, что они сохранены.
+  const auto = self ? autoRecommendations(self, catalog, REC_SLOTS) : []
+  const slots = resolveRecSlots(manual, auto, REC_SLOTS, () => true)
+
+  const ids = slots.map(sl => sl.productId)
+  const rows = ids.length
+    ? await prisma.product.findMany({
+      where: { id: { in: ids } },
+      select: { id: true, name: true, photoUrl: true, coverPhoto: true },
+    })
+    : []
+  const byId = new Map(rows.map(r => [r.id, r]))
+  const priceById = new Map(catalog.map(c => [c.id, c.price]))
+
+  return {
+    limit: REC_SLOTS,
+    manual,
+    slots: slots.map(sl => {
+      const row = byId.get(sl.productId)
+      return {
+        position: sl.position,
+        productId: sl.productId,
+        // Товар мог быть удалён уже после закрепления — честно говорим об этом
+        name: row?.name ?? `удалённый товар #${sl.productId}`,
+        photoUrl: row ? (row.coverPhoto || row.photoUrl || null) : null,
+        price: priceById.get(sl.productId) ?? null,
+        source: sl.source,
+        onStorefront: visible.has(sl.productId),
+      }
+    }),
   }
 }
 
@@ -573,5 +656,76 @@ export async function setProductPreorder(
   })
   // Условия и суммы видны покупателю на карточке — открытые вкладки должны узнать
   await touchStorefrontCache('product_preorder')
+  return { ok: true, status: 200 }
+}
+
+/**
+ * «Рекомендуем»: ручные замены слотов. Только владелец — лента видна каждому
+ * покупателю в каждой карточке, это витринное решение, а не операционка.
+ *
+ * Формат `ids` — массив по слотам, где 0 значит «этот слот считает алгоритм».
+ * `[0, 0, 394, 0]` — закреплён только третий слот. Пустой массив (и массив из
+ * одних нулей, который схлопывается в пустой) возвращает товар на чистый
+ * авто-подбор: витрина в этом случае работает ровно так же, как до появления
+ * поля.
+ *
+ * DB-only, как coverPhoto и условия предзаказа: синк это поле не пишет, значит
+ * замены переживают любой прогон таблицы.
+ */
+export async function setProductRecommendations(
+  actor: string,
+  productId: number,
+  raw: unknown,
+): Promise<Outcome> {
+  const p = await prisma.product.findUnique({
+    where: { id: productId },
+    select: { id: true, recommendedIds: true },
+  })
+  if (!p) return bad(404, 'Товар не найден')
+
+  const b = (raw ?? {}) as Record<string, unknown>
+  if (!('ids' in b)) return bad(422, 'Нечего менять')
+  if (!Array.isArray(b.ids)) return bad(422, 'Ожидался список позиций')
+  if (b.ids.length > REC_SLOTS) return bad(422, `В ленте ${REC_SLOTS} позиции — больше не поместится`)
+
+  const ids: number[] = []
+  for (const v of b.ids) {
+    const n = typeof v === 'number' ? v : Number(v)
+    if (!Number.isInteger(n) || n < 0) return bad(422, 'Позиция — это id товара или 0 для авто-подбора')
+    ids.push(n)
+  }
+
+  // Дальше проверяем только НЕнулевые: ноль — это не товар, а пустой слот, и
+  // таких в массиве может быть сколько угодно, в том числе несколько подряд.
+  const picked = ids.filter(id => id !== 0)
+  if (picked.some(id => id === productId)) return bad(422, 'Товар нельзя рекомендовать сам к себе')
+  if (new Set(picked).size !== picked.length) return bad(422, 'Один товар в ленте дважды — уберите повтор')
+
+  if (picked.length) {
+    const found = await prisma.product.findMany({
+      where: { id: { in: picked } },
+      select: { id: true },
+    })
+    const known = new Set(found.map(r => r.id))
+    const missing = picked.filter(id => !known.has(id))
+    if (missing.length) return bad(422, `Таких товаров нет: ${missing.join(', ')}`)
+  }
+
+  // Хвостовые нули не храним — [394, 0, 0] и [394] это одно и то же. Нули в
+  // начале и в середине значимы: они держат позицию закреплённого товара.
+  const next = trimManual(ids)
+  const before = p.recommendedIds ?? []
+  if (before.length === next.length && before.every((v, i) => v === next[i])) {
+    return { ok: true, status: 200, data: { unchanged: true } }
+  }
+
+  await prisma.product.update({ where: { id: productId }, data: { recommendedIds: next } })
+  void logAdminAction({
+    adminTelegramId: actor, action: 'update', entity: 'Product', entityId: productId,
+    before: { recommendedIds: before }, after: { recommendedIds: next },
+  })
+  log.info('Product recommendations changed from web admin', { productId, recommendedIds: next })
+  // Лента видна покупателю сразу — открытые вкладки должны узнать
+  await touchStorefrontCache('product_recommendations')
   return { ok: true, status: 200 }
 }

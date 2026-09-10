@@ -1,0 +1,38 @@
+--- Product columns ---
+id	integer	NO	nextval('"Product_id_seq"'::regclass)
+sku	text	NO	
+name	text	NO	
+description	text	YES	
+price	numeric	NO	
+stock	integer	NO	0
+quantity	integer	NO	0
+reserved	integer	NO	0
+categoryId	integer	YES	
+photoUrl	text	YES	
+photos	ARRAY	YES	
+isAvailable	boolean	NO	true
+isFeatured	boolean	NO	false
+attributes	jsonb	YES	
+specs	jsonb	YES	
+badge	text	YES	
+brand	text	YES	
+createdAt	timestamp without time zone	NO	CURRENT_TIMESTAMP
+updatedAt	timestamp without time zone	NO	
+avitoEnabled	boolean	NO	false
+avitoItemId	bigint	YES	
+line	text	YES	
+sortOrder	integer	NO	0
+coverPhoto	text	YES	
+isPreorder	boolean	NO	false
+preorderEta	text	YES	
+preorderMode	USER-DEFINED	YES	
+preorderTerms	text	YES	
+prepaymentKind	USER-DEFINED	YES	
+prepaymentValue	numeric	YES	
+--- has recommendedIds: false
+--- Product count: 721
+--- last migrations ---
+20260903180000_add_preorder	2026-09-03T17:28:15.784Z
+20260826140000_add_variant_archived_at	2026-08-28T12:01:01.683Z
+20260821090000_add_order_delivery_pricing	2026-08-21T15:06:36.892Z
+0_init	2026-08-09T22:06:00.616Z

@@ -5,7 +5,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 vi.mock('../lib/prisma', () => ({
-  prisma: { product: { findUnique: vi.fn(), update: vi.fn() } },
+  // findMany нужен ленте «Рекомендуем»: карточка считает авто-подбор по каталогу
+  prisma: { product: { findUnique: vi.fn(), update: vi.fn(), findMany: vi.fn() } },
 }))
 vi.mock('../lib/audit', () => ({ logAdminAction: vi.fn() }))
 vi.mock('../lib/api-key-store', () => ({ getApiKeyValue: vi.fn(), setApiKeyValue: vi.fn() }))
@@ -32,8 +33,9 @@ const productRow = {
 }
 
 beforeEach(() => {
-  pp.findUnique.mockReset(); pp.update.mockReset(); bump.mockReset()
+  pp.findUnique.mockReset(); pp.update.mockReset(); pp.findMany.mockReset(); bump.mockReset()
   pp.update.mockResolvedValue({})
+  pp.findMany.mockResolvedValue([])
 })
 
 describe('карточка', () => {
