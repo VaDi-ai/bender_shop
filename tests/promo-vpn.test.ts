@@ -197,3 +197,31 @@ describe('окно свежести initData', () => {
     expect(PROMO_SEEN_MAX_AGE_SECONDS).toBe(86400)
   })
 })
+
+// ── Событие безопасности промо-ручек не будит владельца ──────────────────────
+//
+// «Critical» нигде не хранится: в SecurityLog нет severity, алерт в Telegram
+// решает список CRITICAL_EVENTS. Значит проверять надо именно список — иначе
+// однажды кто-нибудь добавит туда промо-событие, и сканер с мусорным
+// заголовком начнёт будить владельца по ночам.
+describe('promo_invalid_signature не критично', () => {
+  it('события промо-ручек нет в CRITICAL_EVENTS', async () => {
+    const src = await import('node:fs').then(fs =>
+      fs.readFileSync(new URL('../lib/security-log.ts', import.meta.url), 'utf8'))
+    // Вырезаем именно тело массива: в объявлении есть `SecurityEvent[]`, и
+    // наивный поиск первой `]` обрезал бы список до пустого
+    const start = src.indexOf('const CRITICAL_EVENTS')
+    const open = src.indexOf('= [', start) + 2
+    const block = src.slice(open, src.indexOf('\n]', open))
+    expect(block).not.toContain('promo_invalid_signature')
+    // Контроль: витринное событие заказов там по-прежнему есть
+    expect(block).toContain('invalid_telegram_signature')
+  })
+
+  it('событие объявлено в типе и имеет человеческое описание', async () => {
+    const src = await import('node:fs').then(fs =>
+      fs.readFileSync(new URL('../lib/security-log.ts', import.meta.url), 'utf8'))
+    expect(src).toContain("| 'promo_invalid_signature'")
+    expect(src).toMatch(/promo_invalid_signature:\s+'/)
+  })
+})

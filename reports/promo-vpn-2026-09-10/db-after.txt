@@ -1,0 +1,12 @@
+--- _prisma_migrations ---
+  20260910180000_add_promo_seen | 2026-09-10T18:21:15.111Z | steps: 1
+  20260910120000_add_product_recommendations | 2026-09-10T15:43:09.038Z | steps: 1
+  20260903180000_add_preorder | 2026-09-03T17:28:15.784Z | steps: 1
+--- PromoSeen ---
+  id integer NO
+  telegramUserId text NO
+  promoKey text NO
+  seenAt timestamp without time zone NO
+индексы: PromoSeen_pkey, PromoSeen_promoKey_idx, PromoSeen_telegramUserId_promoKey_key
+строк: 0
+setting_promo_vpn в ApiKey: нет (промо на дефолте = выключено)

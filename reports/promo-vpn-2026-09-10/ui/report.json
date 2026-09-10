@@ -1,0 +1,200 @@
+{
+  "visitor": 990186674,
+  "checks": [
+    {
+      "name": "промо на проде выключено (дефолт релиза)",
+      "value": {
+        "pass": true,
+        "enabled": false
+      }
+    },
+    {
+      "name": "выключенное промо не отдаёт ни ссылки, ни enabled",
+      "value": {
+        "pass": true,
+        "body": {
+          "enabled": false,
+          "link": "",
+          "offerText": "2 недели VPN бесплатно",
+          "seen": false
+        }
+      }
+    },
+    {
+      "name": "#vpnFab === null при выключенном промо",
+      "value": {
+        "pass": true,
+        "fabIsNull": true,
+        "templatePresent": true
+      }
+    },
+    {
+      "name": "менеджер не сохраняет настройку (403)",
+      "value": {
+        "pass": true,
+        "status": 403,
+        "error": "Недостаточно прав (нужна роль owner)"
+      }
+    },
+    {
+      "name": "чужой хост отклоняется на записи (422)",
+      "value": {
+        "pass": true,
+        "results": [
+          {
+            "link": "https://evil.com/x",
+            "status": 422
+          },
+          {
+            "link": "http://t.me/x",
+            "status": 422
+          },
+          {
+            "link": "https://t.me.evil.com/x",
+            "status": 422
+          },
+          {
+            "link": "https://t.me@evil.com/x",
+            "status": 422
+          }
+        ]
+      }
+    },
+    {
+      "name": "после отказов настройка не изменилась",
+      "value": {
+        "pass": true,
+        "now": {
+          "enabled": false,
+          "link": "https://t.me/Bender_KVN_bot?start=ref_bs_home"
+        }
+      }
+    },
+    {
+      "name": "мусорный заголовок: GET деградирует в анонима, POST 401",
+      "value": {
+        "pass": true,
+        "get": 200,
+        "post": 401
+      }
+    },
+    {
+      "name": "промо пишет СВОЁ событие, critical-событие витрины не задето",
+      "value": {
+        "pass": true,
+        "promoRows": 5,
+        "criticalRowsLast5min": 0,
+        "scopes": [
+          "promo_write",
+          "promo_read",
+          "promo_write",
+          "promo_write",
+          "promo_read"
+        ]
+      }
+    },
+    {
+      "name": "владелец включил промо",
+      "value": {
+        "pass": true,
+        "status": 200
+      }
+    },
+    {
+      "name": "кнопка появилась на «Главной»",
+      "value": {
+        "pass": true,
+        "visible": true
+      }
+    },
+    {
+      "name": "на «Каталоге» кнопки нет",
+      "value": {
+        "pass": true,
+        "hidden": true
+      }
+    },
+    {
+      "name": "клик → затемнение и отсчёт",
+      "value": {
+        "pass": true,
+        "num": "3"
+      }
+    },
+    {
+      "name": "шторка с оффером",
+      "value": {
+        "pass": true,
+        "text": "✕ 🎁 ну ты и нажал 😏 Раз уж не удержался — держи 2 недели VPN бесплатно Быстрый VPN от Бендера. Без рекламы, без лагов,"
+      }
+    },
+    {
+      "name": "кнопка спряталась сразу по клику (оптимистично)",
+      "value": {
+        "pass": true
+      }
+    },
+    {
+      "name": "CTA открывает диплинк t.me",
+      "value": {
+        "pass": true,
+        "link": "https://t.me/Bender_KVN_bot?start=ref_bs_home"
+      }
+    },
+    {
+      "name": "флаг «видел» записан по этому посетителю",
+      "value": {
+        "pass": true,
+        "rows": [
+          {
+            "promoKey": "vpn_2weeks",
+            "seenAt": "2026-09-10T15:33:28.482Z"
+          }
+        ]
+      }
+    },
+    {
+      "name": "после перезагрузки кнопки нет — флаг сохранился",
+      "value": {
+        "pass": true,
+        "fabIsNull": true
+      }
+    },
+    {
+      "name": "клик через 6 минут после открытия витрины пишет флаг (24ч-окно)",
+      "value": {
+        "pass": true,
+        "status": 200,
+        "rows": 1
+      }
+    },
+    {
+      "name": "23 часа — ещё пишет",
+      "value": {
+        "pass": true,
+        "status": 200
+      }
+    },
+    {
+      "name": "старше суток — 401, окно не бесконечное",
+      "value": {
+        "pass": true,
+        "status": 401
+      }
+    },
+    {
+      "name": "витрине отдаётся только t.me",
+      "value": {
+        "pass": true,
+        "link": "https://t.me/Bender_KVN_bot?start=ref_bs_home",
+        "host": "t.me"
+      }
+    }
+  ],
+  "restored": {
+    "enabled": false,
+    "link": "https://t.me/Bender_KVN_bot?start=ref_bs_home",
+    "qaRowsDeleted": 3,
+    "promoSeenTotal": 0
+  }
+}
