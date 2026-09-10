@@ -1,0 +1,13 @@
+--- таблица PromoSeen ---
+нет (ожидаемо)
+--- ключи настроек в ApiKey ---
+  setting_enrich_after_sync | длина значения: 63
+  setting_maintenance | длина значения: 63
+  setting_maintenance_note | длина значения: 61
+  setting_marquee | длина значения: 123
+  setting_preorder | длина значения: 813
+setting_promo_vpn: нет (ожидаемо)
+--- _prisma_migrations ---
+  20260910120000_add_product_recommendations | 2026-09-10T15:43:09.038Z
+  20260903180000_add_preorder | 2026-09-03T17:28:15.784Z
+  20260826140000_add_variant_archived_at | 2026-08-28T12:01:01.683Z

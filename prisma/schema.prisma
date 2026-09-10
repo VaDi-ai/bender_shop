@@ -893,3 +893,22 @@ model PriceApplyBatch {
   @@index([status])
   @@index([createdAt])
 }
+
+/// Кто уже видел разовое промо на витрине. Ключ — telegram-id посетителя, а не
+/// Client: клиентом человек становится только при заказе, а промо видят все.
+///
+/// promoKey, а не булево поле: следующие разовые механики (реф-ссылки, тумблеры
+/// акции) лягут сюда же без новой миграции. Уникальность по паре делает запись
+/// идемпотентной — дабл-тап и ретрай не плодят строк.
+///
+/// Внешнего ключа нет намеренно: посетителя может не быть ни в Client, ни в
+/// AdminUser, и промо это не должно волновать.
+model PromoSeen {
+  id             Int      @id @default(autoincrement())
+  telegramUserId String
+  promoKey       String
+  seenAt         DateTime @default(now())
+
+  @@unique([telegramUserId, promoKey])
+  @@index([promoKey])
+}

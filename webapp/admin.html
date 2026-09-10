@@ -455,6 +455,7 @@
         <button class="hub-tile" data-hub="sync"><span class="ht-n">Журнал синка</span><span class="ht-s" id="tileSync">—</span></button>
         <button class="hub-tile" data-hub="parser"><span class="ht-n">Парсер</span><span class="ht-s" id="tileParser">—</span></button>
         <button class="hub-tile" data-hub="preorder"><span class="ht-n">Предзаказ</span><span class="ht-s" id="tilePreorder">—</span></button>
+        <button class="hub-tile" data-hub="promovpn"><span class="ht-n">VPN-промо</span><span class="ht-s" id="tilePromoVpn">—</span></button>
       </div>
 
       <div class="hub-page" id="hub-promos" style="display:none">
@@ -665,6 +666,27 @@
       </div>
       </div>
 
+      <div class="hub-page" id="hub-promovpn" style="display:none">
+      <div class="card">
+        <h3>Кнопка «2 недели VPN» <span class="chip c-off right" id="pvChip">—</span></h3>
+        <div class="mt">Красная кнопка «⛔ НЕ НАЖИМАТЬ» на главной витрины. Тап — обратный отсчёт и оффер со ссылкой в Telegram. Каждому покупателю показывается один раз: нажал — больше не всплывает.</div>
+        <div id="pvBroken" class="warnbox" style="display:none"></div>
+        <div class="cap" style="margin:12px 0 6px">ПОКАЗЫВАТЬ НА ВИТРИНЕ</div>
+        <div class="sf-item-actions">
+          <button class="btn b-nt sm" id="pvOn">Включить</button>
+          <button class="btn b-nt sm" id="pvOff">Выключить</button>
+        </div>
+        <div class="cap" style="margin:12px 0 6px">КУДА ВЕДЁТ КНОПКА</div>
+        <input class="inp" id="pvLink" maxlength="500" placeholder="https://t.me/…">
+        <div class="hint">Только ссылка на Telegram — адрес другого сайта не сохранится. Витрина не должна уводить покупателя на посторонний домен.</div>
+        <div class="cap" style="margin:12px 0 6px">ЧТО ОБЕЩАЕМ</div>
+        <input class="inp" id="pvOffer" maxlength="200" placeholder="2 недели VPN бесплатно">
+        <div class="hint">Эта строка подсвечивается в заголовке оффера: «Раз уж не удержался — держи <b>…</b>».</div>
+        <button class="btn b-main" id="pvSave">Сохранить</button>
+        <div class="mt" id="pvErr" style="color:var(--bad)"></div>
+      </div>
+      </div>
+
       <div class="hub-page" id="hub-sync" style="display:none">
       <div class="card"><h3>Журнал синка</h3><div class="mt" id="syncRuns">Загрузка…</div></div>
       <div class="card"><h3>Кто что менял <span class="chip c-off right">скоро</span></h3><div class="mt">Каждое действие в админке уже пишется в журнал на сервере — просмотр появится после первых разделов Этапа 2.</div></div>
@@ -772,7 +794,7 @@
       window.adminMe = me
       gate.classList.add('hidden')
       loadDashboard(); loadSyncRuns(); loadSuppliers(); loadBatches(); loadUnmatched(); loadAliases(); loadMarkupRules(); loadDeliveryPricing()
-      loadSimQueue(); loadSimRecalc(); loadDictionary(); loadStorefront(); loadTeam(); loadIssues(); loadPromotions(); loadInsights(); loadBroadcasts(); loadSegments(); loadAiAgent(); loadMaintenance(); loadPreorderDefaults()
+      loadSimQueue(); loadSimRecalc(); loadDictionary(); loadStorefront(); loadTeam(); loadIssues(); loadPromotions(); loadInsights(); loadBroadcasts(); loadSegments(); loadAiAgent(); loadMaintenance(); loadPreorderDefaults(); loadPromoVpn()
     }
 
     // ── ОШИБКИ В ТОВАРАХ: идём от проблемы к карточке ─────────────────────────
@@ -1639,6 +1661,7 @@
       sync: ['Журнал синка', 'Как прошли последние прогоны таблицы.'],
       parser: ['Парсер', 'Разобрал строку → вы поправили → запомнил. SIM — такой же атрибут.'],
       preorder: ['Предзаказ', 'Сколько берём вперёд и на каких условиях — одна настройка на магазин.'],
+      promovpn: ['VPN-промо', 'Кнопка «не нажимать» на главной и куда она ведёт.'],
     }
 
     function openHub(id) {
@@ -2161,6 +2184,84 @@
         toast('Дефолты предзаказа сохранены')
         loadPreorderDefaults()
         loadIssues()
+      } finally { this.disabled = false }
+    })
+
+
+    // ── VPN-ПРОМО: рубильник кнопки на главной ────────────────────────────────
+    //
+    // Настройку меняет только владелец (ownerOnly на ручке). Менеджеру блок
+    // показываем в режиме чтения — видеть, включено ли промо, ему полезно.
+    let pvState = null
+
+    async function loadPromoVpn() {
+      const r = await api('/settings/promo-vpn').catch(() => null)
+      if (!r || !r.ok) { setTile('tilePromoVpn', 'не загрузилось'); return }
+      pvState = r.data
+      const isOwner = window.adminMe && window.adminMe.role === 'owner'
+
+      document.getElementById('pvLink').value = pvState.link || ''
+      document.getElementById('pvOffer').value = pvState.offerText || ''
+
+      const chip = document.getElementById('pvChip')
+      chip.textContent = pvState.enabled ? 'на витрине' : 'выключено'
+      chip.className = 'chip right ' + (pvState.enabled ? 'c-ok' : 'c-off')
+      setTile('tilePromoVpn', pvState.enabled ? 'показывается' : 'выключено')
+
+      // Сломанная настройка — говорим, что именно не так, и промо при этом
+      // выключено само: витрина чужой хост не получает ни при каких условиях
+      const broken = document.getElementById('pvBroken')
+      if (pvState.flaw) {
+        broken.style.display = ''
+        broken.textContent = pvState.flaw === 'bad_link'
+          ? 'В настройке лежит адрес не на Telegram — промо выключено, пока адрес не исправлен. Витрине он не отдаётся.'
+          : 'Настройка записана не как надо и не читается — промо выключено. Сохраните её заново.'
+        setTile('tilePromoVpn', 'настройка сломана')
+      } else {
+        broken.style.display = 'none'
+      }
+
+      pvSetButtons(isOwner)
+    }
+
+    function pvSetButtons(isOwner) {
+      const on = document.getElementById('pvOn'), off = document.getElementById('pvOff')
+      on.className = 'btn sm ' + (pvState && pvState.enabled ? 'b-main' : 'b-nt')
+      off.className = 'btn sm ' + (pvState && !pvState.enabled ? 'b-main' : 'b-nt')
+      const ro = !isOwner
+      on.disabled = ro; off.disabled = ro
+      document.getElementById('pvLink').disabled = ro
+      document.getElementById('pvOffer').disabled = ro
+      document.getElementById('pvSave').style.display = ro ? 'none' : ''
+      if (ro) document.getElementById('pvErr').textContent = 'Промо включает и настраивает владелец.'
+    }
+
+    /** Тумблер локальный: на сервер уходит одним сохранением вместе с полями. */
+    let pvEnabledDraft = null
+    document.getElementById('pvOn').addEventListener('click', () => { pvEnabledDraft = true; pvPaintDraft() })
+    document.getElementById('pvOff').addEventListener('click', () => { pvEnabledDraft = false; pvPaintDraft() })
+    function pvPaintDraft() {
+      const on = document.getElementById('pvOn'), off = document.getElementById('pvOff')
+      on.className = 'btn sm ' + (pvEnabledDraft ? 'b-main' : 'b-nt')
+      off.className = 'btn sm ' + (pvEnabledDraft === false ? 'b-main' : 'b-nt')
+    }
+
+    document.getElementById('pvSave').addEventListener('click', async function () {
+      const err = document.getElementById('pvErr'); err.textContent = ''
+      const enabled = pvEnabledDraft === null ? !!(pvState && pvState.enabled) : pvEnabledDraft
+      if (enabled && !confirm('Включить кнопку «⛔ НЕ НАЖИМАТЬ» на главной? Её увидит каждый покупатель — по одному разу.')) return
+      this.disabled = true
+      try {
+        const body = {
+          enabled: enabled,
+          link: document.getElementById('pvLink').value.trim(),
+          offerText: document.getElementById('pvOffer').value.trim(),
+        }
+        const r = await api('/settings/promo-vpn', { method: 'PUT', body: JSON.stringify(body) }).catch(() => null)
+        if (!r || !r.ok) { err.textContent = (r && r.data && r.data.error) || 'Не получилось'; return }
+        toast(enabled ? 'Промо включено' : 'Промо выключено')
+        pvEnabledDraft = null
+        loadPromoVpn()
       } finally { this.disabled = false }
     })
 
