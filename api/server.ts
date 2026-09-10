@@ -764,6 +764,7 @@ export function startApiServer(bot?: Telegraf): Server {
           prepaymentValue: true,
           preorderEta: true,
           preorderTerms: true,
+          recommendedIds: true,
           category: { select: { id: true, name: true } },
           variants: {
             // Предзаказные варианты живут при нулевом остатке — они и есть смысл
@@ -826,6 +827,11 @@ export function startApiServer(bot?: Telegraf): Server {
         isFeatured: p.isFeatured,
         createdAt: p.createdAt.toISOString(),
         salesCount: p.variants.reduce((s, v) => s + (v.quantity || 0), 0),
+        // Ручные замены в «Рекомендуем». Ключ появляется ТОЛЬКО когда замены
+        // есть: у товара без них payload обязан остаться прежним до байта —
+        // это и есть гарантия, что старая лента не поехала. Разбор — в
+        // resolveRecs() на клиенте, алгоритм там же и остаётся.
+        ...(p.recommendedIds?.length ? { recommendedIds: p.recommendedIds } : {}),
         // Предзаказ товара целиком: бейдж и срок берутся отсюда
         isPreorder: p.isPreorder && policy !== null,
         preorderEta: policy?.eta ?? null,

@@ -354,6 +354,9 @@ export function setMarkupRuleEnabled(enabled: boolean) {
 /** Сколько строк пикер показывает за раз (остальное — уточнением запроса). */
 export const VARIANT_SEARCH_TAKE = 50
 
+/** Столько товаров отдаёт товарный пикер за раз. */
+export const PRODUCT_SEARCH_TAKE = 20
+
 /**
  * Сколько строк вычитываем из БД, чтобы отсортировать страницу по имени
  * варианта. Порядок по attributes.fullName в SQL недоступен (JSON-путь), а
@@ -936,26 +939,38 @@ export function adminApiRouter(): Router {
     res.status(r.status).json({ ok: true, ...(r.data as object) })
   }))
 
-  // Поиск товаров (для хитов и карточек товара). Ищем по ВСЕМУ каталогу,
-  // включая скрытые — иначе не подсказать, почему товара нет на витрине.
+  // Поиск товаров (хиты, карточка товара, замена позиции в «Рекомендуем»).
+  // Ищем по ВСЕМУ каталогу, включая скрытые — иначе не подсказать, почему
+  // товара нет на витрине.
+  //
+  // Отдаёт { items, total }, как вариантный пикер: усечение выдачи должно быть
+  // ВИДНО. Молчаливый take ровно этим и был плох — товар за 20-й позицией
+  // выглядел как «такого нет», и его заводили заново.
   router.get('/products', safe(async (req, res) => {
     const q = String(req.query.q ?? '').trim()
-    if (q.length < 2) { res.json([]); return }
-    const products = await prisma.product.findMany({
-      where: { OR: [{ name: { contains: q, mode: 'insensitive' } }, { sku: { contains: q, mode: 'insensitive' } }] },
-      take: 20,
-      orderBy: [{ isFeatured: 'desc' }, { sortOrder: 'asc' }, { name: 'asc' }],
-      select: {
-        id: true, name: true, sku: true, photoUrl: true, coverPhoto: true, isFeatured: true, isAvailable: true,
-        category: { select: { name: true } },
-        variants: { where: { inStock: true, quantity: { gt: 0 } }, select: { id: true }, take: 1 },
-      },
+    if (q.length < 2) { res.json({ items: [], total: 0 }); return }
+    const where = { OR: [{ name: { contains: q, mode: 'insensitive' as const } }, { sku: { contains: q, mode: 'insensitive' as const } }] }
+    const [products, total] = await Promise.all([
+      prisma.product.findMany({
+        where,
+        take: PRODUCT_SEARCH_TAKE,
+        orderBy: [{ isFeatured: 'desc' }, { sortOrder: 'asc' }, { name: 'asc' }],
+        select: {
+          id: true, name: true, sku: true, photoUrl: true, coverPhoto: true, isFeatured: true, isAvailable: true,
+          category: { select: { name: true } },
+          variants: { where: { inStock: true, quantity: { gt: 0 } }, select: { id: true }, take: 1 },
+        },
+      }),
+      prisma.product.count({ where }),
+    ])
+    res.json({
+      items: products.map(p => ({
+        id: p.id, name: p.name, sku: p.sku, photoUrl: p.coverPhoto || p.photoUrl || null,
+        category: p.category?.name ?? null, isFeatured: p.isFeatured,
+        inStock: p.isAvailable && p.variants.length > 0,
+      })),
+      total,
     })
-    res.json(products.map(p => ({
-      id: p.id, name: p.name, sku: p.sku, photoUrl: p.coverPhoto || p.photoUrl || null,
-      category: p.category?.name ?? null, isFeatured: p.isFeatured,
-      inStock: p.isAvailable && p.variants.length > 0,
-    })))
   }))
 
   // ── ТОВАРЫ (пласт 2): карточка, фото, описание, скрытие с витрины ─────────
@@ -1188,6 +1203,19 @@ export function adminApiRouter(): Router {
     if (!Number.isInteger(id)) { res.status(422).json({ error: 'Неверный ID' }); return }
     const { setProductPreorder } = await import('../lib/product-admin')
     const r = await setProductPreorder(req.admin!.telegramId, id, req.body)
+    res.status(r.status).json(r.ok ? { ok: true } : { error: r.error })
+  }))
+
+  // ── «Рекомендуем»: ручные замены слотов (только владелец) ────────────────
+  //
+  // Лента считается алгоритмом на витрине; здесь хранятся ТОЛЬКО замены, по
+  // слотам, где 0 = «слот на авто». Пустой список = возврат к чистому
+  // авто-подбору. Менеджеру нельзя: это то, что видит каждый покупатель.
+  router.put('/products/:id/recommendations', ownerOnly, safe(async (req, res) => {
+    const id = parseInt(String(req.params.id), 10)
+    if (!Number.isInteger(id)) { res.status(422).json({ error: 'Неверный ID' }); return }
+    const { setProductRecommendations } = await import('../lib/product-admin')
+    const r = await setProductRecommendations(req.admin!.telegramId, id, req.body)
     res.status(r.status).json(r.ok ? { ok: true } : { error: r.error })
   }))
 

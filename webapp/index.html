@@ -3188,12 +3188,54 @@
       return recs
     }
 
+    /**
+     * Лента с учётом ручных замен владельца.
+     *
+     * product.recommendedIds — массив по слотам, где 0 = «слот считает
+     * алгоритм». Ключа нет вовсе, пока замен нет: тогда сразу уходим в старую
+     * ветку, и подбор для покупателя ничем не отличается от прежнего.
+     *
+     * Закреплённый товар стоит на своём месте; остальные слоты добивает
+     * getRecommendations, из его выдачи закреплённые вычитаются, чтобы позиция
+     * не задвоилась. Закреплённого нет в каталоге (скрыли, кончился, удалили) —
+     * слот молча уходит на авто: карточка, которую нельзя открыть, хуже
+     * подобранной.
+     *
+     * Тот же порядок повторяет resolveRecSlots() в lib/recommendations.ts —
+     * по нему админка рисует владельцу предпросмотр ленты.
+     */
+    function resolveRecs(product, all, limit) {
+      limit = limit || 4
+      const manual = Array.isArray(product.recommendedIds) ? product.recommendedIds : []
+      if (!manual.length) return getRecommendations(product, all, limit)
+
+      const pinned = {}
+      const taken = {}
+      for (let i = 0; i < manual.length && i < limit; i++) {
+        const id = manual[i]
+        if (!id || id === product.id) continue
+        const found = all.find(p => p.id === id)
+        if (!found) continue
+        pinned[i] = found
+        taken[found.id] = true
+      }
+
+      const auto = getRecommendations(product, all, limit).filter(p => !taken[p.id])
+      const out = []
+      for (let i = 0; i < limit; i++) {
+        if (pinned[i]) { out.push(pinned[i]); continue }
+        const next = auto.shift()
+        if (next) out.push(next)
+      }
+      return out
+    }
+
     function renderModalRecs() {
       const section = document.getElementById('modalRecs')
       const grid = document.getElementById('modalRecsGrid')
       if (!section || !grid || !modalProduct) { if (section) section.style.display = 'none'; return }
 
-      const recs = getRecommendations(modalProduct, allProducts, 4)
+      const recs = resolveRecs(modalProduct, allProducts, 4)
       if (!recs.length) { section.style.display = 'none'; return }
 
       section.style.display = ''
