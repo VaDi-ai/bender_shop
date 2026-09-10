@@ -933,6 +933,20 @@ export function adminApiRouter(): Router {
     res.status(r.status).json(r.ok ? { ok: true, ...(r.data as object) } : { error: r.error })
   }))
 
+  // Промо «2 недели VPN»: рубильник и адрес кнопки. Чтение — всем админам
+  // (видеть, включено ли промо, полезно и менеджеру), запись — только
+  // владельцу: это то, что видит каждый покупатель на главной.
+  router.get('/settings/promo-vpn', safe(async (_req, res) => {
+    const { getPromoVpn } = await import('../lib/storefront-admin')
+    res.json(await getPromoVpn())
+  }))
+
+  router.put('/settings/promo-vpn', ownerOnly, safe(async (req, res) => {
+    const { setPromoVpn } = await import('../lib/storefront-admin')
+    const r = await setPromoVpn(req.admin!.telegramId, (req.body ?? {}) as Record<string, unknown>)
+    res.status(r.status).json(r.ok ? { ok: true, ...(r.data as object) } : { error: r.error })
+  }))
+
   router.post('/cache-reset', safe(async (req, res) => {
     const { bumpCacheVersion } = await import('../lib/storefront-admin')
     const r = await bumpCacheVersion(req.admin!.telegramId)

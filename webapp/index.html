@@ -1123,6 +1123,77 @@
     .promo-card .pc-badge { background: var(--accent); color: var(--accent-fg); font-weight: 700; font-size: 13px; border-radius: 9px; padding: 5px 10px; white-space: nowrap; }
     .promo-card .pc-meta { font-size: 12px; color: var(--hint); margin-top: 6px; line-height: 1.5; }
     .promo-card .promos-btn { width: 100%; margin-top: 12px; }
+
+    /* ═══ Промо «2 недели VPN»: кнопка на главной ═══
+       Прототип согласован владельцем (артефакт «Бендер · кнопка VPN»).
+       Рисуется ТОЛЬКО когда промо включено и этот посетитель ещё не нажимал —
+       промо выключено = ни одного узла в DOM. */
+    #vpnFab {
+      position: fixed; right: 16px;
+      bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom) + 14px);
+      z-index: 55;                       /* таббар 60; по геометрии не пересекаются */
+      background: #2a0f0c; border: 1.5px solid #ff4d3d; color: #ff4d3d;
+      font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 700;
+      letter-spacing: 1.5px; padding: 13px 17px; border-radius: 15px;
+      display: flex; align-items: center; gap: 8px; cursor: pointer;
+      box-shadow: 0 0 0 4px rgba(255,77,61,.08), 0 12px 26px rgba(0,0,0,.5);
+      animation: vpnPulse 2.2s ease-in-out infinite;
+      -webkit-tap-highlight-color: transparent; user-select: none; transition: transform .12s;
+    }
+    #vpnFab:active { transform: scale(.94); }
+    #vpnFab .vf-em { font-size: 14px; }
+    @keyframes vpnPulse {
+      0%, 100% { box-shadow: 0 0 0 4px rgba(255,77,61,.09), 0 12px 26px rgba(0,0,0,.5); }
+      50%      { box-shadow: 0 0 0 9px rgba(255,77,61,0),   0 12px 26px rgba(0,0,0,.5); }
+    }
+    @media (prefers-reduced-motion: reduce) { #vpnFab { animation: none; } }
+
+    /* Оверлей выше модалки товара (600) и ниже тостов (8000) */
+    #vpnOv {
+      position: fixed; inset: 0; z-index: 620; display: flex;
+      align-items: flex-end; justify-content: center;
+      background: rgba(4,4,4,0); backdrop-filter: blur(0); pointer-events: none;
+      transition: background .3s, backdrop-filter .3s;
+    }
+    #vpnOv.show { background: rgba(4,4,4,.72); backdrop-filter: blur(3px); pointer-events: auto; }
+
+    #vpnCount { position: absolute; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center; gap: 14px; }
+    #vpnCount.on { display: flex; }
+    #vpnCount .vc-pre { font-family: 'JetBrains Mono', monospace; font-size: 12px; letter-spacing: 3px; color: #ff4d3d; text-transform: uppercase; }
+    #vpnCount .vc-n { font-family: 'JetBrains Mono', monospace; font-size: 120px; font-weight: 700; color: #fff; line-height: 1; text-shadow: 0 0 40px rgba(255,77,61,.5); }
+    #vpnCount .vc-n.tick { animation: vpnTick .8s ease-out; }
+    @keyframes vpnTick {
+      0%   { transform: scale(1.7); opacity: 0; filter: blur(6px); }
+      30%  { opacity: 1; filter: blur(0); }
+      100% { transform: scale(1); opacity: .9; }
+    }
+
+    #vpnSheet {
+      position: relative; z-index: 1; width: 100%; max-width: 480px;
+      background: #101114; border-top: 1px solid rgba(255,255,255,.09);
+      border-radius: 24px 24px 0 0; padding: 8px 20px 26px;
+      transform: translateY(110%); transition: transform .42s cubic-bezier(.16,1,.3,1);
+      box-shadow: 0 -24px 60px rgba(0,0,0,.6); overflow: hidden;
+      padding-bottom: calc(26px + env(safe-area-inset-bottom));
+    }
+    #vpnSheet.up { transform: translateY(0); }
+    #vpnSheet::before {
+      content: ""; position: absolute; top: -60px; left: 50%; transform: translateX(-50%);
+      width: 260px; height: 260px; pointer-events: none;
+      background: radial-gradient(circle, rgba(168,255,62,.16), transparent 70%);
+    }
+    #vpnSheet .vs-close { position: absolute; top: 14px; right: 16px; width: 30px; height: 30px; border-radius: 8px; border: 1px solid #2a2a2a; color: var(--hint); display: flex; align-items: center; justify-content: center; font-size: 16px; cursor: pointer; z-index: 2; background: none; }
+    #vpnSheet .vs-grab { width: 42px; height: 4px; border-radius: 3px; background: #2e2e2e; margin: 6px auto 18px; }
+    #vpnSheet .vs-em { font-size: 40px; line-height: 1; margin-bottom: 12px; position: relative; }
+    #vpnSheet .vs-kick { font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: 2px; color: var(--hint); text-transform: uppercase; margin-bottom: 6px; }
+    #vpnSheet .vs-hd { font-size: 22px; font-weight: 700; letter-spacing: -.4px; line-height: 1.15; margin-bottom: 10px; position: relative; }
+    #vpnSheet .vs-hd .hl { color: var(--accent); }
+    #vpnSheet .vs-tx { font-size: 13.5px; color: var(--hint); line-height: 1.55; margin-bottom: 18px; }
+    #vpnSheet .vs-tx b { color: var(--text); font-weight: 600; }
+    #vpnSheet .vs-cta { display: block; width: 100%; background: var(--accent); color: var(--accent-fg); text-align: center; font-weight: 700; font-size: 15px; letter-spacing: .4px; padding: 15px; border-radius: 13px; font-family: 'Onest', sans-serif; cursor: pointer; border: none; -webkit-tap-highlight-color: transparent; transition: transform .12s; }
+    #vpnSheet .vs-cta:active { transform: scale(.98); }
+    #vpnSheet .vs-sub { text-align: center; color: #5a5e59; font-size: 11px; margin-top: 12px; font-family: 'JetBrains Mono', monospace; letter-spacing: .5px; }
+    #vpnSheet .vs-skip { text-align: center; margin-top: 14px; color: #5a5e59; font-size: 12.5px; text-decoration: underline; cursor: pointer; background: none; border: none; width: 100%; }
   </style>
 </head>
 <body>
@@ -1467,6 +1538,31 @@
     </div>
     <div class="footer-copy">© 2026 Bender Shop. Все права защищены.</div>
   </footer>
+
+  <!-- ═══ Промо «2 недели VPN» ═══
+       Лежит в <template>: содержимое шаблона в документ НЕ попадает, пока его
+       не склонируют. Пока промо выключено (дефолт) или посетитель уже нажимал,
+       в DOM нет ни одного узла кнопки — витрина ровно такая же, как до промо. -->
+  <template id="vpnPromoTpl">
+  <div id="vpnFab"><span class="vf-em">⛔</span> НЕ НАЖИМАТЬ</div>
+  <div id="vpnOv" hidden>
+    <div id="vpnCount">
+      <div class="vc-pre">эй, тебя же просили…</div>
+      <div class="vc-n" id="vpnNum">3</div>
+    </div>
+    <div id="vpnSheet">
+      <button class="vs-close" id="vpnClose" aria-label="Закрыть">✕</button>
+      <div class="vs-grab"></div>
+      <div class="vs-em">🎁</div>
+      <div class="vs-kick">ну ты и нажал 😏</div>
+      <div class="vs-hd">Раз уж не удержался — держи <span class="hl" id="vpnOffer">2 недели VPN бесплатно</span></div>
+      <div class="vs-tx">Быстрый VPN от Бендера. Без рекламы, без лагов, для своих. <b>Подключение за минуту прямо в Telegram.</b></div>
+      <button class="vs-cta" id="vpnClaim">ЗАБРАТЬ 2 НЕДЕЛИ →</button>
+      <div class="vs-sub">откроется в telegram · карта не нужна</div>
+      <button class="vs-skip" id="vpnSkip">не, спасибо</button>
+    </div>
+  </div>
+  </template>
 
   <!-- ═══ Нижний таббар ═══ -->
   <nav id="tabbar">
@@ -2399,9 +2495,133 @@
         renderCatFilterBar()
         renderHome()
         renderGrid()
+        loadVpnPromo()
       } catch {
         grid.innerHTML = '<div class="state-msg">Не удалось загрузить товары<br><button onclick="loadProducts()" style="margin-top:12px;padding:8px 24px;background:var(--accent);color:var(--accent-fg);border:none;border-radius:8px;font-weight:700;cursor:pointer">Попробовать снова</button></div>'
       }
+    }
+
+
+    // ══════════════════ Промо «2 недели VPN» ══════════════════
+    //
+    // Кнопка появляется, только если сервер сказал enabled:true и этот
+    // посетитель ещё не нажимал. Промо выключено — не рисуем ничего и больше
+    // сюда не возвращаемся: витрина ведёт себя ровно как до появления промо.
+    //
+    // Скрытие ОПТИМИСТИЧНОЕ: кнопка уходит сразу по клику, отметка на сервер
+    // летит следом и её судьба на UI не влияет. Отвалилась сеть — в худшем
+    // случае промо всплывёт ещё раз в следующий заход; бесконечного нытья не
+    // будет, потому что отметка ставится на первом же удачном клике.
+    let vpnPromo = null          // { enabled, link, offerText, seen }
+    let vpnTimer = null
+    let vpnMounted = false
+
+    async function loadVpnPromo() {
+      try {
+        const headers = {}
+        if (tg && tg.initData) headers['x-telegram-init-data'] = tg.initData
+        const res = await fetch('/api/promo/vpn', { headers: headers, cache: 'no-store' })
+        if (!res.ok) return
+        vpnPromo = await res.json()
+      } catch { return }               // промо не критично: молча не показываем
+      if (!vpnPromo || !vpnPromo.enabled || vpnPromo.seen || !vpnPromo.link) return
+      mountVpnPromo()
+      const offer = document.getElementById('vpnOffer')
+      if (offer && vpnPromo.offerText) offer.textContent = vpnPromo.offerText
+      showVpnFab()
+    }
+
+    /**
+     * Достаёт разметку промо из <template> и вешает обработчики. До этого
+     * момента в документе нет ни одного её узла — именно поэтому выключенное
+     * промо не оставляет на витрине никаких следов.
+     */
+    function mountVpnPromo() {
+      if (vpnMounted) return
+      const tpl = document.getElementById('vpnPromoTpl')
+      if (!tpl) return
+      document.body.appendChild(tpl.content.cloneNode(true))
+      vpnMounted = true
+      document.getElementById('vpnFab').addEventListener('click', vpnStart)
+      document.getElementById('vpnClose').addEventListener('click', vpnClose)
+      document.getElementById('vpnSkip').addEventListener('click', vpnClose)
+      document.getElementById('vpnClaim').addEventListener('click', vpnClaim)
+      document.getElementById('vpnOv').addEventListener('click', e => { if (e.target.id === 'vpnOv') vpnClose() })
+    }
+
+    /** Кнопка живёт только на «Главной» — на других вкладках её не место. */
+    function showVpnFab() {
+      const fab = document.getElementById('vpnFab')
+      if (!fab || !vpnPromo || !vpnPromo.enabled || vpnPromo.seen) return
+      const onHome = !document.getElementById('homeView').classList.contains('view-off')
+      fab.hidden = !onHome
+    }
+    function hideVpnFab() {
+      const fab = document.getElementById('vpnFab')
+      if (fab) fab.hidden = true
+    }
+
+    function vpnTick() {
+      const n = document.getElementById('vpnNum')
+      n.classList.remove('tick'); void n.offsetWidth; n.classList.add('tick')
+    }
+
+    function vpnStart() {
+      if (!vpnPromo || !vpnPromo.link) return
+      // Оптимистично: прячем сразу и помечаем локально, чтобы кнопка не
+      // вернулась при переключении вкладок в этой же сессии
+      vpnPromo.seen = true
+      hideVpnFab()
+      markVpnSeen()
+
+      const ov = document.getElementById('vpnOv')
+      const sheet = document.getElementById('vpnSheet')
+      const count = document.getElementById('vpnCount')
+      ov.hidden = false
+      requestAnimationFrame(() => ov.classList.add('show'))
+      sheet.classList.remove('up')
+      count.classList.add('on')
+
+      let n = 3
+      document.getElementById('vpnNum').textContent = n
+      vpnTick()
+      clearInterval(vpnTimer)
+      vpnTimer = setInterval(() => {
+        n--
+        if (n > 0) { document.getElementById('vpnNum').textContent = n; vpnTick(); return }
+        clearInterval(vpnTimer)
+        count.classList.remove('on')
+        requestAnimationFrame(() => setTimeout(() => sheet.classList.add('up'), 40))
+      }, 850)
+    }
+
+    /** Аноним сюда не ходит: без initData помечать нечего, сервер ответит 401. */
+    function markVpnSeen() {
+      if (!(tg && tg.initData)) return
+      fetch('/api/promo/vpn/seen', {
+        method: 'POST',
+        headers: { 'x-telegram-init-data': tg.initData, 'Content-Type': 'application/json' },
+        body: '{}',
+      }).catch(() => {})
+    }
+
+    function vpnClose() {
+      clearInterval(vpnTimer)
+      const ov = document.getElementById('vpnOv')
+      if (!ov) return
+      document.getElementById('vpnSheet').classList.remove('up')
+      document.getElementById('vpnCount').classList.remove('on')
+      ov.classList.remove('show')
+      setTimeout(() => { ov.hidden = true }, 320)
+    }
+
+    function vpnClaim() {
+      if (!vpnPromo || !vpnPromo.link) return
+      // Ссылка всегда t.me (сервер другого хоста не отдаёт), поэтому в Mini App
+      // открываем именно через openTelegramLink — она уводит в сам Telegram
+      if (tg && tg.openTelegramLink) tg.openTelegramLink(vpnPromo.link)
+      else window.open(vpnPromo.link, '_blank', 'noopener')
+      setTimeout(vpnClose, 400)
     }
 
     // ── Render product grid ───────────────────────────────────────────────────
@@ -4188,6 +4408,7 @@
         if (el) el.classList.toggle('view-off', id !== targetId)
       })
       setTabbarActive(tab)
+      if (targetId === 'homeView') showVpnFab(); else hideVpnFab()
       if (tab === 'account') renderAccount()
       if (tab === 'promos') loadPromos()
       scrollToTop()

@@ -278,6 +278,15 @@ export function startApiServer(bot?: Telegraf): Server {
   })
   app.use('/api/delivery', deliveryLimiter)
 
+  // Промо: GET раз на загрузку витрины, POST раз на посетителя. Свой лимит,
+  // чтобы перебор POST не мог раздувать PromoSeen и не ел глобальный лимит.
+  const promoLimiter = rateLimit({
+    windowMs: 60_000,
+    max: 30,
+    message: { error: 'Слишком много запросов. Подождите минуту.' },
+  })
+  app.use('/api/promo', promoLimiter)
+
   // ── Админ-API (ADMIN-DESIGN §2, PR-2): initData-auth + AdminUser, свой лимитер внутри ──
   app.use('/admin/api', adminApiRouter())
 
@@ -1179,6 +1188,55 @@ export function startApiServer(bot?: Telegraf): Server {
       res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate')
       res.setHeader('Pragma', 'no-cache')
       res.json({ version: cacheVersion ?? '0' })
+    } catch (err) {
+      if (!res.headersSent) next(err)
+    }
+  })
+
+  // ── Промо «2 недели VPN»: состояние для витрины и отметка «нажал» ─────────
+  //
+  // Две ручки с РАЗНОЙ строгостью к initData, и это осознанно.
+  //
+  // GET — мягкий. Отвечает всем: без заголовка это аноним, ему промо
+  // показывается каждый заход (пометить «видел» не за что зацепиться — принято
+  // сознательно). Битая подпись тоже уходит в анонима, но записывается
+  // некритичным событием: витринный invalid_telegram_signature заведён как
+  // critical и будил бы владельца на каждый скан с мусорным заголовком.
+  //
+  // POST — строгий. Пишем строку, ключом которой служит telegram-id, значит
+  // личность должна быть доказана: нет подписи или не сошлась — 401. Аноним
+  // сюда просто не ходит, клиент проверяет наличие initData перед отправкой.
+  // Окно свежести здесь расширено до суток, см. PROMO_SEEN_MAX_AGE_SECONDS.
+  app.get('/api/promo/vpn', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { getPromoVpnForUser } = await import('../lib/promo-vpn')
+      const initData = req.headers['x-telegram-init-data'] as string | undefined
+      let telegramUserId: string | null = null
+      if (initData) {
+        const { valid, userId } = validateTelegramWebApp(initData)
+        if (valid && userId) telegramUserId = String(userId)
+        else logSecurityEvent('promo_invalid_signature', { ip: req.ip, scope: 'promo_read' })
+      }
+      res.setHeader('Cache-Control', 'private, no-store, must-revalidate')
+      res.json(await getPromoVpnForUser(telegramUserId))
+    } catch (err) {
+      if (!res.headersSent) next(err)
+    }
+  })
+
+  app.post('/api/promo/vpn/seen', express.json(), async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { markPromoSeen, PROMO_SEEN_MAX_AGE_SECONDS } = await import('../lib/promo-vpn')
+      const initData = req.headers['x-telegram-init-data'] as string | undefined
+      if (!initData) { res.status(401).json({ error: 'Требуется авторизация Telegram' }); return }
+      const { valid, userId } = validateTelegramWebApp(initData, PROMO_SEEN_MAX_AGE_SECONDS)
+      if (!valid || !userId) {
+        logSecurityEvent('promo_invalid_signature', { ip: req.ip, scope: 'promo_write' })
+        res.status(401).json({ error: 'Неверная подпись Telegram' })
+        return
+      }
+      await markPromoSeen(String(userId))
+      res.json({ ok: true })
     } catch (err) {
       if (!res.headersSent) next(err)
     }

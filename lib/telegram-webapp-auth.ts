@@ -9,7 +9,20 @@ import * as crypto from 'crypto'
 
 const MAX_AGE_SECONDS = 300 // anti-replay: initData старше 5 минут не принимаем
 
-export function validateTelegramWebApp(initData: string): { valid: boolean; userId?: number } {
+/**
+ * Проверяет подпись initData.
+ *
+ * `maxAgeSeconds` — ТОЛЬКО окно свежести (anti-replay). Сама подпись (HMAC)
+ * проверяется всегда и одинаково: расширять окно можно, ослаблять валидацию —
+ * нет. По умолчанию 5 минут; передавать другое значение уместно лишь там, где
+ * повтор чужой подписи не даёт злоумышленнику ничего сверх того, что и так
+ * принадлежит владельцу подписи (см. PROMO_SEEN_MAX_AGE_SECONDS в
+ * lib/promo-vpn.ts — там объяснено, почему для той ручки это безопасно).
+ */
+export function validateTelegramWebApp(
+  initData: string,
+  maxAgeSeconds: number = MAX_AGE_SECONDS,
+): { valid: boolean; userId?: number } {
   try {
     const botToken = process.env.BOT_TOKEN ?? ''
     const params = new URLSearchParams(initData)
@@ -39,7 +52,7 @@ export function validateTelegramWebApp(initData: string): { valid: boolean; user
 
     const authDate = parseInt(params.get('auth_date') || '0', 10)
     const now = Math.floor(Date.now() / 1000)
-    if (now - authDate > MAX_AGE_SECONDS) {
+    if (now - authDate > maxAgeSeconds) {
       return { valid: false }
     }
 

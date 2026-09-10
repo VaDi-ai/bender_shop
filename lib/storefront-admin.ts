@@ -520,3 +520,65 @@ export async function bumpCacheVersion(actor: string): Promise<Outcome> {
   void logAdminAction({ adminTelegramId: actor, action: 'update', entity: 'Setting', entityId: 'cache_version', after: { value: version } })
   return { ok: true, status: 200, data: { version } }
 }
+
+// ─── Промо «2 недели VPN»: рубильник и настройки ─────────────────────────────
+//
+// Владелец включает промо и задаёт адрес кнопки. Адрес принимается только как
+// https://t.me/… — витрина не должна становиться трамплином на внешний домен,
+// поэтому чужой хост отклоняется здесь (422) и повторно отсекается на чтении
+// (lib/promo-vpn.ts: промо просто не включается).
+
+export interface PromoVpnView {
+  enabled: boolean
+  link: string
+  offerText: string
+  /** Настройка в базе битая: не наш хост или не JSON. null = всё в порядке */
+  flaw: 'bad_json' | 'bad_link' | null
+}
+
+export async function getPromoVpn(): Promise<PromoVpnView> {
+  const { loadPromoVpnConfig, DEFAULT_PROMO_VPN } = await import('./promo-vpn')
+  const { config, flaw } = await loadPromoVpnConfig()
+  return {
+    enabled: config.enabled,
+    // У сломанной ссылки показываем владельцу дефолтный адрес как подсказку,
+    // а не пустое поле: чинить проще, когда видно, что тут вообще должно быть
+    link: config.link || (flaw === 'bad_link' ? DEFAULT_PROMO_VPN.link : config.link),
+    offerText: config.offerText,
+    flaw,
+  }
+}
+
+export async function setPromoVpn(
+  actor: string,
+  body: { enabled?: unknown; link?: unknown; offerText?: unknown },
+): Promise<Outcome<PromoVpnView>> {
+  const { PROMO_VPN_SETTING, isTelegramLink, DEFAULT_PROMO_VPN } = await import('./promo-vpn')
+
+  const link = String(body.link ?? '').trim()
+  if (!link) return bad(422, 'Укажите адрес кнопки') as Outcome<PromoVpnView>
+  if (link.length > 500) return bad(422, 'Адрес длиннее 500 символов — так не бывает') as Outcome<PromoVpnView>
+  if (!isTelegramLink(link)) {
+    return bad(422, 'Адрес кнопки — только ссылка на Telegram вида https://t.me/…') as Outcome<PromoVpnView>
+  }
+
+  const offerText = String(body.offerText ?? '')
+    .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, ' ')
+    .trim() || DEFAULT_PROMO_VPN.offerText
+  if (offerText.length > 200) return bad(422, 'Текст оффера длиннее 200 символов — покупатель столько не читает') as Outcome<PromoVpnView>
+
+  const enabled = body.enabled === true || body.enabled === 'true'
+  const before = await getPromoVpn()
+  const stored = { enabled, link, offerText }
+  await setApiKeyValue(PROMO_VPN_SETTING, JSON.stringify(stored))
+
+  void logAdminAction({
+    adminTelegramId: actor, action: 'update', entity: 'Setting', entityId: 'promo_vpn',
+    before: { enabled: before.enabled, link: before.link, offerText: before.offerText },
+    after: stored,
+  })
+  // Промо видно каждому покупателю — открытые вкладки должны узнать
+  await touchStorefrontCache('promo_vpn')
+  log.info('Promo VPN setting changed', { enabled, link })
+  return { ok: true, status: 200, data: await getPromoVpn() }
+}
