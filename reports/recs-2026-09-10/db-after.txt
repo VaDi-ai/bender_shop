@@ -1,0 +1,13 @@
+--- колонка recommendedIds ---
+{
+  column_name: 'recommendedIds',
+  data_type: 'ARRAY',
+  is_nullable: 'YES',
+  column_default: 'ARRAY[]::integer[]'
+}
+--- _prisma_migrations (последние 3) ---
+20260910120000_add_product_recommendations | 2026-09-10T15:43:09.038Z | steps: 1
+20260903180000_add_preorder | 2026-09-03T17:28:15.784Z | steps: 1
+20260826140000_add_variant_archived_at | 2026-08-28T12:01:01.683Z | steps: 1
+--- строки ---
+всего товаров: 721 | recommendedIds IS NULL: 0 | с ручными заменами: 0

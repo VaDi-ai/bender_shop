@@ -1,0 +1,99 @@
+{
+  "checks": [
+    {
+      "name": "(а) поиск в карточке находит товары",
+      "value": {
+        "pass": true,
+        "rows": 20,
+        "firstName": "Iphone 17 Pro Max"
+      }
+    },
+    {
+      "name": "(г) усечение подписано",
+      "value": {
+        "pass": true,
+        "text": "Показаны 20 из 119 — уточните запрос"
+      }
+    },
+    {
+      "name": "(а) карточка открывается из результатов",
+      "value": {
+        "pass": true,
+        "title": "IPHONE 17 PRO MAX"
+      }
+    },
+    {
+      "name": "(в) авто-подбор с метками",
+      "value": {
+        "pass": true,
+        "slots": [
+          "1. Macbook Air M5 :: авто · сопутствующий · от 135 200 ₽",
+          "2. Apple Mac Mini M6 :: авто · сопутствующий · от 85 000 ₽",
+          "3. Ipad Air 11 :: авто · сопутствующий · от 67 000 ₽",
+          "4. Apple Watch Ultra 3 Bright :: авто · сопутствующий · от 63 800 ₽"
+        ]
+      }
+    },
+    {
+      "name": "(в) замена встала на свой слот",
+      "value": {
+        "pass": true,
+        "slot3": "3. Airpods 4 :: вручную",
+        "picked": "Airpods 4",
+        "manual": [
+          0,
+          0,
+          265
+        ]
+      }
+    },
+    {
+      "name": "(в) в БД лежат замены по слотам",
+      "value": {
+        "pass": true,
+        "manual": [
+          0,
+          0,
+          265
+        ]
+      }
+    },
+    {
+      "name": "(в) «Вернуть авто» вернул исходную ленту",
+      "value": {
+        "pass": true,
+        "same": true
+      }
+    },
+    {
+      "name": "(в) «Сбросить всё» вернул чистое авто",
+      "value": {
+        "pass": true,
+        "manual": []
+      }
+    },
+    {
+      "name": "(б) поиск в «Хитах» находит",
+      "value": {
+        "pass": true,
+        "rows": 20,
+        "hasHitButton": true,
+        "hasAlreadyHitChip": true
+      }
+    },
+    {
+      "name": "(б) усечение подписано и в «Хитах»",
+      "value": {
+        "pass": true,
+        "text": "Показаны 20 из 119 — уточните запрос"
+      }
+    }
+  ],
+  "screens": [],
+  "alerts": [],
+  "restored": {
+    "expected": [],
+    "actual": [],
+    "equal": true
+  }
+}
