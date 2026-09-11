@@ -155,7 +155,7 @@ describe('запись: карточка в «Рекомендуем»', () => {
 
 describe('запись: подарок в корзине и экран после оплаты', () => {
   const CART = 'https://k9x2m1.conntest.xyz:8443/portal/?ref=bs_cart'
-  const ORDER = 'https://k9x2m1.conntest.xyz:8443/portal/?ref=bs_order'
+  const ORDER = 'https://k9x2m1.conntest.xyz:8443/portal/?ref=bs_cart'
 
   it('все четыре поверхности сохраняются рядом', async () => {
     const r = await setPromoVpn(ACTOR, {

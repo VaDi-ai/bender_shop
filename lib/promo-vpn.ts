@@ -96,10 +96,10 @@ export const DEFAULT_PROMO_VPN_CART: PromoVpnSurface = {
   link: 'https://k9x2m1.conntest.xyz:8443/portal/?ref=bs_cart',
 }
 
-/** Экран «спасибо за покупку» после заказа. Реф-тег `bs_order`. */
+/** Экран «спасибо за покупку» после заказа. Реф-тег `bs_cart` — своей метки у экрана на портале нет. */
 export const DEFAULT_PROMO_VPN_ORDER: PromoVpnSurface = {
   enabled: false,
-  link: 'https://k9x2m1.conntest.xyz:8443/portal/?ref=bs_order',
+  link: 'https://k9x2m1.conntest.xyz:8443/portal/?ref=bs_cart',
 }
 
 /**

@@ -24,7 +24,7 @@ const getKey = getApiKeyValue as any
 
 const BTN = 'https://t.me/Bender_KVN_bot?start=ref_bs_home'
 const CART = 'https://k9x2m1.conntest.xyz:8443/portal/?ref=bs_cart'
-const ORDER = 'https://k9x2m1.conntest.xyz:8443/portal/?ref=bs_order'
+const ORDER = 'https://k9x2m1.conntest.xyz:8443/portal/?ref=bs_cart'
 const setting = (o: Record<string, unknown>) => JSON.stringify(o)
 
 beforeEach(() => {
