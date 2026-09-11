@@ -13,7 +13,7 @@ vi.mock('../lib/api-key-store', () => ({ getApiKeyValue: vi.fn(), setApiKeyValue
 
 import { getApiKeyValue, setApiKeyValue } from '../lib/api-key-store'
 import { getPromoVpn, setPromoVpn } from '../lib/storefront-admin'
-import { PROMO_VPN_SETTING, DEFAULT_PROMO_VPN, DEFAULT_PROMO_VPN_RECS } from '../lib/promo-vpn'
+import { PROMO_VPN_SETTING, DEFAULT_PROMO_VPN, DEFAULT_PROMO_VPN_RECS, DEFAULT_PROMO_VPN_CART, DEFAULT_PROMO_VPN_ORDER } from '../lib/promo-vpn'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 const getKey = getApiKeyValue as any
@@ -43,6 +43,8 @@ describe('запись: адрес кнопки', () => {
     expect(stored()).toEqual({
       enabled: true, link: OK_LINK, offerText: '2 недели VPN бесплатно',
       recs: { enabled: false, link: DEFAULT_PROMO_VPN_RECS.link },
+      cart: { enabled: false, link: DEFAULT_PROMO_VPN_CART.link },
+      order: { enabled: false, link: DEFAULT_PROMO_VPN_ORDER.link },
     })
   })
 
@@ -95,9 +97,12 @@ describe('запись: карточка в «Рекомендуем»', () => {
       recsEnabled: true, recsLink: OK_RECS_LINK,
     })
     expect(r.ok).toBe(true)
+    // Точное равенство: к recs добавились cart/order (по дефолту выключены)
     expect(stored()).toEqual({
       enabled: false, link: OK_LINK, offerText: 'о',
       recs: { enabled: true, link: OK_RECS_LINK },
+      cart: { enabled: false, link: DEFAULT_PROMO_VPN_CART.link },
+      order: { enabled: false, link: DEFAULT_PROMO_VPN_ORDER.link },
     })
   })
 
@@ -148,6 +153,58 @@ describe('запись: карточка в «Рекомендуем»', () => {
   })
 })
 
+describe('запись: подарок в корзине и экран после оплаты', () => {
+  const CART = 'https://k9x2m1.conntest.xyz:8443/portal/?ref=bs_cart'
+  const ORDER = 'https://k9x2m1.conntest.xyz:8443/portal/?ref=bs_order'
+
+  it('все четыре поверхности сохраняются рядом', async () => {
+    const r = await setPromoVpn(ACTOR, {
+      enabled: false, link: OK_LINK, offerText: 'о',
+      recsEnabled: false, recsLink: OK_LINK,
+      cartEnabled: true, cartLink: CART,
+      orderEnabled: true, orderLink: ORDER,
+    })
+    expect(r.ok).toBe(true)
+    expect(stored().cart).toEqual({ enabled: true, link: CART })
+    expect(stored().order).toEqual({ enabled: true, link: ORDER })
+  })
+
+  it('чужой хост подарка — 422, в базу ничего', async () => {
+    setKey.mockClear()
+    const r = await setPromoVpn(ACTOR, { enabled: false, link: OK_LINK, cartEnabled: true, cartLink: 'https://evil.com/x' })
+    expect(r).toMatchObject({ ok: false, status: 422 })
+    expect(stored()).toBeNull()
+  })
+
+  it('чужой хост экрана — 422', async () => {
+    const r = await setPromoVpn(ACTOR, { enabled: false, link: OK_LINK, orderEnabled: true, orderLink: 'https://k9x2m1.conntest.xyz:9443/x' })
+    expect(r).toMatchObject({ ok: false, status: 422 })
+  })
+
+  it('полей cart/order нет в теле → переносится сохранённое, не обнуляется', async () => {
+    getKey.mockResolvedValue(JSON.stringify({
+      enabled: false, link: OK_LINK, offerText: 'о',
+      recs: { enabled: false, link: OK_LINK },
+      cart: { enabled: true, link: CART }, order: { enabled: true, link: ORDER },
+    }))
+    await setPromoVpn(ACTOR, { enabled: true, link: OK_LINK, offerText: 'о' })
+    expect(stored().cart).toEqual({ enabled: true, link: CART })
+    expect(stored().order).toEqual({ enabled: true, link: ORDER })
+  })
+
+  it('включение подарка не трогает кнопку/карточку', async () => {
+    getKey.mockResolvedValue(JSON.stringify({ enabled: true, link: OK_LINK, offerText: 'о', recs: { enabled: true, link: OK_LINK } }))
+    await setPromoVpn(ACTOR, { enabled: true, link: OK_LINK, offerText: 'о', cartEnabled: true, cartLink: CART })
+    expect(stored()).toMatchObject({ enabled: true, recs: { enabled: true }, cart: { enabled: true, link: CART } })
+  })
+
+  it('cartEnabled/orderEnabled приводятся к булеву', async () => {
+    await setPromoVpn(ACTOR, { enabled: false, link: OK_LINK, cartEnabled: 'да', cartLink: CART, orderEnabled: 1, orderLink: ORDER })
+    expect(stored().cart.enabled).toBe(false)
+    expect(stored().order.enabled).toBe(false)
+  })
+})
+
 describe('чтение: отравленную настройку наружу не отдаём', () => {
   it('чужой хост в базе → выключено и помечено как сломанное', async () => {
     getKey.mockResolvedValue(JSON.stringify({ enabled: true, link: 'https://evil.com/x', offerText: 'о' }))
@@ -188,6 +245,25 @@ describe('чтение: отравленную настройку наружу �
   it('настройки нет → карточка выключена с дефолтным адресом', async () => {
     expect(await getPromoVpn()).toMatchObject({
       recsEnabled: false, recsFlaw: null, recsLink: DEFAULT_PROMO_VPN_RECS.link,
+    })
+  })
+
+  it('сломан адрес подарка — помечен он, остальные целы', async () => {
+    getKey.mockResolvedValue(JSON.stringify({
+      enabled: true, link: OK_LINK, offerText: 'о',
+      recs: { enabled: true, link: OK_LINK },
+      cart: { enabled: true, link: 'https://evil.com/x' },
+      order: { enabled: true, link: DEFAULT_PROMO_VPN_ORDER.link },
+    }))
+    const v = await getPromoVpn()
+    expect(v).toMatchObject({ enabled: true, recsEnabled: true, orderEnabled: true, cartEnabled: false, cartFlaw: 'bad_link' })
+    expect(v.cartLink).toBe(DEFAULT_PROMO_VPN_CART.link)
+  })
+
+  it('настройки нет → cart/order выключены с дефолтными адресами', async () => {
+    expect(await getPromoVpn()).toMatchObject({
+      cartEnabled: false, cartFlaw: null, cartLink: DEFAULT_PROMO_VPN_CART.link,
+      orderEnabled: false, orderFlaw: null, orderLink: DEFAULT_PROMO_VPN_ORDER.link,
     })
   })
 })

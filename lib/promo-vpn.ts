@@ -83,6 +83,25 @@ export const DEFAULT_PROMO_VPN_RECS: PromoVpnRecs = {
   link: 'https://k9x2m1.conntest.xyz:8443/portal/?ref=bs_recs',
 }
 
+/** Подарок-строка в корзине и экран после оплаты — ещё две поверхности того же
+ *  промо, каждая со своим тумблером и реф-тегом. Форма одинаковая. */
+export interface PromoVpnSurface {
+  enabled: boolean
+  link: string
+}
+
+/** Подарок VPN строкой в корзине. Реф-тег `bs_cart`. */
+export const DEFAULT_PROMO_VPN_CART: PromoVpnSurface = {
+  enabled: false,
+  link: 'https://k9x2m1.conntest.xyz:8443/portal/?ref=bs_cart',
+}
+
+/** Экран «спасибо за покупку» после заказа. Реф-тег `bs_order`. */
+export const DEFAULT_PROMO_VPN_ORDER: PromoVpnSurface = {
+  enabled: false,
+  link: 'https://k9x2m1.conntest.xyz:8443/portal/?ref=bs_order',
+}
+
 /**
  * Белый список адресов промо: Telegram или веб-портал VPN владельца.
  *
@@ -196,10 +215,51 @@ export function parsePromoVpnRecs(raw: string | null): PromoVpnRecsParsed {
   return { recs: { enabled: n.enabled === true, link }, flaw: null }
 }
 
+export interface PromoVpnSurfaceParsed {
+  surface: PromoVpnSurface
+  flaw: PromoVpnFlaw | null
+}
+
+/**
+ * Разбор одной дополнительной поверхности (`cart` или `order`) из того же JSON —
+ * общей функцией, но НЕ трогая parsePromoVpnConfig/parsePromoVpnRecs. Правила те
+ * же, что у карточки: узла нет → поверхность выключена (дефолтный адрес как
+ * подсказка); чужой хост → выключена и адрес наружу не уходит.
+ */
+export function parsePromoVpnSurface(
+  raw: string | null, key: 'cart' | 'order', def: PromoVpnSurface,
+): PromoVpnSurfaceParsed {
+  if (raw === null || raw.trim() === '') return { surface: { ...def }, flaw: null }
+  let src: Record<string, unknown>
+  try {
+    const parsed = JSON.parse(raw)
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      return { surface: { ...def, enabled: false }, flaw: 'bad_json' }
+    }
+    src = parsed as Record<string, unknown>
+  } catch {
+    return { surface: { ...def, enabled: false }, flaw: 'bad_json' }
+  }
+  const node = src[key]
+  if (node === undefined || node === null) return { surface: { ...def }, flaw: null }
+  if (typeof node !== 'object' || Array.isArray(node)) {
+    return { surface: { ...def, enabled: false }, flaw: 'bad_json' }
+  }
+  const n = node as Record<string, unknown>
+  const link = String(n.link ?? def.link).trim()
+  if (!isAllowedPromoLink(link)) return { surface: { enabled: false, link: '' }, flaw: 'bad_link' }
+  return { surface: { enabled: n.enabled === true, link }, flaw: null }
+}
+
+export const parsePromoVpnCart = (raw: string | null) => parsePromoVpnSurface(raw, 'cart', DEFAULT_PROMO_VPN_CART)
+export const parsePromoVpnOrder = (raw: string | null) => parsePromoVpnSurface(raw, 'order', DEFAULT_PROMO_VPN_ORDER)
+
 /** Обе поверхности за одно чтение ключа: getApiKeyValue ходит в БД и не кэширует. */
 export interface PromoVpnAll {
   button: PromoVpnParsed
   recs: PromoVpnRecsParsed
+  cart: PromoVpnSurfaceParsed
+  order: PromoVpnSurfaceParsed
 }
 
 export async function loadPromoVpnAll(): Promise<PromoVpnAll> {
@@ -211,13 +271,19 @@ export async function loadPromoVpnAll(): Promise<PromoVpnAll> {
     return {
       button: { config: { ...DEFAULT_PROMO_VPN, enabled: false }, flaw: null },
       recs: { recs: { ...DEFAULT_PROMO_VPN_RECS, enabled: false }, flaw: null },
+      cart: { surface: { ...DEFAULT_PROMO_VPN_CART, enabled: false }, flaw: null },
+      order: { surface: { ...DEFAULT_PROMO_VPN_ORDER, enabled: false }, flaw: null },
     }
   }
   const button = parsePromoVpnConfig(raw)
   const recs = parsePromoVpnRecs(raw)
+  const cart = parsePromoVpnCart(raw)
+  const order = parsePromoVpnOrder(raw)
   if (button.flaw) log.warn('Promo VPN setting is broken — кнопка выключена', { flaw: button.flaw })
   if (recs.flaw) log.warn('Promo VPN recs setting is broken — карточка выключена', { flaw: recs.flaw })
-  return { button, recs }
+  if (cart.flaw) log.warn('Promo VPN cart setting is broken — подарок выключен', { flaw: cart.flaw })
+  if (order.flaw) log.warn('Promo VPN order setting is broken — экран выключен', { flaw: order.flaw })
+  return { button, recs, cart, order }
 }
 
 /** Настройка кнопки из ApiKey. Сбой чтения — это тоже «промо выключено». */
@@ -237,6 +303,10 @@ export interface PromoVpnView {
    * кнопки, ни на `seen` — карточка показывается всем и каждый раз.
    */
   recs: PromoVpnRecs
+  /** Подарок-строка в корзине. Своя поверхность, свой тумблер. */
+  cart: PromoVpnSurface
+  /** Экран после оплаты. Своя поверхность, свой тумблер. */
+  order: PromoVpnSurface
 }
 
 /**
@@ -250,19 +320,20 @@ export interface PromoVpnView {
  * показывать, а лишний адрес в ответе ей ни к чему.
  */
 export async function getPromoVpnForUser(telegramUserId: string | null): Promise<PromoVpnView> {
-  const { button, recs } = await loadPromoVpnAll()
+  const { button, recs, cart, order } = await loadPromoVpnAll()
   const config = button.config
 
-  // Состояние карточки считается ДО развилки по кнопке и кладётся в ОБА
-  // возврата. Если оставить его только в финальном, выключенная кнопка молча
-  // потушит и карточку — поверхности перестанут быть независимыми ровно в том
-  // состоянии, в котором релиз едет на прод.
-  const recsView: PromoVpnRecs = recs.recs.enabled && recs.recs.link
-    ? { enabled: true, link: recs.recs.link }
-    : { enabled: false, link: '' }
+  // Состояния ВСЕХ прочих поверхностей считаются ДО развилки по кнопке и кладутся
+  // в ОБА возврата. Если оставить их только в финальном, выключенная кнопка молча
+  // потушит и карточку/подарок/экран — поверхности перестанут быть независимыми
+  // ровно в том состоянии, в котором релиз едет на прод.
+  const surfaceView = (s: PromoVpnSurface): PromoVpnSurface => (s.enabled && s.link ? { enabled: true, link: s.link } : { enabled: false, link: '' })
+  const recsView: PromoVpnRecs = surfaceView(recs.recs)
+  const cartView: PromoVpnSurface = surfaceView(cart.surface)
+  const orderView: PromoVpnSurface = surfaceView(order.surface)
 
   if (!config.enabled) {
-    return { enabled: false, link: '', offerText: config.offerText, seen: false, recs: recsView }
+    return { enabled: false, link: '', offerText: config.offerText, seen: false, recs: recsView, cart: cartView, order: orderView }
   }
 
   let seen = false
@@ -277,7 +348,7 @@ export async function getPromoVpnForUser(telegramUserId: string | null): Promise
       log.warn('Promo seen lookup failed', { error: e instanceof Error ? e.message : String(e) })
     }
   }
-  return { enabled: true, link: config.link, offerText: config.offerText, seen, recs: recsView }
+  return { enabled: true, link: config.link, offerText: config.offerText, seen, recs: recsView, cart: cartView, order: orderView }
 }
 
 /**

@@ -81,12 +81,14 @@ async function main() {
     }
     onlyAllowed(promo.link, 'кнопки')
 
-    // ── (5) Карточка в «Рекомендуем» — своя поверхность ─────────────────────
-    if (!promo.recs || typeof promo.recs.enabled !== 'boolean') {
-      problems.push('в ответе промо нет recs.enabled — витрина не узнает про карточку')
-    } else {
-      if (!promo.recs.enabled && promo.recs.link) problems.push('карточка выключена, но адрес всё равно отдаётся')
-      onlyAllowed(promo.recs.link, 'карточки')
+    // ── (5) Прочие поверхности: карточка, подарок в корзине, экран ───────────
+    for (const [key, ru, what] of [['recs', promo.recs, 'карточки'], ['cart', promo.cart, 'подарка'], ['order', promo.order, 'экрана']]) {
+      if (!ru || typeof ru.enabled !== 'boolean') {
+        problems.push(`в ответе промо нет ${key}.enabled — витрина не узнает про поверхность`)
+        continue
+      }
+      if (!ru.enabled && ru.link) problems.push(`поверхность ${what} выключена, но адрес всё равно отдаётся`)
+      onlyAllowed(ru.link, what)
     }
   }
 
@@ -106,7 +108,7 @@ async function main() {
   console.log(`(1) промо-полей в каталоге: ${promoKeys.length}`)
   console.log(`(2) GET /api/promo/vpn: ${promo ? JSON.stringify(promo) : 'нет ответа'}`)
   console.log(`(3) POST /seen без подписи: ${seenStatus}`)
-  console.log(`(5) карточка в «Рекомендуем»: ${promo && promo.recs ? JSON.stringify(promo.recs) : 'поля нет'}`)
+  console.log(`(5) поверхности recs/cart/order: ${promo ? JSON.stringify({recs:promo.recs,cart:promo.cart,order:promo.order}) : 'нет'}`)
 
   if (problems.length) {
     console.log(`\nНАРУШЕНИЯ (${problems.length}):`)
