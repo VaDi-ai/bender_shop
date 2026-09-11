@@ -196,6 +196,7 @@ async function main() {
 
     // Видимая CTA «ЗАБРАТЬ →» и тап именно по ней (клик всплывает к строке)
     const cta = await ev(shop.session, `(() => {
+      renderCartBody()   // шаг proof выше удалил строку из DOM — вернём её
       window.__opened = null
       if (window.Telegram && window.Telegram.WebApp) { window.Telegram.WebApp.openLink = u => window.__opened = { via:'openLink', u }; window.Telegram.WebApp.openTelegramLink = u => window.__opened = { via:'openTelegramLink', u } }
       const el = document.querySelector('#vpnCartRow .vgift-cta')
