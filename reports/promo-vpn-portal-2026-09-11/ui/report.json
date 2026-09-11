@@ -1,0 +1,217 @@
+{
+  "visitor": 990911344,
+  "productId": 674,
+  "portal": {
+    "btn": "https://k9x2m1.conntest.xyz:8443/portal/?ref=bs_home",
+    "recs": "https://k9x2m1.conntest.xyz:8443/portal/?ref=bs_recs"
+  },
+  "checks": [
+    {
+      "name": "обе поверхности на проде выключены (дефолт релиза)",
+      "value": {
+        "pass": true,
+        "enabled": false,
+        "recsEnabled": false
+      }
+    },
+    {
+      "name": "выключенное промо не отдаёт адресов",
+      "value": {
+        "pass": true,
+        "body": {
+          "enabled": false,
+          "link": "",
+          "offerText": "2 недели VPN бесплатно",
+          "seen": false,
+          "recs": {
+            "enabled": false,
+            "link": ""
+          }
+        }
+      }
+    },
+    {
+      "name": "модалка байт-в-байт прежняя (товар с рекомендациями)",
+      "value": {
+        "pass": true,
+        "identical": true,
+        "cards": 4,
+        "widths": [
+          160,
+          160,
+          160,
+          160
+        ]
+      }
+    },
+    {
+      "name": "товар без рекомендаций так же прячет секцию",
+      "value": {
+        "pass": true,
+        "identical": true
+      }
+    },
+    {
+      "name": "менеджер настройку не сохраняет (403)",
+      "value": {
+        "pass": true,
+        "status": 403
+      }
+    },
+    {
+      "name": "обманки отклонены на записи (422)",
+      "value": {
+        "pass": true,
+        "results": [
+          {
+            "link": "https://k9x2m1.conntest.xyz/portal/",
+            "status": 422
+          },
+          {
+            "link": "https://k9x2m1.conntest.xyz:9443/portal/",
+            "status": 422
+          },
+          {
+            "link": "http://k9x2m1.conntest.xyz:8443/portal/",
+            "status": 422
+          },
+          {
+            "link": "https://k9x2m1.conntest.xyz.evil.com:8443/",
+            "status": 422
+          },
+          {
+            "link": "https://user@evil.com/",
+            "status": 422
+          }
+        ]
+      }
+    },
+    {
+      "name": "после отказов настройка не изменилась",
+      "value": {
+        "pass": true,
+        "now": {
+          "enabled": false,
+          "recsEnabled": false
+        }
+      }
+    },
+    {
+      "name": "владелец включил обе на портал-адреса",
+      "value": {
+        "pass": true,
+        "link": "https://k9x2m1.conntest.xyz:8443/portal/?ref=bs_home",
+        "recsLink": "https://k9x2m1.conntest.xyz:8443/portal/?ref=bs_recs"
+      }
+    },
+    {
+      "name": "витрине отдаются точные портал-адреса с верными ref",
+      "value": {
+        "pass": true,
+        "link": "https://k9x2m1.conntest.xyz:8443/portal/?ref=bs_home",
+        "recsLink": "https://k9x2m1.conntest.xyz:8443/portal/?ref=bs_recs"
+      }
+    },
+    {
+      "name": "кнопка: портал открыт через openLink, НЕ openTelegramLink",
+      "value": {
+        "pass": true,
+        "openLink": "https://k9x2m1.conntest.xyz:8443/portal/?ref=bs_home",
+        "openTelegramLink": null,
+        "winOpen": null
+      }
+    },
+    {
+      "name": "карточка над лентой, лента те же 4 по 160 px",
+      "value": {
+        "pass": true,
+        "cardBeforeGrid": true,
+        "cards": 4,
+        "widths": [
+          160,
+          160,
+          160,
+          160
+        ]
+      }
+    },
+    {
+      "name": "карточка: портал открыт через openLink, НЕ openTelegramLink",
+      "value": {
+        "pass": true,
+        "openLink": "https://k9x2m1.conntest.xyz:8443/portal/?ref=bs_recs",
+        "openTelegramLink": null,
+        "winOpen": null
+      }
+    },
+    {
+      "name": "карточка ничего не пишет в PromoSeen",
+      "value": {
+        "pass": true,
+        "cardVisitor": 990911347,
+        "rowsOfCardVisitor": 0
+      }
+    },
+    {
+      "name": "t.me по-прежнему открывается через openTelegramLink",
+      "value": {
+        "pass": true,
+        "openLink": null,
+        "openTelegramLink": "https://t.me/Bender_KVN_bot?start=ref_bs_home",
+        "winOpen": null
+      }
+    },
+    {
+      "name": "эмпирика сертификата (факт, не приговор проверки)",
+      "value": {
+        "pass": true,
+        "interstitialLikely": false,
+        "navErr": null,
+        "certError": null,
+        "responseStatus": 200,
+        "security": "secure",
+        "loadedTitle": "BenderVPN",
+        "finalUrl": "https://k9x2m1.conntest.xyz:8443/portal/?ref=bs_home"
+      }
+    }
+  ],
+  "certProbe": {
+    "url": "https://k9x2m1.conntest.xyz:8443/portal/?ref=bs_home",
+    "navErr": null,
+    "certificateError": null,
+    "loadingFailed": null,
+    "responseStatus": 200,
+    "responseSecurity": "secure",
+    "dom": {
+      "url": "https://k9x2m1.conntest.xyz:8443/portal/?ref=bs_home",
+      "readyState": "complete",
+      "title": "BenderVPN",
+      "textLen": 1041,
+      "bodySnippet": "BENDERVPN\nСтатус\nПО ПРИГЛАШЕНИЮ\nVPN, который\nделают вместе\nс тобой\n\nНас мало — и это осознанно. Небольшой круг людей и живая обратная связь: ты пишешь, что неудобно, — мы это чиним. Без пустых обещани"
+    }
+  },
+  "restored": {
+    "setting": {
+      "enabled": false,
+      "link": "https://t.me/Bender_KVN_bot?start=ref_bs_home",
+      "offerText": "2 недели VPN бесплатно",
+      "flaw": null,
+      "recsEnabled": false,
+      "recsLink": "https://t.me/Bender_KVN_bot?start=ref_bs_recs",
+      "recsFlaw": null
+    },
+    "storefront": {
+      "enabled": false,
+      "link": "",
+      "offerText": "2 недели VPN бесплатно",
+      "seen": false,
+      "recs": {
+        "enabled": false,
+        "link": ""
+      }
+    },
+    "qaRowsDeleted": 1,
+    "promoSeenTotal": 0,
+    "promoSeenWasBefore": 0
+  }
+}

@@ -269,19 +269,26 @@ async function main() {
     ok('кнопка: портал открыт через openLink, НЕ openTelegramLink', { pass: btnSpy.openLink === BTN_LINK && btnSpy.openTelegramLink === null, ...btnSpy })
     await evalIn(shop.session, `vpnClose(); true`); await pause(400)
 
-    // карточка → openLink (портал)
-    await armOpenSpies(shop.session)
-    const withOn = await modalState(shop.session)
-    await shot(shop.session, '04-card-above-list')
-    ok('карточка над лентой, лента те же 4 по 160 px', { pass: withOn.vpnCardIsNull === false && withOn.cardBeforeGrid === true && withOn.cards === 4 && withOn.widths.every(w => w === 160), cardBeforeGrid: withOn.cardBeforeGrid, cards: withOn.cards, widths: withOn.widths })
-    await evalIn(shop.session, `document.getElementById('vpnRecCard').click(); true`)
-    await pause(600)
-    const cardSpy = await readSpies(shop.session)
-    ok('карточка: портал открыт через openLink, НЕ openTelegramLink', { pass: cardSpy.openLink === RECS_LINK && cardSpy.openTelegramLink === null, ...cardSpy })
-    const cardRows = await rowsOf(QA_VISITOR)
-    ok('карточка ничего не пишет в PromoSeen', { pass: cardRows.length === 0, rowsOfCardVisitor: cardRows.length })
-    await closeModal(shop.session)
     await send('Target.closeTarget', { targetId: shop.targetId })
+
+    // карточка → openLink (портал). СВЕЖИЙ посетитель: выше в этой же сессии
+    // клик по кнопке #137 по замыслу пишет «видел», и общий/переиспользованный
+    // id смешал бы это с проверкой «карточка ничего не пишет»
+    const CARD_V = QA_VISITOR + 3
+    const cardShop = await openShop(CARD_V)
+    await armOpenSpies(cardShop.session)
+    const withOn = await modalState(cardShop.session)
+    await shot(cardShop.session, '04-card-above-list')
+    ok('карточка над лентой, лента те же 4 по 160 px', { pass: withOn.vpnCardIsNull === false && withOn.cardBeforeGrid === true && withOn.cards === 4 && withOn.widths.every(w => w === 160), cardBeforeGrid: withOn.cardBeforeGrid, cards: withOn.cards, widths: withOn.widths })
+    await evalIn(cardShop.session, `document.getElementById('vpnRecCard').click(); true`)
+    await pause(600)
+    const cardSpy = await readSpies(cardShop.session)
+    ok('карточка: портал открыт через openLink, НЕ openTelegramLink', { pass: cardSpy.openLink === RECS_LINK && cardSpy.openTelegramLink === null, ...cardSpy })
+    await pause(1000)
+    const cardRows = await rowsOf(CARD_V)
+    ok('карточка ничего не пишет в PromoSeen', { pass: cardRows.length === 0, cardVisitor: CARD_V, rowsOfCardVisitor: cardRows.length })
+    await closeModal(cardShop.session)
+    await send('Target.closeTarget', { targetId: cardShop.targetId })
 
     // ── 4. t.me по-прежнему открывается через openTelegramLink ─────────────
     const tme = await apiCall(OWNER_ID, 'PUT', '/settings/promo-vpn', { enabled: true, link: 'https://t.me/Bender_KVN_bot?start=ref_bs_home', offerText: original.offerText, recsEnabled: false, recsLink: RECS_LINK })
@@ -317,7 +324,7 @@ async function main() {
     const restore = await apiCall(OWNER_ID, 'PUT', '/settings/promo-vpn', { enabled: original.enabled, link: original.link, offerText: original.offerText, recsEnabled: original.recsEnabled, recsLink: original.recsLink })
     const finalCfg = (await apiCall(OWNER_ID, 'GET', '/settings/promo-vpn')).data
     const finalView = await promoView()
-    const del = await db.query('delete from "PromoSeen" where "telegramUserId" = any($1::text[])', [[QA_VISITOR, QA_VISITOR + 1, QA_VISITOR + 2].map(String)])
+    const del = await db.query('delete from "PromoSeen" where "telegramUserId" = any($1::text[])', [[QA_VISITOR, QA_VISITOR + 1, QA_VISITOR + 2, QA_VISITOR + 3].map(String)])
     const left = await seenRows()
     console.log(`↩️  вернули: ${JSON.stringify({ enabled: finalCfg.enabled, recsEnabled: finalCfg.recsEnabled, link: finalCfg.link, recsLink: finalCfg.recsLink })} (статус ${restore.status})`)
     console.log(`🧹 удалено QA-строк из PromoSeen: ${del.rowCount}; осталось всего: ${left} (было ${seenBefore})`)
