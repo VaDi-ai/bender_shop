@@ -23,7 +23,7 @@
   `subtotal()` (cart.reduce) и вне `items` заказа (cart.map). Кликабельна →
   `openPromoLink(cart.link)`, `?ref=bs_cart`. `cart.length>0 && cart.enabled`.
 - Экран после оплаты: блок из `<template id="vpnOrderTpl">` в `#orderSuccess`
-  при `order.enabled`, CTA → `?ref=bs_order`. Оплату/заказ не трогает.
+  при `order.enabled`, CTA → `?ref=bs_cart`. Оплату/заказ не трогает.
 - Админка: раздел «VPN-промо» → «Интерактивные акции», четыре тумблера
   (кнопка/карточка/подарок/экран), одно «Сохранить», подтверждение на каждое
   включение, PUT ownerOnly, плитка «вкл: N из 4».

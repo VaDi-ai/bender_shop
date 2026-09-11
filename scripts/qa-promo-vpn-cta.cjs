@@ -1,6 +1,6 @@
 /**
- * CDP-QA шага 4 на проде: подарок VPN в корзине + экран после оплаты, и
- * сведение четырёх поверхностей в раздел «Интерактивные акции».
+ * CDP-QA доработки: видимая CTA «ЗАБРАТЬ →» в строке-подарке + фикс bs_order→bs_cart.
+ * (поверх шага 4 — подарок в корзине, экран после оплаты, четыре тумблера)
  *
  * Порядок как в прошлых стоп-гейтах: всё на ВЫКЛЮЧЕННОМ (релиз невидим,
  * корзина и экран успеха байт-в-байт прежние), затем поверхности включаются
@@ -18,9 +18,9 @@ const fs = require('fs')
 const { spawn } = require('child_process')
 
 const BASE = process.env.BASE || 'https://bendershop.store'
-const DIR = 'reports/promo-vpn-cart-2026-09-11'
+const DIR = 'reports/promo-vpn-cta-2026-09-11'
 const OUT = DIR + '/ui'
-const PORT = 9237
+const PORT = 9239
 const BOT_TOKEN = process.env.QA_BOT_TOKEN
 const OWNER_ID = Number(process.env.QA_OWNER_ID)
 const MANAGER_ID = Number(process.env.QA_MANAGER_ID || 0)
@@ -194,6 +194,22 @@ async function main() {
       ...proof,
     })
 
+    // Видимая CTA «ЗАБРАТЬ →» и тап именно по ней (клик всплывает к строке)
+    const cta = await ev(shop.session, `(() => {
+      window.__opened = null
+      if (window.Telegram && window.Telegram.WebApp) { window.Telegram.WebApp.openLink = u => window.__opened = { via:'openLink', u }; window.Telegram.WebApp.openTelegramLink = u => window.__opened = { via:'openTelegramLink', u } }
+      const el = document.querySelector('#vpnCartRow .vgift-cta')
+      const visible = !!el && !!el.offsetParent && el.textContent.trim().length > 0
+      const text = el ? el.textContent.trim() : null
+      if (el) el.click()   // клик по CTA, без своего обработчика — всплывает к строке
+      return { visible, text, opened: window.__opened }
+    })()`)
+    await shot(shop.session, '04-cart-cta')
+    ok('в строке видна CTA «ЗАБРАТЬ →», тап по ней ведёт на ?ref=bs_cart', {
+      pass: cta.visible === true && cta.opened && cta.opened.via === 'openLink' && cta.opened.u === REFS.cart,
+      text: cta.text, opened: cta.opened,
+    })
+
     // Перехват fetch: ассерт тела POST /api/orders ДО отправки, сам POST не шлём
     const intercepted = await ev(shop.session, `(async () => {
       // вернём товар обратно (мы его удалили из DOM выше, но cart цел) и подарок
@@ -248,6 +264,16 @@ async function main() {
       ...orderTap,
     })
     await send('Target.closeTarget', { targetId: shop.targetId })
+
+    // ── 4b. Нигде нет bs_order ──────────────────────────────────────────────
+    const pv = await promoView()
+    const admin = (await getPromoAdmin()).data
+    const blob = JSON.stringify(pv) + JSON.stringify(admin)
+    ok('ни в отдаче, ни в настройке нет метки bs_order', {
+      pass: !/bs_order/.test(blob),
+      inView: /bs_order/.test(JSON.stringify(pv)), inAdmin: /bs_order/.test(JSON.stringify(admin)),
+      orderLink: admin.orderLink,
+    })
 
     // ── 5. МЕНЕДЖЕР НИ ОДИН ТУМБЛЕР НЕ ВКЛЮЧАЕТ ─────────────────────────────
     if (MANAGER_ID) {
