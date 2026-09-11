@@ -1,0 +1,36 @@
+{
+  "takenAt": "2026-09-11T08:28:15.077Z",
+  "base": "https://bendershop.store",
+  "productId": 674,
+  "promoEndpoint": {
+    "enabled": false,
+    "link": "",
+    "offerText": "2 недели VPN бесплатно",
+    "seen": false
+  },
+  "productName": "Apple Airpods 4",
+  "withRecs": {
+    "sectionDisplay": "",
+    "cards": 4,
+    "widths": [
+      160,
+      160,
+      160,
+      160
+    ],
+    "vpnRecCard": null,
+    "recsHtmlLength": 1705
+  },
+  "emptyRecs": {
+    "sectionDisplay": "none",
+    "cards": 4,
+    "widths": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "vpnRecCard": null,
+    "recsHtmlLength": 1719
+  }
+}

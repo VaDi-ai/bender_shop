@@ -13,13 +13,14 @@ vi.mock('../lib/api-key-store', () => ({ getApiKeyValue: vi.fn(), setApiKeyValue
 
 import { getApiKeyValue, setApiKeyValue } from '../lib/api-key-store'
 import { getPromoVpn, setPromoVpn } from '../lib/storefront-admin'
-import { PROMO_VPN_SETTING, DEFAULT_PROMO_VPN } from '../lib/promo-vpn'
+import { PROMO_VPN_SETTING, DEFAULT_PROMO_VPN, DEFAULT_PROMO_VPN_RECS } from '../lib/promo-vpn'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 const getKey = getApiKeyValue as any
 const setKey = setApiKeyValue as any
 const ACTOR = '900'
 const OK_LINK = 'https://t.me/Bender_KVN_bot?start=ref_bs_home'
+const OK_RECS_LINK = 'https://t.me/Bender_KVN_bot?start=ref_bs_recs'
 
 beforeEach(() => {
   getKey.mockReset(); setKey.mockReset()
@@ -37,7 +38,12 @@ describe('запись: адрес кнопки', () => {
   it('t.me сохраняется', async () => {
     const r = await setPromoVpn(ACTOR, { enabled: true, link: OK_LINK, offerText: '2 недели VPN бесплатно' })
     expect(r.ok).toBe(true)
-    expect(stored()).toEqual({ enabled: true, link: OK_LINK, offerText: '2 недели VPN бесплатно' })
+    // Ключ `recs` добавился вместе с карточкой в «Рекомендуем»: тело без её
+    // полей сохраняет то, что уже лежало (здесь — дефолт: выключена)
+    expect(stored()).toEqual({
+      enabled: true, link: OK_LINK, offerText: '2 недели VPN бесплатно',
+      recs: { enabled: false, link: DEFAULT_PROMO_VPN_RECS.link },
+    })
   })
 
   it('чужой хост — 422 и в базу НИЧЕГО не пишется', async () => {
@@ -82,6 +88,66 @@ describe('запись: остальное', () => {
   })
 })
 
+describe('запись: карточка в «Рекомендуем»', () => {
+  it('свой адрес и свой тумблер сохраняются рядом с кнопкой', async () => {
+    const r = await setPromoVpn(ACTOR, {
+      enabled: false, link: OK_LINK, offerText: 'о',
+      recsEnabled: true, recsLink: OK_RECS_LINK,
+    })
+    expect(r.ok).toBe(true)
+    expect(stored()).toEqual({
+      enabled: false, link: OK_LINK, offerText: 'о',
+      recs: { enabled: true, link: OK_RECS_LINK },
+    })
+  })
+
+  it('чужой хост карточки — 422 и в базу НИЧЕГО не пишется', async () => {
+    for (const link of ['https://evil.com/x', 'http://t.me/x', 'https://t.me.evil.com/x', 'https://t.me@evil.com/x']) {
+      setKey.mockClear()
+      const r = await setPromoVpn(ACTOR, { enabled: true, link: OK_LINK, recsEnabled: true, recsLink: link })
+      expect(r, link).toMatchObject({ ok: false, status: 422 })
+      expect(r.error, link).toContain('t.me')
+      expect(stored(), link).toBeNull()
+    }
+  })
+
+  it('отказ по адресу карточки не сохраняет и кнопку', async () => {
+    // Сохранение атомарно: одна форма — одна запись. Иначе владелец получил бы
+    // «не получилось», а половина настройки всё равно уехала бы в базу
+    const r = await setPromoVpn(ACTOR, { enabled: true, link: OK_LINK, recsLink: 'https://evil.com/x' })
+    expect(r).toMatchObject({ ok: false, status: 422 })
+    expect(stored()).toBeNull()
+  })
+
+  it('полей карточки в теле нет → сохранённое переносится, а не обнуляется', async () => {
+    getKey.mockResolvedValue(JSON.stringify({
+      enabled: false, link: OK_LINK, offerText: 'о',
+      recs: { enabled: true, link: OK_RECS_LINK },
+    }))
+    await setPromoVpn(ACTOR, { enabled: true, link: OK_LINK, offerText: 'о' })
+    expect(stored().recs).toEqual({ enabled: true, link: OK_RECS_LINK })
+  })
+
+  it('и наоборот: тело только с полями карточки не гасит кнопку', async () => {
+    getKey.mockResolvedValue(JSON.stringify({
+      enabled: true, link: OK_LINK, offerText: 'о', recs: { enabled: false, link: OK_RECS_LINK },
+    }))
+    await setPromoVpn(ACTOR, { enabled: true, link: OK_LINK, offerText: 'о', recsEnabled: true })
+    expect(stored()).toMatchObject({ enabled: true, recs: { enabled: true, link: OK_RECS_LINK } })
+  })
+
+  it('recsEnabled приводится к булеву, мусор = выключено', async () => {
+    await setPromoVpn(ACTOR, { enabled: true, link: OK_LINK, recsEnabled: 'да', recsLink: OK_RECS_LINK })
+    expect(stored().recs.enabled).toBe(false)
+  })
+
+  it('слишком длинный адрес карточки — 422', async () => {
+    const long = 'https://t.me/' + 'a'.repeat(600)
+    const r = await setPromoVpn(ACTOR, { enabled: true, link: OK_LINK, recsLink: long })
+    expect(r).toMatchObject({ ok: false, status: 422 })
+  })
+})
+
 describe('чтение: отравленную настройку наружу не отдаём', () => {
   it('чужой хост в базе → выключено и помечено как сломанное', async () => {
     getKey.mockResolvedValue(JSON.stringify({ enabled: true, link: 'https://evil.com/x', offerText: 'о' }))
@@ -99,6 +165,30 @@ describe('чтение: отравленную настройку наружу �
 
   it('настройки нет → дефолт выключен', async () => {
     expect(await getPromoVpn()).toMatchObject({ enabled: false, flaw: null, link: DEFAULT_PROMO_VPN.link })
+  })
+
+  it('сломан адрес карточки — помечена она, кнопка цела', async () => {
+    getKey.mockResolvedValue(JSON.stringify({
+      enabled: true, link: OK_LINK, offerText: 'о', recs: { enabled: true, link: 'https://evil.com/x' },
+    }))
+    const v = await getPromoVpn()
+    expect(v).toMatchObject({ enabled: true, flaw: null, recsEnabled: false, recsFlaw: 'bad_link' })
+    expect(v.recsLink).toBe(DEFAULT_PROMO_VPN_RECS.link)
+  })
+
+  it('сломан адрес кнопки — помечена она, карточка цела', async () => {
+    getKey.mockResolvedValue(JSON.stringify({
+      enabled: true, link: 'https://evil.com/x', offerText: 'о', recs: { enabled: true, link: OK_RECS_LINK },
+    }))
+    expect(await getPromoVpn()).toMatchObject({
+      enabled: false, flaw: 'bad_link', recsEnabled: true, recsLink: OK_RECS_LINK, recsFlaw: null,
+    })
+  })
+
+  it('настройки нет → карточка выключена с дефолтным адресом', async () => {
+    expect(await getPromoVpn()).toMatchObject({
+      recsEnabled: false, recsFlaw: null, recsLink: DEFAULT_PROMO_VPN_RECS.link,
+    })
   })
 })
 

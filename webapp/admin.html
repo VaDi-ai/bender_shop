@@ -682,7 +682,25 @@
         <div class="cap" style="margin:12px 0 6px">ЧТО ОБЕЩАЕМ</div>
         <input class="inp" id="pvOffer" maxlength="200" placeholder="2 недели VPN бесплатно">
         <div class="hint">Эта строка подсвечивается в заголовке оффера: «Раз уж не удержался — держи <b>…</b>».</div>
+      </div>
+
+      <div class="card">
+        <h3>Карточка в «Рекомендуем» <span class="chip c-off right" id="pvRecsChip">—</span></h3>
+        <div class="mt">Закреплённая карточка «VPN Бендер — 2 недели» над лентой рекомендаций в карточке товара. Тап уводит в Telegram — без отсчёта и без шторки. Показывается всем и каждый раз: это не разовое промо, как кнопка.</div>
+        <div id="pvRecsBroken" class="warnbox" style="display:none"></div>
+        <div class="cap" style="margin:12px 0 6px">ПОКАЗЫВАТЬ В РЕКОМЕНДАЦИЯХ</div>
+        <div class="sf-item-actions">
+          <button class="btn b-nt sm" id="pvRecsOn">Включить</button>
+          <button class="btn b-nt sm" id="pvRecsOff">Выключить</button>
+        </div>
+        <div class="cap" style="margin:12px 0 6px">КУДА ВЕДЁТ КАРТОЧКА</div>
+        <input class="inp" id="pvRecsLink" maxlength="500" placeholder="https://t.me/…">
+        <div class="hint">Свой адрес, отдельный от кнопки: по разным реф-тегам видно, какая поверхность приводит людей. Только ссылка на Telegram — адрес другого сайта не сохранится.</div>
+      </div>
+
+      <div class="card">
         <button class="btn b-main" id="pvSave">Сохранить</button>
+        <div class="hint">Сохраняются обе поверхности разом — и кнопка, и карточка.</div>
         <div class="mt" id="pvErr" style="color:var(--bad)"></div>
       </div>
       </div>
@@ -1661,7 +1679,7 @@
       sync: ['Журнал синка', 'Как прошли последние прогоны таблицы.'],
       parser: ['Парсер', 'Разобрал строку → вы поправили → запомнил. SIM — такой же атрибут.'],
       preorder: ['Предзаказ', 'Сколько берём вперёд и на каких условиях — одна настройка на магазин.'],
-      promovpn: ['VPN-промо', 'Кнопка «не нажимать» на главной и куда она ведёт.'],
+      promovpn: ['VPN-промо', 'Кнопка «не нажимать» на главной и карточка в «Рекомендуем» — куда они ведут.'],
     }
 
     function openHub(id) {
@@ -2202,65 +2220,102 @@
 
       document.getElementById('pvLink').value = pvState.link || ''
       document.getElementById('pvOffer').value = pvState.offerText || ''
+      document.getElementById('pvRecsLink').value = pvState.recsLink || ''
 
       const chip = document.getElementById('pvChip')
       chip.textContent = pvState.enabled ? 'на витрине' : 'выключено'
       chip.className = 'chip right ' + (pvState.enabled ? 'c-ok' : 'c-off')
-      setTile('tilePromoVpn', pvState.enabled ? 'показывается' : 'выключено')
 
-      // Сломанная настройка — говорим, что именно не так, и промо при этом
-      // выключено само: витрина чужой хост не получает ни при каких условиях
-      const broken = document.getElementById('pvBroken')
-      if (pvState.flaw) {
-        broken.style.display = ''
-        broken.textContent = pvState.flaw === 'bad_link'
-          ? 'В настройке лежит адрес не на Telegram — промо выключено, пока адрес не исправлен. Витрине он не отдаётся.'
-          : 'Настройка записана не как надо и не читается — промо выключено. Сохраните её заново.'
-        setTile('tilePromoVpn', 'настройка сломана')
-      } else {
-        broken.style.display = 'none'
-      }
+      const recsChip = document.getElementById('pvRecsChip')
+      recsChip.textContent = pvState.recsEnabled ? 'на витрине' : 'выключено'
+      recsChip.className = 'chip right ' + (pvState.recsEnabled ? 'c-ok' : 'c-off')
+
+      // Плитка одна на обе поверхности: по подписи сразу видно, что именно
+      // сейчас показывается покупателю
+      setTile('tilePromoVpn', pvSurfacesLabel())
+
+      // Сломанная настройка — говорим, что именно не так, и поверхность при
+      // этом выключена сама: витрина чужой хост не получает ни при каких
+      // условиях. Поломки независимы: сломанный адрес кнопки не гасит карточку
+      pvPaintBroken('pvBroken', pvState.flaw, 'кнопка')
+      pvPaintBroken('pvRecsBroken', pvState.recsFlaw, 'карточка')
+      if (pvState.flaw || pvState.recsFlaw) setTile('tilePromoVpn', 'настройка сломана')
 
       pvSetButtons(isOwner)
+    }
+
+    /** Комбинированная подпись плитки: что из двух поверхностей сейчас живо. */
+    function pvSurfacesLabel() {
+      if (!pvState) return '—'
+      if (pvState.enabled && pvState.recsEnabled) return 'кнопка и карточка'
+      if (pvState.enabled) return 'только кнопка'
+      if (pvState.recsEnabled) return 'только карточка'
+      return 'выключено'
+    }
+
+    function pvPaintBroken(id, flaw, what) {
+      const el = document.getElementById(id)
+      if (!flaw) { el.style.display = 'none'; return }
+      el.style.display = ''
+      el.textContent = flaw === 'bad_link'
+        ? 'В настройке лежит адрес не на Telegram — ' + what + ' выключена, пока адрес не исправлен. Витрине он не отдаётся.'
+        : 'Настройка записана не как надо и не читается — ' + what + ' выключена. Сохраните её заново.'
     }
 
     function pvSetButtons(isOwner) {
       const on = document.getElementById('pvOn'), off = document.getElementById('pvOff')
       on.className = 'btn sm ' + (pvState && pvState.enabled ? 'b-main' : 'b-nt')
       off.className = 'btn sm ' + (pvState && !pvState.enabled ? 'b-main' : 'b-nt')
+      const rOn = document.getElementById('pvRecsOn'), rOff = document.getElementById('pvRecsOff')
+      rOn.className = 'btn sm ' + (pvState && pvState.recsEnabled ? 'b-main' : 'b-nt')
+      rOff.className = 'btn sm ' + (pvState && !pvState.recsEnabled ? 'b-main' : 'b-nt')
       const ro = !isOwner
-      on.disabled = ro; off.disabled = ro
+      on.disabled = ro; off.disabled = ro; rOn.disabled = ro; rOff.disabled = ro
       document.getElementById('pvLink').disabled = ro
       document.getElementById('pvOffer').disabled = ro
+      document.getElementById('pvRecsLink').disabled = ro
       document.getElementById('pvSave').style.display = ro ? 'none' : ''
       if (ro) document.getElementById('pvErr').textContent = 'Промо включает и настраивает владелец.'
     }
 
-    /** Тумблер локальный: на сервер уходит одним сохранением вместе с полями. */
+    /** Тумблеры локальные: на сервер уходят одним сохранением вместе с полями. */
     let pvEnabledDraft = null
+    let pvRecsDraft = null
     document.getElementById('pvOn').addEventListener('click', () => { pvEnabledDraft = true; pvPaintDraft() })
     document.getElementById('pvOff').addEventListener('click', () => { pvEnabledDraft = false; pvPaintDraft() })
+    document.getElementById('pvRecsOn').addEventListener('click', () => { pvRecsDraft = true; pvPaintDraft() })
+    document.getElementById('pvRecsOff').addEventListener('click', () => { pvRecsDraft = false; pvPaintDraft() })
     function pvPaintDraft() {
       const on = document.getElementById('pvOn'), off = document.getElementById('pvOff')
       on.className = 'btn sm ' + (pvEnabledDraft ? 'b-main' : 'b-nt')
       off.className = 'btn sm ' + (pvEnabledDraft === false ? 'b-main' : 'b-nt')
+      const rOn = document.getElementById('pvRecsOn'), rOff = document.getElementById('pvRecsOff')
+      rOn.className = 'btn sm ' + (pvRecsDraft ? 'b-main' : 'b-nt')
+      rOff.className = 'btn sm ' + (pvRecsDraft === false ? 'b-main' : 'b-nt')
     }
 
     document.getElementById('pvSave').addEventListener('click', async function () {
       const err = document.getElementById('pvErr'); err.textContent = ''
       const enabled = pvEnabledDraft === null ? !!(pvState && pvState.enabled) : pvEnabledDraft
-      if (enabled && !confirm('Включить кнопку «⛔ НЕ НАЖИМАТЬ» на главной? Её увидит каждый покупатель — по одному разу.')) return
+      const recsEnabled = pvRecsDraft === null ? !!(pvState && pvState.recsEnabled) : pvRecsDraft
+      const wasEnabled = !!(pvState && pvState.enabled)
+      const wasRecs = !!(pvState && pvState.recsEnabled)
+      if (enabled && !wasEnabled && !confirm('Включить кнопку «⛔ НЕ НАЖИМАТЬ» на главной? Её увидит каждый покупатель — по одному разу.')) return
+      if (recsEnabled && !wasRecs && !confirm('Включить карточку VPN в блоке «Рекомендуем»? Она будет в карточке каждого товара.')) return
       this.disabled = true
       try {
         const body = {
           enabled: enabled,
           link: document.getElementById('pvLink').value.trim(),
           offerText: document.getElementById('pvOffer').value.trim(),
+          recsEnabled: recsEnabled,
+          recsLink: document.getElementById('pvRecsLink').value.trim(),
         }
         const r = await api('/settings/promo-vpn', { method: 'PUT', body: JSON.stringify(body) }).catch(() => null)
         if (!r || !r.ok) { err.textContent = (r && r.data && r.data.error) || 'Не получилось'; return }
-        toast(enabled ? 'Промо включено' : 'Промо выключено')
+        toast('Сохранено: ' + (enabled || recsEnabled ? (enabled && recsEnabled ? 'кнопка и карточка' : (enabled ? 'только кнопка' : 'только карточка')) : 'всё выключено'))
         pvEnabledDraft = null
+        pvRecsDraft = null
         loadPromoVpn()
       } finally { this.disabled = false }
     })
