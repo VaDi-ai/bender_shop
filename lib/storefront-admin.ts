@@ -527,9 +527,10 @@ export async function bumpCacheVersion(actor: string): Promise<Outcome> {
 // закреплённая карточка над лентой «Рекомендуем». У каждой свой тумблер и свой
 // адрес — по разным реф-тегам видно, какая приводит людей.
 //
-// Адреса принимаются только как https://t.me/… — витрина не должна становиться
-// трамплином на внешний домен, поэтому чужой хост отклоняется здесь (422) и
-// повторно отсекается на чтении (lib/promo-vpn.ts: поверхность не включается).
+// Адреса принимаются только из белого списка (t.me или VPN-портал владельца) —
+// витрина не должна становиться трамплином на посторонний домен, поэтому чужой
+// хост отклоняется здесь (422) и повторно отсекается на чтении
+// (lib/promo-vpn.ts: поверхность не включается).
 
 export interface PromoVpnView {
   enabled: boolean
@@ -564,13 +565,13 @@ export async function setPromoVpn(
   actor: string,
   body: { enabled?: unknown; link?: unknown; offerText?: unknown; recsEnabled?: unknown; recsLink?: unknown },
 ): Promise<Outcome<PromoVpnView>> {
-  const { PROMO_VPN_SETTING, isTelegramLink, DEFAULT_PROMO_VPN } = await import('./promo-vpn')
+  const { PROMO_VPN_SETTING, isAllowedPromoLink, DEFAULT_PROMO_VPN } = await import('./promo-vpn')
 
   const link = String(body.link ?? '').trim()
   if (!link) return bad(422, 'Укажите адрес кнопки') as Outcome<PromoVpnView>
   if (link.length > 500) return bad(422, 'Адрес длиннее 500 символов — так не бывает') as Outcome<PromoVpnView>
-  if (!isTelegramLink(link)) {
-    return bad(422, 'Адрес кнопки — только ссылка на Telegram вида https://t.me/…') as Outcome<PromoVpnView>
+  if (!isAllowedPromoLink(link)) {
+    return bad(422, 'Адрес кнопки — ссылка на Telegram (t.me) или на VPN-портал') as Outcome<PromoVpnView>
   }
 
   const offerText = String(body.offerText ?? '')
@@ -587,7 +588,7 @@ export async function setPromoVpn(
   const recsLink = body.recsLink === undefined ? before.recsLink : String(body.recsLink).trim()
   if (!recsLink) return bad(422, 'Укажите адрес карточки в рекомендациях') as Outcome<PromoVpnView>
   if (recsLink.length > 500) return bad(422, 'Адрес карточки длиннее 500 символов — так не бывает') as Outcome<PromoVpnView>
-  if (!isTelegramLink(recsLink)) {
+  if (!isAllowedPromoLink(recsLink)) {
     return bad(422, 'Адрес карточки — только ссылка на Telegram вида https://t.me/…') as Outcome<PromoVpnView>
   }
   const recsEnabled = body.recsEnabled === undefined

@@ -1,0 +1,21 @@
+{
+  "url": "https://k9x2m1.conntest.xyz:8443/portal/?ref=bs_home",
+  "navErr": "net::ERR_TIMED_OUT",
+  "certificateError": null,
+  "loadingFailed": {
+    "requestId": "29F35566DADB3632A6A5F27BCBAB721F",
+    "timestamp": 13355.290875,
+    "type": "Document",
+    "errorText": "net::ERR_ABORTED",
+    "canceled": true
+  },
+  "responseStatus": null,
+  "responseSecurity": null,
+  "dom": {
+    "url": "chrome-error://chromewebdata/",
+    "readyState": "complete",
+    "title": "k9x2m1.conntest.xyz",
+    "textLen": 251,
+    "snippet": "Не удается получить доступ к сайту\n\nПревышено время ожидания ответа от сайта k9x2m1.conntest.xyz.\n\nПопробуйте сделать следующее:\n\nПроверьте подключение к интернету.\nПроверьте настройки прокси-сервера и брандмауэра.\nERR_TIMED_OUT\nПерезагрузить\nСведения"
+  }
+}

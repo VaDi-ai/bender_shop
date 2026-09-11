@@ -2650,12 +2650,24 @@
       setTimeout(() => { ov.hidden = true }, 320)
     }
 
+    /**
+     * Открыть адрес промо правильным способом по его хосту. Сервер отдаёт только
+     * адреса из белого списка (t.me или веб-портал VPN), но открываются они
+     * по-разному: t.me уводит в сам Telegram через openTelegramLink, портал —
+     * во внешний браузер через openLink. Вне Mini App — обычный window.open.
+     */
+    function openPromoLink(url) {
+      if (!url) return
+      let host = null
+      try { host = new URL(url).hostname } catch (e) { /* ниже — фолбэк */ }
+      if (host === 't.me' && tg && tg.openTelegramLink) { tg.openTelegramLink(url); return }
+      if (tg && tg.openLink) { tg.openLink(url); return }
+      window.open(url, '_blank', 'noopener')
+    }
+
     function vpnClaim() {
       if (!vpnPromo || !vpnPromo.link) return
-      // Ссылка всегда t.me (сервер другого хоста не отдаёт), поэтому в Mini App
-      // открываем именно через openTelegramLink — она уводит в сам Telegram
-      if (tg && tg.openTelegramLink) tg.openTelegramLink(vpnPromo.link)
-      else window.open(vpnPromo.link, '_blank', 'noopener')
+      openPromoLink(vpnPromo.link)
       setTimeout(vpnClose, 400)
     }
 
@@ -2663,7 +2675,7 @@
     //
     // Вторая поверхность того же промо и полностью независимая: не смотрит ни
     // на тумблер кнопки, ни на seen, ничего не пишет в PromoSeen (она не про
-    // «видел») и не крутит таймер — тап сразу уводит в Telegram.
+    // «видел») и не крутит таймер — тап сразу уводит на адрес промо.
 
     /** Карточка включена и есть куда вести. Любое «нет» — поверхность выключена. */
     function vpnRecsOn() {
@@ -2696,9 +2708,9 @@
 
     function vpnRecClaim() {
       if (!vpnRecsOn()) return
-      // Адрес всегда t.me — сервер чужого хоста не отдаёт (двойная отсечка)
-      if (tg && tg.openTelegramLink) tg.openTelegramLink(vpnPromo.recs.link)
-      else window.open(vpnPromo.recs.link, '_blank', 'noopener')
+      // Адрес из белого списка (сервер чужого хоста не отдаёт); способ открытия
+      // выбирается по хосту — см. openPromoLink
+      openPromoLink(vpnPromo.recs.link)
     }
 
     // ── Render product grid ───────────────────────────────────────────────────
