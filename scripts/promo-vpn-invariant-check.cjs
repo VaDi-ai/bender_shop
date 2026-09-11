@@ -13,7 +13,8 @@
  *       ни ссылки, ни признака включённости;
  *   (3) POST /api/promo/vpn/seen без подписи отвечает 401 — писать строку по
  *       telegram-id можно только с доказанной личностью;
- *   (4) отдаваемые ссылки (если поверхность включат) ведут строго на t.me;
+ *   (4) отдаваемые ссылки (если поверхность включат) ведут только на адреса
+ *       из белого списка (t.me или веб-портал VPN на его порту 8443);
  *   (5) карточка в «Рекомендуем» отдаётся отдельным полем `recs` и, пока она
  *       выключена, не отдаёт адреса — как и кнопка.
  *
@@ -63,23 +64,29 @@ async function main() {
     if (promo.seen !== false) problems.push('аноним получил seen != false — помечать его нечем')
     if (!promo.enabled && promo.link) problems.push('промо выключено, но ссылка всё равно отдаётся')
     // ── (4) Ссылка только на Telegram ──────────────────────────────────────
-    const onlyTelegram = (url, what) => {
-      if (!url) return
-      let host = null
-      try { host = new URL(url).hostname } catch { /* ниже */ }
-      const proto = (() => { try { return new URL(url).protocol } catch { return null } })()
-      if (host !== 't.me' || proto !== 'https:') {
-        problems.push(`витрине отдаётся не-Telegram адрес ${what}: ${url}`)
-      }
+    // Тот же белый список, что в lib/promo-vpn.ts isAllowedPromoLink: точный
+    // хост + строгий порт. Держим копией, а не импортом: скрипт .cjs гоняется
+    // отдельно от сборки и не должен тянуть ts-модуль
+    const allowed = (url) => {
+      let u = null
+      try { u = new URL(url) } catch { return false }
+      if (u.protocol !== 'https:') return false
+      if (u.hostname === 't.me' && u.port === '') return true
+      if (u.hostname === 'k9x2m1.conntest.xyz' && u.port === '8443') return true
+      return false
     }
-    onlyTelegram(promo.link, 'кнопки')
+    const onlyAllowed = (url, what) => {
+      if (!url) return
+      if (!allowed(url)) problems.push(`витрине отдаётся адрес не из белого списка ${what}: ${url}`)
+    }
+    onlyAllowed(promo.link, 'кнопки')
 
     // ── (5) Карточка в «Рекомендуем» — своя поверхность ─────────────────────
     if (!promo.recs || typeof promo.recs.enabled !== 'boolean') {
       problems.push('в ответе промо нет recs.enabled — витрина не узнает про карточку')
     } else {
       if (!promo.recs.enabled && promo.recs.link) problems.push('карточка выключена, но адрес всё равно отдаётся')
-      onlyTelegram(promo.recs.link, 'карточки')
+      onlyAllowed(promo.recs.link, 'карточки')
     }
   }
 

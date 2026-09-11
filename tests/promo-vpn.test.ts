@@ -17,7 +17,7 @@ vi.mock('../lib/api-key-store', () => ({ getApiKeyValue: vi.fn(), setApiKeyValue
 import { prisma } from '../lib/prisma'
 import { getApiKeyValue } from '../lib/api-key-store'
 import {
-  isTelegramLink, parsePromoVpnConfig, loadPromoVpnConfig,
+  isAllowedPromoLink, parsePromoVpnConfig, loadPromoVpnConfig,
   getPromoVpnForUser, markPromoSeen,
   DEFAULT_PROMO_VPN, PROMO_VPN_KEY, PROMO_SEEN_MAX_AGE_SECONDS,
 } from '../lib/promo-vpn'
@@ -33,28 +33,51 @@ beforeEach(() => {
   ps.upsert.mockResolvedValue({})
 })
 
-describe('адрес кнопки — только Telegram', () => {
-  it('пускает t.me по https, с путём и параметрами', () => {
-    expect(isTelegramLink('https://t.me/Bender_KVN_bot?start=ref_bs_home')).toBe(true)
-    expect(isTelegramLink('https://t.me/durov')).toBe(true)
-    expect(isTelegramLink('  https://t.me/x  ')).toBe(true)          // пробелы по краям
-    expect(isTelegramLink('https://T.ME/x')).toBe(true)              // хост регистронезависим
+describe('белый список адресов промо', () => {
+  it('пускает t.me по https без явного порта', () => {
+    expect(isAllowedPromoLink('https://t.me/Bender_KVN_bot?start=ref_bs_home')).toBe(true)
+    expect(isAllowedPromoLink('https://t.me/durov')).toBe(true)
+    expect(isAllowedPromoLink('  https://t.me/x  ')).toBe(true)          // пробелы по краям
+    expect(isAllowedPromoLink('https://T.ME/x')).toBe(true)             // хост регистронезависим
+  })
+
+  it('пускает веб-портал VPN на его порту 8443', () => {
+    expect(isAllowedPromoLink('https://k9x2m1.conntest.xyz:8443/portal/?ref=bs_home')).toBe(true)
+    expect(isAllowedPromoLink('https://k9x2m1.conntest.xyz:8443/portal/?ref=bs_recs')).toBe(true)
+    expect(isAllowedPromoLink('https://K9X2M1.CONNTEST.XYZ:8443/portal/')).toBe(true)  // хост регистронезависим
+  })
+
+  it('портал только на 8443 и только по https', () => {
+    // Порт обязан совпасть ровно: new URL убирает лишь дефолтный 443
+    expect(isAllowedPromoLink('https://k9x2m1.conntest.xyz/portal/')).toBe(false)      // без порта
+    expect(isAllowedPromoLink('https://k9x2m1.conntest.xyz:443/portal/')).toBe(false)  // дефолтный 443, не 8443
+    expect(isAllowedPromoLink('https://k9x2m1.conntest.xyz:9443/portal/')).toBe(false) // другой порт
+    expect(isAllowedPromoLink('http://k9x2m1.conntest.xyz:8443/portal/')).toBe(false)  // не https
+  })
+
+  it('t.me с нестандартным портом не проходит', () => {
+    // :443 нормализуется в пустой порт (это тот же https://t.me/x) — допустимо;
+    // а вот явный нестандартный порт на t.me — отказ
+    expect(isAllowedPromoLink('https://t.me:8443/x')).toBe(false)
+    expect(isAllowedPromoLink('https://t.me:443/x')).toBe(true)
   })
 
   it('заворачивает всё остальное', () => {
     const bad = [
-      'http://t.me/x',                    // не https — подменяется по дороге
+      'http://t.me/x',                              // не https
       'https://evil.com/x',
-      'https://t.me.evil.com/x',          // поддомен-обманка: хост чужой
-      'https://t.me@evil.com/x',          // userinfo-трюк: hostname = evil.com
-      'https://telegram.me/x',            // похоже, но это другой хост
+      'https://t.me.evil.com/x',                    // поддомен-обманка: хост чужой
+      'https://t.me@evil.com/x',                    // userinfo-трюк: hostname = evil.com
+      'https://k9x2m1.conntest.xyz.evil.com:8443/', // сабдомен под портал: хост чужой
+      'https://k9x2m1.conntest.xyz.evil.com/',
+      'https://telegram.me/x',                      // похоже, но другой хост
       'https://sub.t.me/x',
-      'javascript:alert(1)',              // eslint-disable-line no-script-url
+      'javascript:alert(1)',                        // eslint-disable-line no-script-url
       'tg://resolve?domain=x',
-      't.me/x',                           // без схемы URL не разбирается
+      't.me/x',                                     // без схемы URL не разбирается
       '', '   ', null, undefined, 42,
     ]
-    for (const v of bad) expect(isTelegramLink(v), String(v)).toBe(false)
+    for (const v of bad) expect(isAllowedPromoLink(v), String(v)).toBe(false)
   })
 })
 

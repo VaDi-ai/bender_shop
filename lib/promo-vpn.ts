@@ -14,9 +14,10 @@
  * руками, когда готов. Старое значение без `recs` остаётся валидным: кнопка
  * читается как читалась, карточка — как выключенная.
  *
- * Адреса обеих поверхностей принимаются ТОЛЬКО как https://t.me/… и проверяются
- * дважды: на сохранении (отказ 422) и на отдаче витрине (чужой хост → поверхность
- * не показываем вовсе). Двойная проверка не паранойя: ключ в ApiKey мог быть записан мимо
+ * Адреса обеих поверхностей принимаются только из белого списка — Telegram
+ * (t.me) или веб-портал VPN владельца — и проверяются дважды: на сохранении
+ * (отказ 422) и на отдаче витрине (чужой хост → поверхность не показываем
+ * вовсе). Двойная проверка не паранойя: ключ в ApiKey мог быть записан мимо
  * админки — руками в БД, старой версией кода, восстановлением дампа, — и
  * витрина не должна становиться трамплином на внешний домен.
  */
@@ -62,7 +63,7 @@ export interface PromoVpnConfig {
  */
 export const DEFAULT_PROMO_VPN: PromoVpnConfig = {
   enabled: false,
-  link: 'https://t.me/Bender_KVN_bot?start=ref_bs_home',
+  link: 'https://k9x2m1.conntest.xyz:8443/portal/?ref=bs_home',
   offerText: '2 недели VPN бесплатно',
 }
 
@@ -74,23 +75,29 @@ export interface PromoVpnRecs {
 
 /**
  * Дефолт карточки: выключена, адрес со своим реф-тегом. Тег отличается от
- * кнопочного (`ref_bs_home`) намеренно — по нему видно, какая поверхность
+ * кнопочного (`ref=bs_home`) намеренно — по нему видно, какая поверхность
  * приводит людей.
  */
 export const DEFAULT_PROMO_VPN_RECS: PromoVpnRecs = {
   enabled: false,
-  link: 'https://t.me/Bender_KVN_bot?start=ref_bs_recs',
+  link: 'https://k9x2m1.conntest.xyz:8443/portal/?ref=bs_recs',
 }
 
 /**
- * Ссылка ведёт в Telegram и никуда больше.
+ * Белый список адресов промо: Telegram или веб-портал VPN владельца.
  *
- * Проверяется именно `hostname`, а не вхождение подстроки: `t.me.evil.com` и
- * `https://t.me@evil.com/` содержат «t.me», но ведут на чужой домен — у первого
- * hostname `t.me.evil.com`, у второго `evil.com`. Схема строго https: у http
- * ссылку можно подменить по дороге.
+ * Проверяется именно `hostname` (точное равенство, не подстрока и не endsWith)
+ * плюс порт — а не вхождение текста. `t.me.evil.com` и `https://t.me@evil.com/`
+ * содержат «t.me», но ведут на чужой домен: у первого hostname `t.me.evil.com`,
+ * у второго — `evil.com` (userinfo до `@` хостом не становится). Так же
+ * `k9x2m1.conntest.xyz.evil.com` не пройдёт под портал. Схема строго https.
+ *
+ * Портал слушает нестандартный порт 8443, и он обязан совпасть ровно: `new URL`
+ * убирает только дефолтный порт схемы (443 → пусто), поэтому `:443` и `:9443`
+ * оба отсекаются как не-8443. Telegram, наоборот, ходит по дефолтному 443 —
+ * там явный порт запрещаем (`port === ''`).
  */
-export function isTelegramLink(raw: unknown): boolean {
+export function isAllowedPromoLink(raw: unknown): boolean {
   const s = String(raw ?? '').trim()
   if (!s) return false
   let u: URL
@@ -99,7 +106,10 @@ export function isTelegramLink(raw: unknown): boolean {
   } catch {
     return false
   }
-  return u.protocol === 'https:' && u.hostname === 't.me'
+  if (u.protocol !== 'https:') return false
+  if (u.hostname === 't.me' && u.port === '') return true
+  if (u.hostname === 'k9x2m1.conntest.xyz' && u.port === '8443') return true
+  return false
 }
 
 /** Что не так с сохранённой настройкой — нужно и админке, и логу. */
@@ -133,8 +143,8 @@ export function parsePromoVpnConfig(raw: string | null): PromoVpnParsed {
 
   const link = String(src.link ?? '').trim()
   const offerText = String(src.offerText ?? '').trim() || DEFAULT_PROMO_VPN.offerText
-  if (!isTelegramLink(link)) {
-    // Адрес не наш — промо не включаем, каким бы ни был флаг в JSON
+  if (!isAllowedPromoLink(link)) {
+    // Адрес не из белого списка — промо не включаем, каким бы ни был флаг в JSON
     return { config: { enabled: false, link: '', offerText }, flaw: 'bad_link' }
   }
   return { config: { enabled: src.enabled === true, link, offerText }, flaw: null }
@@ -182,7 +192,7 @@ export function parsePromoVpnRecs(raw: string | null): PromoVpnRecsParsed {
   // Адреса нет в объекте — берём дефолтный: это не поломка, а недописанная
   // настройка. Поломка — это когда адрес есть и он чужой
   const link = String(n.link ?? DEFAULT_PROMO_VPN_RECS.link).trim()
-  if (!isTelegramLink(link)) return { recs: { enabled: false, link: '' }, flaw: 'bad_link' }
+  if (!isAllowedPromoLink(link)) return { recs: { enabled: false, link: '' }, flaw: 'bad_link' }
   return { recs: { enabled: n.enabled === true, link }, flaw: null }
 }
 
