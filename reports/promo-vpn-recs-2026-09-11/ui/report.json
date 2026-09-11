@@ -1,0 +1,200 @@
+{
+  "visitor": 990744236,
+  "productId": 674,
+  "checks": [
+    {
+      "name": "карточка на проде выключена (дефолт релиза)",
+      "value": {
+        "pass": true,
+        "recsEnabled": false
+      }
+    },
+    {
+      "name": "выключенная карточка не отдаёт адреса",
+      "value": {
+        "pass": true,
+        "recs": {
+          "enabled": false,
+          "link": ""
+        }
+      }
+    },
+    {
+      "name": "модалка байт-в-байт прежняя (товар с рекомендациями)",
+      "value": {
+        "pass": true,
+        "identical": true,
+        "vpnCardIsNull": true,
+        "cards": 4,
+        "widths": [
+          160,
+          160,
+          160,
+          160
+        ]
+      }
+    },
+    {
+      "name": "товар без рекомендаций так же прячет секцию",
+      "value": {
+        "pass": true,
+        "identical": true,
+        "sectionDisplay": "none",
+        "vpnCardIsNull": true
+      }
+    },
+    {
+      "name": "менеджер не включает карточку (403)",
+      "value": {
+        "pass": true,
+        "status": 403,
+        "error": "Недостаточно прав (нужна роль owner)"
+      }
+    },
+    {
+      "name": "чужой хост карточки отклонён на записи (422)",
+      "value": {
+        "pass": true,
+        "results": [
+          {
+            "link": "https://evil.com/x",
+            "status": 422
+          },
+          {
+            "link": "http://t.me/x",
+            "status": 422
+          },
+          {
+            "link": "https://t.me.evil.com/x",
+            "status": 422
+          },
+          {
+            "link": "https://t.me@evil.com/x",
+            "status": 422
+          }
+        ]
+      }
+    },
+    {
+      "name": "после отказов настройка не изменилась",
+      "value": {
+        "pass": true,
+        "now": {
+          "enabled": false,
+          "recsEnabled": false
+        }
+      }
+    },
+    {
+      "name": "владелец включил карточку, кнопку не трогая",
+      "value": {
+        "pass": true,
+        "status": 200,
+        "recsEnabled": true,
+        "enabled": false
+      }
+    },
+    {
+      "name": "выключенная кнопка не мешает карточке: #vpnFab === null",
+      "value": {
+        "pass": true
+      }
+    },
+    {
+      "name": "карточка стоит НАД лентой",
+      "value": {
+        "pass": true,
+        "cardBeforeGrid": true,
+        "text": "🔒\n    \n      📌 ЗАКРЕПЛЕНО\n      VPN Бендер — 2 недели\n      БЕСПЛАТНО · 0 ₽\n    \n    ЗАБРАТЬ →"
+      }
+    },
+    {
+      "name": "лента не пострадала: те же 4 карточки по 160 px",
+      "value": {
+        "pass": true,
+        "cards": 4,
+        "widths": [
+          160,
+          160,
+          160,
+          160
+        ]
+      }
+    },
+    {
+      "name": "тап открывает ref_bs_recs, без таймера и шторки",
+      "value": {
+        "pass": true,
+        "link": "https://t.me/Bender_KVN_bot?start=ref_bs_recs",
+        "overlay": false,
+        "stillThere": true
+      }
+    },
+    {
+      "name": "карточка ничего не пишет в PromoSeen",
+      "value": {
+        "pass": true,
+        "cardVisitor": 990744236,
+        "rowsOfCardVisitor": 0,
+        "total": 0,
+        "wasBefore": 0
+      }
+    },
+    {
+      "name": "без рекомендаций секция открыта только с карточкой",
+      "value": {
+        "pass": true,
+        "sectionDisplay": "",
+        "cards": 0
+      }
+    },
+    {
+      "name": "включены обе поверхности",
+      "value": {
+        "pass": true
+      }
+    },
+    {
+      "name": "кнопка #137 работает как работала: отсчёт, шторка, ref_bs_home",
+      "value": {
+        "pass": true,
+        "num": "3",
+        "link": "https://t.me/Bender_KVN_bot?start=ref_bs_home"
+      }
+    },
+    {
+      "name": "обе поверхности уживаются в одной сессии",
+      "value": {
+        "pass": true,
+        "vpnCardIsNull": false,
+        "cards": 4
+      }
+    },
+    {
+      "name": "карточка выключена, кнопка жива: узла карточки нет, модалка прежняя",
+      "value": {
+        "pass": true,
+        "vpnCardIsNull": true,
+        "identical": true,
+        "fab": true
+      }
+    }
+  ],
+  "restored": {
+    "enabled": false,
+    "recsEnabled": false,
+    "storefront": {
+      "enabled": false,
+      "link": "",
+      "offerText": "2 недели VPN бесплатно",
+      "seen": false,
+      "recs": {
+        "enabled": false,
+        "link": ""
+      }
+    },
+    "qaRowsDeleted": 0,
+    "promoSeenTotal": 0,
+    "promoSeenWasBefore": 0
+  }
+}

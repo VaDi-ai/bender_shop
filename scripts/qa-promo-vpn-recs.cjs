@@ -46,17 +46,38 @@ function initData(userId, ageSeconds = 0) {
   return p.toString()
 }
 
-async function apiCall(userId, method, path, body) {
-  const r = await fetch(BASE + '/admin/api' + path, {
-    method,
-    headers: { 'x-telegram-init-data': initData(userId), 'content-type': 'application/json' },
-    body: body === undefined ? undefined : JSON.stringify(body),
-  })
-  let data = null
-  try { data = await r.json() } catch { /* пусто */ }
-  return { status: r.status, data }
+/**
+ * Сетевой блип на проде не должен ронять стоп-гейт: прогон длинный, запросов
+ * много, и единственный сброшенный коннект стоил бы полного перепрогона. Сам
+ * ОТВЕТ не ретраится — только отсутствие ответа: ошибка уровня fetch.
+ */
+async function withRetry(label, fn, tries = 3) {
+  let last
+  for (let i = 1; i <= tries; i++) {
+    try { return await fn() } catch (e) {
+      last = e
+      const cause = e.cause && (e.cause.code || e.cause.message)
+      console.log(`   ↻ ${label}: попытка ${i}/${tries} не дошла (${e.message}${cause ? ' / ' + cause : ''})`)
+      await new Promise(r => setTimeout(r, 1500 * i))
+    }
+  }
+  throw last
 }
-const promoView = () => fetch(BASE + '/api/promo/vpn', { cache: 'no-store' }).then(r => r.json())
+
+async function apiCall(userId, method, path, body) {
+  return withRetry(`${method} ${path}`, async () => {
+    const r = await fetch(BASE + '/admin/api' + path, {
+      method,
+      headers: { 'x-telegram-init-data': initData(userId), 'content-type': 'application/json' },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    })
+    let data = null
+    try { data = await r.json() } catch { /* пусто */ }
+    return { status: r.status, data }
+  })
+}
+const promoView = () => withRetry('GET /api/promo/vpn', () =>
+  fetch(BASE + '/api/promo/vpn', { cache: 'no-store' }).then(r => r.json()))
 
 // ── CDP ──────────────────────────────────────────────────────────────────────
 let msgId = 0
@@ -142,6 +163,8 @@ async function main() {
   const db = new pg.Client({ connectionString: DBURL, ssl: { rejectUnauthorized: false } })
   await db.connect()
   const seenRows = async () => (await db.query('select count(*)::int n from "PromoSeen"')).rows[0].n
+  const rowsOf = async id =>
+    (await db.query('select "promoKey" from "PromoSeen" where "telegramUserId" = $1', [String(id)])).rows
 
   const chrome = spawn('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
     ['--headless=new', `--remote-debugging-port=${PORT}`, '--no-first-run',
@@ -248,6 +271,17 @@ async function main() {
     ok('тап открывает ref_bs_recs, без таймера и шторки', {
       pass: tapped.link === RECS_LINK && tapped.overlay === false, ...tapped,
     })
+
+    // Карточка не про «видел» — писать в PromoSeen ей нечего и незачем.
+    // Считаем по СВОЕМУ посетителю, а не общий счётчик: ниже по сценарию мы
+    // намеренно жмём кнопку #137 другим посетителем, и она строку пишет по
+    // замыслу. Общий счётчик смешал бы эти два факта в один
+    await pause(1200)
+    const cardRows = await rowsOf(QA_VISITOR)
+    ok('карточка ничего не пишет в PromoSeen', {
+      pass: cardRows.length === 0 && (await seenRows()) === seenBefore,
+      cardVisitor: QA_VISITOR, rowsOfCardVisitor: cardRows.length, total: await seenRows(), wasBefore: seenBefore,
+    })
     await closeModal(shop.session)
 
     // товар без рекомендаций: секция открывается ТОЛЬКО ради карточки
@@ -306,11 +340,6 @@ async function main() {
     await closeModal(onlyBtnShop.session)
     await send('Target.closeTarget', { targetId: onlyBtnShop.targetId })
 
-    // ── 6. PromoSeen не тронут ─────────────────────────────────────────────
-    const seenAfter = await seenRows()
-    ok('карточка ничего не пишет в PromoSeen', {
-      pass: seenAfter === seenBefore, before: seenBefore, after: seenAfter,
-    })
   } finally {
     const restore = await apiCall(OWNER_ID, 'PUT', '/settings/promo-vpn', {
       enabled: original.enabled, link: original.link, offerText: original.offerText,
@@ -318,12 +347,18 @@ async function main() {
     })
     const finalCfg = (await apiCall(OWNER_ID, 'GET', '/settings/promo-vpn')).data
     const finalView = await promoView()
+    // Кнопка #137 по замыслу пишет «видел» — строку за собой убираем, как и в
+    // стоп-гейте #137: после прогона на проде следов QA остаться не должно
+    const del = await db.query(
+      'delete from "PromoSeen" where "telegramUserId" = any($1::text[])',
+      [[QA_VISITOR, QA_VISITOR + 1, QA_VISITOR + 2].map(String)])
     const left = await seenRows()
     console.log(`↩️  вернули: ${JSON.stringify({ enabled: finalCfg.enabled, recsEnabled: finalCfg.recsEnabled })} (статус ${restore.status})`)
-    console.log(`🧹 строк в PromoSeen: ${left} (было ${seenBefore})`)
+    console.log(`🧹 удалено QA-строк из PromoSeen: ${del.rowCount}; осталось всего: ${left} (было ${seenBefore})`)
     report.restored = {
       enabled: finalCfg.enabled, recsEnabled: finalCfg.recsEnabled,
-      storefront: finalView, promoSeenTotal: left, promoSeenWasBefore: seenBefore,
+      storefront: finalView, qaRowsDeleted: del.rowCount,
+      promoSeenTotal: left, promoSeenWasBefore: seenBefore,
     }
     await db.end()
     try { ws && ws.close() } catch { /* пусто */ }
@@ -337,4 +372,8 @@ async function main() {
   process.exit(failed.length ? 1 : 0)
 }
 
-main().catch(e => { console.error('QA упал:', e.message); process.exit(1) })
+main().catch(e => {
+  const cause = e.cause && (e.cause.code || e.cause.message)
+  console.error('QA упал:', e.message, cause ? '| причина: ' + cause : '')
+  process.exit(1)
+})
