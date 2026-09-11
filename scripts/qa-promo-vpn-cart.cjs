@@ -89,8 +89,21 @@ async function openShop(userId) {
   await waitFor(s, `!!document.getElementById('tabbar')`, 30000, 'разметка')
   await waitFor(s, `(()=>{const l=document.getElementById('loader');return !l||l.style.display==='none'})()`, 30000, 'заставка')
   await waitFor(s, `Array.isArray(allProducts)&&allProducts.length>0`, 30000, 'товары')
-  await waitFor(s, `vpnPromo!==null`, 20000, 'промо')
+  // vpnPromo грузится отдельным фетчем, который витрина глотает при сетевом
+  // блипе (промо не критично). Пассивное ожидание тогда виснет — поэтому на
+  // таймауте перезапускаем сам фетч in-page, до нескольких попыток.
+  await waitPromo(s)
   return { session: s, targetId: t.targetId }
+}
+async function waitPromo(s, totalMs = 45000) {
+  const t0 = Date.now()
+  while (Date.now() - t0 < totalMs) {
+    if (await ev(s, `vpnPromo !== null`)) return
+    await pause(3000)
+    if (await ev(s, `vpnPromo !== null`)) return
+    await ev(s, `typeof loadVpnPromo==='function' && loadVpnPromo(); true`)   // повторный фетч
+  }
+  throw new Error('waitFor timeout: промо (после ретраев фетча)')
 }
 /** Кладёт первый покупаемый товар в корзину и открывает её. */
 async function addItemAndOpenCart(s) {

@@ -1,0 +1,166 @@
+{
+  "checks": [
+    {
+      "name": "всё выключено: адресов наружу нет",
+      "value": {
+        "pass": true,
+        "body": {
+          "enabled": false,
+          "link": "",
+          "offerText": "2 недели VPN бесплатно",
+          "seen": false,
+          "recs": {
+            "enabled": false,
+            "link": ""
+          },
+          "cart": {
+            "enabled": false,
+            "link": ""
+          },
+          "order": {
+            "enabled": false,
+            "link": ""
+          }
+        }
+      }
+    },
+    {
+      "name": "корзина байт-в-байт прежняя, строки-подарка нет",
+      "value": {
+        "pass": true,
+        "identical": true,
+        "giftIsNull": true,
+        "sub": 10500
+      }
+    },
+    {
+      "name": "#orderSuccess байт-в-байт прежний, блока нет",
+      "value": {
+        "pass": true,
+        "identical": true
+      }
+    },
+    {
+      "name": "включена только «кнопка»: видна, три другие off",
+      "value": {
+        "pass": true,
+        "surfaceVisible": true,
+        "othersOff": true,
+        "ref": "https://k9x2m1.conntest.xyz:8443/portal/?ref=bs_home"
+      }
+    },
+    {
+      "name": "включена только «recs»: видна, три другие off",
+      "value": {
+        "pass": true,
+        "surfaceVisible": true,
+        "othersOff": true,
+        "ref": "https://k9x2m1.conntest.xyz:8443/portal/?ref=bs_recs"
+      }
+    },
+    {
+      "name": "включена только «cart»: видна, три другие off",
+      "value": {
+        "pass": true,
+        "surfaceVisible": true,
+        "othersOff": true,
+        "ref": "https://k9x2m1.conntest.xyz:8443/portal/?ref=bs_cart"
+      }
+    },
+    {
+      "name": "включена только «order»: видна, три другие off",
+      "value": {
+        "pass": true,
+        "surfaceVisible": true,
+        "othersOff": true,
+        "ref": "https://k9x2m1.conntest.xyz:8443/portal/?ref=bs_order"
+      }
+    },
+    {
+      "name": "подарок виден, но вне subtotal() и вне items заказа",
+      "value": {
+        "pass": true,
+        "withGift": true,
+        "subWith": 10500,
+        "subWithout": 10500,
+        "subEqual": true,
+        "itemsCount": 1,
+        "itemsEqual": true,
+        "hasGiftInItems": false
+      }
+    },
+    {
+      "name": "перехваченный POST /api/orders НЕ содержит подарок",
+      "value": {
+        "pass": true,
+        "sent": true,
+        "itemCount": 1,
+        "names": [
+          "Apple Airpods 4 (White · One Size · США · [object Object])"
+        ],
+        "giftInPayload": false,
+        "totalAmount": "10500.00"
+      }
+    },
+    {
+      "name": "order off → блока на экране успеха нет, хотя подарок в корзине был",
+      "value": {
+        "pass": true,
+        "blockIsNull": true
+      }
+    },
+    {
+      "name": "экран после заказа ведёт на ?ref=bs_order через openLink",
+      "value": {
+        "pass": true,
+        "present": true,
+        "opened": {
+          "via": "openLink",
+          "u": "https://k9x2m1.conntest.xyz:8443/portal/?ref=bs_order"
+        }
+      }
+    },
+    {
+      "name": "менеджер тумблеры не включает (403)",
+      "value": {
+        "pass": true,
+        "status": 403
+      }
+    }
+  ],
+  "restored": {
+    "setting": {
+      "enabled": false,
+      "link": "https://k9x2m1.conntest.xyz:8443/portal/?ref=bs_home",
+      "offerText": "2 недели VPN бесплатно",
+      "flaw": null,
+      "recsEnabled": false,
+      "recsLink": "https://k9x2m1.conntest.xyz:8443/portal/?ref=bs_recs",
+      "recsFlaw": null,
+      "cartEnabled": false,
+      "cartLink": "https://k9x2m1.conntest.xyz:8443/portal/?ref=bs_cart",
+      "cartFlaw": null,
+      "orderEnabled": false,
+      "orderLink": "https://k9x2m1.conntest.xyz:8443/portal/?ref=bs_order",
+      "orderFlaw": null
+    },
+    "storefront": {
+      "enabled": false,
+      "link": "",
+      "offerText": "2 недели VPN бесплатно",
+      "seen": false,
+      "recs": {
+        "enabled": false,
+        "link": ""
+      },
+      "cart": {
+        "enabled": false,
+        "link": ""
+      },
+      "order": {
+        "enabled": false,
+        "link": ""
+      }
+    }
+  }
+}
