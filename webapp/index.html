@@ -1209,6 +1209,27 @@
     #vpnRecCard .vrec-nm { font-size: 13.5px; font-weight: 600; line-height: 1.25; color: var(--text); }
     #vpnRecCard .vrec-pr { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--accent); font-weight: 700; margin-top: 3px; }
     #vpnRecCard .vrec-cta { flex-shrink: 0; background: #2c3a16; border: 1px solid #4c621f; color: var(--accent); font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 12px; padding: 8px 12px; border-radius: 9px; }
+
+    /* ═══ Промо VPN: строка-подарок в корзине ═══
+       DOM-only: клонируется из <template> ПОСЛЕ cart.map, в массив cart не
+       пишется никогда → вне subtotal() и вне payload заказа. Кликабельна. */
+    #vpnCartRow { display: flex; gap: 11px; align-items: center; background: rgba(168,255,62,0.05); border: 1px solid #2b371a; border-radius: 12px; padding: 11px; margin-top: 8px; cursor: pointer; -webkit-tap-highlight-color: transparent; transition: border-color 0.2s, transform 0.12s; }
+    #vpnCartRow:hover { border-color: var(--accent); }
+    #vpnCartRow:active { transform: scale(0.99); }
+    #vpnCartRow .vgift-ph { width: 46px; height: 46px; border-radius: 9px; background: #0f120a; border: 1px solid #2b371a; display: flex; align-items: center; justify-content: center; font-size: 22px; flex-shrink: 0; }
+    #vpnCartRow .vgift-info { flex: 1; min-width: 0; }
+    #vpnCartRow .vgift-badge { display: inline-block; font-family: 'JetBrains Mono', monospace; font-size: 8.5px; font-weight: 700; letter-spacing: 1px; background: #2c3a16; color: var(--accent); border: 1px solid #4c621f; padding: 2px 6px; border-radius: 5px; margin-bottom: 4px; }
+    #vpnCartRow .vgift-name { font-size: 13px; line-height: 1.25; color: var(--text); }
+    #vpnCartRow .vgift-price { font-family: 'Onest', sans-serif; font-size: 13px; font-weight: 600; margin-top: 3px; color: var(--accent); }
+
+    /* ═══ Промо VPN: блок на экране после оплаты ═══ */
+    #vpnOrderBlock { margin: 4px 0 2px; padding: 14px; border: 1px dashed #34421c; border-radius: 13px; background: rgba(168,255,62,0.05); text-align: center; }
+    #vpnOrderBlock .vo-em { font-size: 34px; line-height: 1; margin-bottom: 8px; }
+    #vpnOrderBlock .vo-hd { font-size: 15px; font-weight: 700; line-height: 1.3; margin-bottom: 4px; }
+    #vpnOrderBlock .vo-hd .hl { color: var(--accent); }
+    #vpnOrderBlock .vo-tx { font-size: 12px; color: var(--hint); line-height: 1.5; margin-bottom: 12px; }
+    #vpnOrderBlock .vo-cta { display: block; width: 100%; background: var(--accent); color: var(--accent-fg); text-align: center; font-weight: 700; font-size: 14px; letter-spacing: 0.3px; padding: 13px; border-radius: 12px; font-family: 'Onest', sans-serif; cursor: pointer; border: none; -webkit-tap-highlight-color: transparent; transition: transform 0.12s; }
+    #vpnOrderBlock .vo-cta:active { transform: scale(0.98); }
   </style>
 </head>
 <body>
@@ -1592,6 +1613,30 @@
       <div class="vrec-pr">БЕСПЛАТНО · 0 ₽</div>
     </div>
     <div class="vrec-cta">ЗАБРАТЬ →</div>
+  </div>
+  </template>
+
+  <!-- ═══ Промо VPN: строка-подарок в корзине ═══
+       DOM-only, клонируется в #cartList ПОСЛЕ cart.map — в массив cart не
+       попадает, поэтому вне subtotal() и вне payload заказа. -->
+  <template id="vpnCartTpl">
+  <div id="vpnCartRow" role="button" tabindex="0">
+    <div class="vgift-ph">🎁</div>
+    <div class="vgift-info">
+      <span class="vgift-badge">🎁 ПОДАРОК К ЗАКАЗУ</span>
+      <div class="vgift-name">VPN Бендер — 2 недели</div>
+      <div class="vgift-price">0 ₽</div>
+    </div>
+  </div>
+  </template>
+
+  <!-- ═══ Промо VPN: блок на экране после оплаты ═══ -->
+  <template id="vpnOrderTpl">
+  <div id="vpnOrderBlock">
+    <div class="vo-em">🎁</div>
+    <div class="vo-hd">Спасибо за покупку, братан — держи <span class="hl">2 недели VPN</span></div>
+    <div class="vo-tx">Быстрый VPN от Бендера. Активируй за минуту — карта не нужна.</div>
+    <button class="vo-cta" id="vpnOrderCta">ЗАБРАТЬ VPN →</button>
   </div>
   </template>
 
@@ -2713,6 +2758,58 @@
       openPromoLink(vpnPromo.recs.link)
     }
 
+    // ── Подарок VPN строкой в корзине (DOM-only) ─────────────────────────────
+    //
+    // Строка НЕ элемент массива cart: она клонируется из <template> и
+    // вставляется в #cartList уже ПОСЛЕ cart.map. Поэтому subtotal()
+    // (cart.reduce) и items в checkout() (cart.map) её не видят — подарок вне
+    // суммы, вне payload заказа, вне остатков. Кликом уводит на портал.
+
+    function vpnCartOn() {
+      return !!(vpnPromo && vpnPromo.cart && vpnPromo.cart.enabled && vpnPromo.cart.link)
+    }
+
+    /** Вставляет/снимает строку-подарок в #cartList. Не трогает cart и товары. */
+    function mountVpnCartRow(on) {
+      const existing = document.getElementById('vpnCartRow')
+      if (!on) { if (existing) existing.remove(); return }
+      if (existing) return
+      const tpl = document.getElementById('vpnCartTpl')
+      const list = document.getElementById('cartList')
+      if (!tpl || !list) return
+      const frag = tpl.content.cloneNode(true)
+      const row = frag.querySelector('#vpnCartRow')
+      if (row) {
+        row.addEventListener('click', vpnCartClaim)
+        row.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); vpnCartClaim() } })
+      }
+      list.appendChild(frag)   // строго ПОСЛЕ строк товаров
+    }
+
+    function vpnCartClaim() {
+      if (!vpnCartOn()) return
+      openPromoLink(vpnPromo.cart.link)
+    }
+
+    // ── Экран после оплаты ───────────────────────────────────────────────────
+    function vpnOrderOn() {
+      return !!(vpnPromo && vpnPromo.order && vpnPromo.order.enabled && vpnPromo.order.link)
+    }
+    /** Вставляет блок VPN в #orderSuccess (или снимает). Оплату/заказ не трогает. */
+    function mountVpnOrderBlock(on) {
+      const existing = document.getElementById('vpnOrderBlock')
+      if (!on) { if (existing) existing.remove(); return }
+      if (existing) return
+      const tpl = document.getElementById('vpnOrderTpl')
+      const details = document.getElementById('successDetails')
+      if (!tpl || !details || !details.parentNode) return
+      const frag = tpl.content.cloneNode(true)
+      const cta = frag.querySelector('#vpnOrderCta')
+      if (cta) cta.addEventListener('click', () => { if (vpnOrderOn()) openPromoLink(vpnPromo.order.link) })
+      // Между деталями заказа и кнопками действий
+      details.parentNode.insertBefore(frag, details.nextSibling)
+    }
+
     // ── Render product grid ───────────────────────────────────────────────────
     function renderGrid() {
       const grid = document.getElementById('grid')
@@ -3704,6 +3801,7 @@
       if (!cart.length) {
         empty.style.display = 'block'; filled.style.display = 'none'
         if (footer) footer.style.display = 'none'
+        mountVpnCartRow(false)   // корзина пуста — строки-подарка быть не должно
         return
       }
       if (footer) footer.style.display = ''
@@ -3727,6 +3825,9 @@
   </div>
 </div>`
       }).join('')
+      // Строка-подарок вставляется ПОСЛЕ строк товаров и только как DOM-узел —
+      // в массив cart ничего не добавляется, поэтому суммы и payload не трогает
+      mountVpnCartRow(vpnCartOn())
       updateTotals()
     }
 
@@ -4138,6 +4239,7 @@
           (deliveryInfo && deliveryInfo.pending ? ' <span style="color:#888">(без доставки)</span>' : ''),
       ].join('<br>')
 
+      mountVpnOrderBlock(vpnOrderOn())
       el.style.display = 'flex'
     }
 

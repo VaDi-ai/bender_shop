@@ -455,7 +455,7 @@
         <button class="hub-tile" data-hub="sync"><span class="ht-n">Журнал синка</span><span class="ht-s" id="tileSync">—</span></button>
         <button class="hub-tile" data-hub="parser"><span class="ht-n">Парсер</span><span class="ht-s" id="tileParser">—</span></button>
         <button class="hub-tile" data-hub="preorder"><span class="ht-n">Предзаказ</span><span class="ht-s" id="tilePreorder">—</span></button>
-        <button class="hub-tile" data-hub="promovpn"><span class="ht-n">VPN-промо</span><span class="ht-s" id="tilePromoVpn">—</span></button>
+        <button class="hub-tile" data-hub="promovpn"><span class="ht-n">Интерактивные акции</span><span class="ht-s" id="tilePromoVpn">—</span></button>
       </div>
 
       <div class="hub-page" id="hub-promos" style="display:none">
@@ -699,8 +699,36 @@
       </div>
 
       <div class="card">
+        <h3>Подарок в корзине <span class="chip c-off right" id="pvCartChip">—</span></h3>
+        <div class="mt">Строка «🎁 VPN Бендер — 2 недели · 0 ₽» в корзине, когда в ней есть товары. Это подарок к заказу: в сумму, в оплату и в заказ он не входит. Тап уводит на VPN.</div>
+        <div id="pvCartBroken" class="warnbox" style="display:none"></div>
+        <div class="cap" style="margin:12px 0 6px">ПОКАЗЫВАТЬ В КОРЗИНЕ</div>
+        <div class="sf-item-actions">
+          <button class="btn b-nt sm" id="pvCartOn">Включить</button>
+          <button class="btn b-nt sm" id="pvCartOff">Выключить</button>
+        </div>
+        <div class="cap" style="margin:12px 0 6px">КУДА ВЕДЁТ СТРОКА</div>
+        <input class="inp" id="pvCartLink" maxlength="500" placeholder="https://k9x2m1.conntest.xyz:8443/portal/?ref=bs_cart">
+        <div class="hint">Свой реф-тег. Ссылка на Telegram (t.me) или на VPN-портал — адрес другого сайта не сохранится.</div>
+      </div>
+
+      <div class="card">
+        <h3>Экран после оплаты <span class="chip c-off right" id="pvOrderChip">—</span></h3>
+        <div class="mt">Отбивка «Спасибо за покупку — держи 2 недели VPN» на экране после успешного заказа. Оплату и сам заказ не трогает. Показывается для каждого заказа.</div>
+        <div id="pvOrderBroken" class="warnbox" style="display:none"></div>
+        <div class="cap" style="margin:12px 0 6px">ПОКАЗЫВАТЬ ПОСЛЕ ЗАКАЗА</div>
+        <div class="sf-item-actions">
+          <button class="btn b-nt sm" id="pvOrderOn">Включить</button>
+          <button class="btn b-nt sm" id="pvOrderOff">Выключить</button>
+        </div>
+        <div class="cap" style="margin:12px 0 6px">КУДА ВЕДЁТ КНОПКА НА ЭКРАНЕ</div>
+        <input class="inp" id="pvOrderLink" maxlength="500" placeholder="https://k9x2m1.conntest.xyz:8443/portal/?ref=bs_order">
+        <div class="hint">Свой реф-тег. Ссылка на Telegram (t.me) или на VPN-портал — адрес другого сайта не сохранится.</div>
+      </div>
+
+      <div class="card">
         <button class="btn b-main" id="pvSave">Сохранить</button>
-        <div class="hint">Сохраняются обе поверхности разом — и кнопка, и карточка.</div>
+        <div class="hint">Сохраняются все четыре механики разом. Каждая включается и выключается независимо.</div>
         <div class="mt" id="pvErr" style="color:var(--bad)"></div>
       </div>
       </div>
@@ -1679,7 +1707,7 @@
       sync: ['Журнал синка', 'Как прошли последние прогоны таблицы.'],
       parser: ['Парсер', 'Разобрал строку → вы поправили → запомнил. SIM — такой же атрибут.'],
       preorder: ['Предзаказ', 'Сколько берём вперёд и на каких условиях — одна настройка на магазин.'],
-      promovpn: ['VPN-промо', 'Кнопка «не нажимать» на главной и карточка в «Рекомендуем» — куда они ведут.'],
+      promovpn: ['Интерактивные акции', 'VPN-механики: кнопка, карточка, подарок в корзине, экран после оплаты — каждая включается отдельно.'],
     }
 
     function openHub(id) {
@@ -2206,51 +2234,52 @@
     })
 
 
-    // ── VPN-ПРОМО: рубильник кнопки на главной ────────────────────────────────
+    // ── ИНТЕРАКТИВНЫЕ АКЦИИ: четыре независимые VPN-поверхности ────────────────
     //
     // Настройку меняет только владелец (ownerOnly на ручке). Менеджеру блок
-    // показываем в режиме чтения — видеть, включено ли промо, ему полезно.
+    // показываем в режиме чтения. Четыре поверхности одной таблицей — тумблеры,
+    // адреса и статусы у каждой свои и независимы.
     let pvState = null
+    const PV = [
+      { key: '',      what: 'кнопка',  onId: 'pvOn',      offId: 'pvOff',      linkId: 'pvLink',      chipId: 'pvChip',      brokenId: 'pvBroken',      en: 'enabled',      link: 'link',      flaw: 'flaw',
+        confirm: 'Включить кнопку «⛔ НЕ НАЖИМАТЬ» на главной? Её увидит каждый покупатель — по одному разу.' },
+      { key: 'recs',  what: 'карточка', onId: 'pvRecsOn',  offId: 'pvRecsOff',  linkId: 'pvRecsLink',  chipId: 'pvRecsChip',  brokenId: 'pvRecsBroken',  en: 'recsEnabled',  link: 'recsLink',  flaw: 'recsFlaw',
+        confirm: 'Включить карточку VPN в блоке «Рекомендуем»? Она будет в карточке каждого товара.' },
+      { key: 'cart',  what: 'подарок', onId: 'pvCartOn',  offId: 'pvCartOff',  linkId: 'pvCartLink',  chipId: 'pvCartChip',  brokenId: 'pvCartBroken',  en: 'cartEnabled',  link: 'cartLink',  flaw: 'cartFlaw',
+        confirm: 'Включить подарок VPN в корзине? Строка «0 ₽» будет во всех непустых корзинах.' },
+      { key: 'order', what: 'экран',   onId: 'pvOrderOn', offId: 'pvOrderOff', linkId: 'pvOrderLink', chipId: 'pvOrderChip', brokenId: 'pvOrderBroken', en: 'orderEnabled', link: 'orderLink', flaw: 'orderFlaw',
+        confirm: 'Включить экран после оплаты? Отбивка с VPN будет показываться после каждого заказа.' },
+    ]
+    // Локальные черновики тумблеров: null = не трогали, уходят одним «Сохранить»
+    const pvDraft = { '': null, recs: null, cart: null, order: null }
 
     async function loadPromoVpn() {
       const r = await api('/settings/promo-vpn').catch(() => null)
       if (!r || !r.ok) { setTile('tilePromoVpn', 'не загрузилось'); return }
       pvState = r.data
       const isOwner = window.adminMe && window.adminMe.role === 'owner'
-
-      document.getElementById('pvLink').value = pvState.link || ''
       document.getElementById('pvOffer').value = pvState.offerText || ''
-      document.getElementById('pvRecsLink').value = pvState.recsLink || ''
 
-      const chip = document.getElementById('pvChip')
-      chip.textContent = pvState.enabled ? 'на витрине' : 'выключено'
-      chip.className = 'chip right ' + (pvState.enabled ? 'c-ok' : 'c-off')
-
-      const recsChip = document.getElementById('pvRecsChip')
-      recsChip.textContent = pvState.recsEnabled ? 'на витрине' : 'выключено'
-      recsChip.className = 'chip right ' + (pvState.recsEnabled ? 'c-ok' : 'c-off')
-
-      // Плитка одна на обе поверхности: по подписи сразу видно, что именно
-      // сейчас показывается покупателю
-      setTile('tilePromoVpn', pvSurfacesLabel())
-
-      // Сломанная настройка — говорим, что именно не так, и поверхность при
-      // этом выключена сама: витрина чужой хост не получает ни при каких
-      // условиях. Поломки независимы: сломанный адрес кнопки не гасит карточку
-      pvPaintBroken('pvBroken', pvState.flaw, 'кнопка')
-      pvPaintBroken('pvRecsBroken', pvState.recsFlaw, 'карточка')
-      if (pvState.flaw || pvState.recsFlaw) setTile('tilePromoVpn', 'настройка сломана')
-
+      let broken = false
+      for (const su of PV) {
+        pvDraft[su.key] = null
+        document.getElementById(su.linkId).value = pvState[su.link] || ''
+        const chip = document.getElementById(su.chipId)
+        chip.textContent = pvState[su.en] ? 'на витрине' : 'выключено'
+        chip.className = 'chip right ' + (pvState[su.en] ? 'c-ok' : 'c-off')
+        // Поломки независимы: сломанный адрес одной поверхности не гасит другие
+        pvPaintBroken(su.brokenId, pvState[su.flaw], su.what)
+        if (pvState[su.flaw]) broken = true
+      }
+      setTile('tilePromoVpn', broken ? 'настройка сломана' : pvSurfacesLabel())
       pvSetButtons(isOwner)
     }
 
-    /** Комбинированная подпись плитки: что из двух поверхностей сейчас живо. */
+    /** Подпись плитки: сколько поверхностей сейчас включено. */
     function pvSurfacesLabel() {
       if (!pvState) return '—'
-      if (pvState.enabled && pvState.recsEnabled) return 'кнопка и карточка'
-      if (pvState.enabled) return 'только кнопка'
-      if (pvState.recsEnabled) return 'только карточка'
-      return 'выключено'
+      const n = PV.filter(su => pvState[su.en]).length
+      return n === 0 ? 'всё выключено' : ('вкл: ' + n + ' из ' + PV.length)
     }
 
     function pvPaintBroken(id, flaw, what) {
@@ -2258,64 +2287,57 @@
       if (!flaw) { el.style.display = 'none'; return }
       el.style.display = ''
       el.textContent = flaw === 'bad_link'
-        ? 'В настройке лежит адрес не на Telegram — ' + what + ' выключена, пока адрес не исправлен. Витрине он не отдаётся.'
+        ? 'В настройке лежит адрес не из белого списка — ' + what + ' выключена, пока адрес не исправлен. Витрине он не отдаётся.'
         : 'Настройка записана не как надо и не читается — ' + what + ' выключена. Сохраните её заново.'
     }
 
+    /** Текущее значение тумблера: черновик, иначе сохранённое. */
+    function pvVal(su) { return pvDraft[su.key] === null ? !!(pvState && pvState[su.en]) : pvDraft[su.key] }
+
     function pvSetButtons(isOwner) {
-      const on = document.getElementById('pvOn'), off = document.getElementById('pvOff')
-      on.className = 'btn sm ' + (pvState && pvState.enabled ? 'b-main' : 'b-nt')
-      off.className = 'btn sm ' + (pvState && !pvState.enabled ? 'b-main' : 'b-nt')
-      const rOn = document.getElementById('pvRecsOn'), rOff = document.getElementById('pvRecsOff')
-      rOn.className = 'btn sm ' + (pvState && pvState.recsEnabled ? 'b-main' : 'b-nt')
-      rOff.className = 'btn sm ' + (pvState && !pvState.recsEnabled ? 'b-main' : 'b-nt')
       const ro = !isOwner
-      on.disabled = ro; off.disabled = ro; rOn.disabled = ro; rOff.disabled = ro
-      document.getElementById('pvLink').disabled = ro
+      for (const su of PV) {
+        const on = document.getElementById(su.onId), off = document.getElementById(su.offId)
+        const v = pvVal(su)
+        on.className = 'btn sm ' + (v ? 'b-main' : 'b-nt')
+        off.className = 'btn sm ' + (v ? 'b-nt' : 'b-main')
+        on.disabled = ro; off.disabled = ro
+        document.getElementById(su.linkId).disabled = ro
+      }
       document.getElementById('pvOffer').disabled = ro
-      document.getElementById('pvRecsLink').disabled = ro
       document.getElementById('pvSave').style.display = ro ? 'none' : ''
-      if (ro) document.getElementById('pvErr').textContent = 'Промо включает и настраивает владелец.'
+      if (ro) document.getElementById('pvErr').textContent = 'Акции включает и настраивает владелец.'
     }
 
-    /** Тумблеры локальные: на сервер уходят одним сохранением вместе с полями. */
-    let pvEnabledDraft = null
-    let pvRecsDraft = null
-    document.getElementById('pvOn').addEventListener('click', () => { pvEnabledDraft = true; pvPaintDraft() })
-    document.getElementById('pvOff').addEventListener('click', () => { pvEnabledDraft = false; pvPaintDraft() })
-    document.getElementById('pvRecsOn').addEventListener('click', () => { pvRecsDraft = true; pvPaintDraft() })
-    document.getElementById('pvRecsOff').addEventListener('click', () => { pvRecsDraft = false; pvPaintDraft() })
-    function pvPaintDraft() {
-      const on = document.getElementById('pvOn'), off = document.getElementById('pvOff')
-      on.className = 'btn sm ' + (pvEnabledDraft ? 'b-main' : 'b-nt')
-      off.className = 'btn sm ' + (pvEnabledDraft === false ? 'b-main' : 'b-nt')
-      const rOn = document.getElementById('pvRecsOn'), rOff = document.getElementById('pvRecsOff')
-      rOn.className = 'btn sm ' + (pvRecsDraft ? 'b-main' : 'b-nt')
-      rOff.className = 'btn sm ' + (pvRecsDraft === false ? 'b-main' : 'b-nt')
+    for (const su of PV) {
+      document.getElementById(su.onId).addEventListener('click', () => { pvDraft[su.key] = true; pvSetButtons(true) })
+      document.getElementById(su.offId).addEventListener('click', () => { pvDraft[su.key] = false; pvSetButtons(true) })
     }
 
     document.getElementById('pvSave').addEventListener('click', async function () {
       const err = document.getElementById('pvErr'); err.textContent = ''
-      const enabled = pvEnabledDraft === null ? !!(pvState && pvState.enabled) : pvEnabledDraft
-      const recsEnabled = pvRecsDraft === null ? !!(pvState && pvState.recsEnabled) : pvRecsDraft
-      const wasEnabled = !!(pvState && pvState.enabled)
-      const wasRecs = !!(pvState && pvState.recsEnabled)
-      if (enabled && !wasEnabled && !confirm('Включить кнопку «⛔ НЕ НАЖИМАТЬ» на главной? Её увидит каждый покупатель — по одному разу.')) return
-      if (recsEnabled && !wasRecs && !confirm('Включить карточку VPN в блоке «Рекомендуем»? Она будет в карточке каждого товара.')) return
+      // Подтверждаем каждое ВКЛючение отдельно — только при переходе из выключенного
+      for (const su of PV) {
+        const now = pvVal(su), was = !!(pvState && pvState[su.en])
+        if (now && !was && !confirm(su.confirm)) return
+      }
       this.disabled = true
       try {
         const body = {
-          enabled: enabled,
-          link: document.getElementById('pvLink').value.trim(),
-          offerText: document.getElementById('pvOffer').value.trim(),
-          recsEnabled: recsEnabled,
-          recsLink: document.getElementById('pvRecsLink').value.trim(),
+          enabled:      pvVal(PV[0]),
+          link:         document.getElementById('pvLink').value.trim(),
+          offerText:    document.getElementById('pvOffer').value.trim(),
+          recsEnabled:  pvVal(PV[1]),
+          recsLink:     document.getElementById('pvRecsLink').value.trim(),
+          cartEnabled:  pvVal(PV[2]),
+          cartLink:     document.getElementById('pvCartLink').value.trim(),
+          orderEnabled: pvVal(PV[3]),
+          orderLink:    document.getElementById('pvOrderLink').value.trim(),
         }
         const r = await api('/settings/promo-vpn', { method: 'PUT', body: JSON.stringify(body) }).catch(() => null)
         if (!r || !r.ok) { err.textContent = (r && r.data && r.data.error) || 'Не получилось'; return }
-        toast('Сохранено: ' + (enabled || recsEnabled ? (enabled && recsEnabled ? 'кнопка и карточка' : (enabled ? 'только кнопка' : 'только карточка')) : 'всё выключено'))
-        pvEnabledDraft = null
-        pvRecsDraft = null
+        const n = PV.filter(su => r.data[su.en]).length
+        toast(n === 0 ? 'Сохранено: всё выключено' : ('Сохранено: включено ' + n + ' из ' + PV.length))
         loadPromoVpn()
       } finally { this.disabled = false }
     })

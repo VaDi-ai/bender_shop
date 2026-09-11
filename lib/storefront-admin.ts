@@ -542,11 +542,19 @@ export interface PromoVpnView {
   recsEnabled: boolean
   recsLink: string
   recsFlaw: 'bad_json' | 'bad_link' | null
+  /** Подарок-строка в корзине */
+  cartEnabled: boolean
+  cartLink: string
+  cartFlaw: 'bad_json' | 'bad_link' | null
+  /** Экран после оплаты */
+  orderEnabled: boolean
+  orderLink: string
+  orderFlaw: 'bad_json' | 'bad_link' | null
 }
 
 export async function getPromoVpn(): Promise<PromoVpnView> {
-  const { loadPromoVpnAll, DEFAULT_PROMO_VPN, DEFAULT_PROMO_VPN_RECS } = await import('./promo-vpn')
-  const { button, recs } = await loadPromoVpnAll()
+  const { loadPromoVpnAll, DEFAULT_PROMO_VPN, DEFAULT_PROMO_VPN_RECS, DEFAULT_PROMO_VPN_CART, DEFAULT_PROMO_VPN_ORDER } = await import('./promo-vpn')
+  const { button, recs, cart, order } = await loadPromoVpnAll()
   const { config, flaw } = button
   return {
     enabled: config.enabled,
@@ -558,12 +566,23 @@ export async function getPromoVpn(): Promise<PromoVpnView> {
     recsEnabled: recs.recs.enabled,
     recsLink: recs.recs.link || (recs.flaw === 'bad_link' ? DEFAULT_PROMO_VPN_RECS.link : recs.recs.link),
     recsFlaw: recs.flaw,
+    cartEnabled: cart.surface.enabled,
+    cartLink: cart.surface.link || (cart.flaw === 'bad_link' ? DEFAULT_PROMO_VPN_CART.link : cart.surface.link),
+    cartFlaw: cart.flaw,
+    orderEnabled: order.surface.enabled,
+    orderLink: order.surface.link || (order.flaw === 'bad_link' ? DEFAULT_PROMO_VPN_ORDER.link : order.surface.link),
+    orderFlaw: order.flaw,
   }
 }
 
 export async function setPromoVpn(
   actor: string,
-  body: { enabled?: unknown; link?: unknown; offerText?: unknown; recsEnabled?: unknown; recsLink?: unknown },
+  body: {
+    enabled?: unknown; link?: unknown; offerText?: unknown;
+    recsEnabled?: unknown; recsLink?: unknown;
+    cartEnabled?: unknown; cartLink?: unknown;
+    orderEnabled?: unknown; orderLink?: unknown;
+  },
 ): Promise<Outcome<PromoVpnView>> {
   const { PROMO_VPN_SETTING, isAllowedPromoLink, DEFAULT_PROMO_VPN } = await import('./promo-vpn')
 
@@ -589,13 +608,42 @@ export async function setPromoVpn(
   if (!recsLink) return bad(422, 'Укажите адрес карточки в рекомендациях') as Outcome<PromoVpnView>
   if (recsLink.length > 500) return bad(422, 'Адрес карточки длиннее 500 символов — так не бывает') as Outcome<PromoVpnView>
   if (!isAllowedPromoLink(recsLink)) {
-    return bad(422, 'Адрес карточки — только ссылка на Telegram вида https://t.me/…') as Outcome<PromoVpnView>
+    return bad(422, 'Адрес карточки — ссылка на Telegram (t.me) или на VPN-портал') as Outcome<PromoVpnView>
   }
   const recsEnabled = body.recsEnabled === undefined
     ? before.recsEnabled
     : (body.recsEnabled === true || body.recsEnabled === 'true')
 
-  const stored = { enabled, link, offerText, recs: { enabled: recsEnabled, link: recsLink } }
+  // Подарок в корзине и экран после оплаты — ещё две независимые поверхности.
+  // Каждая сохраняется тем же правилом: поля нет в теле → переносим текущее
+  // значение (сохранение одной поверхности не гасит остальные); адрес — только
+  // из белого списка, иначе вся форма отклоняется (запись атомарна).
+  const cartLink = body.cartLink === undefined ? before.cartLink : String(body.cartLink).trim()
+  if (!cartLink) return bad(422, 'Укажите адрес подарка в корзине') as Outcome<PromoVpnView>
+  if (cartLink.length > 500) return bad(422, 'Адрес подарка длиннее 500 символов — так не бывает') as Outcome<PromoVpnView>
+  if (!isAllowedPromoLink(cartLink)) {
+    return bad(422, 'Адрес подарка — ссылка на Telegram (t.me) или на VPN-портал') as Outcome<PromoVpnView>
+  }
+  const cartEnabled = body.cartEnabled === undefined
+    ? before.cartEnabled
+    : (body.cartEnabled === true || body.cartEnabled === 'true')
+
+  const orderLink = body.orderLink === undefined ? before.orderLink : String(body.orderLink).trim()
+  if (!orderLink) return bad(422, 'Укажите адрес экрана после оплаты') as Outcome<PromoVpnView>
+  if (orderLink.length > 500) return bad(422, 'Адрес экрана длиннее 500 символов — так не бывает') as Outcome<PromoVpnView>
+  if (!isAllowedPromoLink(orderLink)) {
+    return bad(422, 'Адрес экрана — ссылка на Telegram (t.me) или на VPN-портал') as Outcome<PromoVpnView>
+  }
+  const orderEnabled = body.orderEnabled === undefined
+    ? before.orderEnabled
+    : (body.orderEnabled === true || body.orderEnabled === 'true')
+
+  const stored = {
+    enabled, link, offerText,
+    recs: { enabled: recsEnabled, link: recsLink },
+    cart: { enabled: cartEnabled, link: cartLink },
+    order: { enabled: orderEnabled, link: orderLink },
+  }
   await setApiKeyValue(PROMO_VPN_SETTING, JSON.stringify(stored))
 
   void logAdminAction({
@@ -603,11 +651,13 @@ export async function setPromoVpn(
     before: {
       enabled: before.enabled, link: before.link, offerText: before.offerText,
       recs: { enabled: before.recsEnabled, link: before.recsLink },
+      cart: { enabled: before.cartEnabled, link: before.cartLink },
+      order: { enabled: before.orderEnabled, link: before.orderLink },
     },
     after: stored,
   })
   // Промо видно каждому покупателю — открытые вкладки должны узнать
   await touchStorefrontCache('promo_vpn')
-  log.info('Promo VPN setting changed', { enabled, link, recsEnabled, recsLink })
+  log.info('Promo VPN setting changed', { enabled, recsEnabled, cartEnabled, orderEnabled })
   return { ok: true, status: 200, data: await getPromoVpn() }
 }
