@@ -13,7 +13,9 @@
  *       ни ссылки, ни признака включённости;
  *   (3) POST /api/promo/vpn/seen без подписи отвечает 401 — писать строку по
  *       telegram-id можно только с доказанной личностью;
- *   (4) отдаваемая ссылка (если промо включат) ведёт строго на t.me.
+ *   (4) отдаваемые ссылки (если поверхность включат) ведут строго на t.me;
+ *   (5) карточка в «Рекомендуем» отдаётся отдельным полем `recs` и, пока она
+ *       выключена, не отдаёт адреса — как и кнопка.
  *
  * Проверки (2)-(4) ходят на живой прод, поэтому нужен его адрес:
  *   BASE=https://bendershop.store node scripts/promo-vpn-invariant-check.cjs …
@@ -61,13 +63,23 @@ async function main() {
     if (promo.seen !== false) problems.push('аноним получил seen != false — помечать его нечем')
     if (!promo.enabled && promo.link) problems.push('промо выключено, но ссылка всё равно отдаётся')
     // ── (4) Ссылка только на Telegram ──────────────────────────────────────
-    if (promo.link) {
+    const onlyTelegram = (url, what) => {
+      if (!url) return
       let host = null
-      try { host = new URL(promo.link).hostname } catch { /* ниже */ }
-      const proto = (() => { try { return new URL(promo.link).protocol } catch { return null } })()
+      try { host = new URL(url).hostname } catch { /* ниже */ }
+      const proto = (() => { try { return new URL(url).protocol } catch { return null } })()
       if (host !== 't.me' || proto !== 'https:') {
-        problems.push(`витрине отдаётся не-Telegram адрес: ${promo.link}`)
+        problems.push(`витрине отдаётся не-Telegram адрес ${what}: ${url}`)
       }
+    }
+    onlyTelegram(promo.link, 'кнопки')
+
+    // ── (5) Карточка в «Рекомендуем» — своя поверхность ─────────────────────
+    if (!promo.recs || typeof promo.recs.enabled !== 'boolean') {
+      problems.push('в ответе промо нет recs.enabled — витрина не узнает про карточку')
+    } else {
+      if (!promo.recs.enabled && promo.recs.link) problems.push('карточка выключена, но адрес всё равно отдаётся')
+      onlyTelegram(promo.recs.link, 'карточки')
     }
   }
 
@@ -87,6 +99,7 @@ async function main() {
   console.log(`(1) промо-полей в каталоге: ${promoKeys.length}`)
   console.log(`(2) GET /api/promo/vpn: ${promo ? JSON.stringify(promo) : 'нет ответа'}`)
   console.log(`(3) POST /seen без подписи: ${seenStatus}`)
+  console.log(`(5) карточка в «Рекомендуем»: ${promo && promo.recs ? JSON.stringify(promo.recs) : 'поля нет'}`)
 
   if (problems.length) {
     console.log(`\nНАРУШЕНИЯ (${problems.length}):`)

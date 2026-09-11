@@ -521,12 +521,15 @@ export async function bumpCacheVersion(actor: string): Promise<Outcome> {
   return { ok: true, status: 200, data: { version } }
 }
 
-// ─── Промо «2 недели VPN»: рубильник и настройки ─────────────────────────────
+// ─── Промо «2 недели VPN»: рубильники и настройки ────────────────────────────
 //
-// Владелец включает промо и задаёт адрес кнопки. Адрес принимается только как
-// https://t.me/… — витрина не должна становиться трамплином на внешний домен,
-// поэтому чужой хост отклоняется здесь (422) и повторно отсекается на чтении
-// (lib/promo-vpn.ts: промо просто не включается).
+// Две независимые поверхности в одном ключе: кнопка на главной (#137) и
+// закреплённая карточка над лентой «Рекомендуем». У каждой свой тумблер и свой
+// адрес — по разным реф-тегам видно, какая приводит людей.
+//
+// Адреса принимаются только как https://t.me/… — витрина не должна становиться
+// трамплином на внешний домен, поэтому чужой хост отклоняется здесь (422) и
+// повторно отсекается на чтении (lib/promo-vpn.ts: поверхность не включается).
 
 export interface PromoVpnView {
   enabled: boolean
@@ -534,11 +537,16 @@ export interface PromoVpnView {
   offerText: string
   /** Настройка в базе битая: не наш хост или не JSON. null = всё в порядке */
   flaw: 'bad_json' | 'bad_link' | null
+  /** Карточка в «Рекомендуем» — свой тумблер, свой адрес, свои поломки */
+  recsEnabled: boolean
+  recsLink: string
+  recsFlaw: 'bad_json' | 'bad_link' | null
 }
 
 export async function getPromoVpn(): Promise<PromoVpnView> {
-  const { loadPromoVpnConfig, DEFAULT_PROMO_VPN } = await import('./promo-vpn')
-  const { config, flaw } = await loadPromoVpnConfig()
+  const { loadPromoVpnAll, DEFAULT_PROMO_VPN, DEFAULT_PROMO_VPN_RECS } = await import('./promo-vpn')
+  const { button, recs } = await loadPromoVpnAll()
+  const { config, flaw } = button
   return {
     enabled: config.enabled,
     // У сломанной ссылки показываем владельцу дефолтный адрес как подсказку,
@@ -546,12 +554,15 @@ export async function getPromoVpn(): Promise<PromoVpnView> {
     link: config.link || (flaw === 'bad_link' ? DEFAULT_PROMO_VPN.link : config.link),
     offerText: config.offerText,
     flaw,
+    recsEnabled: recs.recs.enabled,
+    recsLink: recs.recs.link || (recs.flaw === 'bad_link' ? DEFAULT_PROMO_VPN_RECS.link : recs.recs.link),
+    recsFlaw: recs.flaw,
   }
 }
 
 export async function setPromoVpn(
   actor: string,
-  body: { enabled?: unknown; link?: unknown; offerText?: unknown },
+  body: { enabled?: unknown; link?: unknown; offerText?: unknown; recsEnabled?: unknown; recsLink?: unknown },
 ): Promise<Outcome<PromoVpnView>> {
   const { PROMO_VPN_SETTING, isTelegramLink, DEFAULT_PROMO_VPN } = await import('./promo-vpn')
 
@@ -569,16 +580,33 @@ export async function setPromoVpn(
 
   const enabled = body.enabled === true || body.enabled === 'true'
   const before = await getPromoVpn()
-  const stored = { enabled, link, offerText }
+
+  // Ключей карточки в теле нет — сохраняем то, что уже лежит. Сохранение одной
+  // поверхности не должно гасить другую: старый клиент админки (или скрипт,
+  // который шлёт только поля кнопки) иначе молча выключал бы карточку.
+  const recsLink = body.recsLink === undefined ? before.recsLink : String(body.recsLink).trim()
+  if (!recsLink) return bad(422, 'Укажите адрес карточки в рекомендациях') as Outcome<PromoVpnView>
+  if (recsLink.length > 500) return bad(422, 'Адрес карточки длиннее 500 символов — так не бывает') as Outcome<PromoVpnView>
+  if (!isTelegramLink(recsLink)) {
+    return bad(422, 'Адрес карточки — только ссылка на Telegram вида https://t.me/…') as Outcome<PromoVpnView>
+  }
+  const recsEnabled = body.recsEnabled === undefined
+    ? before.recsEnabled
+    : (body.recsEnabled === true || body.recsEnabled === 'true')
+
+  const stored = { enabled, link, offerText, recs: { enabled: recsEnabled, link: recsLink } }
   await setApiKeyValue(PROMO_VPN_SETTING, JSON.stringify(stored))
 
   void logAdminAction({
     adminTelegramId: actor, action: 'update', entity: 'Setting', entityId: 'promo_vpn',
-    before: { enabled: before.enabled, link: before.link, offerText: before.offerText },
+    before: {
+      enabled: before.enabled, link: before.link, offerText: before.offerText,
+      recs: { enabled: before.recsEnabled, link: before.recsLink },
+    },
     after: stored,
   })
   // Промо видно каждому покупателю — открытые вкладки должны узнать
   await touchStorefrontCache('promo_vpn')
-  log.info('Promo VPN setting changed', { enabled, link })
+  log.info('Promo VPN setting changed', { enabled, link, recsEnabled, recsLink })
   return { ok: true, status: 200, data: await getPromoVpn() }
 }

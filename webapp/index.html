@@ -1194,6 +1194,21 @@
     #vpnSheet .vs-cta:active { transform: scale(.98); }
     #vpnSheet .vs-sub { text-align: center; color: #5a5e59; font-size: 11px; margin-top: 12px; font-family: 'JetBrains Mono', monospace; letter-spacing: .5px; }
     #vpnSheet .vs-skip { text-align: center; margin-top: 14px; color: #5a5e59; font-size: 12.5px; text-decoration: underline; cursor: pointer; background: none; border: none; width: 100%; }
+
+    /* ═══ Промо VPN: закреплённая карточка в «Рекомендуем» ═══
+       Прототип согласован владельцем (артефакт «Бендер · VPN-механика», фрейм ②).
+       Карточка стоит НАД лентой и на всю ширину: .modal-recs-grid и
+       .modal-rec-card не трогаются ни одним правилом, поэтому превью товаров
+       остаются теми же 160 px и не сжимаются. */
+    #vpnRecCard { display: flex; gap: 11px; align-items: center; background: rgba(168,255,62,0.045); border: 1px dashed #34421c; border-radius: 13px; padding: 11px; margin-bottom: 12px; cursor: pointer; -webkit-tap-highlight-color: transparent; transition: border-color 0.2s, transform 0.12s; }
+    #vpnRecCard:hover { border-color: var(--accent); }
+    #vpnRecCard:active { transform: scale(0.985); }
+    #vpnRecCard .vrec-ph { width: 52px; height: 52px; border-radius: 10px; background: #0f120a; border: 1px solid #2b371a; display: flex; align-items: center; justify-content: center; font-size: 24px; flex-shrink: 0; }
+    #vpnRecCard .vrec-info { flex: 1; min-width: 0; }
+    #vpnRecCard .vrec-pin { display: inline-block; font-family: 'JetBrains Mono', monospace; font-size: 8.5px; font-weight: 700; letter-spacing: 0.5px; color: var(--accent); background: #2c3a16; border: 1px solid #4c621f; border-radius: 5px; padding: 1px 6px; margin-bottom: 5px; }
+    #vpnRecCard .vrec-nm { font-size: 13.5px; font-weight: 600; line-height: 1.25; color: var(--text); }
+    #vpnRecCard .vrec-pr { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--accent); font-weight: 700; margin-top: 3px; }
+    #vpnRecCard .vrec-cta { flex-shrink: 0; background: #2c3a16; border: 1px solid #4c621f; color: var(--accent); font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 12px; padding: 8px 12px; border-radius: 9px; }
   </style>
 </head>
 <body>
@@ -1561,6 +1576,22 @@
       <div class="vs-sub">откроется в telegram · карта не нужна</div>
       <button class="vs-skip" id="vpnSkip">не, спасибо</button>
     </div>
+  </div>
+  </template>
+
+  <!-- ═══ Промо VPN: закреплённая карточка в «Рекомендуем» ═══
+       Как и кнопка, лежит в <template>: пока поверхность выключена, ни одного
+       её узла в документе нет и #modalRecs остаётся ровно таким, каким был.
+       Текст статичный — он принадлежит карточке, а не офферу кнопки. -->
+  <template id="vpnRecTpl">
+  <div id="vpnRecCard" role="button" tabindex="0">
+    <div class="vrec-ph">🔒</div>
+    <div class="vrec-info">
+      <span class="vrec-pin">📌 ЗАКРЕПЛЕНО</span>
+      <div class="vrec-nm">VPN Бендер — 2 недели</div>
+      <div class="vrec-pr">БЕСПЛАТНО · 0 ₽</div>
+    </div>
+    <div class="vrec-cta">ЗАБРАТЬ →</div>
   </div>
   </template>
 
@@ -2524,6 +2555,10 @@
         if (!res.ok) return
         vpnPromo = await res.json()
       } catch { return }               // промо не критично: молча не показываем
+      // Карточка в «Рекомендуем» — своя поверхность, и её состояние доезжает
+      // даже при выключенной кнопке. Если покупатель успел открыть товар,
+      // пока летел запрос, — перерисуем ленту, иначе карточки он не увидит
+      if (modalProduct) renderModalRecs()
       if (!vpnPromo || !vpnPromo.enabled || vpnPromo.seen || !vpnPromo.link) return
       mountVpnPromo()
       const offer = document.getElementById('vpnOffer')
@@ -2622,6 +2657,48 @@
       if (tg && tg.openTelegramLink) tg.openTelegramLink(vpnPromo.link)
       else window.open(vpnPromo.link, '_blank', 'noopener')
       setTimeout(vpnClose, 400)
+    }
+
+    // ── Закреплённая VPN-карточка в «Рекомендуем» ────────────────────────────
+    //
+    // Вторая поверхность того же промо и полностью независимая: не смотрит ни
+    // на тумблер кнопки, ни на seen, ничего не пишет в PromoSeen (она не про
+    // «видел») и не крутит таймер — тап сразу уводит в Telegram.
+
+    /** Карточка включена и есть куда вести. Любое «нет» — поверхность выключена. */
+    function vpnRecsOn() {
+      return !!(vpnPromo && vpnPromo.recs && vpnPromo.recs.enabled && vpnPromo.recs.link)
+    }
+
+    /**
+     * Вставляет карточку над лентой (или снимает её). Разметка клонируется из
+     * <template>, поэтому при выключенной поверхности узла в документе нет
+     * вовсе — #modalRecs остаётся байт-в-байт прежним.
+     *
+     * Саму ленту не трогает: #modalRecsGrid остаётся следующим соседом.
+     */
+    function mountVpnRecCard(on) {
+      const existing = document.getElementById('vpnRecCard')
+      if (!on) { if (existing) existing.remove(); return }
+      if (existing) return
+      const tpl = document.getElementById('vpnRecTpl')
+      const section = document.getElementById('modalRecs')
+      const grid = document.getElementById('modalRecsGrid')
+      if (!tpl || !section || !grid) return
+      const frag = tpl.content.cloneNode(true)
+      const card = frag.querySelector('#vpnRecCard')
+      if (card) {
+        card.addEventListener('click', vpnRecClaim)
+        card.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); vpnRecClaim() } })
+      }
+      section.insertBefore(frag, grid)
+    }
+
+    function vpnRecClaim() {
+      if (!vpnRecsOn()) return
+      // Адрес всегда t.me — сервер чужого хоста не отдаёт (двойная отсечка)
+      if (tg && tg.openTelegramLink) tg.openTelegramLink(vpnPromo.recs.link)
+      else window.open(vpnPromo.recs.link, '_blank', 'noopener')
     }
 
     // ── Render product grid ───────────────────────────────────────────────────
@@ -3456,9 +3533,14 @@
       if (!section || !grid || !modalProduct) { if (section) section.style.display = 'none'; return }
 
       const recs = resolveRecs(modalProduct, allProducts, 4)
-      if (!recs.length) { section.style.display = 'none'; return }
+      // Секция открывается, если есть что показать: лента, закреплённая
+      // VPN-карточка или и то и другое. При выключенной поверхности
+      // vpnRecsOn() === false, и условие вырождается в прежнее `!recs.length`
+      const promoOn = vpnRecsOn()
+      if (!recs.length && !promoOn) { mountVpnRecCard(false); section.style.display = 'none'; return }
 
       section.style.display = ''
+      mountVpnRecCard(promoOn)
       grid.innerHTML = recs.map(p => {
         const photo = getProductPhotos(p, null)[0] || null
         const imgHtml = photo
