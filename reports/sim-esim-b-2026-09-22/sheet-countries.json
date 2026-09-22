@@ -1,0 +1,144 @@
+{
+  "takenAt": "2026-09-22T09:47:47.291Z",
+  "countries": {
+    "\"США\"": {
+      "n": 555,
+      "gens": {
+        "16": 10,
+        "null": 545
+      },
+      "example": "Apple Watch SE 3 40mm Midnight 2025 M/L"
+    },
+    "\"Катар\"": {
+      "n": 2,
+      "gens": {
+        "null": 2
+      },
+      "example": "Apple Watch S10 42mm Slate Titanium Milanese Loop"
+    },
+    "\"Индия\"": {
+      "n": 70,
+      "gens": {
+        "16": 41,
+        "17": 16,
+        "null": 13
+      },
+      "example": "iPhone 16e 128GB Black (Индия)"
+    },
+    "\"Китай\"": {
+      "n": 39,
+      "gens": {
+        "16": 7,
+        "null": 32
+      },
+      "example": "iPhone 16 512GB Black 2Sim (Китай)"
+    },
+    "\"Гонконг\"": {
+      "n": 83,
+      "gens": {
+        "16": 1,
+        "17": 21,
+        "18": 28,
+        "null": 33
+      },
+      "example": "iPhone 16 Plus 512GB Teal 2Sim (Гонконг)"
+    },
+    "\"Япония\"": {
+      "n": 101,
+      "gens": {
+        "16": 1,
+        "17": 49,
+        "18": 28,
+        "null": 23
+      },
+      "example": "iPhone 16 Plus 512GB Teal (Япония)"
+    },
+    "\"Южная Корея\"": {
+      "n": 12,
+      "gens": {
+        "16": 1,
+        "null": 11
+      },
+      "example": "iPhone 16 Pro 128GB Desert (Южная Корея)"
+    },
+    "\"Европа\"": {
+      "n": 18,
+      "gens": {
+        "16": 1,
+        "null": 17
+      },
+      "example": "iPhone 16 Pro 1TB Desert (Европа)"
+    },
+    "\"ОАЭ\"": {
+      "n": 8,
+      "gens": {
+        "16": 2,
+        "null": 6
+      },
+      "example": "iPhone 16 Pro 1TB Natural (ОАЭ)"
+    },
+    "\"Казахстан\"": {
+      "n": 41,
+      "gens": {
+        "null": 41
+      },
+      "example": "Samsung Galaxy S26 12/256GB (SM-S942B) Black"
+    },
+    "\"Малайзия\"": {
+      "n": 6,
+      "gens": {
+        "null": 6
+      },
+      "example": "Samsung Galaxy S26 Ultra 16/1TB (SM-S948B) Black"
+    },
+    "\"Россия\"": {
+      "n": 26,
+      "gens": {
+        "null": 26
+      },
+      "example": "Samsung Galaxy Z Flip 8 12/256GB Cream"
+    },
+    "\"Гонконг/Сингапур\"": {
+      "n": 8,
+      "gens": {
+        "null": 8
+      },
+      "example": "Dyson AirBlade V HU02 Nickel"
+    },
+    "\"Великобритания\"": {
+      "n": 9,
+      "gens": {
+        "null": 9
+      },
+      "example": "Dyson PH05 White Gold"
+    },
+    "\"Австралия\"": {
+      "n": 1,
+      "gens": {
+        "null": 1
+      },
+      "example": "Dyson Wash G1 Black"
+    },
+    "\"Таиланд\"": {
+      "n": 1,
+      "gens": {
+        "null": 1
+      },
+      "example": "Dyson HS05 Ceramic Pop"
+    },
+    "\"Кувейт\"": {
+      "n": 2,
+      "gens": {
+        "null": 2
+      },
+      "example": "Galaxy Buds 3 Pro White"
+    },
+    "\"\"": {
+      "n": 2,
+      "gens": {
+        "null": 2
+      },
+      "example": "Защитное стекло Remax для iPhone"
+    }
+  }
+}

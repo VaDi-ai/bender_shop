@@ -87,9 +87,12 @@ describe('оверрайды с 17-го поколения (правило с п
     expect(sim('Япония', 'iPhone 16 Pro 256 (Япония)').simType).toBe('SIM + eSIM')
     expect(sim('Япония', 'iPhone 17 Pro 256 (Япония)').simType).toBe('eSIM + eSIM')
   })
-  it('Катар и Китай оверрайдов не имеют — база работает и на 17-м', () => {
-    expect(sim('Катар', 'iPhone 17 (Катар)').simType).toBe('SIM + eSIM')
+  it('Китай оверрайда не имеет — база работает и на 17-м', () => {
     expect(sim('Китай', 'iPhone 17 Pro Max (Китай)').simType).toBe('2 SIM')
+  })
+  it('Катар с 17-го — eSIM-only (две eSIM), база SIM + eSIM осталась для 16 и старше', () => {
+    expect(sim('Катар', 'iPhone 17 (Катар)').simType).toBe('eSIM + eSIM')
+    expect(sim('Катар', 'iPhone 16 (Катар)').simType).toBe('SIM + eSIM')
   })
 })
 

@@ -251,6 +251,18 @@ export const SIM_SEED: SeedRule[] = [
   { country: 'ОАЭ', brand: APPLE, modelGenFrom: 17, simType: 'eSIM + eSIM', note: 'с 17-го ОАЭ — две eSIM' },
   { country: 'Япония', brand: APPLE, modelGenFrom: 17, simType: 'eSIM + eSIM', note: 'с 17-го Япония — две eSIM' },
 
+  // eSIM-only рынки поколения B (17 и новее, 18 = 17 — Apple не меняла).
+  // Источники: MacRumors «iPhone 18 Pro is eSIM-Only in These Countries»
+  // (2026-09-09) + CodeeSIM, списки совпали дословно. Базы поколения A
+  // (14/15/16) у этих стран не заводим — вне источников; у Катара база
+  // «SIM + eSIM» выше остаётся. Канон — полное русское название, как в листе:
+  // правило матчится по «Стране» точным совпадением.
+  ...['Виргинские острова США', 'Гуам', 'Канада', 'Мексика', 'Катар', 'Саудовская Аравия', 'Бахрейн', 'Кувейт', 'Оман']
+    .map(country => ({
+      country, brand: APPLE, modelGenFrom: 17, simType: 'eSIM + eSIM' as SimType,
+      note: `с 17-го ${country} — две eSIM (eSIM-only рынок, MacRumors 2026-09-09)`,
+    })),
+
   // Модельный оверрайд: iPhone Air — eSIM во всём мире, страна не важна
   { modelMatch: 'air', modelGenFrom: 17, simType: 'eSIM', note: 'iPhone 17 Air — eSIM-only глобально' },
 
@@ -276,6 +288,17 @@ const COUNTRY_ALIAS_SEED: Array<[canonical: string, raws: string[]]> = [
   ['Таиланд', ['🇹🇭', 'th', 'thailand', 'таиланд']],
   ['Казахстан', ['🇰🇿', 'kz', 'kazakhstan', 'казахстан']],
   ['Индонезия', ['🇮🇩', 'id', 'indonesia', 'индонезия']],
+  // eSIM-only рынки поколения B — для матчера прайса и «Завести товар из прайса»
+  // (на резолв SIM из листа алиасы не влияют: там точное совпадение «Страны»)
+  ['Виргинские острова США', ['🇻🇮', 'vi', 'usvi', 'us virgin islands', 'u.s. virgin islands', 'виргинские острова сша', 'виргинские о-ва сша']],
+  ['Гуам', ['🇬🇺', 'gu', 'guam', 'гуам']],
+  ['Канада', ['🇨🇦', 'ca', 'canada', 'канада']],
+  ['Мексика', ['🇲🇽', 'mx', 'mexico', 'мексика']],
+  ['Катар', ['🇶🇦', 'qa', 'qatar', 'катар']],
+  ['Саудовская Аравия', ['🇸🇦', 'sa', 'ksa', 'saudi arabia', 'саудовская аравия']],
+  ['Бахрейн', ['🇧🇭', 'bh', 'bahrain', 'бахрейн']],
+  ['Кувейт', ['🇰🇼', 'kw', 'kuwait', 'кувейт']],
+  ['Оман', ['🇴🇲', 'om', 'oman', 'оман']],
 ]
 
 /** Канон меток: то, что раньше приходило сырьём из листа. */
