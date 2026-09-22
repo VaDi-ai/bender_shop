@@ -1,0 +1,35 @@
+{
+ "counts": {
+  "semantic": 0,
+  "added": 0,
+  "canonical": 0,
+  "inherited": 2,
+  "manual": 0
+ },
+ "byCountry": {},
+ "addedByCountry": {},
+ "semantic": [],
+ "added": [],
+ "canonical": [],
+ "inherited": [
+  {
+   "variantId": 372,
+   "fullName": "iPhone 15 128GB Blue",
+   "country": "Япония/Индия",
+   "brand": "Apple",
+   "current": "SIM + eSIM"
+  },
+  {
+   "variantId": 369,
+   "fullName": "iPhone 15 128GB Black",
+   "country": "Индия/Япония",
+   "brand": "Apple",
+   "current": "SIM + eSIM"
+  }
+ ],
+ "lastRecalc": {
+  "recalcId": 509,
+  "appliedAt": "2026-08-07T11:26:07.895Z",
+  "rolledBack": false
+ }
+}
