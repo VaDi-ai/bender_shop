@@ -1,6 +1,7 @@
 import { Telegraf } from 'telegraf'
 import { prisma } from './prisma'
 import log from './logger'
+import { isJobEnabled } from './jobs-switches'
 
 export type SecurityEvent =
   | 'invalid_telegram_signature'
@@ -76,6 +77,15 @@ const CRITICAL_EVENTS: SecurityEvent[] = [
   // шторм невозможен — троттлинг отправки critical-алертов (hardening 1б)
   'price_out_of_corridor_applied',
 ]
+
+// Ценовые события: их Telegram-отправку (обе ветки ниже — critical-рассылка
+// админам и личное сообщение сотруднику-актору) гасит тумблер priceAlerts.
+// Запись в SecurityLog при этом остаётся всегда — аудит не режем.
+const PRICE_ALERT_EVENTS: ReadonlySet<SecurityEvent> = new Set<SecurityEvent>([
+  'price_out_of_corridor_applied',
+  'price_batch_applied',
+  'price_changed',
+])
 
 const EVENT_DESCRIPTIONS: Record<SecurityEvent, string> = {
   pdn_consent:                '✅ Согласие на обработку персональных данных (профиль)',
@@ -246,6 +256,8 @@ export async function logSecurityEvent(
   } catch (err) {
     log.error('[SECURITY] Failed to write security log', { err: err instanceof Error ? err.message : String(err) })
   }
+
+  if (PRICE_ALERT_EVENTS.has(event) && !(await isJobEnabled('priceAlerts'))) return
 
   const text = formatSecurityAlert(event, safe)
 

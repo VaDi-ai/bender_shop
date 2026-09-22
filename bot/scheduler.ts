@@ -18,10 +18,14 @@ import { prisma } from '../lib/prisma'
 import { isAvitoConfigured, getAvitoChats, getAvitoUserId, sendAvitoMessage, extractAvitoImages, type AvitoChat } from '../lib/avito'
 import { getAIMode, generateAIResponse, storeSuggestion, incrementStat } from './ai/agent'
 import { moderateAIOutput } from '../webhooks/telegram'
+import { isJobEnabled } from '../lib/jobs-switches'
 
 const INTERVAL_MS = 10 * 60 * 1000 // 10 минут
 
 export let isRunning = false
+
+/** Клиентские авто-отправки — гасятся тумблером clientAuto (lib/jobs-switches.ts). */
+const CLIENT_AUTO_ACTIONS = new Set(['remind_client', 'promo_notify'])
 
 type RemindPayload = {
   text?: string
@@ -41,7 +45,7 @@ export function startScheduler(bot: Telegraf): void {
 
 // ─── Один «тик» — проверяем и выполняем задачи ───────────────────────────────
 
-async function runTick(bot: Telegraf): Promise<void> {
+export async function runTick(bot: Telegraf): Promise<void> {
   if (isRunning) return
   isRunning = true
   try {
@@ -59,7 +63,21 @@ async function runTick(bot: Telegraf): Promise<void> {
 
     log.info('Scheduler processing tasks', { count: tasks.length })
 
+    // Решение владельца (2026-09-22): при выключенном clientAuto подошедшие
+    // клиентские задачи отменяются, а не копятся — иначе при включении клиенты
+    // разом получили бы устаревшие «Актуален ли вопрос?» за недели.
+    const clientAutoOn = await isJobEnabled('clientAuto')
+
     for (const task of tasks) {
+      if (!clientAutoOn && CLIENT_AUTO_ACTIONS.has(task.action)) {
+        try {
+          await prisma.task.update({ where: { id: task.id }, data: { status: 'cancelled' } })
+          log.info('Scheduler task cancelled: clientAuto off', { taskId: task.id, action: task.action, clientId: task.clientId })
+        } catch (err) {
+          log.error('Scheduler task cancel failed', { taskId: task.id, error: err instanceof Error ? err.message : String(err) })
+        }
+        continue
+      }
       try {
         await executeTask(bot, task)
         await prisma.task.update({ where: { id: task.id }, data: { status: 'done' } })
@@ -190,6 +208,7 @@ async function executeTask(
 const lastProcessedMsg = new Map<string, string>()
 let initialPollDone = false
 let isPollingAvito = false
+let avitoOffLogged = false
 
 function extractMessageText(msg: { text?: string; content?: { text?: string }; body?: string }): string {
   return msg.text || msg.content?.text || msg.body || ''
@@ -202,7 +221,14 @@ function buildItemInfo(chat: AvitoChat): { title: string; url: string } {
   return { title, url }
 }
 
-async function pollAvitoMessages(telegram: Telegram): Promise<void> {
+export async function pollAvitoMessages(telegram: Telegram): Promise<void> {
+  // Тумблер avitoChats: выключен — тик выходит сразу, в API Авито не ходим
+  // (в лог — один раз на переход, чтобы по логам было видно, что тики пропускаются)
+  if (!(await isJobEnabled('avitoChats'))) {
+    if (!avitoOffLogged) { log.info('Avito poll skipped: avitoChats off'); avitoOffLogged = true }
+    return
+  }
+  if (avitoOffLogged) { log.info('Avito poll resumed: avitoChats on'); avitoOffLogged = false }
   if (isPollingAvito) return
   isPollingAvito = true
   try {
