@@ -1,0 +1,14 @@
+{
+  "takenAt": "2026-09-22T08:36:25.008Z",
+  "source": "ApiKey (read-only)",
+  "setting_jobs": {
+    "exists": false,
+    "updatedAt": null,
+    "value": null
+  },
+  "supplier_notify": {
+    "exists": false,
+    "updatedAt": null,
+    "value": null
+  }
+}

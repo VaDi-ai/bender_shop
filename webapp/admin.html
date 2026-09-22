@@ -456,6 +456,7 @@
         <button class="hub-tile" data-hub="parser"><span class="ht-n">Парсер</span><span class="ht-s" id="tileParser">—</span></button>
         <button class="hub-tile" data-hub="preorder"><span class="ht-n">Предзаказ</span><span class="ht-s" id="tilePreorder">—</span></button>
         <button class="hub-tile" data-hub="promovpn"><span class="ht-n">Интерактивные акции</span><span class="ht-s" id="tilePromoVpn">—</span></button>
+        <button class="hub-tile" data-hub="jobs"><span class="ht-n">Фоновые задачи</span><span class="ht-s" id="tileJobs">—</span></button>
       </div>
 
       <div class="hub-page" id="hub-promos" style="display:none">
@@ -733,6 +734,19 @@
       </div>
       </div>
 
+      <div class="hub-page" id="hub-jobs" style="display:none">
+      <div id="jobsCards"></div>
+      <div class="card">
+        <h3>Курс доллара <span class="chip c-ok right">всегда включено</span></h3>
+        <div class="mt">Курс в 10:00 и предупреждение о скачке доллара приходят всегда — у них нет выключателя.</div>
+      </div>
+      <div class="card">
+        <button class="btn b-main" id="jobsSave">Сохранить</button>
+        <div class="hint">Каждый выключатель гасит только свою задачу. Изменение действует со следующего запуска задачи.</div>
+        <div class="mt" id="jobsErr" style="color:var(--bad)"></div>
+      </div>
+      </div>
+
       <div class="hub-page" id="hub-sync" style="display:none">
       <div class="card"><h3>Журнал синка</h3><div class="mt" id="syncRuns">Загрузка…</div></div>
       <div class="card"><h3>Кто что менял <span class="chip c-off right">скоро</span></h3><div class="mt">Каждое действие в админке уже пишется в журнал на сервере — просмотр появится после первых разделов Этапа 2.</div></div>
@@ -840,7 +854,7 @@
       window.adminMe = me
       gate.classList.add('hidden')
       loadDashboard(); loadSyncRuns(); loadSuppliers(); loadBatches(); loadUnmatched(); loadAliases(); loadMarkupRules(); loadDeliveryPricing()
-      loadSimQueue(); loadSimRecalc(); loadDictionary(); loadStorefront(); loadTeam(); loadIssues(); loadPromotions(); loadInsights(); loadBroadcasts(); loadSegments(); loadAiAgent(); loadMaintenance(); loadPreorderDefaults(); loadPromoVpn()
+      loadSimQueue(); loadSimRecalc(); loadDictionary(); loadStorefront(); loadTeam(); loadIssues(); loadPromotions(); loadInsights(); loadBroadcasts(); loadSegments(); loadAiAgent(); loadMaintenance(); loadPreorderDefaults(); loadPromoVpn(); loadJobs()
     }
 
     // ── ОШИБКИ В ТОВАРАХ: идём от проблемы к карточке ─────────────────────────
@@ -1707,6 +1721,7 @@
       sync: ['Журнал синка', 'Как прошли последние прогоны таблицы.'],
       parser: ['Парсер', 'Разобрал строку → вы поправили → запомнил. SIM — такой же атрибут.'],
       preorder: ['Предзаказ', 'Сколько берём вперёд и на каких условиях — одна настройка на магазин.'],
+      jobs: ['Фоновые задачи', 'Что бот делает сам: чаты Авито, утренние сводки, авто-сообщения клиентам, уведомления о ценах. Каждое выключается отдельно.'],
       promovpn: ['Интерактивные акции', 'VPN-механики: кнопка, карточка, подарок в корзине, экран после оплаты — каждая включается отдельно.'],
     }
 
@@ -2339,6 +2354,79 @@
         const n = PV.filter(su => r.data[su.en]).length
         toast(n === 0 ? 'Сохранено: всё выключено' : ('Сохранено: включено ' + n + ' из ' + PV.length))
         loadPromoVpn()
+      } finally { this.disabled = false }
+    })
+
+    // ── ФОНОВЫЕ ЗАДАЧИ (lib/jobs-switches.ts) ─────────────────────────────────
+    const JOBS = [
+      { key: 'avitoChats', title: 'Синхрон чатов Авито',
+        desc: 'Раз в 2 минуты бот забирает новые сообщения из Авито в CRM-топики и отвечает AI. Выключено — сообщения в CRM не приходят, их видно только в самом Авито.' },
+      { key: 'avitoCommands', title: 'Команды Авито',
+        desc: '/avito sync (цены в Авито) и /avito map (сверка объявлений). Выключено — бот отвечает «Авито временно выключен».' },
+      { key: 'morningSummary', title: 'Утренняя сводка цен',
+        desc: 'В 11:00 — сводка цен от поставщиков. Ночная сводка Бендера и AI-тренды приходят независимо от этого выключателя.' },
+      { key: 'clientAuto', title: 'Авто-сообщения клиентам',
+        desc: '«Доброе утро, актуальные цены готовы» и отложенные напоминания из CRM («напомним через 3 дня», «уведомим при акции»). Выключено — подошедшие напоминания отменяются, а не копятся.' },
+      { key: 'priceAlerts', title: 'Уведомления о ценах',
+        desc: 'Цены применены вне коридора, применён батч, изменена цена, новый прайс от поставщика, ежечасный синк и устаревшие цены. Выключено — сообщений нет, журнал безопасности пишется как раньше.' },
+    ]
+    let jobsState = null
+    const jobsDraft = {}
+
+    async function loadJobs() {
+      const r = await api('/settings/jobs').catch(() => null)
+      if (!r || !r.ok) { setTile('tileJobs', 'не загрузилось'); return }
+      jobsState = r.data
+      for (const j of JOBS) jobsDraft[j.key] = null
+      const n = JOBS.filter(j => jobsState[j.key]).length
+      setTile('tileJobs', n === JOBS.length ? 'всё включено' : ('вкл: ' + n + ' из ' + JOBS.length))
+      document.getElementById('jobsCards').innerHTML = JOBS.map(j => `
+        <div class="card">
+          <h3>${esc(j.title)} <span class="chip right ${jobsState[j.key] ? 'c-ok' : 'c-off'}">${jobsState[j.key] ? 'включено' : 'выключено'}</span></h3>
+          <div class="mt">${esc(j.desc)}</div>
+          <div class="sf-item-actions" style="margin-top:12px">
+            <button class="btn b-nt sm" data-job-on="${j.key}">Включить</button>
+            <button class="btn b-nt sm" data-job-off="${j.key}">Выключить</button>
+          </div>
+        </div>`).join('')
+      jobsPaint()
+    }
+
+    function jobVal(key) { return jobsDraft[key] === null ? !!(jobsState && jobsState[key]) : jobsDraft[key] }
+
+    function jobsPaint() {
+      const ro = !(window.adminMe && window.adminMe.role === 'owner')
+      for (const j of JOBS) {
+        const on = document.querySelector(`[data-job-on="${j.key}"]`), off = document.querySelector(`[data-job-off="${j.key}"]`)
+        if (!on || !off) continue
+        const v = jobVal(j.key)
+        on.className = 'btn sm ' + (v ? 'b-main' : 'b-nt')
+        off.className = 'btn sm ' + (v ? 'b-nt' : 'b-main')
+        on.disabled = ro; off.disabled = ro
+      }
+      document.getElementById('jobsSave').style.display = ro ? 'none' : ''
+      if (ro) document.getElementById('jobsErr').textContent = 'Включает и выключает владелец.'
+    }
+
+    document.getElementById('jobsCards').addEventListener('click', e => {
+      const b = e.target.closest('[data-job-on],[data-job-off]')
+      if (!b || b.disabled) return
+      if (b.dataset.jobOn) jobsDraft[b.dataset.jobOn] = true
+      else jobsDraft[b.dataset.jobOff] = false
+      jobsPaint()
+    })
+
+    document.getElementById('jobsSave').addEventListener('click', async function () {
+      const err = document.getElementById('jobsErr'); err.textContent = ''
+      const body = {}
+      for (const j of JOBS) body[j.key] = jobVal(j.key)
+      this.disabled = true
+      try {
+        const r = await api('/settings/jobs', { method: 'PUT', body: JSON.stringify(body) }).catch(() => null)
+        if (!r || !r.ok) { err.textContent = (r && r.data && r.data.error) || 'Не получилось'; return }
+        const n = JOBS.filter(j => r.data[j.key]).length
+        toast(n === JOBS.length ? 'Сохранено: всё включено' : ('Сохранено: включено ' + n + ' из ' + JOBS.length))
+        loadJobs()
       } finally { this.disabled = false }
     })
 

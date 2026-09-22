@@ -947,6 +947,20 @@ export function adminApiRouter(): Router {
     res.status(r.status).json(r.ok ? { ok: true, ...(r.data as object) } : { error: r.error })
   }))
 
+  // Рубильники фоновых задач и уведомлений (lib/jobs-switches.ts). Чтение —
+  // всем админам (менеджеру полезно видеть, почему что-то не пришло), запись —
+  // только владельцу.
+  router.get('/settings/jobs', safe(async (_req, res) => {
+    const { loadJobs } = await import('../lib/jobs-switches')
+    res.json(await loadJobs())
+  }))
+
+  router.put('/settings/jobs', ownerOnly, safe(async (req, res) => {
+    const { setJobs } = await import('../lib/jobs-switches')
+    const r = await setJobs(req.admin!.telegramId, (req.body ?? {}) as Record<string, unknown>)
+    res.status(r.status).json(r.ok ? { ok: true, ...r.data } : { error: r.error })
+  }))
+
   router.post('/cache-reset', safe(async (req, res) => {
     const { bumpCacheVersion } = await import('../lib/storefront-admin')
     const r = await bumpCacheVersion(req.admin!.telegramId)

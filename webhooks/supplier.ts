@@ -12,6 +12,7 @@ import { prisma } from '../lib/prisma'
 import { getApiKeyValue } from '../lib/api-key-store'
 import { roundPrice } from '../lib/currency'
 import log from '../lib/logger'
+import { isJobEnabled } from '../lib/jobs-switches'
 
 const ADMIN_IDS = (process.env.ADMIN_IDS ?? '').split(',').map((id) => Number(id.trim())).filter(Boolean)
 
@@ -65,9 +66,10 @@ export async function handleSupplierMessage(
 
     log.info('Supplier price batch created', { supplier: supplier.name, batchId: result.batchId, reused: result.reused, ...result.stats })
 
-    // Уведомить админов (если включено) — карточка «разберите в админке»
+    // Уведомить админов (если включено) — карточка «разберите в админке».
+    // Старый ключ supplier_notify='false' глушит как раньше; поверх — тумблер priceAlerts.
     const notifyEnabled = await getApiKeyValue('supplier_notify')
-    if (notifyEnabled !== 'false' && !result.reused) {
+    if (notifyEnabled !== 'false' && !result.reused && await isJobEnabled('priceAlerts')) {
       const s = result.stats
       const notification = [
         `📦 Новый прайс от ${supplier.name} — разбор #${result.batchId}`,
