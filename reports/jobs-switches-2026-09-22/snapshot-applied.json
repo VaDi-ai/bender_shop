@@ -1,0 +1,14 @@
+{
+  "takenAt": "2026-09-22T08:49:59.121Z",
+  "source": "ApiKey (read-only)",
+  "setting_jobs": {
+    "exists": true,
+    "updatedAt": "2026-09-22T08:49:49.490Z",
+    "value": "{\"avitoChats\":false,\"avitoCommands\":false,\"morningSummary\":false,\"clientAuto\":false,\"priceAlerts\":false}"
+  },
+  "supplier_notify": {
+    "exists": false,
+    "updatedAt": null,
+    "value": null
+  }
+}

@@ -1,0 +1,749 @@
+{
+  "takenAt": "2026-08-26T09:14:40.885Z",
+  "reason": "before fix-m5-aliases: перепутанные привязки MDHE4/MDHH4",
+  "priceAliasFull": [
+    {
+      "id": 18,
+      "alias": "17 256gb mist blue 🇯🇵 73500",
+      "productId": null,
+      "variantId": 298,
+      "isIgnored": false,
+      "createdAt": "2026-08-17T10:21:34.873Z",
+      "updatedAt": "2026-08-17T10:21:34.873Z"
+    },
+    {
+      "id": 19,
+      "alias": "iphone 17 256gb mist blue",
+      "productId": null,
+      "variantId": 298,
+      "isIgnored": false,
+      "createdAt": "2026-08-17T10:21:34.879Z",
+      "updatedAt": "2026-08-17T10:21:34.879Z"
+    },
+    {
+      "id": 20,
+      "alias": "iphone 17e 512gb soft pink 🇯🇵 67200",
+      "productId": null,
+      "variantId": 1574,
+      "isIgnored": false,
+      "createdAt": "2026-08-18T09:37:45.779Z",
+      "updatedAt": "2026-08-18T09:37:45.779Z"
+    },
+    {
+      "id": 21,
+      "alias": "iphone 17e 512gb soft pink",
+      "productId": null,
+      "variantId": 1574,
+      "isIgnored": false,
+      "createdAt": "2026-08-18T09:37:45.902Z",
+      "updatedAt": "2026-08-18T09:37:45.902Z"
+    },
+    {
+      "id": 22,
+      "alias": "macbook air 13 m5 16gb 512gb midnight - 120000",
+      "productId": null,
+      "variantId": 395,
+      "isIgnored": false,
+      "createdAt": "2026-08-22T14:08:50.691Z",
+      "updatedAt": "2026-08-22T14:08:50.691Z"
+    },
+    {
+      "id": 23,
+      "alias": "macbook air 13 m5 512gb midnight",
+      "productId": null,
+      "variantId": 395,
+      "isIgnored": false,
+      "createdAt": "2026-08-22T14:08:50.696Z",
+      "updatedAt": "2026-08-22T14:08:50.696Z"
+    },
+    {
+      "id": 24,
+      "alias": "macbook mdhh4 air 13 sky blue (m5, 16gb, 512gb) 2026 115000",
+      "productId": null,
+      "variantId": 395,
+      "isIgnored": false,
+      "createdAt": "2026-08-22T14:11:48.958Z",
+      "updatedAt": "2026-08-22T14:11:48.958Z"
+    },
+    {
+      "id": 25,
+      "alias": "macbook air 13 m5 512gb sky blue",
+      "productId": null,
+      "variantId": 395,
+      "isIgnored": false,
+      "createdAt": "2026-08-22T14:11:48.963Z",
+      "updatedAt": "2026-08-22T14:11:48.963Z"
+    },
+    {
+      "id": 26,
+      "alias": "macbook air 15 m5 16gb 1tb midnight  153000",
+      "productId": null,
+      "variantId": 395,
+      "isIgnored": false,
+      "createdAt": "2026-08-22T15:11:43.861Z",
+      "updatedAt": "2026-08-22T15:11:43.861Z"
+    },
+    {
+      "id": 27,
+      "alias": "macbook air 15 m5 1tb midnight",
+      "productId": null,
+      "variantId": 395,
+      "isIgnored": false,
+      "createdAt": "2026-08-22T15:11:43.867Z",
+      "updatedAt": "2026-08-22T15:11:43.867Z"
+    },
+    {
+      "id": 28,
+      "alias": "17 air 256gb black 🇯🇵 73500",
+      "productId": null,
+      "variantId": 317,
+      "isIgnored": false,
+      "createdAt": "2026-08-26T08:08:40.708Z",
+      "updatedAt": "2026-08-26T08:08:40.708Z"
+    },
+    {
+      "id": 29,
+      "alias": "macbook air 17 256gb black",
+      "productId": null,
+      "variantId": 317,
+      "isIgnored": false,
+      "createdAt": "2026-08-26T08:08:40.715Z",
+      "updatedAt": "2026-08-26T08:08:40.715Z"
+    },
+    {
+      "id": 30,
+      "alias": "17 air 256gb blue 🇯🇵 71400",
+      "productId": null,
+      "variantId": 1530,
+      "isIgnored": false,
+      "createdAt": "2026-08-26T08:09:11.960Z",
+      "updatedAt": "2026-08-26T08:09:11.960Z"
+    },
+    {
+      "id": 31,
+      "alias": "macbook air 17 256gb blue",
+      "productId": null,
+      "variantId": 1530,
+      "isIgnored": false,
+      "createdAt": "2026-08-26T08:09:11.971Z",
+      "updatedAt": "2026-08-26T08:09:11.971Z"
+    },
+    {
+      "id": 32,
+      "alias": "17 air 256gb white 🇯🇵 73600",
+      "productId": null,
+      "variantId": 318,
+      "isIgnored": false,
+      "createdAt": "2026-08-26T08:12:55.971Z",
+      "updatedAt": "2026-08-26T08:12:55.971Z"
+    },
+    {
+      "id": 33,
+      "alias": "macbook air 17 256gb white",
+      "productId": null,
+      "variantId": 318,
+      "isIgnored": false,
+      "createdAt": "2026-08-26T08:12:55.977Z",
+      "updatedAt": "2026-08-26T08:12:55.977Z"
+    },
+    {
+      "id": 34,
+      "alias": "17 air 256gb gold 🇯🇵 72100",
+      "productId": null,
+      "variantId": 319,
+      "isIgnored": false,
+      "createdAt": "2026-08-26T08:13:18.826Z",
+      "updatedAt": "2026-08-26T08:13:18.826Z"
+    },
+    {
+      "id": 35,
+      "alias": "macbook air 17 256gb gold",
+      "productId": null,
+      "variantId": 319,
+      "isIgnored": false,
+      "createdAt": "2026-08-26T08:13:18.832Z",
+      "updatedAt": "2026-08-26T08:13:18.832Z"
+    },
+    {
+      "id": 36,
+      "alias": "17 air 512gb black 🇯🇵 81000",
+      "productId": null,
+      "variantId": 320,
+      "isIgnored": false,
+      "createdAt": "2026-08-26T08:13:47.204Z",
+      "updatedAt": "2026-08-26T08:13:47.204Z"
+    },
+    {
+      "id": 37,
+      "alias": "macbook air 17 512gb black",
+      "productId": null,
+      "variantId": 320,
+      "isIgnored": false,
+      "createdAt": "2026-08-26T08:13:47.211Z",
+      "updatedAt": "2026-08-26T08:13:47.211Z"
+    },
+    {
+      "id": 38,
+      "alias": "17 air 512gb blue 🇯🇵 76000",
+      "productId": null,
+      "variantId": 321,
+      "isIgnored": false,
+      "createdAt": "2026-08-26T08:14:11.552Z",
+      "updatedAt": "2026-08-26T08:14:11.552Z"
+    },
+    {
+      "id": 39,
+      "alias": "macbook air 17 512gb blue",
+      "productId": null,
+      "variantId": 321,
+      "isIgnored": false,
+      "createdAt": "2026-08-26T08:14:11.559Z",
+      "updatedAt": "2026-08-26T08:14:11.559Z"
+    },
+    {
+      "id": 40,
+      "alias": "17 air 512gb white 🇯🇵 84500",
+      "productId": null,
+      "variantId": 322,
+      "isIgnored": false,
+      "createdAt": "2026-08-26T08:14:31.204Z",
+      "updatedAt": "2026-08-26T08:14:31.204Z"
+    },
+    {
+      "id": 41,
+      "alias": "macbook air 17 512gb white",
+      "productId": null,
+      "variantId": 322,
+      "isIgnored": false,
+      "createdAt": "2026-08-26T08:14:31.210Z",
+      "updatedAt": "2026-08-26T08:14:31.210Z"
+    },
+    {
+      "id": 42,
+      "alias": "17 air 512gb gold 🇯🇵 77100",
+      "productId": null,
+      "variantId": 1531,
+      "isIgnored": false,
+      "createdAt": "2026-08-26T08:14:47.358Z",
+      "updatedAt": "2026-08-26T08:14:47.358Z"
+    },
+    {
+      "id": 43,
+      "alias": "macbook air 17 512gb gold",
+      "productId": null,
+      "variantId": 1531,
+      "isIgnored": false,
+      "createdAt": "2026-08-26T08:14:47.369Z",
+      "updatedAt": "2026-08-26T08:14:47.369Z"
+    },
+    {
+      "id": 44,
+      "alias": "17 air 1tb black 🇯🇵 90000",
+      "productId": null,
+      "variantId": 323,
+      "isIgnored": false,
+      "createdAt": "2026-08-26T08:15:09.105Z",
+      "updatedAt": "2026-08-26T08:15:09.105Z"
+    },
+    {
+      "id": 45,
+      "alias": "macbook air 17 1tb black",
+      "productId": null,
+      "variantId": 323,
+      "isIgnored": false,
+      "createdAt": "2026-08-26T08:15:09.111Z",
+      "updatedAt": "2026-08-26T08:15:09.111Z"
+    },
+    {
+      "id": 46,
+      "alias": "17 air 1tb blue 🇯🇵 82200",
+      "productId": null,
+      "variantId": 324,
+      "isIgnored": false,
+      "createdAt": "2026-08-26T08:15:25.057Z",
+      "updatedAt": "2026-08-26T08:15:25.057Z"
+    },
+    {
+      "id": 47,
+      "alias": "macbook air 17 1tb blue",
+      "productId": null,
+      "variantId": 324,
+      "isIgnored": false,
+      "createdAt": "2026-08-26T08:15:25.063Z",
+      "updatedAt": "2026-08-26T08:15:25.063Z"
+    },
+    {
+      "id": 48,
+      "alias": "17 air 1tb white 🇯🇵 88600",
+      "productId": null,
+      "variantId": 325,
+      "isIgnored": false,
+      "createdAt": "2026-08-26T08:15:45.707Z",
+      "updatedAt": "2026-08-26T08:15:45.707Z"
+    },
+    {
+      "id": 49,
+      "alias": "macbook air 17 1tb white",
+      "productId": null,
+      "variantId": 325,
+      "isIgnored": false,
+      "createdAt": "2026-08-26T08:15:45.713Z",
+      "updatedAt": "2026-08-26T08:15:45.713Z"
+    },
+    {
+      "id": 50,
+      "alias": "17e 256gb black  🇮🇳 59500",
+      "productId": null,
+      "variantId": 1569,
+      "isIgnored": false,
+      "createdAt": "2026-08-26T08:25:06.375Z",
+      "updatedAt": "2026-08-26T08:25:06.375Z"
+    },
+    {
+      "id": 51,
+      "alias": "17e 256gb black",
+      "productId": null,
+      "variantId": 1569,
+      "isIgnored": false,
+      "createdAt": "2026-08-26T08:25:06.381Z",
+      "updatedAt": "2026-08-26T08:25:06.381Z"
+    },
+    {
+      "id": 52,
+      "alias": "17e 256gb white  🇮🇳 54500",
+      "productId": null,
+      "variantId": 1570,
+      "isIgnored": false,
+      "createdAt": "2026-08-26T08:25:33.081Z",
+      "updatedAt": "2026-08-26T08:25:33.081Z"
+    },
+    {
+      "id": 53,
+      "alias": "17e 256gb white",
+      "productId": null,
+      "variantId": 1570,
+      "isIgnored": false,
+      "createdAt": "2026-08-26T08:25:33.087Z",
+      "updatedAt": "2026-08-26T08:25:33.087Z"
+    },
+    {
+      "id": 54,
+      "alias": "17e 256gb pink 🇮🇳 54500",
+      "productId": null,
+      "variantId": 1571,
+      "isIgnored": false,
+      "createdAt": "2026-08-26T08:25:55.167Z",
+      "updatedAt": "2026-08-26T08:25:55.167Z"
+    },
+    {
+      "id": 55,
+      "alias": "17e 256gb pink",
+      "productId": null,
+      "variantId": 1571,
+      "isIgnored": false,
+      "createdAt": "2026-08-26T08:25:55.173Z",
+      "updatedAt": "2026-08-26T08:25:55.173Z"
+    },
+    {
+      "id": 56,
+      "alias": "17e 512gb black 🇯🇵 65100",
+      "productId": null,
+      "variantId": 1572,
+      "isIgnored": false,
+      "createdAt": "2026-08-26T08:26:53.353Z",
+      "updatedAt": "2026-08-26T08:26:53.353Z"
+    },
+    {
+      "id": 57,
+      "alias": "17e 512gb black",
+      "productId": null,
+      "variantId": 1572,
+      "isIgnored": false,
+      "createdAt": "2026-08-26T08:26:53.359Z",
+      "updatedAt": "2026-08-26T08:26:53.359Z"
+    },
+    {
+      "id": 58,
+      "alias": "17e 512gb white  🇯🇵 65100",
+      "productId": null,
+      "variantId": 1573,
+      "isIgnored": false,
+      "createdAt": "2026-08-26T08:31:56.967Z",
+      "updatedAt": "2026-08-26T08:31:56.967Z"
+    },
+    {
+      "id": 59,
+      "alias": "17e 512gb white",
+      "productId": null,
+      "variantId": 1573,
+      "isIgnored": false,
+      "createdAt": "2026-08-26T08:31:56.972Z",
+      "updatedAt": "2026-08-26T08:31:56.972Z"
+    },
+    {
+      "id": 60,
+      "alias": "17e 512gb soft pink 🇯🇵 65400",
+      "productId": null,
+      "variantId": 1574,
+      "isIgnored": false,
+      "createdAt": "2026-08-26T08:41:19.837Z",
+      "updatedAt": "2026-08-26T08:41:19.837Z"
+    },
+    {
+      "id": 61,
+      "alias": "17e 512gb soft pink",
+      "productId": null,
+      "variantId": 1574,
+      "isIgnored": false,
+      "createdAt": "2026-08-26T08:41:19.843Z",
+      "updatedAt": "2026-08-26T08:41:19.843Z"
+    },
+    {
+      "id": 62,
+      "alias": "macbook mdha4 air 13 starlight (m5, 16gb, 512gb) 2026 116000",
+      "productId": null,
+      "variantId": 396,
+      "isIgnored": false,
+      "createdAt": "2026-08-26T08:53:57.103Z",
+      "updatedAt": "2026-08-26T08:53:57.103Z"
+    },
+    {
+      "id": 63,
+      "alias": "macbook air 13 m5 512gb starlight",
+      "productId": null,
+      "variantId": 396,
+      "isIgnored": false,
+      "createdAt": "2026-08-26T08:53:57.109Z",
+      "updatedAt": "2026-08-26T08:53:57.109Z"
+    }
+  ],
+  "variants394_395_396": [
+    {
+      "id": 394,
+      "productId": 448,
+      "sku": "04-6ckx-53h-cl3u7",
+      "price": "125000",
+      "quantity": 3,
+      "inStock": true,
+      "attributes": {
+        "RAM": "16GB",
+        "fullName": "MacBook Air 13 M5 16GB 512GB Midnight",
+        "Цвет": "Midnight",
+        "Экран": "13\"",
+        "Память": "512GB",
+        "Страна": "США"
+      },
+      "photos": [
+        "https://bendershop.store/photos/Apple%20MacBook%20Air%2013%20Midnight.png"
+      ],
+      "costPrice": null,
+      "lastSyncedCostPrice": null,
+      "photoUrls": [
+        "https://bendershop.store/photos/Apple%20MacBook%20Air%2013%20Midnight.png"
+      ],
+      "bestSupplierName": null,
+      "priceUpdatedAt": null,
+      "createdAt": "2026-03-22T13:16:35.511Z"
+    },
+    {
+      "id": 396,
+      "productId": 448,
+      "sku": "04-6ckx-53h-cleec",
+      "price": "122000",
+      "quantity": 3,
+      "inStock": true,
+      "attributes": {
+        "RAM": "16GB",
+        "fullName": "MacBook Air 13 M5 16GB 512GB Starlight",
+        "Цвет": "Starlight",
+        "Экран": "13\"",
+        "Память": "512GB",
+        "Страна": "США"
+      },
+      "photos": [
+        "https://bendershop.store/photos/Apple%20MacBook%20Air%2013%20Starlight%204.png"
+      ],
+      "costPrice": "116000",
+      "lastSyncedCostPrice": "116000",
+      "photoUrls": [
+        "https://bendershop.store/photos/Apple%20MacBook%20Air%2013%20Starlight%204.png"
+      ],
+      "bestSupplierName": "Ланский",
+      "priceUpdatedAt": "2026-08-26T08:54:15.803Z",
+      "createdAt": "2026-03-22T13:16:35.522Z"
+    },
+    {
+      "id": 395,
+      "productId": 448,
+      "sku": "04-6ckx-53h-cl90o",
+      "price": "121500",
+      "quantity": 3,
+      "inStock": true,
+      "attributes": {
+        "RAM": "16GB",
+        "fullName": "MacBook Air 13 M5 16GB 512GB Sky Blue",
+        "Цвет": "Midnight",
+        "Экран": "13\"",
+        "Память": "512GB",
+        "Страна": "США",
+        "attrOverrides": {
+          "Цвет": {
+            "at": "2026-08-26T08:56:20.404Z",
+            "by": "7461166995",
+            "value": "Midnight"
+          },
+          "Экран": {
+            "at": "2026-08-26T08:50:36.062Z",
+            "by": "7461166995",
+            "value": "13\""
+          },
+          "Память": {
+            "at": "2026-08-26T08:51:30.249Z",
+            "by": "7461166995",
+            "value": "512GB"
+          }
+        }
+      },
+      "photos": [
+        "https://bendershop.store/photos/Apple%20MacBook%20Air%2013%20Sky%20Blue%204.png"
+      ],
+      "costPrice": "115500",
+      "lastSyncedCostPrice": "115500",
+      "photoUrls": [
+        "https://bendershop.store/photos/Apple%20MacBook%20Air%2013%20Sky%20Blue%204.png"
+      ],
+      "bestSupplierName": "Ланский",
+      "priceUpdatedAt": "2026-08-26T08:54:15.803Z",
+      "createdAt": "2026-03-22T13:16:35.517Z"
+    }
+  ],
+  "supplierPriceRows": [
+    {
+      "id": 427,
+      "supplierId": 8,
+      "model": "MacBook Air 13 M5",
+      "storage": "512GB",
+      "ram": "16GB",
+      "color": "Midnight",
+      "simType": null,
+      "country": null,
+      "price": "120000",
+      "variantId": 395,
+      "supplierName": null,
+      "productName": null,
+      "rawMessage": "MacBook MDHE4 Air 13 Midnight (M5, 16GB, 512GB) 2026 120000",
+      "messageId": null,
+      "isActive": false,
+      "parsedAt": "2026-08-19T09:44:21.051Z",
+      "batchId": 31,
+      "expiresAt": "2026-08-22T09:44:21.034Z"
+    },
+    {
+      "id": 569,
+      "supplierId": 8,
+      "model": "MacBook Air 13 M5",
+      "storage": "512GB",
+      "ram": "16GB",
+      "color": "Midnight",
+      "simType": null,
+      "country": null,
+      "price": "120000",
+      "variantId": 395,
+      "supplierName": null,
+      "productName": null,
+      "rawMessage": "MacBook MDHE4 Air 13 Midnight (M5, 16GB, 512GB) 2026 120000",
+      "messageId": null,
+      "isActive": false,
+      "parsedAt": "2026-08-22T14:11:12.317Z",
+      "batchId": 39,
+      "expiresAt": "2026-08-25T14:11:12.302Z"
+    },
+    {
+      "id": 720,
+      "supplierId": 8,
+      "model": "MacBook Air 13 M5",
+      "storage": "512GB",
+      "ram": "16GB",
+      "color": "Midnight",
+      "simType": null,
+      "country": null,
+      "price": "117000",
+      "variantId": 395,
+      "supplierName": null,
+      "productName": null,
+      "rawMessage": "MacBook MDHE4 Air 13 Midnight (M5, 16GB, 512GB) 2026 117000",
+      "messageId": null,
+      "isActive": true,
+      "parsedAt": "2026-08-26T08:50:12.298Z",
+      "batchId": 52,
+      "expiresAt": "2026-08-29T08:50:12.283Z"
+    },
+    {
+      "id": 721,
+      "supplierId": 8,
+      "model": "MacBook Air 13 M5",
+      "storage": "512GB",
+      "ram": "16GB",
+      "color": "Sky Blue",
+      "simType": null,
+      "country": null,
+      "price": "115500",
+      "variantId": 395,
+      "supplierName": null,
+      "productName": null,
+      "rawMessage": "MacBook MDHH4 Air 13 Sky Blue (M5, 16GB, 512GB) 2026 115500",
+      "messageId": null,
+      "isActive": true,
+      "parsedAt": "2026-08-26T08:50:12.298Z",
+      "batchId": 52,
+      "expiresAt": "2026-08-29T08:50:12.283Z"
+    },
+    {
+      "id": 724,
+      "supplierId": 8,
+      "model": "MacBook Air 13 M5",
+      "storage": "512GB",
+      "ram": "16GB",
+      "color": "Starlight",
+      "simType": null,
+      "country": null,
+      "price": "116000",
+      "variantId": 396,
+      "supplierName": null,
+      "productName": null,
+      "rawMessage": "MacBook MDHA4 Air 13 Starlight (M5, 16GB, 512GB) 2026 116000",
+      "messageId": null,
+      "isActive": true,
+      "parsedAt": "2026-08-26T08:50:12.298Z",
+      "batchId": 52,
+      "expiresAt": "2026-08-29T08:50:12.283Z"
+    },
+    {
+      "id": 740,
+      "supplierId": 8,
+      "model": "MacBook Air 13 M5",
+      "storage": "512GB",
+      "ram": "16GB",
+      "color": "Midnight",
+      "simType": null,
+      "country": null,
+      "price": "117000",
+      "variantId": 395,
+      "supplierName": null,
+      "productName": null,
+      "rawMessage": "MacBook MDHE4 Air 13 Midnight (M5, 16GB, 512GB) 2026 117000",
+      "messageId": null,
+      "isActive": false,
+      "parsedAt": "2026-08-26T08:55:09.886Z",
+      "batchId": 53,
+      "expiresAt": "2026-08-29T08:55:09.869Z"
+    },
+    {
+      "id": 741,
+      "supplierId": 8,
+      "model": "MacBook Air 13 M5",
+      "storage": "512GB",
+      "ram": "16GB",
+      "color": "Starlight",
+      "simType": null,
+      "country": null,
+      "price": "116000",
+      "variantId": 396,
+      "supplierName": null,
+      "productName": null,
+      "rawMessage": "MacBook MDHA4 Air 13 Starlight (M5, 16GB, 512GB) 2026 116000",
+      "messageId": null,
+      "isActive": false,
+      "parsedAt": "2026-08-26T08:55:09.886Z",
+      "batchId": 53,
+      "expiresAt": "2026-08-29T08:55:09.869Z"
+    },
+    {
+      "id": 742,
+      "supplierId": 8,
+      "model": "MacBook Air 13 M5",
+      "storage": "512GB",
+      "ram": "16GB",
+      "color": "Sky Blue",
+      "simType": null,
+      "country": null,
+      "price": "115500",
+      "variantId": 395,
+      "supplierName": null,
+      "productName": null,
+      "rawMessage": "MacBook MDHH4 Air 13 Sky Blue (M5, 16GB, 512GB) 2026 115500",
+      "messageId": null,
+      "isActive": false,
+      "parsedAt": "2026-08-26T08:55:09.886Z",
+      "batchId": 53,
+      "expiresAt": "2026-08-29T08:55:09.869Z"
+    }
+  ],
+  "product448": {
+    "id": 448,
+    "sku": "20-rp8n-16r",
+    "name": "Macbook Air M5",
+    "description": "MacBook Air M5 — лёгкий и мощный ноутбук 2026 года с инновационным процессором Apple M5. Идеален для творческих задач, видеомонтажа и работы с искусственным интеллектом благодаря встроенному нейронному ускорителю в каждом ядре GPU.",
+    "price": "121500",
+    "stock": 64,
+    "quantity": 64,
+    "reserved": 0,
+    "categoryId": 20,
+    "photoUrl": "https://bendershop.store/photos/Apple%20MacBook%20Air%2013%20Midnight.png",
+    "coverPhoto": null,
+    "photos": [
+      "https://bendershop.store/photos/Apple%20MacBook%20Air%2013%20Midnight.png",
+      "https://bendershop.store/photos/Apple%20MacBook%20Air%2013%20Sky%20Blue%204.png",
+      "https://bendershop.store/photos/Apple%20MacBook%20Air%2013%20Starlight%204.png",
+      "https://bendershop.store/photos/Apple%20MacBook%20Air%2013%20Silver%203.png",
+      "https://bendershop.store/photos/Apple%20MacBook%20Air%2015%20Midnight.png",
+      "https://bendershop.store/photos/Apple%20MacBook%20Air%2015%20Sky%20Blue.png",
+      "https://bendershop.store/photos/Apple%20MacBook%20Air%2015%20Starlight%204.png",
+      "https://bendershop.store/photos/Apple%20MacBook%20Air%2015%20Silver%204.png"
+    ],
+    "isAvailable": true,
+    "isFeatured": true,
+    "attributes": {
+      "RAM": [
+        "16GB",
+        "24GB",
+        "32GB"
+      ],
+      "Цвет": [
+        "Midnight",
+        "Silver",
+        "Sky Blue",
+        "Starlight"
+      ],
+      "Экран": [
+        "13\"",
+        "15\""
+      ],
+      "Память": [
+        "1TB",
+        "2TB",
+        "4TB",
+        "512GB"
+      ]
+    },
+    "specs": {
+      "ОС": "macOS Tahoe",
+      "Связь": "Wi-Fi 7, Bluetooth 6 (чип N1)",
+      "Экран": "Liquid Retina Display, 13.6\" или 15.3\", разрешение 2560×1664 (13\") или 2880×1864 (15\"), 500 нит, 224 ppi",
+      "Разъёмы": "2x Thunderbolt 4, MagSafe 3, разъём для наушников 3.5 мм",
+      "Процессор": "Apple M5 (10-ядерный CPU, 8-ядерный или 10-ядерный GPU, 16-ядерный Neural Engine)",
+      "Техпроцесс": "3 нм второго поколения",
+      "Аккумулятор": "52.6 Вт·ч (13\") или 66.5 Вт·ч (15\"), до 18 часов видео",
+      "Фронтальная камера": "12 МП с Center Stage и Desk View",
+      "Пропускная способность памяти": "153 ГБ/с"
+    },
+    "badge": null,
+    "brand": "Apple",
+    "avitoItemId": null,
+    "avitoEnabled": false,
+    "line": "MacBook",
+    "sortOrder": 16,
+    "createdAt": "2026-03-24T23:24:24.072Z",
+    "updatedAt": "2026-08-26T09:12:41.219Z"
+  }
+}

@@ -1,0 +1,461 @@
+{
+  "takenAt": "2026-08-28T12:02:05.117Z",
+  "reason": "before backfill-archived-at",
+  "variants": [
+    {
+      "id": 44,
+      "sku": "01-6aw8-2pa-ax7ve",
+      "archivedAt": null,
+      "quantity": 0,
+      "inStock": false
+    },
+    {
+      "id": 45,
+      "sku": "01-6aw8-2pa-axdx1",
+      "archivedAt": null,
+      "quantity": 0,
+      "inStock": false
+    },
+    {
+      "id": 50,
+      "sku": "01-6axi-2ts-aybul",
+      "archivedAt": null,
+      "quantity": 0,
+      "inStock": false
+    },
+    {
+      "id": 76,
+      "sku": "02-6b35-uwa-b3bht",
+      "archivedAt": null,
+      "quantity": 0,
+      "inStock": false
+    },
+    {
+      "id": 77,
+      "sku": "02-6b35-uwa-b3gbc",
+      "archivedAt": null,
+      "quantity": 0,
+      "inStock": false
+    },
+    {
+      "id": 78,
+      "sku": "02-6b35-uwa-b3lwa",
+      "archivedAt": null,
+      "quantity": 0,
+      "inStock": false
+    },
+    {
+      "id": 79,
+      "sku": "02-6b35-uwa-b3r08",
+      "archivedAt": null,
+      "quantity": 0,
+      "inStock": false
+    },
+    {
+      "id": 80,
+      "sku": "02-6b35-uwa-b3wla",
+      "archivedAt": null,
+      "quantity": 0,
+      "inStock": false
+    },
+    {
+      "id": 81,
+      "sku": "02-6b35-uwa-b42ga",
+      "archivedAt": null,
+      "quantity": 0,
+      "inStock": false
+    },
+    {
+      "id": 82,
+      "sku": "02-6b35-uwa-b48xh",
+      "archivedAt": null,
+      "quantity": 0,
+      "inStock": false
+    },
+    {
+      "id": 83,
+      "sku": "02-6b35-uwa-b4dj4",
+      "archivedAt": null,
+      "quantity": 0,
+      "inStock": false
+    },
+    {
+      "id": 84,
+      "sku": "02-6b35-uwa-b4j4v",
+      "archivedAt": null,
+      "quantity": 0,
+      "inStock": false
+    },
+    {
+      "id": 85,
+      "sku": "02-6b35-uwa-b4oh1",
+      "archivedAt": null,
+      "quantity": 0,
+      "inStock": false
+    },
+    {
+      "id": 86,
+      "sku": "02-6b35-uwa-b4ugj",
+      "archivedAt": null,
+      "quantity": 0,
+      "inStock": false
+    },
+    {
+      "id": 87,
+      "sku": "02-6b35-uwa-b50ej",
+      "archivedAt": null,
+      "quantity": 0,
+      "inStock": false
+    },
+    {
+      "id": 88,
+      "sku": "02-6b35-uwa-b55w4",
+      "archivedAt": null,
+      "quantity": 0,
+      "inStock": false
+    },
+    {
+      "id": 89,
+      "sku": "02-6b35-uwa-b5cyr",
+      "archivedAt": null,
+      "quantity": 0,
+      "inStock": false
+    },
+    {
+      "id": 90,
+      "sku": "02-6b35-uwa-b5hxk",
+      "archivedAt": null,
+      "quantity": 0,
+      "inStock": false
+    },
+    {
+      "id": 91,
+      "sku": "02-6b35-uwa-b5mlv",
+      "archivedAt": null,
+      "quantity": 0,
+      "inStock": false
+    },
+    {
+      "id": 128,
+      "sku": "02-6b5t-7d6-bbsoo",
+      "archivedAt": null,
+      "quantity": 0,
+      "inStock": false
+    },
+    {
+      "id": 130,
+      "sku": "02-6b5t-7d6-bc3yp",
+      "archivedAt": null,
+      "quantity": 0,
+      "inStock": false
+    },
+    {
+      "id": 131,
+      "sku": "02-6b5t-7d6-bc8vf",
+      "archivedAt": null,
+      "quantity": 0,
+      "inStock": false
+    },
+    {
+      "id": 132,
+      "sku": "02-6b5t-7d6-bcds2",
+      "archivedAt": null,
+      "quantity": 0,
+      "inStock": false
+    },
+    {
+      "id": 134,
+      "sku": "02-6b5t-7d6-bcnys",
+      "archivedAt": null,
+      "quantity": 0,
+      "inStock": false
+    },
+    {
+      "id": 135,
+      "sku": "02-6b5t-7d6-bcsbp",
+      "archivedAt": null,
+      "quantity": 0,
+      "inStock": false
+    },
+    {
+      "id": 136,
+      "sku": "02-6b5t-7d6-bcx1g",
+      "archivedAt": null,
+      "quantity": 0,
+      "inStock": false
+    },
+    {
+      "id": 138,
+      "sku": "02-6b5t-7d6-bd8ra",
+      "archivedAt": null,
+      "quantity": 0,
+      "inStock": false
+    },
+    {
+      "id": 139,
+      "sku": "02-6b5t-7d6-bdd48",
+      "archivedAt": null,
+      "quantity": 0,
+      "inStock": false
+    },
+    {
+      "id": 140,
+      "sku": "02-6b5t-7d6-bdi34",
+      "archivedAt": null,
+      "quantity": 0,
+      "inStock": false
+    },
+    {
+      "id": 141,
+      "sku": "02-6b5t-7d6-bdnnm",
+      "archivedAt": null,
+      "quantity": 0,
+      "inStock": false
+    },
+    {
+      "id": 142,
+      "sku": "02-6b5t-7d6-bdsi8",
+      "archivedAt": null,
+      "quantity": 0,
+      "inStock": false
+    },
+    {
+      "id": 143,
+      "sku": "02-6b5t-7d6-bdxni",
+      "archivedAt": null,
+      "quantity": 0,
+      "inStock": false
+    },
+    {
+      "id": 491,
+      "sku": "05-6d0q-zpl-d23dy",
+      "archivedAt": null,
+      "quantity": 0,
+      "inStock": false
+    },
+    {
+      "id": 530,
+      "sku": "05-6d55-6ke-d8kbs",
+      "archivedAt": null,
+      "quantity": 0,
+      "inStock": false
+    },
+    {
+      "id": 531,
+      "sku": "05-6d55-6ke-d8pnm",
+      "archivedAt": null,
+      "quantity": 0,
+      "inStock": false
+    },
+    {
+      "id": 532,
+      "sku": "05-6d55-6ke-d8v5j",
+      "archivedAt": null,
+      "quantity": 0,
+      "inStock": false
+    },
+    {
+      "id": 533,
+      "sku": "05-6d55-6ke-d9052",
+      "archivedAt": null,
+      "quantity": 0,
+      "inStock": false
+    },
+    {
+      "id": 534,
+      "sku": "05-6d55-6ke-d96ee",
+      "archivedAt": null,
+      "quantity": 0,
+      "inStock": false
+    },
+    {
+      "id": 535,
+      "sku": "05-6d55-6ke-d9b1k",
+      "archivedAt": null,
+      "quantity": 0,
+      "inStock": false
+    },
+    {
+      "id": 536,
+      "sku": "05-6d55-6ke-d9hg9",
+      "archivedAt": null,
+      "quantity": 0,
+      "inStock": false
+    },
+    {
+      "id": 537,
+      "sku": "05-6d55-6ke-d9mkt",
+      "archivedAt": null,
+      "quantity": 0,
+      "inStock": false
+    },
+    {
+      "id": 538,
+      "sku": "05-6d55-6ke-d9ria",
+      "archivedAt": null,
+      "quantity": 0,
+      "inStock": false
+    },
+    {
+      "id": 539,
+      "sku": "05-6d55-6ke-d9xda",
+      "archivedAt": null,
+      "quantity": 0,
+      "inStock": false
+    },
+    {
+      "id": 540,
+      "sku": "05-6d55-6ke-da35r",
+      "archivedAt": null,
+      "quantity": 0,
+      "inStock": false
+    },
+    {
+      "id": 541,
+      "sku": "05-6d55-6ke-da8vg",
+      "archivedAt": null,
+      "quantity": 0,
+      "inStock": false
+    },
+    {
+      "id": 542,
+      "sku": "05-6d55-6ke-dadok",
+      "archivedAt": null,
+      "quantity": 0,
+      "inStock": false
+    },
+    {
+      "id": 543,
+      "sku": "05-6d55-6ke-daj2u",
+      "archivedAt": null,
+      "quantity": 0,
+      "inStock": false
+    },
+    {
+      "id": 544,
+      "sku": "05-6d55-6ke-dapxm",
+      "archivedAt": null,
+      "quantity": 0,
+      "inStock": false
+    },
+    {
+      "id": 545,
+      "sku": "05-6d55-6ke-dauy5",
+      "archivedAt": null,
+      "quantity": 0,
+      "inStock": false
+    },
+    {
+      "id": 546,
+      "sku": "05-6d55-6ke-db04c",
+      "archivedAt": null,
+      "quantity": 0,
+      "inStock": false
+    },
+    {
+      "id": 547,
+      "sku": "05-6d55-6ke-db6un",
+      "archivedAt": null,
+      "quantity": 0,
+      "inStock": false
+    },
+    {
+      "id": 548,
+      "sku": "05-6d55-6ke-dbcgd",
+      "archivedAt": null,
+      "quantity": 0,
+      "inStock": false
+    },
+    {
+      "id": 549,
+      "sku": "05-6d55-6ke-dbhdn",
+      "archivedAt": null,
+      "quantity": 0,
+      "inStock": false
+    },
+    {
+      "id": 550,
+      "sku": "05-6d55-6ke-dbneb",
+      "archivedAt": null,
+      "quantity": 0,
+      "inStock": false
+    },
+    {
+      "id": 551,
+      "sku": "05-6d55-6ke-dbsrh",
+      "archivedAt": null,
+      "quantity": 0,
+      "inStock": false
+    },
+    {
+      "id": 552,
+      "sku": "05-6d55-6ke-dbyyd",
+      "archivedAt": null,
+      "quantity": 0,
+      "inStock": false
+    },
+    {
+      "id": 553,
+      "sku": "05-6d55-6ke-dc3f7",
+      "archivedAt": null,
+      "quantity": 0,
+      "inStock": false
+    },
+    {
+      "id": 554,
+      "sku": "05-6d55-6ke-dc8u9",
+      "archivedAt": null,
+      "quantity": 0,
+      "inStock": false
+    },
+    {
+      "id": 555,
+      "sku": "05-6d55-6ke-dcex4",
+      "archivedAt": null,
+      "quantity": 0,
+      "inStock": false
+    },
+    {
+      "id": 556,
+      "sku": "05-6d55-6ke-dcjte",
+      "archivedAt": null,
+      "quantity": 0,
+      "inStock": false
+    },
+    {
+      "id": 557,
+      "sku": "05-6d55-6ke-dcpod",
+      "archivedAt": null,
+      "quantity": 0,
+      "inStock": false
+    },
+    {
+      "id": 824,
+      "sku": "08-6f1a-8hb-f1nkm",
+      "archivedAt": null,
+      "quantity": 0,
+      "inStock": false
+    },
+    {
+      "id": 834,
+      "sku": "08-6f3v-u95-f46jl",
+      "archivedAt": null,
+      "quantity": 0,
+      "inStock": false
+    },
+    {
+      "id": 1059,
+      "sku": "03-6ght-7cq-giekf",
+      "archivedAt": null,
+      "quantity": 0,
+      "inStock": false
+    },
+    {
+      "id": 1142,
+      "sku": "03-6gzf-sht-gzlgz",
+      "archivedAt": null,
+      "quantity": 0,
+      "inStock": false
+    }
+  ]
+}

@@ -46,6 +46,7 @@ import fs from 'fs'
 import path from 'path'
 
 import { flattenRelativePhotoPath } from '../lib/photo-flat-name'
+import { normColor, splitGluedColor } from '../lib/photo-match-normalize'
 
 /** Как parsePhotoUrls (sheets-sync): вытащить список URL из ячейки для дедупа без зависимости от всего prisma-стека. */
 function urlsInCommaPhotoCell(cell: string): string[] {
@@ -129,30 +130,6 @@ const BRAND_FROM_FOLDER: Record<string, string> = {
   'GoPro': 'GoPro',
   'Valve Steam Deck': 'Valve',
   'Xbox X': 'Microsoft',
-}
-
-/** Нормализует цвет: 'Jet Black', 'jetblack', 'jet-black' → 'jet black' */
-function normColor(s: string): string {
-  return s
-    .toLowerCase()
-    .replace(/[-_]+/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-}
-
-/** Раскладывает слитные цвета: 'jetblack' → 'jet black', 'spacegray' → 'space gray', etc. */
-function splitGluedColor(s: string): string {
-  return s
-    .replace(/jetblack/gi, 'jet black')
-    .replace(/spacegray/gi, 'space gray')
-    .replace(/spaceblack/gi, 'space black')
-    .replace(/rosegold/gi, 'rose gold')
-    .replace(/lightgold/gi, 'light gold')
-    .replace(/skyblue/gi, 'sky blue')
-    .replace(/icyblue/gi, 'icy blue')
-    .replace(/starlight/gi, 'starlight')
-    .replace(/midnight/gi, 'midnight')
-    .replace(/titaniumnatural/gi, 'titanium natural')
 }
 
 /** Нормализует размер: '42', '42mm', '42 mm' → '42mm' */

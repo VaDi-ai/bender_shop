@@ -1,0 +1,85 @@
+{
+  "takenAt": "2026-08-28T12:54:34.018Z",
+  "plans": [
+    {
+      "id": 23,
+      "alias": "macbook air 13 m5 512gb midnight",
+      "variantId": 394,
+      "fullName": "MacBook Air 13 M5 16GB 512GB Midnight",
+      "ram": "16GB",
+      "newAlias": "macbook air 13 m5 512gb 16gb midnight",
+      "action": "rename",
+      "reason": "RAM дописана из привязанного варианта"
+    },
+    {
+      "id": 25,
+      "alias": "macbook air 13 m5 512gb sky blue",
+      "variantId": 395,
+      "fullName": "MacBook Air 13 M5 16GB 512GB Sky Blue",
+      "ram": "16GB",
+      "newAlias": "macbook air 13 m5 512gb 16gb sky blue",
+      "action": "rename",
+      "reason": "RAM дописана из привязанного варианта"
+    },
+    {
+      "id": 63,
+      "alias": "macbook air 13 m5 512gb starlight",
+      "variantId": 396,
+      "fullName": "MacBook Air 13 M5 16GB 512GB Starlight",
+      "ram": "16GB",
+      "newAlias": "macbook air 13 m5 512gb 16gb starlight",
+      "action": "rename",
+      "reason": "RAM дописана из привязанного варианта"
+    },
+    {
+      "id": 65,
+      "alias": "macbook air 13 m5 1tb midnight",
+      "variantId": 398,
+      "fullName": "MacBook Air 13 M5 16GB 1TB Midnight",
+      "ram": "16GB",
+      "newAlias": "macbook air 13 m5 1tb 16gb midnight",
+      "action": "rename",
+      "reason": "RAM дописана из привязанного варианта"
+    },
+    {
+      "id": 67,
+      "alias": "macbook air 13 m5 1tb starlight",
+      "variantId": 400,
+      "fullName": "MacBook Air 13 M5 16GB 1TB Starlight",
+      "ram": "16GB",
+      "newAlias": "macbook air 13 m5 1tb 16gb starlight",
+      "action": "rename",
+      "reason": "RAM дописана из привязанного варианта"
+    },
+    {
+      "id": 69,
+      "alias": "macbook air 13 m5 1tb sky blue",
+      "variantId": 399,
+      "fullName": "MacBook Air 13 M5 16GB 1TB Sky Blue",
+      "ram": "16GB",
+      "newAlias": "macbook air 13 m5 1tb 16gb sky blue",
+      "action": "rename",
+      "reason": "RAM дописана из привязанного варианта"
+    },
+    {
+      "id": 71,
+      "alias": "macbook air 13 m5 1tb silver",
+      "variantId": 413,
+      "fullName": "MacBook Air 13 M5 24GB 1TB Silver",
+      "ram": "24GB",
+      "newAlias": "macbook air 13 m5 1tb 24gb silver",
+      "action": "rename",
+      "reason": "RAM дописана из привязанного варианта"
+    },
+    {
+      "id": 135,
+      "alias": "macbook air 13 m5 512gb silver",
+      "variantId": 397,
+      "fullName": "MacBook Air 13 M5 16GB 512GB Silver",
+      "ram": "16GB",
+      "newAlias": "macbook air 13 m5 512gb 16gb silver",
+      "action": "rename",
+      "reason": "RAM дописана из привязанного варианта"
+    }
+  ]
+}

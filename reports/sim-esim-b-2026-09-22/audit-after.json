@@ -1,0 +1,911 @@
+{
+  "takenAt": "2026-09-22T10:31:06.736Z",
+  "iphoneCountries": {
+    "\"Гонконг\"": {
+      "gen": {
+        "16": 3,
+        "17": 21,
+        "18": 54
+      },
+      "sim": {
+        "SIM + eSIM": 75,
+        "2 SIM": 3
+      },
+      "example": "iPhone 18 Pro 512GB Silver"
+    },
+    "\"Индия\"": {
+      "gen": {
+        "15": 6,
+        "16": 38,
+        "17": 16
+      },
+      "sim": {
+        "SIM + eSIM": 60
+      },
+      "example": "iPhone 16e 256GB Black (Индия)"
+    },
+    "\"Япония\"": {
+      "gen": {
+        "16": 1,
+        "17": 49,
+        "18": 2
+      },
+      "sim": {
+        "eSIM": 12,
+        "eSIM + eSIM": 39,
+        "SIM + eSIM": 1
+      },
+      "example": "iPhone 17 Air 1TB White (Япония)"
+    },
+    "\"США\"": {
+      "gen": {
+        "16": 10
+      },
+      "sim": {
+        "eSIM + eSIM": 10
+      },
+      "example": "iPhone 16 Pro Max 256GB Black (Индия)"
+    },
+    "\"Китай\"": {
+      "gen": {
+        "16": 8
+      },
+      "sim": {
+        "2 SIM": 8
+      },
+      "example": "iPhone 16 Pro 128GB Desert 2Sim (Китай)"
+    },
+    "\"Европа\"": {
+      "gen": {
+        "16": 1
+      },
+      "sim": {
+        "SIM + eSIM": 1
+      },
+      "example": "iPhone 16 Pro 1TB Desert (Европа)"
+    },
+    "\"Япония/Индия\"": {
+      "gen": {
+        "15": 1
+      },
+      "sim": {
+        "SIM + eSIM": 1
+      },
+      "example": "iPhone 15 128GB Blue"
+    },
+    "\"ОАЭ\"": {
+      "gen": {
+        "16": 2
+      },
+      "sim": {
+        "SIM + eSIM": 2
+      },
+      "example": "iPhone 16 Pro 1TB White (ОАЭ)"
+    },
+    "\"Южная Корея\"": {
+      "gen": {
+        "16": 1
+      },
+      "sim": {
+        "SIM + eSIM": 1
+      },
+      "example": "iPhone 16 Pro 128GB Desert (Южная Корея)"
+    },
+    "\"Индия/Япония\"": {
+      "gen": {
+        "15": 1
+      },
+      "sim": {
+        "SIM + eSIM": 1
+      },
+      "example": "iPhone 15 128GB Black"
+    },
+    "\"(нет)\"": {
+      "gen": {
+        "null": 1
+      },
+      "sim": {
+        "(нет)": 1
+      },
+      "example": "Защитное стекло Remax для iPhone"
+    }
+  },
+  "simRules": [
+    {
+      "id": 38,
+      "country": null,
+      "countryNorm": "",
+      "brandNorm": "samsung",
+      "modelMatch": "",
+      "modelGenFrom": 0,
+      "brand": "Samsung",
+      "simType": "SIM + eSIM",
+      "source": "seed",
+      "note": "перенесено из хардкода sheets-sync",
+      "createdAt": "2026-07-28T18:41:59.138Z",
+      "updatedAt": "2026-09-22T10:24:02.959Z"
+    },
+    {
+      "id": 37,
+      "country": null,
+      "countryNorm": "",
+      "brandNorm": "",
+      "modelMatch": "air",
+      "modelGenFrom": 17,
+      "brand": null,
+      "simType": "eSIM",
+      "source": "seed",
+      "note": "iPhone 17 Air — eSIM-only глобально",
+      "createdAt": "2026-07-28T18:41:59.128Z",
+      "updatedAt": "2026-09-22T10:24:02.674Z"
+    },
+    {
+      "id": 2893,
+      "country": "Бахрейн",
+      "countryNorm": "бахрейн",
+      "brandNorm": "apple",
+      "modelMatch": "",
+      "modelGenFrom": 17,
+      "brand": "Apple",
+      "simType": "eSIM + eSIM",
+      "source": "seed",
+      "note": "с 17-го Бахрейн — две eSIM (eSIM-only рынок, MacRumors 2026-09-09)",
+      "createdAt": "2026-09-22T10:24:01.155Z",
+      "updatedAt": "2026-09-22T10:24:01.155Z"
+    },
+    {
+      "id": 1952,
+      "country": "Бразилия",
+      "countryNorm": "бразилия",
+      "brandNorm": "apple",
+      "modelMatch": "",
+      "modelGenFrom": 0,
+      "brand": "Apple",
+      "simType": "SIM + eSIM",
+      "source": "seed",
+      "note": null,
+      "createdAt": "2026-08-04T15:39:10.982Z",
+      "updatedAt": "2026-09-22T10:23:57.740Z"
+    },
+    {
+      "id": 2887,
+      "country": "Виргинские острова США",
+      "countryNorm": "виргинские острова сша",
+      "brandNorm": "apple",
+      "modelMatch": "",
+      "modelGenFrom": 17,
+      "brand": "Apple",
+      "simType": "eSIM + eSIM",
+      "source": "seed",
+      "note": "с 17-го Виргинские острова США — две eSIM (eSIM-only рынок, MacRumors 2026-09-09)",
+      "createdAt": "2026-09-22T10:23:59.448Z",
+      "updatedAt": "2026-09-22T10:23:59.448Z"
+    },
+    {
+      "id": 78,
+      "country": "Гонконг",
+      "countryNorm": "гонконг",
+      "brandNorm": "apple",
+      "modelMatch": "",
+      "modelGenFrom": 0,
+      "brand": "Apple",
+      "simType": "2 SIM",
+      "source": "seed",
+      "note": null,
+      "createdAt": "2026-07-28T21:30:29.816Z",
+      "updatedAt": "2026-09-22T10:23:55.164Z"
+    },
+    {
+      "id": 1955,
+      "country": "Гонконг",
+      "countryNorm": "гонконг",
+      "brandNorm": "apple",
+      "modelMatch": "",
+      "modelGenFrom": 17,
+      "brand": "Apple",
+      "simType": "SIM + eSIM",
+      "source": "seed",
+      "note": "с 17-го Гонконг — SIM + eSIM",
+      "createdAt": "2026-08-04T15:39:11.016Z",
+      "updatedAt": "2026-09-22T10:23:58.594Z"
+    },
+    {
+      "id": 2888,
+      "country": "Гуам",
+      "countryNorm": "гуам",
+      "brandNorm": "apple",
+      "modelMatch": "",
+      "modelGenFrom": 17,
+      "brand": "Apple",
+      "simType": "eSIM + eSIM",
+      "source": "seed",
+      "note": "с 17-го Гуам — две eSIM (eSIM-only рынок, MacRumors 2026-09-09)",
+      "createdAt": "2026-09-22T10:23:59.733Z",
+      "updatedAt": "2026-09-22T10:23:59.733Z"
+    },
+    {
+      "id": 101,
+      "country": "Европа",
+      "countryNorm": "европа",
+      "brandNorm": "apple",
+      "modelMatch": "",
+      "modelGenFrom": 0,
+      "brand": "Apple",
+      "simType": "SIM + eSIM",
+      "source": "seed",
+      "note": null,
+      "createdAt": "2026-07-28T21:30:30.075Z",
+      "updatedAt": "2026-09-22T10:23:57.172Z"
+    },
+    {
+      "id": 2457,
+      "country": "Индия",
+      "countryNorm": "индия",
+      "brandNorm": "apple",
+      "modelMatch": "",
+      "modelGenFrom": 0,
+      "brand": "Apple",
+      "simType": "SIM + eSIM",
+      "source": "seed",
+      "note": null,
+      "createdAt": "2026-08-26T09:19:52.622Z",
+      "updatedAt": "2026-09-22T10:23:58.024Z"
+    },
+    {
+      "id": 2889,
+      "country": "Канада",
+      "countryNorm": "канада",
+      "brandNorm": "apple",
+      "modelMatch": "",
+      "modelGenFrom": 17,
+      "brand": "Apple",
+      "simType": "eSIM + eSIM",
+      "source": "seed",
+      "note": "с 17-го Канада — две eSIM (eSIM-only рынок, MacRumors 2026-09-09)",
+      "createdAt": "2026-09-22T10:24:00.017Z",
+      "updatedAt": "2026-09-22T10:24:00.017Z"
+    },
+    {
+      "id": 97,
+      "country": "Катар",
+      "countryNorm": "катар",
+      "brandNorm": "apple",
+      "modelMatch": "",
+      "modelGenFrom": 0,
+      "brand": "Apple",
+      "simType": "SIM + eSIM",
+      "source": "seed",
+      "note": null,
+      "createdAt": "2026-07-28T21:30:30.024Z",
+      "updatedAt": "2026-09-22T10:23:56.888Z"
+    },
+    {
+      "id": 2891,
+      "country": "Катар",
+      "countryNorm": "катар",
+      "brandNorm": "apple",
+      "modelMatch": "",
+      "modelGenFrom": 17,
+      "brand": "Apple",
+      "simType": "eSIM + eSIM",
+      "source": "seed",
+      "note": "с 17-го Катар — две eSIM (eSIM-only рынок, MacRumors 2026-09-09)",
+      "createdAt": "2026-09-22T10:24:00.586Z",
+      "updatedAt": "2026-09-22T10:24:00.586Z"
+    },
+    {
+      "id": 77,
+      "country": "Китай",
+      "countryNorm": "китай",
+      "brandNorm": "apple",
+      "modelMatch": "",
+      "modelGenFrom": 0,
+      "brand": "Apple",
+      "simType": "2 SIM",
+      "source": "seed",
+      "note": null,
+      "createdAt": "2026-07-28T21:30:29.805Z",
+      "updatedAt": "2026-09-22T10:23:54.879Z"
+    },
+    {
+      "id": 2894,
+      "country": "Кувейт",
+      "countryNorm": "кувейт",
+      "brandNorm": "apple",
+      "modelMatch": "",
+      "modelGenFrom": 17,
+      "brand": "Apple",
+      "simType": "eSIM + eSIM",
+      "source": "seed",
+      "note": "с 17-го Кувейт — две eSIM (eSIM-only рынок, MacRumors 2026-09-09)",
+      "createdAt": "2026-09-22T10:24:02.105Z",
+      "updatedAt": "2026-09-22T10:24:02.105Z"
+    },
+    {
+      "id": 79,
+      "country": "Макао",
+      "countryNorm": "макао",
+      "brandNorm": "apple",
+      "modelMatch": "",
+      "modelGenFrom": 0,
+      "brand": "Apple",
+      "simType": "2 SIM",
+      "source": "seed",
+      "note": null,
+      "createdAt": "2026-07-28T21:30:29.825Z",
+      "updatedAt": "2026-09-22T10:23:55.447Z"
+    },
+    {
+      "id": 2890,
+      "country": "Мексика",
+      "countryNorm": "мексика",
+      "brandNorm": "apple",
+      "modelMatch": "",
+      "modelGenFrom": 17,
+      "brand": "Apple",
+      "simType": "eSIM + eSIM",
+      "source": "seed",
+      "note": "с 17-го Мексика — две eSIM (eSIM-only рынок, MacRumors 2026-09-09)",
+      "createdAt": "2026-09-22T10:24:00.301Z",
+      "updatedAt": "2026-09-22T10:24:00.301Z"
+    },
+    {
+      "id": 83,
+      "country": "ОАЭ",
+      "countryNorm": "оаэ",
+      "brandNorm": "apple",
+      "modelMatch": "",
+      "modelGenFrom": 0,
+      "brand": "Apple",
+      "simType": "SIM + eSIM",
+      "source": "seed",
+      "note": null,
+      "createdAt": "2026-07-28T21:30:29.870Z",
+      "updatedAt": "2026-09-22T10:23:56.015Z"
+    },
+    {
+      "id": 84,
+      "country": "ОАЭ",
+      "countryNorm": "оаэ",
+      "brandNorm": "apple",
+      "modelMatch": "",
+      "modelGenFrom": 17,
+      "brand": "Apple",
+      "simType": "eSIM + eSIM",
+      "source": "seed",
+      "note": "с 17-го ОАЭ — две eSIM",
+      "createdAt": "2026-07-28T21:30:29.879Z",
+      "updatedAt": "2026-09-22T10:23:58.880Z"
+    },
+    {
+      "id": 2895,
+      "country": "Оман",
+      "countryNorm": "оман",
+      "brandNorm": "apple",
+      "modelMatch": "",
+      "modelGenFrom": 17,
+      "brand": "Apple",
+      "simType": "eSIM + eSIM",
+      "source": "seed",
+      "note": "с 17-го Оман — две eSIM (eSIM-only рынок, MacRumors 2026-09-09)",
+      "createdAt": "2026-09-22T10:24:02.389Z",
+      "updatedAt": "2026-09-22T10:24:02.389Z"
+    },
+    {
+      "id": 2892,
+      "country": "Саудовская Аравия",
+      "countryNorm": "саудовская аравия",
+      "brandNorm": "apple",
+      "modelMatch": "",
+      "modelGenFrom": 17,
+      "brand": "Apple",
+      "simType": "eSIM + eSIM",
+      "source": "seed",
+      "note": "с 17-го Саудовская Аравия — две eSIM (eSIM-only рынок, MacRumors 2026-09-09)",
+      "createdAt": "2026-09-22T10:24:00.871Z",
+      "updatedAt": "2026-09-22T10:24:00.871Z"
+    },
+    {
+      "id": 109,
+      "country": "Сингапур",
+      "countryNorm": "сингапур",
+      "brandNorm": "apple",
+      "modelMatch": "",
+      "modelGenFrom": 0,
+      "brand": "Apple",
+      "simType": "SIM + eSIM",
+      "source": "seed",
+      "note": null,
+      "createdAt": "2026-07-28T21:30:30.153Z",
+      "updatedAt": "2026-09-22T10:23:58.309Z"
+    },
+    {
+      "id": 80,
+      "country": "США",
+      "countryNorm": "сша",
+      "brandNorm": "apple",
+      "modelMatch": "",
+      "modelGenFrom": 0,
+      "brand": "Apple",
+      "simType": "eSIM + eSIM",
+      "source": "seed",
+      "note": null,
+      "createdAt": "2026-07-28T21:30:29.836Z",
+      "updatedAt": "2026-09-22T10:23:55.731Z"
+    },
+    {
+      "id": 111,
+      "country": "Южная Корея",
+      "countryNorm": "южная корея",
+      "brandNorm": "apple",
+      "modelMatch": "",
+      "modelGenFrom": 0,
+      "brand": "Apple",
+      "simType": "SIM + eSIM",
+      "source": "seed",
+      "note": null,
+      "createdAt": "2026-07-28T21:30:30.170Z",
+      "updatedAt": "2026-09-22T10:23:57.457Z"
+    },
+    {
+      "id": 81,
+      "country": "Япония",
+      "countryNorm": "япония",
+      "brandNorm": "apple",
+      "modelMatch": "",
+      "modelGenFrom": 0,
+      "brand": "Apple",
+      "simType": "SIM + eSIM",
+      "source": "seed",
+      "note": null,
+      "createdAt": "2026-07-28T21:30:29.846Z",
+      "updatedAt": "2026-09-22T10:23:56.299Z"
+    },
+    {
+      "id": 82,
+      "country": "Япония",
+      "countryNorm": "япония",
+      "brandNorm": "apple",
+      "modelMatch": "",
+      "modelGenFrom": 17,
+      "brand": "Apple",
+      "simType": "eSIM + eSIM",
+      "source": "seed",
+      "note": "с 17-го Япония — две eSIM",
+      "createdAt": "2026-07-28T21:30:29.860Z",
+      "updatedAt": "2026-09-22T10:23:59.164Z"
+    }
+  ],
+  "countryAliases": [
+    {
+      "raw": "bh",
+      "canonical": "Бахрейн",
+      "source": "seed"
+    },
+    {
+      "raw": "bahrain",
+      "canonical": "Бахрейн",
+      "source": "seed"
+    },
+    {
+      "raw": "бахрейн",
+      "canonical": "Бахрейн",
+      "source": "seed"
+    },
+    {
+      "raw": "🇧🇭",
+      "canonical": "Бахрейн",
+      "source": "seed"
+    },
+    {
+      "raw": "us virgin islands",
+      "canonical": "Виргинские острова США",
+      "source": "seed"
+    },
+    {
+      "raw": "u.s. virgin islands",
+      "canonical": "Виргинские острова США",
+      "source": "seed"
+    },
+    {
+      "raw": "виргинские острова сша",
+      "canonical": "Виргинские острова США",
+      "source": "seed"
+    },
+    {
+      "raw": "🇻🇮",
+      "canonical": "Виргинские острова США",
+      "source": "seed"
+    },
+    {
+      "raw": "виргинские о-ва сша",
+      "canonical": "Виргинские острова США",
+      "source": "seed"
+    },
+    {
+      "raw": "vi",
+      "canonical": "Виргинские острова США",
+      "source": "seed"
+    },
+    {
+      "raw": "usvi",
+      "canonical": "Виргинские острова США",
+      "source": "seed"
+    },
+    {
+      "raw": "hk",
+      "canonical": "Гонконг",
+      "source": "seed"
+    },
+    {
+      "raw": "гонконг",
+      "canonical": "Гонконг",
+      "source": "seed"
+    },
+    {
+      "raw": "hong kong",
+      "canonical": "Гонконг",
+      "source": "seed"
+    },
+    {
+      "raw": "🇭🇰",
+      "canonical": "Гонконг",
+      "source": "seed"
+    },
+    {
+      "raw": "guam",
+      "canonical": "Гуам",
+      "source": "seed"
+    },
+    {
+      "raw": "гуам",
+      "canonical": "Гуам",
+      "source": "seed"
+    },
+    {
+      "raw": "🇬🇺",
+      "canonical": "Гуам",
+      "source": "seed"
+    },
+    {
+      "raw": "gu",
+      "canonical": "Гуам",
+      "source": "seed"
+    },
+    {
+      "raw": "eu",
+      "canonical": "Европа",
+      "source": "seed"
+    },
+    {
+      "raw": "🇪🇺",
+      "canonical": "Европа",
+      "source": "seed"
+    },
+    {
+      "raw": "europe",
+      "canonical": "Европа",
+      "source": "seed"
+    },
+    {
+      "raw": "европа",
+      "canonical": "Европа",
+      "source": "seed"
+    },
+    {
+      "raw": "🇮🇳",
+      "canonical": "Индия",
+      "source": "seed"
+    },
+    {
+      "raw": "in",
+      "canonical": "Индия",
+      "source": "seed"
+    },
+    {
+      "raw": "индия",
+      "canonical": "Индия",
+      "source": "seed"
+    },
+    {
+      "raw": "india",
+      "canonical": "Индия",
+      "source": "seed"
+    },
+    {
+      "raw": "индонезия",
+      "canonical": "Индонезия",
+      "source": "seed"
+    },
+    {
+      "raw": "🇮🇩",
+      "canonical": "Индонезия",
+      "source": "seed"
+    },
+    {
+      "raw": "indonesia",
+      "canonical": "Индонезия",
+      "source": "seed"
+    },
+    {
+      "raw": "id",
+      "canonical": "Индонезия",
+      "source": "seed"
+    },
+    {
+      "raw": "kazakhstan",
+      "canonical": "Казахстан",
+      "source": "seed"
+    },
+    {
+      "raw": "казахстан",
+      "canonical": "Казахстан",
+      "source": "seed"
+    },
+    {
+      "raw": "🇰🇿",
+      "canonical": "Казахстан",
+      "source": "seed"
+    },
+    {
+      "raw": "kz",
+      "canonical": "Казахстан",
+      "source": "seed"
+    },
+    {
+      "raw": "ca",
+      "canonical": "Канада",
+      "source": "seed"
+    },
+    {
+      "raw": "🇨🇦",
+      "canonical": "Канада",
+      "source": "seed"
+    },
+    {
+      "raw": "canada",
+      "canonical": "Канада",
+      "source": "seed"
+    },
+    {
+      "raw": "канада",
+      "canonical": "Канада",
+      "source": "seed"
+    },
+    {
+      "raw": "🇶🇦",
+      "canonical": "Катар",
+      "source": "seed"
+    },
+    {
+      "raw": "qatar",
+      "canonical": "Катар",
+      "source": "seed"
+    },
+    {
+      "raw": "qa",
+      "canonical": "Катар",
+      "source": "seed"
+    },
+    {
+      "raw": "катар",
+      "canonical": "Катар",
+      "source": "seed"
+    },
+    {
+      "raw": "🇨🇳",
+      "canonical": "Китай",
+      "source": "seed"
+    },
+    {
+      "raw": "китай",
+      "canonical": "Китай",
+      "source": "seed"
+    },
+    {
+      "raw": "china",
+      "canonical": "Китай",
+      "source": "seed"
+    },
+    {
+      "raw": "cn",
+      "canonical": "Китай",
+      "source": "seed"
+    },
+    {
+      "raw": "кувейт",
+      "canonical": "Кувейт",
+      "source": "seed"
+    },
+    {
+      "raw": "kuwait",
+      "canonical": "Кувейт",
+      "source": "seed"
+    },
+    {
+      "raw": "kw",
+      "canonical": "Кувейт",
+      "source": "seed"
+    },
+    {
+      "raw": "🇰🇼",
+      "canonical": "Кувейт",
+      "source": "seed"
+    },
+    {
+      "raw": "мексика",
+      "canonical": "Мексика",
+      "source": "seed"
+    },
+    {
+      "raw": "🇲🇽",
+      "canonical": "Мексика",
+      "source": "seed"
+    },
+    {
+      "raw": "mx",
+      "canonical": "Мексика",
+      "source": "seed"
+    },
+    {
+      "raw": "mexico",
+      "canonical": "Мексика",
+      "source": "seed"
+    },
+    {
+      "raw": "uae",
+      "canonical": "ОАЭ",
+      "source": "seed"
+    },
+    {
+      "raw": "🇦🇪",
+      "canonical": "ОАЭ",
+      "source": "seed"
+    },
+    {
+      "raw": "ae",
+      "canonical": "ОАЭ",
+      "source": "seed"
+    },
+    {
+      "raw": "оаэ",
+      "canonical": "ОАЭ",
+      "source": "seed"
+    },
+    {
+      "raw": "om",
+      "canonical": "Оман",
+      "source": "seed"
+    },
+    {
+      "raw": "🇴🇲",
+      "canonical": "Оман",
+      "source": "seed"
+    },
+    {
+      "raw": "оман",
+      "canonical": "Оман",
+      "source": "seed"
+    },
+    {
+      "raw": "oman",
+      "canonical": "Оман",
+      "source": "seed"
+    },
+    {
+      "raw": "🇸🇦",
+      "canonical": "Саудовская Аравия",
+      "source": "seed"
+    },
+    {
+      "raw": "sa",
+      "canonical": "Саудовская Аравия",
+      "source": "seed"
+    },
+    {
+      "raw": "ksa",
+      "canonical": "Саудовская Аравия",
+      "source": "seed"
+    },
+    {
+      "raw": "saudi arabia",
+      "canonical": "Саудовская Аравия",
+      "source": "seed"
+    },
+    {
+      "raw": "саудовская аравия",
+      "canonical": "Саудовская Аравия",
+      "source": "seed"
+    },
+    {
+      "raw": "us",
+      "canonical": "США",
+      "source": "seed"
+    },
+    {
+      "raw": "🇺🇸",
+      "canonical": "США",
+      "source": "seed"
+    },
+    {
+      "raw": "usa",
+      "canonical": "США",
+      "source": "seed"
+    },
+    {
+      "raw": "сша",
+      "canonical": "США",
+      "source": "seed"
+    },
+    {
+      "raw": "th",
+      "canonical": "Таиланд",
+      "source": "seed"
+    },
+    {
+      "raw": "🇹🇭",
+      "canonical": "Таиланд",
+      "source": "seed"
+    },
+    {
+      "raw": "таиланд",
+      "canonical": "Таиланд",
+      "source": "seed"
+    },
+    {
+      "raw": "thailand",
+      "canonical": "Таиланд",
+      "source": "seed"
+    },
+    {
+      "raw": "🇯🇵",
+      "canonical": "Япония",
+      "source": "seed"
+    },
+    {
+      "raw": "jp",
+      "canonical": "Япония",
+      "source": "seed"
+    },
+    {
+      "raw": "japan",
+      "canonical": "Япония",
+      "source": "seed"
+    },
+    {
+      "raw": "япония",
+      "canonical": "Япония",
+      "source": "seed"
+    }
+  ],
+  "supplierCountries": [
+    {
+      "country": "AU",
+      "n": 2
+    },
+    {
+      "country": null,
+      "n": 459
+    },
+    {
+      "country": "CN",
+      "n": 2
+    },
+    {
+      "country": "IN",
+      "n": 135
+    },
+    {
+      "country": "HK",
+      "n": 234
+    },
+    {
+      "country": "US",
+      "n": 51
+    },
+    {
+      "country": "JP",
+      "n": 456
+    }
+  ]
+}

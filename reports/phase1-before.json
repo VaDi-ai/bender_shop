@@ -1,0 +1,122 @@
+[
+  {
+    "id": 433,
+    "name": "Ipad 11",
+    "isAvailable": true,
+    "variants": 32,
+    "visibleVariants": 4,
+    "totalQty": 4
+  },
+  {
+    "id": 434,
+    "name": "Ipad Air 11",
+    "isAvailable": true,
+    "variants": 61,
+    "visibleVariants": 1,
+    "totalQty": 3
+  },
+  {
+    "id": 598,
+    "name": "Poco F6",
+    "isAvailable": false,
+    "variants": 2,
+    "visibleVariants": 0,
+    "totalQty": 0
+  },
+  {
+    "id": 712,
+    "name": "Ipad Air 13 )",
+    "isAvailable": false,
+    "variants": 29,
+    "visibleVariants": 0,
+    "totalQty": 0
+  },
+  {
+    "id": 576,
+    "name": "Redmi Note 14S 4G NFC",
+    "isAvailable": false,
+    "variants": 5,
+    "visibleVariants": 0,
+    "totalQty": 0
+  },
+  {
+    "id": 671,
+    "name": "Imac M4",
+    "isAvailable": false,
+    "variants": 56,
+    "visibleVariants": 0,
+    "totalQty": 0
+  },
+  {
+    "id": 119,
+    "name": "Яндекс Станция Макс",
+    "isAvailable": false,
+    "variants": 2,
+    "visibleVariants": 0,
+    "totalQty": 0
+  },
+  {
+    "id": 429,
+    "name": "Apple Watch S11",
+    "isAvailable": true,
+    "variants": 45,
+    "visibleVariants": 18,
+    "totalQty": 50
+  },
+  {
+    "id": 431,
+    "name": "Apple Watch Ultra 3",
+    "isAvailable": true,
+    "variants": 18,
+    "visibleVariants": 12,
+    "totalQty": 36
+  },
+  {
+    "id": 668,
+    "name": "Mac Mini M4 Pro",
+    "isAvailable": true,
+    "variants": 12,
+    "visibleVariants": 1,
+    "totalQty": 3
+  },
+  {
+    "id": 506,
+    "name": "Яндекс Станция 3",
+    "isAvailable": false,
+    "variants": 1,
+    "visibleVariants": 0,
+    "totalQty": 0
+  },
+  {
+    "id": 711,
+    "name": "Ipad Air 11 )",
+    "isAvailable": false,
+    "variants": 29,
+    "visibleVariants": 0,
+    "totalQty": 0
+  },
+  {
+    "id": 430,
+    "name": "Apple Watch Ultra 2",
+    "isAvailable": true,
+    "variants": 13,
+    "visibleVariants": 2,
+    "totalQty": 6
+  },
+  {
+    "id": 448,
+    "name": "Macbook Air M5",
+    "isAvailable": true,
+    "variants": 85,
+    "visibleVariants": 23,
+    "totalQty": 61
+  },
+  {
+    "id": 630,
+    "name": "Ipad Air 13",
+    "isAvailable": false,
+    "variants": 37,
+    "visibleVariants": 0,
+    "totalQty": 0
+  }
+]

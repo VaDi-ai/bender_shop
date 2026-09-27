@@ -44,11 +44,19 @@ R-padded/
 R-final/
 staging-flat/
 staging-named/
+Foto/
 Фото/
 Фото_ready/
 Новая папка/
 _tmp_*/
 _smoketest_*/
+
+# Local QA/debug artifacts
+/.playwright-mcp/
+/debug.log
+/*-modal.png
+/reports/*.csv
+/reports/*.log
 
 # Source archives (not part of repo)
 /*.zip

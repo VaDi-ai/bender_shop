@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BENDER//SHOP — каталог (мокап)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0a0a0a; --surface:#1c1c1e; --border:#333; --text:#fff; --hint:#888;
+    --accent:#a8ff3e; --accent-fg:#0a0a0a; --line:#1a1a1a; --neon:0 0 12px rgba(168,255,62,.45);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font-family:'JetBrains Mono',ui-monospace,monospace;
+    min-height:100vh;padding:0 0 60px;-webkit-font-smoothing:antialiased}
+
+  .hdr{position:sticky;top:0;z-index:10;display:flex;align-items:center;gap:12px;
+    padding:15px 20px;background:rgba(10,10,10,.92);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+  .logo{color:var(--accent);letter-spacing:3px;font-weight:700;font-size:18px;text-shadow:var(--neon);cursor:pointer}
+  .hdr .sp{margin-left:auto;display:flex;gap:8px}
+  .ic{width:34px;height:34px;border:1px solid var(--border);border-radius:9px;display:flex;
+    align-items:center;justify-content:center;color:var(--hint);cursor:pointer;transition:.2s}
+  .ic:hover{border-color:var(--accent);color:var(--accent)}
+  .ic svg{width:16px;height:16px}
+
+  .wrap{max-width:1180px;margin:0 auto;padding:22px 20px 0}
+  .crumb{font-size:11px;letter-spacing:1.5px;color:var(--hint);margin-bottom:16px}
+  .crumb span{cursor:pointer} .crumb span:hover{color:#bbb}
+  .crumb b{color:var(--accent);font-weight:500} .crumb .sep{color:#444;margin:0 8px}
+  .title{display:flex;align-items:baseline;gap:14px;margin-bottom:18px;flex-wrap:wrap}
+  .title h1{font-size:clamp(22px,4vw,32px);font-weight:700;letter-spacing:1px}
+  .title .count{font-size:13px;color:var(--hint);letter-spacing:1px}
+
+  /* верхний фильтр по бренду — горизонтальная прокрутка */
+  .rowLabel{font-size:9.5px;letter-spacing:2.5px;color:#5a5a5a;margin:0 0 8px 2px}
+  .filterRow{position:relative;margin-bottom:6px}
+  .filterRow::after{content:"";position:absolute;top:0;right:0;bottom:8px;width:44px;pointer-events:none;
+    background:linear-gradient(90deg,rgba(10,10,10,0) 0%,var(--bg) 90%)}
+  .chips{display:flex;gap:9px;overflow-x:auto;scroll-behavior:smooth;padding-bottom:8px;cursor:grab;
+    scrollbar-width:none;-ms-overflow-style:none}
+  .chips::-webkit-scrollbar{display:none}
+  .chip{flex:0 0 auto;font-size:11.5px;letter-spacing:1.2px;padding:9px 16px;border:1px solid var(--border);
+    border-radius:9px;color:var(--hint);cursor:pointer;white-space:nowrap;transition:.18s;user-select:none}
+  .chip:hover{color:#ccc;border-color:#555}
+  .chip.on{color:var(--accent);border-color:var(--accent);box-shadow:0 0 10px rgba(168,255,62,.14)}
+
+  /* сетка карточек (общая для линеек и моделей) */
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(168px,1fr));gap:16px;margin-top:22px}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:16px;overflow:hidden;
+    display:flex;flex-direction:column;cursor:pointer;transition:.18s;position:relative}
+  .card:hover{border-color:var(--accent);box-shadow:0 0 0 1px rgba(168,255,62,.22)}
+  .photo{aspect-ratio:1/1;background:radial-gradient(120% 120% at 50% 30%,#161618 0%,#0f0f10 100%);
+    display:flex;align-items:center;justify-content:center;padding:14px;border-bottom:1px solid #232326}
+  .photo svg{width:64%;height:64%;opacity:.9}
+  .photo svg *{stroke:var(--accent)}
+  .meta{padding:13px;display:flex;flex-direction:column;gap:6px;flex:1}
+  .nm{font-size:12.5px;line-height:1.35;letter-spacing:.3px}
+  .sub{font-size:9.5px;letter-spacing:1px;color:var(--hint);margin-top:auto}
+  .price{font-size:13px;color:#fff;letter-spacing:.5px;margin-top:auto}
+
+  /* нет в наличии — погашена и не нажимается (позитивного ярлыка нет вообще) */
+  .card.oos{opacity:.38;pointer-events:none}
+  .card.oos .photo svg *{stroke:var(--hint)}
+  .card.oos .price{color:var(--hint)}
+  .badge{position:absolute;top:10px;right:10px;font-size:8px;letter-spacing:1px;color:#0a0a0a;
+    background:var(--hint);padding:3px 7px;border-radius:6px;font-weight:700;z-index:2}
+
+  .empty{grid-column:1/-1;padding:38px;text-align:center;color:var(--hint);font-size:12px;letter-spacing:1px;
+    border:1px dashed var(--border);border-radius:14px}
+  .note{margin-top:26px;padding-top:16px;border-top:1px solid var(--line);
+    font-size:10.5px;color:#666;letter-spacing:.5px;line-height:1.8}
+  .note b{color:var(--accent);font-weight:500}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;scroll-behavior:auto!important}}
+</style>
+</head>
+<body>
+<div class="hdr">
+  <span class="logo" onclick="toBrand()">BENDER//SHOP</span>
+  <span class="sp">
+    <span class="ic" title="Поиск"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg></span>
+    <span class="ic" title="Корзина"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.7 13.4a2 2 0 0 0 2 1.6h9.7a2 2 0 0 0 2-1.6L23 6H6"/></svg></span>
+    <span class="ic" title="Меню"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg></span>
+  </span>
+</div>
+
+<div class="wrap">
+  <div class="crumb" id="crumb"></div>
+  <div class="title"><h1 id="ttl"></h1><span class="count" id="cnt"></span></div>
+
+  <div class="rowLabel">БРЕНД</div>
+  <div class="filterRow"><div class="chips" id="brandChips"></div></div>
+
+  <div class="grid" id="grid"></div>
+
+  <div class="note">
+    Дрилл-даун <b>бренд → линейка → модель</b>. Бренд — верхний чип-фильтр (свайп/тяни).
+    Линейка и модель — <b>фото-карточки</b>: слот <b>.photo</b> (aspect 1:1) заполняется из <b>photoUrl</b>, силуэт — плейсхолдер.
+    Модели по <b>sortOrder</b> (новые сверху, без подписи). Пустые линейки (iMac, AirPods, Galaxy Watch, «Прочее») → сразу к товарам.
+    Нет остатка (<b>quantity=0 || !inStock</b>) → карточка <b>погашена и не нажимается</b> (в бою — либо так, либо скрыта). Позитивного «в наличии» на карточках нет.
+  </div>
+</div>
+
+<script>
+  const OOS = new Set(['iPhone 15','Galaxy S25 FE','Supersonic HD15']);
+  const PRICE = {'Apple':79990,'Samsung':64990,'Dyson':32990,'Garmin':29990,'Прочее':9990};
+
+  const G = {
+    phone:'<svg viewBox="0 0 24 24" fill="none" stroke-width="1.4"><rect x="6.5" y="2.5" width="11" height="19" rx="2.5"/><line x1="10" y1="5" x2="14" y2="5"/></svg>',
+    laptop:'<svg viewBox="0 0 24 24" fill="none" stroke-width="1.4"><rect x="4" y="4" width="16" height="11" rx="1.5"/><path d="M2 19h20l-1.5-2H3.5z"/></svg>',
+    tablet:'<svg viewBox="0 0 24 24" fill="none" stroke-width="1.4"><rect x="4.5" y="3" width="15" height="18" rx="2"/><line x1="10.5" y1="18" x2="13.5" y2="18"/></svg>',
+    watch:'<svg viewBox="0 0 24 24" fill="none" stroke-width="1.4"><rect x="7" y="7" width="10" height="10" rx="3"/><path d="M9 7l.6-3h4.8L15 7M9 17l.6 3h4.8l.6-3"/></svg>',
+    buds:'<svg viewBox="0 0 24 24" fill="none" stroke-width="1.4"><path d="M8 3v10a3 3 0 1 1-3-3M16 3v10a3 3 0 1 0 3-3"/></svg>',
+    desktop:'<svg viewBox="0 0 24 24" fill="none" stroke-width="1.4"><rect x="3" y="4" width="18" height="12" rx="1.5"/><path d="M9 20h6M12 16v4"/></svg>',
+    beauty:'<svg viewBox="0 0 24 24" fill="none" stroke-width="1.4"><circle cx="9" cy="7" r="4.5"/><path d="M12.5 10.5L20 20"/></svg>',
+    box:'<svg viewBox="0 0 24 24" fill="none" stroke-width="1.4"><path d="M12 2 3 6.5v11L12 22l9-4.5v-11z"/><path d="M3 6.5 12 11l9-4.5M12 11v11"/></svg>'
+  };
+  function glyph(name){
+    const s=name.toLowerCase();
+    if(/iphone|galaxy s|galaxy z|phone/.test(s))return G.phone;
+    if(/macbook|ноут/.test(s))return G.laptop;
+    if(/ipad|tab/.test(s))return G.tablet;
+    if(/watch|venu|forerunner|fenix|часы/.test(s))return G.watch;
+    if(/airpods|buds|аудио/.test(s))return G.buds;
+    if(/mac studio|mac mini|imac|desktop|камер|игров/.test(s))return G.desktop;
+    if(/фен|стайлер|уход/.test(s))return G.beauty;
+    return G.box;
+  }
+
+  const DATA = [
+    {name:'Apple', lines:[
+      {name:'iPhone', models:['iPhone 17 Pro Max','iPhone 17 Pro','iPhone 17','iPhone Air','iPhone 17e','iPhone 16 Pro Max','iPhone 16 Pro','iPhone 16','iPhone 16e','iPhone 15 Pro Max','iPhone 15 Pro','iPhone 15']},
+      {name:'MacBook', models:['MacBook Pro 16 M5','MacBook Pro 14 M5','MacBook Air 15 M5','MacBook Air 13 M5','MacBook NEO','MacBook Air 15 M4','MacBook Air 13 M4']},
+      {name:'Mac Studio', models:['Mac Studio M3 Ultra','Mac Studio M4 Max']},
+      {name:'Mac Mini', models:['Mac Mini M4 Pro','Mac Mini M4']},
+      {name:'iMac', models:[]},
+      {name:'iPad', models:['iPad Pro 13 M5','iPad Pro 11 M5','iPad Air 13 M4','iPad Air 11 M4','iPad 11','iPad Mini','iPad Pro 13 M4','iPad Pro 11 M4','iPad Air 13 M3','iPad Air 11 M3']},
+      {name:'AirPods', models:[]},
+      {name:'Apple Watch', models:['Watch Ultra 3','Watch Series 11','Watch SE']},
+    ]},
+    {name:'Samsung', lines:[
+      {name:'Galaxy S', models:['Galaxy S26 Ultra','Galaxy S26 +','Galaxy S26','Galaxy S25 Ultra','Galaxy S25 +','Galaxy S25','Galaxy S25 FE','Galaxy S25 Edge']},
+      {name:'Galaxy Z', models:['Galaxy Z Fold','Galaxy Z Flip']},
+      {name:'Galaxy Watch', models:[]},{name:'Galaxy Tab', models:[]},{name:'Galaxy Buds', models:[]},
+    ]},
+    {name:'Dyson', lines:[
+      {name:'Фен', models:['Supersonic HD15','Supersonic HD17','Supersonic HD18']},
+      {name:'Стайлер', models:['Dyson HS08','Dyson HS09']},{name:'Пылесосы', models:[]},
+    ]},
+    {name:'Garmin', lines:[{name:'VENU', models:[]},{name:'Forerunner', models:[]},{name:'Fenix', models:[]}]},
+    {name:'Прочее', lines:[{name:'Игровое', models:[]},{name:'Камеры', models:[]},{name:'Робот-пылесосы', models:[]},{name:'Фитнес и уход', models:[]}]},
+  ];
+
+  let activeBrand = DATA[0];
+  let activeLine  = null;              // null → показываем карточки линеек; иначе — модели
+  const $ = id => document.getElementById(id);
+  const esc = s => s.replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+  const fmt = n => n.toLocaleString('ru-RU')+' ₽';
+
+  function renderBrandChips(){
+    $('brandChips').innerHTML = DATA.map(b=>`<span class="chip${b===activeBrand?' on':''}" data-b="${esc(b.name)}">${esc(b.name.toUpperCase())}</span>`).join('');
+    $('brandChips').querySelectorAll('.chip').forEach(el=>el.onclick=()=>{activeBrand=DATA.find(x=>x.name===el.dataset.b);activeLine=null;render();});
+  }
+
+  function render(){
+    renderBrandChips();
+    const crumb=[`<span onclick="toBrand()">ГЛАВНАЯ</span>`,`<span onclick="toBrand()">КАТАЛОГ</span>`,`<span onclick="toLines()">${esc(activeBrand.name.toUpperCase())}</span>`];
+
+    if(!activeLine){
+      // ── уровень ЛИНЕЕК (фото-карточки) ──
+      $('crumb').innerHTML=crumb.slice(0,2).concat(`<b>${esc(activeBrand.name.toUpperCase())}</b>`).join('<span class="sep">—</span>');
+      $('ttl').textContent=activeBrand.name;
+      $('cnt').textContent=activeBrand.lines.length+' линеек';
+      $('grid').innerHTML=activeBrand.lines.map(l=>{
+        const sub = l.models.length ? l.models.length+' моделей' : 'к товарам →';
+        return `<div class="card" data-l="${esc(l.name)}"><div class="photo">${glyph(l.name)}</div>`+
+          `<div class="meta"><div class="nm">${esc(activeBrand.name)} ${esc(l.name)}</div><div class="sub">${sub}</div></div></div>`;
+      }).join('');
+      $('grid').querySelectorAll('.card').forEach(el=>el.onclick=()=>{activeLine=activeBrand.lines.find(x=>x.name===el.dataset.l);render();});
+      return;
+    }
+
+    // ── уровень МОДЕЛЕЙ (фото-карточки) ──
+    $('crumb').innerHTML=crumb.concat(`<b>${esc(activeLine.name.toUpperCase())}</b>`).join('<span class="sep">—</span>');
+    $('ttl').textContent=`${activeBrand.name} / ${activeLine.name}`;
+    const models=activeLine.models, gl=glyph(activeLine.name);
+    if(!models.length){
+      $('cnt').textContent='';
+      $('grid').innerHTML=`<div class="empty">Без подмоделей — сразу к товарам линейки «${esc(activeLine.name)}»</div>`;
+      return;
+    }
+    $('cnt').textContent=models.length+' моделей';
+    const base=PRICE[activeBrand.name]||9990;
+    $('grid').innerHTML=models.map((m,i)=>{
+      const oos=OOS.has(m), price=base+(models.length-i)*7000;
+      return `<div class="card${oos?' oos':''}">${oos?'<span class="badge">НЕТ В НАЛИЧИИ</span>':''}`+
+        `<div class="photo">${gl}</div>`+
+        `<div class="meta"><div class="nm">${esc(m)}</div><div class="price">${oos?'—':'от '+fmt(price)}</div></div></div>`;
+    }).join('');
+  }
+  function toBrand(){activeBrand=DATA[0];activeLine=null;render();}
+  function toLines(){activeLine=null;render();}
+
+  document.querySelectorAll('.chips').forEach(bar=>{
+    let down=false,sx=0,sl=0,moved=false;
+    bar.addEventListener('mousedown',e=>{down=true;moved=false;sx=e.pageX;sl=bar.scrollLeft;bar.style.cursor='grabbing';});
+    window.addEventListener('mouseup',()=>{down=false;bar.style.cursor='grab';});
+    bar.addEventListener('mousemove',e=>{if(!down)return;const d=e.pageX-sx;if(Math.abs(d)>4)moved=true;bar.scrollLeft=sl-d;});
+    bar.addEventListener('click',e=>{if(moved){e.stopPropagation();e.preventDefault();}},true);
+  });
+  render();
+</script>
+</body>
+</html>
