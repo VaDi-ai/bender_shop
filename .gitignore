@@ -52,11 +52,14 @@ _tmp_*/
 _smoketest_*/
 
 # Local QA/debug artifacts
+/qa/
 /.playwright-mcp/
 /debug.log
 /*-modal.png
 /reports/*.csv
 /reports/*.log
+/reports/*.xlsx
+/reports/*.zip
 
 # Source archives (not part of repo)
 /*.zip

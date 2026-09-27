@@ -8,6 +8,7 @@
     "dev": "ts-node bot/index.ts",
     "prebuild": "prisma generate",
     "build": "tsc && node scripts/verify-dist.cjs",
+    "check:hygiene": "node scripts/check-repo-hygiene.cjs",
     "db:migrate": "prisma migrate dev",
     "db:generate": "prisma generate",
     "db:studio": "prisma studio",
