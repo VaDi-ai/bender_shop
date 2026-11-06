@@ -5,6 +5,7 @@ initSentry()
 import { Telegraf, Markup } from 'telegraf'
 import { message } from 'telegraf/filters'
 import { setupClientHandlers } from '../webhooks/telegram'
+import { buildQuickEntry } from './price-menu'
 import { isBotAdmin } from '../lib/bot-admin-access'
 import { auditedAliasUpsert, auditedAliasDelete } from '../lib/price-alias'
 import { startScheduler, isRunning as schedulerRunning } from './scheduler'
@@ -179,7 +180,9 @@ const MENU_BUTTONS = new Set([
 // ─── Обработка сообщений от клиентов ─────────────────────────────────────────
 // Регистрируется ДО admin-middleware, чтобы клиенты не получали «⛔ Доступ запрещён»
 
-setupClientHandlers(bot)
+setupClientHandlers(bot, () => buildQuickEntry(
+  WEBAPP_URL || ADMIN_URL.replace(/\/admin$/, '/shop'), ADMIN_URL,
+))
 
 // ─── Обработка сообщений из чатов поставщиков ───────────────────────────────
 // Регистрируется ДО admin-middleware, чтобы прайсы от поставщиков обрабатывались.
@@ -455,12 +458,10 @@ bot.start(async (ctx, next) => {
     adminKeyboard,
   )
   // Веб-входы: витрина и админка. Старое бот-меню остаётся фолбэком (env-админам).
+  const quickEntry = buildQuickEntry(WEBAPP_URL || ADMIN_URL.replace(/\/admin$/, '/shop'), ADMIN_URL)
   const sent = await ctx.reply(
-    'Быстрый вход:',
-    Markup.inlineKeyboard([[
-      Markup.button.webApp('🛍 Открыть магазин', WEBAPP_URL || ADMIN_URL.replace(/\/admin$/, '/shop')),
-      Markup.button.webApp('🛠 Админка', ADMIN_URL),
-    ]]),
+    quickEntry.text,
+    { reply_markup: quickEntry.reply_markup },
   )
   // Закрепляем свежее сообщение: старый пин Telegram заменяет сам при
   // повторном pin в том же чате. Тихо — уведомление о пине не нужно.

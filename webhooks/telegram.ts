@@ -39,6 +39,7 @@ import { encryptClientField, decryptClientField, encryptDate, decryptDate } from
 import log, { safeLog } from '../lib/logger'
 import { Sentry } from '../lib/sentry'
 import { isBotAdmin } from '../lib/bot-admin-access'
+import { buildClientWelcome, registerPriceMenuHandlers, type PriceMenuPage } from '../bot/price-menu'
 
 const CRM_GROUP_ID = Number(process.env.CRM_GROUP_ID)
 const ADMIN_IDS = (process.env.ADMIN_IDS ?? '').split(',').map((id) => Number(id.trim()))
@@ -211,7 +212,8 @@ function sourceLabel(source: string): string {
  * и inline-кнопок карточки клиента.
  * ВАЖНО: вызывать ДО admin-middleware в bot/index.ts.
  */
-export function setupClientHandlers(bot: Telegraf): void {
+export function setupClientHandlers(bot: Telegraf, getQuickHome?: () => PriceMenuPage): void {
+  registerPriceMenuHandlers(bot, getQuickHome)
   // ── Обработчик нажатий inline-кнопок ────────────────────────────────────────
 
   const ADMIN_ACTION_PREFIXES = ['cp:', 'seg:', 'st:', 'note:', 'hist:', 'card:', 'edit:', 'crm:', 'tags:', 'ai:']
@@ -1209,31 +1211,11 @@ async function handleClientMessage(
       })
     }
 
-    // Приветственное сообщение для нового клиента
-    if (isNewClient) {
-      const webAppUrl = process.env.WEBAPP_URL
+    // Повторный /start возвращает вход в магазин и прайс существующему клиенту.
+    if (isNewClient || /^\/start(?:@\w+)?(?:\s|$)/.test(text)) {
       try {
-        const welcomeText = [
-          'Привет! 👋 Добро пожаловать в Bender Shop!',
-          '',
-          '🛍 У нас можно купить технику по лучшим ценам — iPhone, MacBook, PlayStation, Dyson и многое другое.',
-          '',
-          '📍 Мы работаем:',
-          '   Барклая 8, ТЦ Горбушка, Павильон 202',
-          '   ⏰ Ежедневно с 11:00 до 20:00',
-          '',
-          '💬 Напишите что вас интересует — ответим быстро!',
-          '🛒 Или откройте каталог по кнопке ниже 👇',
-        ].join('\n')
-        if (webAppUrl) {
-          await telegram.sendMessage(from.id, welcomeText, {
-            reply_markup: {
-              inline_keyboard: [[{ text: '🛍 Открыть каталог', web_app: { url: webAppUrl } }]],
-            },
-          })
-        } else {
-          await telegram.sendMessage(from.id, welcomeText)
-        }
+        const welcome = buildClientWelcome(process.env.WEBAPP_URL)
+        await telegram.sendMessage(from.id, welcome.text, { reply_markup: welcome.reply_markup })
       } catch { /* ignore: user may have blocked bot */ }
     }
 

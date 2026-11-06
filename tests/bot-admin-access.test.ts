@@ -89,7 +89,13 @@ describe('маршрутизация личных сообщений (webhooks/t
 
   function makeBot() {
     const bot = new Telegraf('123456:TEST')
-    ;(bot.telegram as any).callApi = vi.fn().mockResolvedValue({ message_id: 2 })
+    bot.botInfo = {
+      id: 123456, is_bot: true, first_name: 'Test', username: 'test_bot',
+      can_join_groups: true, can_read_all_group_messages: false, supports_inline_queries: false,
+    }
+    const callApi = vi.fn().mockResolvedValue({ message_id: 2 })
+    // Telegraf creates a Telegram instance per update; mock that instance too.
+    bot.use(async (ctx, next) => { ctx.telegram.callApi = callApi; return next() })
     setupClientHandlers(bot)
     const downstream = vi.fn()
     bot.on('message', async (ctx) => { downstream(ctx.from?.id) })
