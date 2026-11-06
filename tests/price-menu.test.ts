@@ -75,11 +75,13 @@ describe('static price navigation', () => {
       }
       for (const childId of node.children ?? []) {
         expect(PRICE_MENU_NODES[childId]!.parent).toBe(id)
-        expect(buttons).toContainEqual({ text: PRICE_MENU_NODES[childId]!.title, callback_data: `price:${home}:${childId}` })
+        expect(buttons).toContainEqual(childId === 'order'
+          ? { text: 'Оформить заказ у менеджера', url: 'https://t.me/BenderManager' }
+          : { text: PRICE_MENU_NODES[childId]!.title, callback_data: `price:${home}:${childId}` })
         visit(childId)
       }
       const urls = buttons.filter(b => 'url' in b).map(b => ('url' in b ? b.url : ''))
-      expect(urls).toEqual([])
+      expect(urls).toEqual(id === 'root' || id === 'order' ? ['https://t.me/BenderManager'] : [])
       if (!node.children && !node.text) expect(page.text).toContain('Прайс скоро появится.')
     }
     visit('root')

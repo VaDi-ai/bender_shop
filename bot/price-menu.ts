@@ -13,7 +13,7 @@ export const PRICE_MENU_NODES: Record<string, PriceNode> = {
     'vacuum_cleaners', 'tv', 'accessories',
   ] },
   info: { title: 'Основная информация', parent: 'root', text: 'Барклая 8, ТЦ Горбушка, Павильон 202\nЕжедневно с 11:00 до 20:00' },
-  order: { title: 'Оформить заказ', parent: 'root', text: 'Для заказа откройте магазин в главном меню или напишите менеджеру.' },
+  order: { title: 'Оформить заказ у менеджера', parent: 'root', text: 'Для оформления заказа напишите @BenderManager.' },
   apple: { title: 'Apple', parent: 'root', children: [
     'iphone_18_pro', 'iphone_17_pro', 'iphone_17_air', 'iphone_13_16',
     'airpods', 'apple_watch', 'ipad', 'macbook_air', 'macbook_pro', 'mac_studio_mini',
@@ -87,15 +87,24 @@ export function getPriceMenuStore(): PriceMenuStore {
   return store
 }
 
+const MANAGER_URL = 'https://t.me/BenderManager'
+const ORDER_LABEL = 'Оформить заказ у менеджера'
+
 export function buildPriceMenuPage(nodeId: string, home: PriceHomeVariant): PriceMenuPage | undefined {
   const nodes = getPriceMenuStore().snapshot().nodes
   if (!Object.prototype.hasOwnProperty.call(nodes, nodeId)) return undefined
   const node = nodes[nodeId]!
   const rows: InlineKeyboardButton[][] = (node.children ?? []).map((childId) => [
-    { text: nodes[childId]!.title, callback_data: `price:${home}:${childId}` },
+    childId === 'order'
+      ? { text: nodes[childId]!.title === 'Оформить заказ' ? ORDER_LABEL : nodes[childId]!.title, url: MANAGER_URL }
+      : { text: nodes[childId]!.title, callback_data: `price:${home}:${childId}` },
   ])
+  // Keep earlier order callbacks usable, including menus saved before the manager link.
+  if (nodeId === 'order') rows.push([{ text: ORDER_LABEL, url: MANAGER_URL }])
   rows.push([{ text: 'Назад', callback_data: `price:${home}:${node.parent}` }])
-  const body = node.text ?? (node.children?.length ? 'Выберите раздел:' : 'Прайс скоро появится.')
+  const text = nodeId === 'order' && node.text === 'Для заказа откройте магазин в главном меню или напишите менеджеру.'
+    ? 'Для оформления заказа напишите @BenderManager.' : node.text
+  const body = text ?? (node.children?.length ? 'Выберите раздел:' : 'Прайс скоро появится.')
   return { text: `${node.title}\n\n${body}`, reply_markup: { inline_keyboard: rows } }
 }
 
