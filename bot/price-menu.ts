@@ -3,40 +3,8 @@ import type { InlineKeyboardButton, InlineKeyboardMarkup } from 'telegraf/types'
 
 export type PriceHomeVariant = 'client' | 'quick'
 export type PriceMenuPage = { text: string; reply_markup: InlineKeyboardMarkup }
-type PriceNode = { title: string; parent: string; children?: string[]; text?: string }
-type PriceLink = { title: string; url: string }
-
-// Navigation only: these references belong to existing, manually edited posts.
-export const PRICE_POST_LINKS: Record<string, PriceLink[]> = {
-  iphone_18_pro: [
-    { title: 'iPhone 18 Pro', url: 'https://t.me/bendershopDevice/1757' },
-    { title: 'iPhone 18 Pro Max', url: 'https://t.me/bendershopDevice/1758' },
-  ],
-  iphone_17_pro: [{ title: 'Общий список iPhone 17 / Air / Pro', url: 'https://t.me/bendershopprice/127' }],
-  iphone_17_air: [{ title: 'Общий список iPhone 17 / Air / Pro', url: 'https://t.me/bendershopprice/127' }],
-  iphone_13_16: [
-    { title: 'iPhone 13', url: 'https://t.me/bendershopprice/110' },
-    { title: 'iPhone 14', url: 'https://t.me/bendershopprice/111' },
-    { title: 'iPhone 15', url: 'https://t.me/bendershopprice/112' },
-    { title: 'iPhone 16E / 16', url: 'https://t.me/bendershopprice/113' },
-    { title: 'iPhone 16 Pro', url: 'https://t.me/bendershopprice/114' },
-    { title: 'iPhone 16 Pro Max', url: 'https://t.me/bendershopprice/115' },
-  ],
-  airpods: [{ title: 'AirPods 4, 5, 5 Wireless, Pro 3', url: 'https://t.me/bendershopDevice/1714' }],
-  apple_watch: [{ title: 'Apple Watch S12', url: 'https://t.me/bendershopDevice/1732' }],
-  ipad: [{ title: 'iPad, iPad Air, iPad Pro', url: 'https://t.me/bendershopDevice/1755' }],
-  macbook_air: [{ title: 'MacBook Air', url: 'https://t.me/bendershopprice/30' }],
-  macbook_pro: [{ title: 'MacBook Pro', url: 'https://t.me/bendershopprice/31' }],
-  mac_studio_mini: [
-    { title: 'Mac mini', url: 'https://t.me/bendershopDevice/1717' },
-    { title: 'Mac Studio', url: 'https://t.me/bendershopDevice/1761' },
-  ],
-  dyson: [{ title: 'Dyson', url: 'https://t.me/bendershopprice/36' }],
-  cameras: [{ title: 'Камеры, стабилизаторы, META, Whoop', url: 'https://t.me/bendershopprice/39' }],
-  gaming_vr: [{ title: 'PS5 и DualSense', url: 'https://t.me/bendershopDevice/1762' }],
-  vacuum_cleaners: [{ title: 'Пылесосы Dreame / Roborock', url: 'https://t.me/bendershopprice/40' }],
-  accessories: [{ title: 'Аксессуары и AirPods', url: 'https://t.me/bendershopprice/35' }],
-}
+import path from 'node:path'
+import { PriceMenuStore, type PriceNode } from './price-menu-store'
 
 export const PRICE_MENU_NODES: Record<string, PriceNode> = {
   root: { title: 'Каталог Bender Shop', parent: 'home', children: [
@@ -105,21 +73,29 @@ export function buildQuickEntry(shopUrl: string, adminUrl: string): PriceMenuPag
       { text: '🛠 Админка', web_app: { url: adminUrl } },
     ],
     [{ text: 'ПРАЙС', callback_data: 'price:quick:root' }],
+    [{ text: '✏️ Управление прайсом', callback_data: 'pm:view:root' }],
   ] } }
 }
 
+let store: PriceMenuStore | undefined
+export function getPriceMenuStore(): PriceMenuStore {
+  if (!store) {
+    const file = process.env.PRICE_MENU_FILE || (process.env.PHOTOS_DIR
+      ? path.join(process.env.PHOTOS_DIR, '.bender-price-menu', 'menu.json') : undefined)
+    store = new PriceMenuStore(file, PRICE_MENU_NODES)
+  }
+  return store
+}
+
 export function buildPriceMenuPage(nodeId: string, home: PriceHomeVariant): PriceMenuPage | undefined {
-  if (!Object.prototype.hasOwnProperty.call(PRICE_MENU_NODES, nodeId)) return undefined
-  const node = PRICE_MENU_NODES[nodeId]!
-  const links = PRICE_POST_LINKS[nodeId]
+  const nodes = getPriceMenuStore().snapshot().nodes
+  if (!Object.prototype.hasOwnProperty.call(nodes, nodeId)) return undefined
+  const node = nodes[nodeId]!
   const rows: InlineKeyboardButton[][] = (node.children ?? []).map((childId) => [
-    { text: PRICE_MENU_NODES[childId]!.title, callback_data: `price:${home}:${childId}` },
+    { text: nodes[childId]!.title, callback_data: `price:${home}:${childId}` },
   ])
-  for (const link of links ?? []) rows.push([{ text: link.title, url: link.url }])
   rows.push([{ text: 'Назад', callback_data: `price:${home}:${node.parent}` }])
-  const body = node.text ?? (node.children ? 'Выберите раздел:' : links
-    ? 'Существующие сообщения прайса. Дата последнего изменения цен не подтверждена. Цены и наличие уточняйте у менеджера.'
-    : 'Ссылка на прайс пока не добавлена.')
+  const body = node.text ?? (node.children?.length ? 'Выберите раздел:' : 'Прайс скоро появится.')
   return { text: `${node.title}\n\n${body}`, reply_markup: { inline_keyboard: rows } }
 }
 
@@ -140,7 +116,7 @@ export function registerPriceMenuHandlers(bot: Telegraf, getQuickHome?: () => Pr
     const nodeId = match[2]!
     const page = nodeId === 'home'
       ? home === 'client' ? buildClientWelcome(process.env.WEBAPP_URL) : getQuickHome?.()
-      : buildPriceMenuPage(nodeId, home)
+      : buildPriceMenuPage(nodeId, home) ?? buildPriceMenuPage('root', home)
     await ctx.answerCbQuery()
     if (!page) return
     try {

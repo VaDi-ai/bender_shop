@@ -259,6 +259,7 @@ async function setAdminChatCommands(adminId: number): Promise<void> {
       { command: 'start', description: 'Главное меню' },
       { command: 'shop', description: 'Открыть магазин' },
       { command: 'admin', description: 'Веб-админка' },
+      { command: 'price_menu', description: 'Управление прайсом' },
     ], { scope: { type: 'chat', chat_id: adminId } })
   } catch (e) {
     log.warn('setMyCommands (admin scope) failed', { adminId, error: e instanceof Error ? e.message : String(e) })

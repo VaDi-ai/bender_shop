@@ -3,7 +3,7 @@ import { Telegraf } from 'telegraf'
 import type { Update } from 'telegraf/types'
 import {
   buildClientWelcome, buildPriceMenuPage, buildQuickEntry,
-  PRICE_MENU_NODES, PRICE_POST_LINKS, registerPriceMenuHandlers,
+  PRICE_MENU_NODES, registerPriceMenuHandlers,
   type PriceHomeVariant,
 } from '../bot/price-menu'
 
@@ -44,6 +44,7 @@ describe('static price navigation', () => {
     expect(buildQuickEntry(SHOP, ADMIN)).toEqual({ text: 'Быстрый вход:', reply_markup: { inline_keyboard: [
       [{ text: '🛍 Открыть магазин', web_app: { url: SHOP } }, { text: '🛠 Админка', web_app: { url: ADMIN } }],
       [{ text: 'ПРАЙС', callback_data: 'price:quick:root' }],
+      [{ text: '✏️ Управление прайсом', callback_data: 'pm:view:root' }],
     ] } })
     expect(buildClientWelcome().reply_markup.inline_keyboard).toEqual([[{ text: 'ПРАЙС', callback_data: 'price:client:root' }]])
   })
@@ -57,18 +58,6 @@ describe('static price navigation', () => {
       'iphone_18_pro', 'iphone_17_pro', 'iphone_17_air', 'iphone_13_16', 'airpods', 'apple_watch', 'ipad', 'macbook_air', 'macbook_pro', 'mac_studio_mini',
     ])
     expect(PRICE_MENU_NODES.samsung!.children).toEqual(['galaxy_a', 'galaxy_s', 'galaxy_z', 'samsung_tablets'])
-  })
-
-  it('keeps exactly 22 references to the 21 confirmed posts, including shared /127', () => {
-    const references = Object.values(PRICE_POST_LINKS).flat().map(p => p.url)
-    expect(Object.keys(PRICE_POST_LINKS)).toHaveLength(15)
-    expect(references).toHaveLength(22)
-    expect([...new Set(references)].sort()).toEqual([
-      ...[1714, 1717, 1732, 1755, 1757, 1758, 1761, 1762].map(id => `https://t.me/bendershopDevice/${id}`),
-      ...[30, 31, 35, 36, 39, 40, 110, 111, 112, 113, 114, 115, 127].map(id => `https://t.me/bendershopprice/${id}`),
-    ].sort())
-    expect(PRICE_POST_LINKS.iphone_17_pro![0]!.url).toBe('https://t.me/bendershopprice/127')
-    expect(PRICE_POST_LINKS.iphone_17_air![0]!.url).toBe('https://t.me/bendershopprice/127')
   })
 
   it.each(['client', 'quick'] as const)('every node is reachable and returns to its actual parent (%s)', home => {
@@ -90,12 +79,8 @@ describe('static price navigation', () => {
         visit(childId)
       }
       const urls = buttons.filter(b => 'url' in b).map(b => ('url' in b ? b.url : ''))
-      expect(urls).toEqual((PRICE_POST_LINKS[id] ?? []).map(p => p.url))
-      if (!node.children && !node.text && !PRICE_POST_LINKS[id]) {
-        expect(page.text).toContain('Ссылка на прайс пока не добавлена.')
-        expect(urls).toEqual([])
-      }
-      if (urls.length) expect(page.text).toContain('Дата последнего изменения цен не подтверждена.')
+      expect(urls).toEqual([])
+      if (!node.children && !node.text) expect(page.text).toContain('Прайс скоро появится.')
     }
     visit('root')
     expect([...seen].sort()).toEqual(Object.keys(PRICE_MENU_NODES).sort())
@@ -134,11 +119,18 @@ describe('Telegram callback transport (fully mocked)', () => {
     expect(api.mock.calls.map(c => c[0])).toEqual(['answerCallbackQuery', 'editMessageText', 'answerCallbackQuery', 'editMessageText'])
   })
 
-  it.each(['price:client:unknown', 'price:client:__proto__', 'price:bad:root', 'price:client:root:extra', 'price:'])('acknowledges unknown own callback without edit/send: %s', async data => {
+  it.each(['price:bad:root', 'price:client:root:extra', 'price:'])('acknowledges unknown own callback without edit/send: %s', async data => {
     const { bot, api, downstream } = makeBot()
     await bot.handleUpdate(callback(data))
     expect(api.mock.calls.map(c => c[0])).toEqual(['answerCallbackQuery'])
     expect(downstream).not.toHaveBeenCalled()
+  })
+
+  it.each(['price:client:unknown', 'price:client:__proto__'])('returns stale deleted buttons to the root: %s', async data => {
+    const { bot, api } = makeBot()
+    await bot.handleUpdate(callback(data))
+    expect(api.mock.calls.map(c => c[0])).toEqual(['answerCallbackQuery', 'editMessageText'])
+    expect(api.mock.calls[1]![1].text).toBe(buildPriceMenuPage('root', 'client')!.text)
   })
 
   it.each([

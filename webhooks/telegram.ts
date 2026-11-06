@@ -40,6 +40,7 @@ import log, { safeLog } from '../lib/logger'
 import { Sentry } from '../lib/sentry'
 import { isBotAdmin } from '../lib/bot-admin-access'
 import { buildClientWelcome, registerPriceMenuHandlers, type PriceMenuPage } from '../bot/price-menu'
+import { registerPriceMenuAdmin } from '../bot/price-menu-admin'
 
 const CRM_GROUP_ID = Number(process.env.CRM_GROUP_ID)
 const ADMIN_IDS = (process.env.ADMIN_IDS ?? '').split(',').map((id) => Number(id.trim()))
@@ -213,6 +214,7 @@ function sourceLabel(source: string): string {
  * ВАЖНО: вызывать ДО admin-middleware в bot/index.ts.
  */
 export function setupClientHandlers(bot: Telegraf, getQuickHome?: () => PriceMenuPage): void {
+  registerPriceMenuAdmin(bot)
   registerPriceMenuHandlers(bot, getQuickHome)
   // ── Обработчик нажатий inline-кнопок ────────────────────────────────────────
 

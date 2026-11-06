@@ -94,6 +94,6 @@ describe('price menu integrated before CRM handlers (all services mocked)', () =
       for (const method of Object.values(model)) expect(method).not.toHaveBeenCalled()
     }
     expect(api.mock.calls.every(c => ['answerCallbackQuery', 'editMessageText'].includes(c[0]))).toBe(true)
-    if (data.endsWith(':unknown')) expect(api.mock.calls.map(c => c[0])).toEqual(['answerCallbackQuery'])
+    expect(api.mock.calls.map(c => c[0])).toEqual(['answerCallbackQuery', 'editMessageText'])
   })
 })
